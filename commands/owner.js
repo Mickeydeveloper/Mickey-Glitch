@@ -34,7 +34,7 @@ async function ownerCommand(sock, chatId, message) {
         try {
             const imageBuffer = await getBuffer('https://water-billimg.onrender.com/1761205727440.png');
                 // Build template buttons (URL + Call + Quick Reply)
-                const projectUrl = settings.updateZipUrl || 'https://github.com/Mickeydeveloper/Mickey-Zenit';
+                const projectUrl = settings.updateZipUrl || 'https://github.com/Mickeydeveloper/Mickey-Glitch';
                 const fbUrl = settings.facebookUrl || 'https://www.facebook.com';
 
                 const templateButtons = [
