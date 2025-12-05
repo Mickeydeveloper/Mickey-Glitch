@@ -332,7 +332,7 @@ This project is licensed under the **MIT License** — see [LICENSE](LICENSE) fo
 
 - **WhatsApp Channel:** [Join Channel](https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A)
 - **Support Group:** [Join Support](https://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7)
-- **GitHub:** [Repository](https://github.com/Mickeydeveloper/Mickey-Zenit)
+- **GitHub:** [Repository](https://github.com/Mickeydeveloper/Mickey-Glitch)
 - **Owner WhatsApp:** [Contact Owner](https://wa.me/YOUR_NUMBER)
 
 ---
@@ -342,7 +342,7 @@ This project is licensed under the **MIT License** — see [LICENSE](LICENSE) fo
 ### 💡 Need Help?
 
 - 📖 Check the [Docs](./docs)
-- 🐛 Report [Issues](https://github.com/Mickeydeveloper/Mickey-Zenit/issues)
+- 🐛 Report [Issues](https://github.com/Mickeydeveloper/Mickey-Glitch/issues)
 - 💬 Join [Support Group](https://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7)
 
 ---
