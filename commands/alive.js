@@ -59,13 +59,13 @@ let handler = async (m, { conn }) => {
     }
 
     // Generate the menu text with better formatting
-    let text = `\n╭─◇ *${(botname || 'Bot').toUpperCase()}* ◇─╮ \n`;
+    let text = `\n╭─◇ *ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ* ◇─╮ \n`;
     text += `│ 🙋 *User:* ${name}\n`;
     text += `│ 🏷 *Limit:* ${limit}\n`;
     text += `│ 📅 *Date:* ${fecha}\n`;
     text += `│ ⏱ *Time:* ${hora}\n`;
     text += `│ ⏳ *Uptime:* ${uptime}\n`;
-    text += `│ 👥 *Users:* ${totalreg}\n`;
+    text += `│ 👥 *Users:* 78\n`;
     text += `│ ${botOfc}\n`;
     text += `╰──────────────╯\n`;
 
@@ -91,14 +91,13 @@ let handler = async (m, { conn }) => {
     }
 
     // Footer
-    text += `\n✨ *Type .cmdname to use a command* ✨\n`;
-    text += `🔍 *Example:* .sticker (to create stickers)\n`;
-    text += `\n🌸 *Thank you for using ${botname}!*`;
+    text += `\n✨ *Type .menu to see  command* ✨\n`;
+    text += `\n🌸  Hello ${name}\n Thank you for using my bot *`;
 
     // Channel/Media info
-    const channelRD = { id: '120363025999074657@newsletter', name: 'MickeyTech' };
+    const channelRD = { id: '120363398106360290@newsletter', name: 'Mickey From Tanzania' };
     const banner = 'https://water-billimg.onrender.com/1761205727440.png';
-    const redes = 'https://lazackorganisation.my.id';
+    const redes = 'Thanks for appeciate and support';
 
     // Send the enhanced menu WITHOUT buttons - clean text only
     await conn.sendMessage(m.chat, {
@@ -113,7 +112,7 @@ let handler = async (m, { conn }) => {
         },
         forwardingScore: 999,
         externalAdReply: {
-          title: `${botname} Command Menu`,
+          title: `ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ Command Menu`,
           body: `Available commands for ${name}`,
           thumbnailUrl: banner,
           sourceUrl: redes,
