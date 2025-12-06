@@ -43,6 +43,7 @@ const { autoreadCommand, isAutoreadEnabled, handleAutoread } = require('./comman
 const tagAllCommand = require('./commands/tagall');
 const helpCommand = require('./commands/help');
 const banCommand = require('./commands/ban');
+const addCommand = require('./commands/add');
 const { promoteCommand } = require('./commands/promote');
 const { demoteCommand } = require('./commands/demote');
 const muteCommand = require('./commands/mute');
@@ -426,6 +427,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         switch (true) {
             // .simage command removed
+            case userMessage.startsWith('.add'):
+                const addArgs = userMessage.trim().split(/\s+/);
+                const phoneNumber = addArgs.slice(1).join(' ').trim();
+                await addCommand(sock, chatId, senderId, phoneNumber, message);
+                break;
             case userMessage.startsWith('.kick'):
                 const mentionedJidListKick = message.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
                 await kickCommand(sock, chatId, senderId, mentionedJidListKick, message);
