@@ -53,7 +53,7 @@ const HELP = `
 ✖ unmute
 ✖ delete | .del
 ✖ kick @user
-✖ warnings @user
+✖ add <number>
 ✖ warn @user
 ✖ antilink
 ✖ antibadword
