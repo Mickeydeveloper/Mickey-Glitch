@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const TEMP_DIR = path.join(__dirname, 'temp');
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP(TEMP_DIR, { recursive: true });
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 const lastReply = new Map(); // Anti-spam per user
 
@@ -50,33 +50,16 @@ Jibu tu kama Mickey bila intro:`;
     }
 }
 
-// Send voice note (PTT) or fallback to text
-async function sendVoiceOrText(sock, jid, text, quoted) {
-    const filePath = path.join(TEMP_DIR, `voice_${Date.now()}.mp3`);
 
-    try {
-        await new Promise((resolve, reject) => {
-            new gTTS(text, 'sw').save(filePath, err => {
-                err ? reject(err) : resolve();
-            });
-        });
-
-        await sock.sendMessage(jid, {
-            audio: fs.readFileSync(filePath),
-            mimetype: 'audio/mpeg',
-            ptt: true
-        }, { quoted });
-
-        setTimeout(() => fs.unlink(filePath, () => {}), 6000);
-    } catch {
-        await sock.sendMessage(jid, { text }, { quoted });
-    }
+// Always reply with text from API
+async function sendTextReply(sock, jid, text, quoted) {
+    await sock.sendMessage(jid, { text }, { quoted });
 }
 
-// Command: .autoreply on/off (admin only)
+// Command: .chatbot on/off (admin only)
 async function handleChatbotCommand(sock, m, prefix) {
     const text = (m.message?.conversation || m.message?.extendedTextMessage?.text || '');
-    if (!text.toLowerCase().startsWith(prefix + 'autoreply')) return;
+    if (!text.toLowerCase().startsWith(prefix + 'chatbot')) return;
 
     const jid = m.key.remoteJid;
     const isGroup = jid.endsWith('@g.us');
@@ -90,21 +73,21 @@ async function handleChatbotCommand(sock, m, prefix) {
     const arg = text.slice(prefix.length).trim().split(' ')[1];
 
     if (arg === 'on') {
-        global.autoReplyEnabled = true;
-        return m.reply('*AutoReply imewezeshwa* — sasa nitareply kila mtu kama msee halisi 😂');
+        global.chatbotEnabled = true;
+        return m.reply('*Chatbot imewezeshwa* — sasa nitareply kila mtu kama msee halisi 😂');
     }
     if (arg === 'off') {
-        global.autoReplyEnabled = false;
-        return m.reply('AutoReply imezimwa');
+        global.chatbotEnabled = false;
+        return m.reply('Chatbot imezimwa');
     }
 
-    m.reply(`*.autoreply on* → washa auto reply\n*.autoreply off* → zima\n\nSasa niko live kama Mickey wa mtaa 😂`);
+    m.reply(`*.chatbot on* → washa chatbot\n*.chatbot off* → zima\n\nSasa niko live kama Mickey wa mtaa 😂`);
 }
 
-// Main auto-reply function (works in group & private)
+// Main chatbot function (works in group & private)
 async function handleChatbotResponse(sock, m) {
     // Only run if enabled
-    if (!global.autoReplyEnabled) return;
+    if (!global.chatbotEnabled) return;
 
     const jid = m.key.remoteJid;
     const sender = m.key.participant || m.key.remoteJid;
@@ -125,10 +108,11 @@ async function handleChatbotResponse(sock, m) {
     // Show typing
     await showTyping(sock, jid);
 
+
     const replyNow = async () => {
         const reply = await getSmartReply(text, m.pushName || "Bro");
         await new Promise(r => setTimeout(r, humanDelay()));
-        await sendVoiceOrText(sock, jid, reply, m);
+        await sendTextReply(sock, jid, reply, m);
     };
 
     if (replyLate()) {
