@@ -9,13 +9,21 @@ function loadState() {
         const state = JSON.parse(raw);
         // If using the built-in default asset, treat it as no custom asset and default to text "Hi"
         if (state && typeof state.assetPath === 'string' && state.assetPath.endsWith('assets/mention_default.webp')) {
-            return { enabled: !!state.enabled, assetPath: '', type: 'text' };
+            return { enabled: !!state.enabled, assetPath: '', type: 'text', perGroup: {} };
         }
+        // Ensure perGroup map exists for backwards compatibility
+        if (!state.perGroup) state.perGroup = {};
         return state;
 	} catch {
         // Default: disabled; when enabled without custom asset, reply as plain text
-        return { enabled: false, assetPath: '', type: 'text' };
+        return { enabled: false, assetPath: '', type: 'text', perGroup: {} };
 	}
+}
+
+function isMentionEnabledForChat(state, chatId) {
+	// If per-group setting exists, use it; otherwise fall back to global enabled
+	if (state && state.perGroup && typeof state.perGroup[chatId] === 'boolean') return !!state.perGroup[chatId];
+	return !!state.enabled;
 }
 
 function saveState(state) {
@@ -46,15 +54,13 @@ async function ensureDefaultSticker(state) {
 	}
 }
 
-async function handleMentionDetection(sock, chatId, message) {
+	async function handleMentionDetection(sock, chatId, message) {
 	try {
 		if (message.key?.fromMe) return;
 
 		const state = loadState();
 		await ensureDefaultSticker(state);
-		if (!state.enabled) return;
-
-		// Normalize bot JID (handles formats like '12345:abcd@...')
+		if (!isMentionEnabledForChat(state, chatId)) return;		// Normalize bot JID (handles formats like '12345:abcd@...')
 		const rawId = sock.user?.id || sock.user?.jid || '';
 		if (!rawId) return;
 		const botNum = rawId.split('@')[0].split(':')[0];
@@ -162,6 +168,32 @@ async function mentionToggleCommand(sock, chatId, message, args, isOwner) {
 	return sock.sendMessage(chatId, { text: `Mention reply ${state.enabled ? 'enabled' : 'disabled'}.` }, { quoted: message });
 }
 
+// Toggle mention replies for the current group. Only group admins can use this.
+async function groupMentionToggleCommand(sock, chatId, message, args) {
+	try {
+		// Only valid in groups
+		if (!chatId.endsWith('@g.us')) return sock.sendMessage(chatId, { text: 'This command can only be used in groups.' }, { quoted: message });
+		// Check admin
+		const isAdmin = require('../lib/isAdmin');
+		const { isSenderAdmin } = await isAdmin(sock, chatId, message.key.participant || message.key.remoteJid);
+		if (!isSenderAdmin && !message.key.fromMe) return sock.sendMessage(chatId, { text: 'Only group admins can toggle status mention replies for this group.' }, { quoted: message });
+
+		const onoff = (args || '').trim().toLowerCase();
+		if (!onoff || !['on','off'].includes(onoff)) {
+			return sock.sendMessage(chatId, { text: 'Usage: .gmention on|off' }, { quoted: message });
+		}
+
+		const state = loadState();
+		state.perGroup = state.perGroup || {};
+		state.perGroup[chatId] = onoff === 'on';
+		saveState(state);
+		return sock.sendMessage(chatId, { text: `Status mention replies ${state.perGroup[chatId] ? 'enabled' : 'disabled'} for this group.` }, { quoted: message });
+	} catch (e) {
+		console.error('groupMentionToggleCommand error:', e);
+		return sock.sendMessage(chatId, { text: 'Failed to toggle group mention setting.' }, { quoted: message });
+	}
+}
+
 async function setMentionCommand(sock, chatId, message, isOwner) {
 	if (!isOwner) return sock.sendMessage(chatId, { text: 'Only Owner or Sudo can use this command.' }, { quoted: message });
 	const ctx = message.message?.extendedTextMessage?.contextInfo;
@@ -263,6 +295,6 @@ async function setMentionCommand(sock, chatId, message, isOwner) {
 	return sock.sendMessage(chatId, { text: 'Mention reply media updated.' }, { quoted: message });
 }
 
-module.exports = { handleMentionDetection, mentionToggleCommand, setMentionCommand };
+module.exports = { handleMentionDetection, mentionToggleCommand, setMentionCommand, groupMentionToggleCommand };
 
 

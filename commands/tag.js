@@ -14,6 +14,12 @@ async function downloadMediaMessage(message, mediaType) {
     return filePath;
 }
 
+// Remove emoji characters from text before sending
+function stripEmoji(text) {
+    if (!text || typeof text !== 'string') return text;
+    return text.replace(/[\u{1F600}-\u{1F64F}|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}|\u{1F1E6}-\u{1F1FF}]/gu, '');
+}
+
 async function tagCommand(sock, chatId, senderId, messageText, replyMessage, message) {
     const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
 
@@ -43,7 +49,7 @@ async function tagCommand(sock, chatId, senderId, messageText, replyMessage, mes
             const filePath = await downloadMediaMessage(replyMessage.imageMessage, 'image');
             messageContent = {
                 image: { url: filePath },
-                caption: messageText || replyMessage.imageMessage.caption || '',
+                caption: stripEmoji(messageText || replyMessage.imageMessage.caption || ''),
                 mentions: mentionedJidList
             };
         }
@@ -52,14 +58,14 @@ async function tagCommand(sock, chatId, senderId, messageText, replyMessage, mes
             const filePath = await downloadMediaMessage(replyMessage.videoMessage, 'video');
             messageContent = {
                 video: { url: filePath },
-                caption: messageText || replyMessage.videoMessage.caption || '',
+                caption: stripEmoji(messageText || replyMessage.videoMessage.caption || ''),
                 mentions: mentionedJidList
             };
         }
         // Handle text messages
         else if (replyMessage.conversation || replyMessage.extendedTextMessage) {
             messageContent = {
-                text: replyMessage.conversation || replyMessage.extendedTextMessage.text,
+                text: stripEmoji(replyMessage.conversation || replyMessage.extendedTextMessage.text),
                 mentions: mentionedJidList
             };
         }
@@ -69,7 +75,7 @@ async function tagCommand(sock, chatId, senderId, messageText, replyMessage, mes
             messageContent = {
                 document: { url: filePath },
                 fileName: replyMessage.documentMessage.fileName,
-                caption: messageText || '',
+                caption: stripEmoji(messageText || ''),
                 mentions: mentionedJidList
             };
         }
@@ -79,7 +85,7 @@ async function tagCommand(sock, chatId, senderId, messageText, replyMessage, mes
         }
     } else {
         await sock.sendMessage(chatId, {
-            text: messageText || "Tagged message",
+            text: stripEmoji(messageText || "Tagged message"),
             mentions: mentionedJidList
         });
     }

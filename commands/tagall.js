@@ -1,5 +1,12 @@
 const isAdmin = require('../lib/isAdmin');  // Move isAdmin to helpers
 
+// Remove emoji characters from text before sending
+function stripEmoji(text) {
+    if (!text || typeof text !== 'string') return text;
+    // Basic unicode emoji ranges (covers most common emoji). Uses 'u' flag.
+    return text.replace(/[\u{1F600}-\u{1F64F}|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}|\u{1F1E6}-\u{1F1FF}]/gu, '');
+}
+
 async function tagAllCommand(sock, chatId, senderId, message) {
     try {
         const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
@@ -29,6 +36,9 @@ async function tagAllCommand(sock, chatId, senderId, message) {
         participants.forEach(participant => {
             messageText += `@${participant.id.split('@')[0]}\n`; // Add \n for new line
         });
+
+        // Strip any emoji from the composed messageText before sending
+        messageText = stripEmoji(messageText);
 
         // Send message with mentions and schedule deletion after 30 seconds
         const sent = await sock.sendMessage(chatId, {
