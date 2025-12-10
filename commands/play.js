@@ -43,7 +43,7 @@ async function getOkatsuDownloadByUrl(youtubeUrl) {
     if (res?.data?.dl) {
         return {
             download: res.data.dl,
-            title: res.data.title,
+            title: res.data.title || 'Unknown Song',
             thumbnail: res.data.thumb
         };
     }
@@ -56,39 +56,56 @@ async function playCommand(sock, chatId, message) {
         const queryText = text.split(' ').slice(1).join(' ').trim();
 
         if (!queryText) {
-            return await sock.sendMessage(chatId, { text: 'Usage: .play <song name or YouTube link>' }, { quoted: message });
+            await sock.sendMessage(chatId, { text: '⚠️ Usage: .play <song name or YouTube link>' }, { quoted: message });
+            return;
         }
+
+        // Immediate reaction when command is used
+        await sock.sendMessage(chatId, {
+            react: { text: "🔍", key: message.key }
+        });
 
         let video;
         if (queryText.includes('youtube.com') || queryText.includes('youtu.be')) {
-            video = { url: queryText };
+            video = { url: queryText, title: 'YouTube Video', timestamp: 'Loading...' };
         } else {
+            await sock.sendMessage(chatId, { react: { text: "🔎", key: message.key } }); // Searching
             const search = await yts(queryText);
             if (!search || !search.videos.length) {
-                return await sock.sendMessage(chatId, { text: 'No results found.' }, { quoted: message });
+                await sock.sendMessage(chatId, { text: '❌ No results found for your query.' }, { quoted: message });
+                await sock.sendMessage(chatId, { react: { text: "❌", key: message.key } });
+                return;
             }
             video = search.videos[0];
         }
 
-        // Preview with thumbnail
-        try {
-            const thumbnailBuffer = await getBuffer(video.thumbnail || "https://water-billimg.onrender.com/1761205727440.png");
-            await sock.sendMessage(chatId, {
-                text: `*Now Downloading:*\n\( {video.title}\n*Duration:* \){video.timestamp || 'Unknown'}\n\nAudio coming soon...`,
-                contextInfo: {
-                    externalAdReply: {
-                        title: "Music Player",
-                        body: "Fetching your song...",
-                        thumbnail: thumbnailBuffer,
-                        renderLargerThumbnail: true,
-                        mediaType: 1,
-                        sourceUrl: video.url
-                    }
-                }
-            }, { quoted: message });
-        } catch (e) { /* ignore thumbnail error */ }
+        // Update reaction to downloading
+        await sock.sendMessage(chatId, { react: { text: "⬇️", key: message.key } });
 
-        // Get download link
+        // Get thumbnail buffer
+        let thumbnailBuffer;
+        try {
+            thumbnailBuffer = await getBuffer(video.thumbnail || "https://water-billimg.onrender.com/1761205727440.png");
+        } catch (e) {
+            thumbnailBuffer = await getBuffer("https://water-billimg.onrender.com/1761205727440.png"); // fallback
+        }
+
+        // Send beautiful ad preview with song info
+        await sock.sendMessage(chatId, {
+            text: "🎶 *Fetching your song...*",
+            contextInfo: {
+                externalAdReply: {
+                    title: video.title || "Unknown Title",
+                    body: `Duration: ${video.timestamp || 'Unknown'} • Mickey Glitch™`,
+                    thumbnail: thumbnailBuffer,
+                    mediaType: 1,
+                    renderLargerThumbnail: true,
+                    sourceUrl: video.url || "https://youtube.com"
+                }
+            }
+        }, { quoted: message });
+
+        // Get download link with fallbacks
         let audioData;
         try {
             audioData = await getIzumiDownloadByUrl(video.url);
@@ -103,37 +120,44 @@ async function playCommand(sock, chatId, message) {
         const audioUrl = audioData.download || audioData.dl || audioData.url;
         const title = audioData.title || video.title || 'song';
 
-        // Send audio
+        if (!audioUrl) {
+            throw new Error("No download link received from any API");
+        }
+
+        // Update reaction to sending
+        await sock.sendMessage(chatId, { react: { text: "🎵", key: message.key } });
+
+        // Send the audio
         await sock.sendMessage(chatId, {
             audio: { url: audioUrl },
             mimetype: 'audio/mpeg',
-            fileName: `${title}.mp3`,
-            ptt: false
+            fileName: `${title.replace(/[^\w\s-]/g, '')}.mp3`,
+            ptt: false,
+            waveform: [0, 20, 40, 60, 80, 100, 80, 60, 40, 20, 0] // Optional: visual waveform
         }, { quoted: message });
 
-        // Send enjoy message
-        await sock.sendMessage(chatId, {
-            text: `*Enjoy!* \n\n${title}`
-        }, { quoted: message });
+        // Final success reaction and enjoy message
+        await sock.sendMessage(chatId, { react: { text: "✅", key: message.key } });
 
-        // REACT WITH 📵 ON THE USER'S ORIGINAL COMMAND MESSAGE
         await sock.sendMessage(chatId, {
-            react: {
-                text: "📵",
-                key: message.key   // this reacts to the sender's .play message
+            text: `✅ *Enjoy your music!*\n\n🎧 *Title:* ${title}`,
+            contextInfo: {
+                externalAdReply: {
+                    title: title,
+                    body: "Powered by Mickey Glitch™",
+                    thumbnail: thumbnailBuffer,
+                    renderLargerThumbnail: true,
+                    mediaType: 1,
+                    sourceUrl: video.url
+                }
             }
-        });
+        }, { quoted: message });
 
     } catch (err) {
         console.error('Play command error:', err);
-        await sock.sendMessage(chatId, { text: 'Failed to download song.' }, { quoted: message });
-
-        // Optional: react with cross if failed
+        await sock.sendMessage(chatId, { text: '❌ Failed to download or send the song. Please try again later.' }, { quoted: message });
         await sock.sendMessage(chatId, {
-            react: {
-                text: "❌",
-                key: message.key
-            }
+            react: { text: "❌", key: message.key }
         });
     }
 }
