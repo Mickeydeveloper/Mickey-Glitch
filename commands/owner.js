@@ -1,6 +1,6 @@
 const settings = require('../settings');
 const { getBuffer } = require('../lib/myfunc');
-const QRCode = require('qrcode'); // Add this dependency if not already installed: npm i qrcode
+const QRCode = require('qrcode'); // Ensure 'qrcode' is installed: npm i qrcode
 
 async function ownerCommand(sock, chatId, message) {
     try {
@@ -8,96 +8,99 @@ async function ownerCommand(sock, chatId, message) {
         const waLink = `https://wa.me/${settings.ownerNumber.replace(/^\+/, '')}`;
         const qrBuffer = await QRCode.toBuffer(waLink, { width: 512 });
 
-        // Professional thumbnail (you can replace with a custom owner photo URL)
-        const thumbnailUrl = 'https://example.com/owner-photo.jpg'; // Optional: use a real professional photo
+        // Optional professional thumbnail (replace with a real owner/business photo for better trust)
+        const thumbnailUrl = null; // e.g., 'https://yourdomain.com/owner-professional-photo.jpg'
         let thumbnailBuffer = null;
-        try {
-            thumbnailBuffer = thumbnailUrl ? await getBuffer(thumbnailUrl) : null;
-        } catch (err) {
-            console.warn('Failed to load thumbnail, proceeding without it');
+        if (thumbnailUrl) {
+            try {
+                thumbnailBuffer = await getBuffer(thumbnailUrl);
+            } catch (err) {
+                console.warn('Failed to load thumbnail');
+            }
         }
 
-        // First: Professional ad-like message with call-to-action
+        // First: Clean ad-like message (removed misleading ✅ from caption section)
         await sock.sendMessage(chatId, {
-            text: `✅ *Official Bot Owner*\n\n` +
-                  `👤 *${settings.botOwner}* ✅\n` +
+            text: `*Official Bot Owner*\n\n` +
+                  `👤 *${settings.botOwner}*\n` +
                   `📱 +${settings.ownerNumber}\n` +
                   `🤖 Owner of ${settings.botName}\n\n` +
                   `Tap below to connect securely.`,
             contextInfo: {
                 externalAdReply: {
-                    title: `${settings.botOwner} (Verified Owner)`,
-                    body: 'Direct WhatsApp Contact • Available Now',
+                    title: `${settings.botOwner} - Official Owner`,
+                    body: 'Direct & Secure WhatsApp Contact',
                     mediaType: 1,
                     sourceUrl: waLink,
                     thumbnail: thumbnailBuffer,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: false // Keeps it clean
+                    renderLargerThumbnail: true
                 }
             }
         }, { quoted: message });
 
-        // Second: Image with professional buttons + QR code fallback
+        // Second: Image with buttons + QR code
         try {
-            const imageBuffer = await getBuffer('https://water-billimg.onrender.com/1761205727440.png'); // Keep your existing image or replace with a more professional one
+            const imageBuffer = await getBuffer('https://water-billimg.onrender.com/1761205727440.png'); // Replace with a more professional banner if possible
 
             const projectUrl = settings.updateZipUrl || 'https://github.com/Mickeydeveloper/Mickey-Glitch';
             const fbUrl = settings.facebookUrl || 'https://www.facebook.com';
 
             const templateButtons = [
-                { urlButton: { displayText: '🌐 View Project', url: projectUrl } },
-                { urlButton: { displayText: '📘 Facebook Profile', url: fbUrl } },
-                { callButton: { displayText: '📞 Call Owner', phoneNumber: `+${settings.ownerNumber}` } },
+                { urlButton: { displayText: '🌐 Project Repo', url: projectUrl } },
+                { urlButton: { displayText: '📘 Facebook', url: fbUrl } },
+                { callButton: { displayText: '📞 Call Now', phoneNumber: `+${settings.ownerNumber}` } },
                 { quickReplyButton: { displayText: '💬 Message Owner', id: '.msgowner' } }
             ];
 
             await sock.sendMessage(chatId, {
                 image: imageBuffer,
-                caption: `✅ *Contact ${settings.botOwner}*\n\n` +
+                caption: `*Owner Contact*\n\n` +
                          `Official owner of ${settings.botName}\n` +
-                         `Secure & direct connection options below 👇`,
-                footer: `© ${settings.botName} • Verified Contact`,
+                         `Choose an option below 👇`,
+                footer: `${settings.botName} • Contact Info`,
                 templateButtons
             }, { quoted: message });
 
-            // Bonus: Send QR code for easy scanning
+            // Send QR code for easy scanning
             await sock.sendMessage(chatId, {
                 image: qrBuffer,
-                caption: '📲 *Scan to chat directly with the owner*'
+                caption: '📲 *Scan QR to start chat with owner*'
             }, { quoted: message });
 
         } catch (imgErr) {
             console.error('Error sending image/QR:', imgErr);
-            // Fallback text-only with links
+            // Robust fallback
             await sock.sendMessage(chatId, {
-                text: `✅ *${settings.botOwner}*\n` +
+                text: `*Owner Contact*\n\n` +
+                      `👤 ${settings.botOwner}\n` +
                       `📱 Chat: ${waLink}\n` +
-                      `🌐 Project: ${projectUrl || 'N/A'}\n` +
+                      `🌐 Project: ${projectUrl}\n` +
                       `📘 Facebook: ${fbUrl}`
             }, { quoted: message });
         }
 
-        // Third: Send professional vCard
+        // Third: Professional vCard (removed misleading ✅ from display name)
         const vcard = `BEGIN:VCARD\n` +
                       `VERSION:3.0\n` +
                       `FN:${settings.botOwner}\n` +
-                      `ORG:${settings.botName};\n` +
+                      `ORG:${settings.botName}\n` +
                       `TEL;type=CELL;type=VOICE;waid=\( {settings.ownerNumber.replace(/^\+/, '')}:+ \){settings.ownerNumber}\n` +
                       `URL:${projectUrl || ''}\n` +
-                      `NOTE:Official Bot Owner\n` +
+                      `NOTE:Official Bot Owner - Direct Contact\n` +
                       `END:VCARD`;
 
         await sock.sendMessage(chatId, {
             contacts: {
-                displayName: `${settings.botOwner} ✅`,
+                displayName: `${settings.botOwner} (Owner)`,
                 contacts: [{ vcard }]
             }
         }, { quoted: message });
 
     } catch (error) {
         console.error('Error in owner command:', error);
+        // If error persists, check: image URL validity, QRCode dependency, or network issues
         await sock.sendMessage(chatId, {
-            text: '❌ An error occurred while fetching owner information. Please try again later.'
+            text: '⚠️ Temporary issue loading owner info. Please try again shortly.'
         }, { quoted: message });
     }
 }
