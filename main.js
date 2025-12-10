@@ -80,7 +80,7 @@ const { clearCommand } = require('./commands/clear');
 const pingCommand = require('./commands/ping');
 const aliveCommand = require('./commands/alive');
 const blurCommand = require('./commands/img-blur');
-const { welcomeCommand, handleJoinEvent } = require('./commands/welcome');
+// Welcome command removed. Previously: ./commands/welcome
 // github command removed
 const { handleAntiBadwordCommand, handleBadwordDetection } = require('./lib/antibadword');
 const antibadwordCommand = require('./commands/antibadword');
@@ -717,7 +717,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     }
 
                     if (isSenderAdmin || message.key.fromMe) {
-                        await welcomeCommand(sock, chatId, message);
+                        await sock.sendMessage(chatId, { text: '⚠️ The welcome command is currently disabled.' }, { quoted: message });
                     } else {
                         await sock.sendMessage(chatId, { text: 'Sorry, only group admins can use this command.' }, { quoted: message });
                     }
@@ -1168,7 +1168,8 @@ async function handleGroupParticipantUpdate(sock, update) {
 
         // Handle join events
         if (action === 'add') {
-            await handleJoinEvent(sock, id, participants);
+            // Welcome handling removed (commands/welcome.js deleted)
+            // previously: await handleJoinEvent(sock, id, participants);
         }
 
         // Handle leave events
