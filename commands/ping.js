@@ -2,8 +2,7 @@ const os = require('os');
 const settings = require('../settings.js');
 
 function formatTime(seconds) {
-    seconds = Math.floor(seconds); // Ensure integer
-
+    seconds = Math.floor(seconds);
     const days = Math.floor(seconds / 86400);
     seconds %= 86400;
     const hours = Math.floor(seconds / 3600);
@@ -22,37 +21,43 @@ function formatTime(seconds) {
 
 async function pingCommand(sock, chatId, message) {
     try {
-        // Send initial Pong! and measure latency
+        // Send quick pong to measure send latency
         const start = Date.now();
-        const pongMsg = await sock.sendMessage(chatId, { text: 'Pong! 🏓' }, { quoted: message });
+        await sock.sendMessage(chatId, { text: 'Pong! 🏓' }, { quoted: message });
         const latency = Date.now() - start;
 
-        // Format uptime
-        const uptimeFormatted = formatTime(process.uptime());
-
-        // Gather additional system info for richer display
+        // Uptime and system info
+        const processUptime = formatTime(process.uptime());
+        const hostUptime = formatTime(os.uptime());
         const cpuCount = os.cpus().length;
-        const totalMemGB = (os.totalmem() / (1024 ** 3)).toFixed(2);
-        const freeMemGB = (os.freemem() / (1024 ** 3)).toFixed(2);
+        const platform = `${os.platform()} ${os.arch()}`;
+        const nodeVersion = process.version;
 
-        // Improved visually appealing box with consistent alignment
-        const botInfo = `
-┏━━〔 *Mickey Glitch™* 〕━━┓
-┃
-┃ 🚀 *Ping*       : ${latency} ms
-┃ ⏱️ *Uptime*     : ${uptimeFormatted}
-┃ 💻 *CPU Cores*  : ${cpuCount}
-┃ 🧠 *RAM*        : \( {freeMemGB} / \){totalMemGB} GB
-┃ 🔖 *Version*    : v${settings.version}
-┃ 📍 *Platform*   : \( {os.platform()} ( \){os.arch()})
-┃
-┗━━━━━━━━━━━━━━━━━━━━━━┛`.trim();
+        // Memory
+        const totalMemGB = (os.totalmem() / (1024 ** 3));
+        const freeMemGB = (os.freemem() / (1024 ** 3));
+        const usedMemProc = process.memoryUsage();
+        const rssMB = (usedMemProc.rss / (1024 ** 2)).toFixed(2);
+        const heapUsedMB = (usedMemProc.heapUsed / (1024 ** 2)).toFixed(2);
 
-        // Edit the initial "Pong!" message to show full info (more stable and cleaner)
-        await sock.sendMessage(chatId, {
-            text: botInfo,
-            edit: pongMsg.key
-        });
+        // Version from settings (fallback)
+        const botVersion = settings && settings.version ? settings.version : 'unknown';
+
+        const botInfo = `┏━━〔 *Mickey Glitch™* 〕━━┓
+┃
+┃ 🚀 Ping        : ${latency} ms
+┃ ⏱️ Uptime      : ${processUptime}
+┃ 🖥️ Host Uptime  : ${hostUptime}
+┃ 💻 CPU Cores   : ${cpuCount}
+┃ 🧠 RAM (free)  : ${freeMemGB.toFixed(2)} GB / ${totalMemGB.toFixed(2)} GB
+┃ 🔧 Proc memory : RSS ${rssMB} MB · Heap ${heapUsedMB} MB
+┃ 🔖 Bot version  : v${botVersion}
+┃ 🧩 Node         : ${nodeVersion}
+┃ 📍 Platform     : ${platform}
+┃
+┗━━━━━━━━━━━━━━━━━━━━━━┛`;
+
+        await sock.sendMessage(chatId, { text: botInfo }, { quoted: message });
 
     } catch (error) {
         console.error('Error in ping command:', error);
