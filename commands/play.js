@@ -90,7 +90,7 @@ async function playCommand(sock, chatId, message) {
             thumbnailBuffer = await getBuffer("https://water-billimg.onrender.com/1761205727440.png"); // fallback
         }
 
-        // Send beautiful ad preview with song info
+        // Send beautiful ad preview with song info (this is the only ad now)
         await sock.sendMessage(chatId, {
             text: "🎶 *Fetching your song...*",
             contextInfo: {
@@ -136,22 +136,8 @@ async function playCommand(sock, chatId, message) {
             waveform: [0, 20, 40, 60, 80, 100, 80, 60, 40, 20, 0] // Optional: visual waveform
         }, { quoted: message });
 
-        // Final success reaction and enjoy message
+        // Final success reaction (no extra "Enjoy" message or second ad)
         await sock.sendMessage(chatId, { react: { text: "✅", key: message.key } });
-
-        await sock.sendMessage(chatId, {
-            text: `✅ *Enjoy your music!*\n\n🎧 *Title:* ${title}`,
-            contextInfo: {
-                externalAdReply: {
-                    title: title,
-                    body: "Powered by Mickey Glitch™",
-                    thumbnail: thumbnailBuffer,
-                    renderLargerThumbnail: true,
-                    mediaType: 1,
-                    sourceUrl: video.url
-                }
-            }
-        }, { quoted: message });
 
     } catch (err) {
         console.error('Play command error:', err);
