@@ -2,45 +2,61 @@ const os = require('os');
 const settings = require('../settings.js');
 
 function formatTime(seconds) {
-    const days = Math.floor(seconds / (24 * 60 * 60));
-    seconds = seconds % (24 * 60 * 60);
-    const hours = Math.floor(seconds / (60 * 60));
-    seconds = seconds % (60 * 60);
+    seconds = Math.floor(seconds); // Ensure integer
+
+    const days = Math.floor(seconds / 86400);
+    seconds %= 86400;
+    const hours = Math.floor(seconds / 3600);
+    seconds %= 3600;
     const minutes = Math.floor(seconds / 60);
-    seconds = Math.floor(seconds % 60);
+    seconds %= 60;
 
-    let time = '';
-    if (days > 0) time += `${days}d `;
-    if (hours > 0) time += `${hours}h `;
-    if (minutes > 0) time += `${minutes}m `;
-    if (seconds > 0 || time === '') time += `${seconds}s`;
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
 
-    return time.trim();
+    return parts.join(' ');
 }
 
 async function pingCommand(sock, chatId, message) {
     try {
+        // Send initial Pong! and measure latency
         const start = Date.now();
-        await sock.sendMessage(chatId, { text: 'Pong!' }, { quoted: message });
-        const end = Date.now();
-        const ping = Math.round((end - start) / 2);
+        const pongMsg = await sock.sendMessage(chatId, { text: 'Pong! 🏓' }, { quoted: message });
+        const latency = Date.now() - start;
 
-        const uptimeInSeconds = process.uptime();
-        const uptimeFormatted = formatTime(uptimeInSeconds);
+        // Format uptime
+        const uptimeFormatted = formatTime(process.uptime());
 
+        // Gather additional system info for richer display
+        const cpuCount = os.cpus().length;
+        const totalMemGB = (os.totalmem() / (1024 ** 3)).toFixed(2);
+        const freeMemGB = (os.freemem() / (1024 ** 3)).toFixed(2);
+
+        // Improved visually appealing box with consistent alignment
         const botInfo = `
-    ┏━━〔 𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™ 〕━━┓
-    ┃ 🚀 Ping     : ${ping} ms
-    ┃ ⏱️ Uptime   : ${uptimeFormatted}
-    ┃ 🔖 Version  : v${settings.version}
-    ┗━━━━━━━━━━━━━━━━━━━┛`.trim();
+┏━━〔 *Mickey Glitch™* 〕━━┓
+┃
+┃ 🚀 *Ping*       : ${latency} ms
+┃ ⏱️ *Uptime*     : ${uptimeFormatted}
+┃ 💻 *CPU Cores*  : ${cpuCount}
+┃ 🧠 *RAM*        : \( {freeMemGB} / \){totalMemGB} GB
+┃ 🔖 *Version*    : v${settings.version}
+┃ 📍 *Platform*   : \( {os.platform()} ( \){os.arch()})
+┃
+┗━━━━━━━━━━━━━━━━━━━━━━┛`.trim();
 
-        // Reply to the original message with the bot info
-        await sock.sendMessage(chatId, { text: botInfo},{ quoted: message });
+        // Edit the initial "Pong!" message to show full info (more stable and cleaner)
+        await sock.sendMessage(chatId, {
+            text: botInfo,
+            edit: pongMsg.key
+        });
 
     } catch (error) {
         console.error('Error in ping command:', error);
-        await sock.sendMessage(chatId, { text: '❌ Failed to get bot status.' });
+        await sock.sendMessage(chatId, { text: '❌ Failed to get bot status.' }, { quoted: message });
     }
 }
 
