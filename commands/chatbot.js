@@ -1,16 +1,19 @@
 // File: mickey-autoreply.js
 const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
 
-const TEMP_DIR = './temp';
-require('fs').mkdirSync(TEMP_DIR, { recursive: true });
+const TEMP_DIR = path.join(__dirname, 'temp');
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
-const lastReply = new Map(); // Anti-spam: per user per chat
-const chatbotStates = new Map(); // Per-chat enable/disable
+// Maps
+const lastReply = new Map();      // Anti-spam: per user per chat
+const chatbotStates = new Map();  // Per-chat state: true = ON, false = OFF, undefined = default (OFF in groups)
 
-// Human-like delays
+// Human-like behavior
 const humanDelay = () => Math.floor(Math.random() * 5000) + 2000;
-const shouldReply = () => Math.random() < 0.82;     // 82% reply chance
-const replyLate = () => Math.random() < 0.20;       // 20% chance to reply 10–30s late
+const shouldReply = () => Math.random() < 0.82;  // 82% chance to reply
+const replyLate = () => Math.random() < 0.20;    // 20% chance to reply late
 
 // Typing animation
 async function showTyping(sock, jid) {
@@ -21,21 +24,21 @@ async function showTyping(sock, jid) {
         await new Promise(r => setTimeout(r, humanDelay()));
         await sock.sendPresenceUpdate('available', jid);
     } catch (e) {
-        console.debug('Typing not supported:', jid);
+        console.debug('Typing indicator failed:', jid);
     }
 }
 
-// Pure API reply — no fallback text, only real AI response
+// AI Reply from API only
 async function getSmartReply(messageText, senderName = "jamaa") {
-    const prompt = `Kama Mickey, msee wa Westlands, mzaliwa wa '98, mjanja na mcheshi sana.
-Jibu fupi tu (1-3 sentensi), tumia sheng nyingi, emoji kama 😂😭🤣🙄😏🫵, natural kama msee anachapia kwa group.
-Usiseme chochote kuhusu bot au AI.
+    const prompt = `Kama Mickey, msee wa Westlands, mzaliwa '98, mjanja na mcheshi.
+Jibu fupi (1-3 sentensi), sheng poa, emoji nyingi 😂😭🤣🙄😏🫵.
+Usiseme kitu kuhusu bot au AI.
 
 \( {senderName}: " \){messageText}"
 
-Jibu tu kama Mickey bila intro yoyote:`;
+Jibu tu kama Mickey:`;
 
-    for (let i = 0; i < 3; i++) { // retry up to 3 times
+    for (let i = 0; i < 3; i++) {
         try {
             const res = await fetch(`https://okatsu-rolezapiiz.vercel.app/ai/gemini?text=${encodeURIComponent(prompt)}`, {
                 timeout: 12000
@@ -43,111 +46,139 @@ Jibu tu kama Mickey bila intro yoyote:`;
             if (!res.ok) continue;
             const data = await res.json();
             const reply = (data.result || data.text || "").trim();
-            if (reply && reply.length > 5) return reply; // valid reply
+            if (reply && reply.length > 5) return reply;
         } catch (e) {
-            console.debug(`API attempt ${i+1} failed:`, e.message);
+            console.debug(`API retry ${i+1} failed:`, e.message);
         }
         await new Promise(r => setTimeout(r, 2000));
     }
-    return null; // no reply if API completely down
+    return null; // Silent if API down
 }
 
-// Send only text reply (quoted)
+// Send reply
 async function sendReply(sock, chatId, text, quoted) {
     try {
         await sock.sendMessage(chatId, { text }, { quoted });
     } catch (e) {
-        console.error('Failed to send reply:', e.message);
+        console.error('Send reply failed:', e.message);
     }
 }
 
-// .chatbot on/off command (admin only in groups)
+// Command: .chatbot on/off/status (admin only in groups)
 async function handleChatbotCommand(sock, m) {
     const chatId = m.key.remoteJid;
-    const text = (m.message?.conversation || m.message?.extendedTextMessage?.text || '').toLowerCase();
+    const text = (m.message?.conversation || m.message?.extendedTextMessage?.text || '').trim().toLowerCase();
     if (!text.startsWith('.chatbot')) return;
 
     const isGroup = chatId.endsWith('@g.us');
     const fromMe = m.key.fromMe;
     const sender = m.key.participant || m.key.remoteJid;
 
+    // Check if user is admin (in groups)
     let isAdmin = fromMe;
     if (isGroup && !fromMe) {
         try {
             const meta = await sock.groupMetadata(chatId);
-            isAdmin = meta.participants.find(p => p.id === sender)?.admin;
-        } catch {}
+            const participant = meta.participants.find(p => p.id === sender);
+            isAdmin = participant?.admin === 'admin' || participant?.admin === 'superadmin';
+        } catch (err) {
+            console.error('Failed to get group metadata:', err);
+        }
     }
 
     if (isGroup && !isAdmin) {
-        await sock.sendMessage(chatId, { text: '⛔ Admins tu wanaeza control hii feature bro' }, { quoted: m });
+        await sock.sendMessage(chatId, { text: '⛔ Only admins wanaeza turn Mickey on au off hapa 🙏' }, { quoted: m });
         return;
     }
 
-    const arg = text.split(' ')[1];
+    const args = text.split(' ');
+    const arg = args[1]?.toLowerCase();
 
     if (arg === 'on') {
         chatbotStates.set(chatId, true);
-        await sock.sendMessage(chatId, { text: '✅ Mickey ako online sasa 😂🫵' }, { quoted: m });
+        await sock.sendMessage(chatId, { 
+            text: '✅ *Mickey ako online sasa!* 🫡\nSasa nitareply tu nikimention 😂🔥' 
+        }, { quoted: m });
+
     } else if (arg === 'off') {
         chatbotStates.set(chatId, false);
-        await sock.sendMessage(chatId, { text: '🔇 Mickey amelala... 😴' }, { quoted: m });
+        await sock.sendMessage(chatId, { 
+            text: '🔇 *Mickey amelala...* 😴\nHapana mentions, hapana replies. Peace at last 🙏' 
+        }, { quoted: m });
+
     } else {
-        const status = chatbotStates.get(chatId) !== false ? '✅ ON' : '🔇 OFF';
-        await sock.sendMessage(chatId, { text: `*Mickey Mode*: ${status}\n\n.chatbot on → washa\n.chatbot off → zima` }, { quoted: m });
+        // Show current status
+        const isEnabled = chatbotStates.get(chatId) === true;
+        const status = isEnabled ? '✅ *ON*' : '🔇 *OFF* (default)';
+        const info = isGroup 
+            ? 'Hadi admin awashe na .chatbot on' 
+            : 'Private chats ziko active daima 😂';
+
+        await sock.sendMessage(chatId, { 
+            text: `*Mickey Chatbot Status*\n\nGroup hii: \( {status}\n \){info}\n\nCommands:\n.chatbot on → washa\n.chatbot off → zima` 
+        }, { quoted: m });
     }
 }
 
-// Main handler — replies ONLY on mention (or always in private)
+// Main response handler
 async function handleChatbotResponse(sock, m) {
     try {
         const chatId = m.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
         const fromMe = m.key.fromMe;
-        const senderId = m.key.participant || chatId;
 
-        // Chatbot disabled?
-        if (chatbotStates.get(chatId) === false) return;
+        // Determine if chatbot is enabled
+        const explicitState = chatbotStates.get(chatId);
+        const isEnabled = explicitState === true || (!isGroup && explicitState !== false);
+
+        if (!isEnabled) return; // OFF in this group or disabled
 
         // Ignore own messages, commands, status
         const text = (m.message?.conversation || m.message?.extendedTextMessage?.text || '').trim();
         if (!text || fromMe || text.startsWith('.') || chatId.includes('status')) return;
 
-        // === REPLY CONDITION ===
-        const mentioned = m.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-        const isQuotedMention = m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-        const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-        const isMentioned = mentioned.includes(botNumber) || isQuotedMention.includes(botNumber);
+        // Correct sender ID for anti-spam
+        const senderId = isGroup ? m.key.participant : m.key.remoteJid;
+        if (!senderId) return;
 
-        // In private → always reply | In group → only when tagged
-        if (!isGroup || isMentioned) {
-            // Anti-spam: 1 reply per 6 sec per person
-            const key = `\( {chatId}: \){senderId}`;
-            const now = Date.now();
-            if ((lastReply.get(key) || 0) + 6000 > now) return;
-            lastReply.set(key, now);
+        // Check if bot is mentioned
+        const context = m.message?.extendedTextMessage?.contextInfo;
+        const mentionedJid = context?.mentionedJid || [];
+        const quotedMention = context?.quotedMessage?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+        const botJid = sock.user?.id ? sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net' : null;
 
-            if (!shouldReply()) return; // skip sometimes → feels human
+        const isMentioned = botJid && (mentionedJid.includes(botJid) || quotedMention.includes(botJid));
 
-            await showTyping(sock, chatId);
+        // Reply only if: private chat OR mentioned in group
+        if (isGroup && !isMentioned) return;
 
-            const replyNow = async () => {
-                const aiReply = await getSmartReply(text, m.pushName || "Bro");
-                if (aiReply) {
-                    await new Promise(r => setTimeout(r, humanDelay()));
-                    await sendReply(sock, chatId, aiReply, m);
-                }
-            };
+        // Anti-spam: 6 seconds per user per chat
+        const spamKey = `\( {chatId}: \){senderId}`;
+        const now = Date.now();
+        if ((lastReply.get(spamKey) || 0) + 6000 > now) return;
+        lastReply.set(spamKey, now);
 
-            if (replyLate()) {
-                const late = 10000 + Math.random() * 20000;
-                setTimeout(replyNow, late);
-            } else {
-                await replyNow();
+        if (!shouldReply()) return; // Human-like: sometimes ignore
+
+        await showTyping(sock, chatId);
+
+        const replyNow = async () => {
+            const aiReply = await getSmartReply(text, m.pushName || "Bro");
+            if (aiReply) {
+                await new Promise(r => setTimeout(r, humanDelay()));
+                await sendReply(sock, chatId, aiReply, m);
             }
+        };
+
+        if (replyLate()) {
+            const delay = 10000 + Math.random() * 20000;
+            setTimeout(replyNow, delay);
+        } else {
+            await replyNow();
         }
+
     } catch (err) {
-        console.error('Chatbot error:', err);
+        console.error('Chatbot response error:', err);
     }
 }
 
