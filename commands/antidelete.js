@@ -212,6 +212,7 @@ async function handleMessageRevocation(sock, revocationMessage) {
 
         const messageId = revocationMessage.message.protocolMessage.key.id;
         const deletedBy = revocationMessage.participant || revocationMessage.key.participant || revocationMessage.key.remoteJid;
+        const chatId = revocationMessage.key.remoteJid;
         const ownerNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
 
         if (deletedBy.includes(sock.user.id) || deletedBy === ownerNumber) return;
@@ -221,7 +222,9 @@ async function handleMessageRevocation(sock, revocationMessage) {
 
         const sender = original.sender;
         const senderName = sender.split('@')[0];
-        const groupName = original.group ? (await sock.groupMetadata(original.group)).subject : '';
+        const deletedByName = deletedBy.split('@')[0];
+        const isGroup = chatId.endsWith('@g.us');
+        const groupName = isGroup ? (await sock.groupMetadata(chatId)).subject : '';
 
         const time = new Date().toLocaleString('en-US', {
             timeZone: 'Asia/Kolkata',
@@ -229,22 +232,41 @@ async function handleMessageRevocation(sock, revocationMessage) {
             day: '2-digit', month: '2-digit', year: 'numeric'
         });
 
-        let text = `*🔰 ANTIDELETE REPORT 🔰*\n\n` +
-            `*🗑️ Deleted By:* @${deletedBy.split('@')[0]}\n` +
-            `*👤 Sender:* @${senderName}\n` +
-            `*📱 Number:* ${sender}\n` +
-            `*🕒 Time:* ${time}\n`;
+        // Enhanced report text
+        let reportText = `🚨 *MESSAGE DELETED* 🚨\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `🗑️ *Deleted By:* @${deletedByName}\n` +
+            `👤 *From:* @${senderName}\n` +
+            `📞 *Number:* ${sender}\n` +
+            `⏰ *Time:* ${time}\n`;
 
-        if (groupName) text += `*👥 Group:* ${groupName}\n`;
+        if (isGroup) reportText += `👥 *Group:* ${groupName}\n`;
+        
+        reportText += `━━━━━━━━━━━━━━━━━━━━━━\n`;
 
         if (original.content) {
-            text += `\n*💬 Deleted Message:*\n${original.content}`;
+            reportText += `\n📝 *Deleted Message:*\n\`\`\`\n${original.content}\n\`\`\``;
         }
 
+        // Send to owner
         await sock.sendMessage(ownerNumber, {
-            text,
+            text: reportText,
             mentions: [deletedBy, sender]
         });
+
+        // Send delete SMS notification to the group if it's a group
+        if (isGroup) {
+            const groupNotification = `⚠️ *Message deleted by @${deletedByName}*\n\n_${senderName}'s message was removed_`;
+            
+            try {
+                await sock.sendMessage(chatId, {
+                    text: groupNotification,
+                    mentions: [deletedBy]
+                });
+            } catch (err) {
+                console.debug('Failed to send group notification:', err.message);
+            }
+        }
 
         // Media sending
         if (original.mediaType && fs.existsSync(original.mediaPath)) {
