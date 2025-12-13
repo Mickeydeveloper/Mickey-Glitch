@@ -4,7 +4,8 @@
   "description": "WhatsApp Bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node server.js",
+    "bot": "node index.js",
     "start:optimized": "node --max-old-space-size=512 --optimize-for-size --gc-interval=100 index.js",
     "cleanup": "node cleanup.js",
     "reset-session": "node reset-session.js",
@@ -71,7 +72,10 @@
     "youtubedl-core": "^4.11.7",
     "yt-search": "^2.12.1",
     "ytdl-core": "^4.11.5"
+    ,
+    "express": "^4.18.2"
   },
+  
   "overrides": {
     "jimp": "^1.6.0"
   },
