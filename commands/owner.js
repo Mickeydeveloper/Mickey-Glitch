@@ -5,7 +5,9 @@ const QRCode = require('qrcode'); // Ensure 'qrcode' is installed: npm i qrcode
 async function ownerCommand(sock, chatId, message) {
     try {
         // Generate QR code for direct WhatsApp chat
-        const waLink = `https://wa.me/${settings.ownerNumber.replace(/^\+/, '')}`;
+        const ownerNumberRaw = '255615944741';
+        const ownerNumberDisplay = '+' + ownerNumberRaw;
+        const waLink = `https://wa.me/${ownerNumberRaw}`;
         const qrBuffer = await QRCode.toBuffer(waLink, { width: 512 });
 
         // Optional professional thumbnail (use a real owner/business photo for trust)
@@ -46,7 +48,7 @@ async function ownerCommand(sock, chatId, message) {
                       `VERSION:3.0\n` +
                       `FN:${settings.botOwner}\n` +
                       `ORG:${settings.botName}\n` +
-                      `TEL;type=CELL;type=VOICE;waid=\( {settings.ownerNumber.replace(/^\+/, '')}:+ \){settings.ownerNumber}\n` +
+                      `TEL;type=CELL;type=VOICE;waid=${ownerNumberRaw}:${ownerNumberDisplay}\n` +
                       `URL:${projectUrl || ''}\n` +
                       `NOTE:Official Bot Owner - Direct Contact\n` +
                       `END:VCARD`;
