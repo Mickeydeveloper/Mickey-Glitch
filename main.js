@@ -61,6 +61,7 @@ const { handleAntilinkCommand, handleLinkDetection } = require('./commands/antil
 const { handleAntitagCommand, handleTagDetection } = require('./commands/antitag');
 const { Antilink } = require('./lib/antilink');
 const { handleMentionDetection, mentionToggleCommand, setMentionCommand, groupMentionToggleCommand } = require('./commands/mention');
+const { handleAntiStatusMention, groupAntiStatusToggleCommand } = require('./commands/antistatusmention');
 const memeCommand = require('./commands/meme');
 const tagCommand = require('./commands/tag');
 const tagNotAdminCommand = require('./commands/tagnotadmin');
@@ -359,6 +360,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     // Always run moderation features (antitag) regardless of mode
                     await handleTagDetection(sock, chatId, message, senderId);
                     await handleMentionDetection(sock, chatId, message);
+                    await handleAntiStatusMention(sock, chatId, message);
                     
                     // Only run chatbot in public mode or for owner/sudo
                     if (isPublic || isOwnerOrSudoCheck) {
@@ -696,6 +698,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 {
                     const args = userMessage.split(' ').slice(1).join(' ');
                     await groupMentionToggleCommand(sock, chatId, message, args);
+                }
+                break;
+            case userMessage.startsWith('.antistatusmention ') || userMessage.startsWith('.astatus '):
+                {
+                    const args = userMessage.split(' ').slice(1).join(' ');
+                    await groupAntiStatusToggleCommand(sock, chatId, message, args);
                 }
                 break;
             case userMessage === '.setmention':
