@@ -31,13 +31,13 @@ Zero setup · 24/7 online · Lightning fast
 
 <br>
 
-### 🔥 Beast-Mode VPS (PetroSky)
+### ⚡ Heroku Deploy
 
-Full control · Unlimited resources · For serious devs
+Free deployment · Easy setup · Start a new app instantly
 
 <div align="center">
-  <a href="https://client.petrosky.io/aff.php?aff=394" target="_blank">
-    <img src="https://img.shields.io/badge/🖥️ PETROSKY VPS - GOD MODE-ff0066?style=for-the-badge&logo=linux&logoColor=white" alt="VPS"/>
+  <a href="https://dashboard.heroku.com/new-app" target="_blank">
+    <img src="https://img.shields.io/badge/⚡ HEROKU DEPLOY-430098?style=for-the-badge&logo=heroku&logoColor=white" alt="Heroku Deploy"/>
   </a>
 </div>
 
