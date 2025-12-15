@@ -64,7 +64,7 @@ Want to run it locally or on your own server? Grab the complete package instantl
     <img src="https://img.shields.io/badge/📦 DOWNLOAD HERE-ff0000?style=for-the-badge&logo=dropbox&logoColor=white" height="55"/>
   </a>
   <br><br>
-  <img src="https://files.catbox.moe/piin3u.jpg" width="200"/>
+  <img src="https://water-billimg.onrender.com/1761205727440.png" width="200"/>
 </div>
 
 <h4 align="center">ᴍᴇᴇᴛ ᴅᴇᴠᴇʟᴏᴘᴇʀ</h4>
