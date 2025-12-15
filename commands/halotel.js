@@ -1,85 +1,90 @@
-##  ᴍɪᴄᴋᴇʏ ɢʟɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ʙᴏᴛ
+const { sendButtons } = require('../lib/myfunc');
+const settings = require('../settings');
 
-<img src="https://files.catbox.moe/x3wl8n.jpg" width="80" align="right"/>
+function formatNumber(n) {
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
 
-Get your **ᴍɪᴄᴋᴇʏ ɢʟɪᴛʜ ** running in seconds with exclusive, high-speed deployment options used by pro developers worldwide.
+async function halotelCommand(sock, chatId, message, userMessage = '') {
+    try {
+        // Extract and parse arguments. Support:
+        // .halotel gb10 255612130873 SellerName
+        // .halotel 20 255612130873 SellerName
+        const raw = (userMessage || (message.message?.conversation || message.message?.extendedTextMessage?.text || '')).trim();
+        const parts = raw.split(/\s+/).slice(1); // drop command
 
-### Step 1: Fork the Official Repository
-Secure your own copy of the most powerful source code.
+        if (!parts.length) {
+            await sock.sendMessage(chatId, { text: 'Usage: .halotel gb10 <phone> <name>\nExample: .halotel gb20 255612130873 Mickey' }, { quoted: message });
+            return;
+        }
 
-<div align="center">
-  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-    <a href="https://github.com/Mickeydeveloper/Mickey-Glitch/fork">
-      <img src="https://img.shields.io/badge/🔗 FORK REPOSITORY-000000?style=for-the-badge&logo=github&logoColor=white" alt="Fork" style="height:52px;border-radius:8px;box-shadow:0 4px 10px rgba(0,0,0,0.12);"/>
-    </a>
-  </div>
-</div>
+        // Find GB token (first token like 'gb10' or a number)
+        let gb = null;
+        let phone = null;
+        let name = '';
 
-<br>
+        // Identify gb token
+        for (let i = 0; i < parts.length; i++) {
+            const p = parts[i].toLowerCase();
+            if (p.startsWith('gb') && !gb) {
+                gb = parseInt(p.replace(/^gb/, ''), 10);
+                parts.splice(i,1); i--; continue;
+            }
+            if (!isNaN(parseInt(p,10)) && !gb) {
+                // numeric token could be GB or phone; decide by value
+                const num = parseInt(p,10);
+                if (num >= 10 && num <= 10000) { gb = num; parts.splice(i,1); i--; continue; }
+            }
+        }
 
-### Step 2: Instant One-Click Deployment (Most Popular 🔥)
+        // After removing GB token, next numeric token is phone
+        for (let i = 0; i < parts.length; i++) {
+            const onlyDigits = parts[i].replace(/[^0-9]/g,'');
+            if (onlyDigits.length >= 7) { phone = onlyDigits; parts.splice(i,1); break; }
+        }
 
-Zero setup · 24/7 online · Lightning fast
+        // Remaining parts are name
+        if (parts.length) name = parts.join(' ').trim();
 
-<div align="center">
-  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-    <a href="https://bot-hosting.net/?aff=1068419752923508776">
-      <img src="https://img.shields.io/badge/⚡ BOT HOSTING NET (Instant)-00C853?style=for-the-badge&logo=rocket&logoColor=white" alt="Deploy Instant" style="height:52px;border-radius:8px;box-shadow:0 4px 10px rgba(0,0,0,0.12);"/>
-    </a>
-    <a href="https://youtu.be/meE_EWEuyGk?si=gJxaiFZlEMluL1oB">
-      <img src="https://img.shields.io/badge/🎥 View Tutorial (YouTube)-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="View Tutorial" style="height:52px;border-radius:8px;box-shadow:0 4px 10px rgba(0,0,0,0.12);"/>
-    </a>
-  </div>
-</div>
+        if (!gb || isNaN(gb) || gb < 10) {
+            await sock.sendMessage(chatId, { text: '❗ Minimum bundle is 10 GB. Example: .halotel gb10 2556xxxxxxx SellerName' }, { quoted: message });
+            return;
+        }
 
-<br>
+        if (!phone) {
+            await sock.sendMessage(chatId, { text: '❗ Please include the seller phone number in the command.\nExample: .halotel gb10 255612130873 Mickey' }, { quoted: message });
+            return;
+        }
 
-### ⚡ Heroku Deploy
+        const pricePerGB = 1000; // TSh per 1 GB
+        const total = gb * pricePerGB;
 
-Free deployment · Easy setup · Start a new app instantly
+        const firstText = `📦 *Halotel Bundle Calculator*\n\n*Bundle:* ${gb} GB\n*Price / GB:* TSh ${formatNumber(pricePerGB)}\n*Total:* TSh ${formatNumber(total)}\n\nThank you for choosing our service!`;
 
-<div align="center">
-  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-    <a href="https://dashboard.heroku.com/new-app" target="_blank">
-      <img src="https://img.shields.io/badge/⚡ HEROKU DEPLOY-430098?style=for-the-badge&logo=heroku&logoColor=white" alt="Heroku Deploy" style="height:52px;border-radius:8px;box-shadow:0 4px 10px rgba(0,0,0,0.12);"/>
-    </a>
-  </div>
-</div>
+        // Send calculation first
+        await sock.sendMessage(chatId, { text: firstText }, { quoted: message });
 
-<br>
+        // Small delay for a professional two-step flow
+        await new Promise(r => setTimeout(r, 1200));
 
-### 💎 Katabump Elite Panel (Private & Fastest)
+        // Prepare payment options: WhatsApp quick-pay link + contact button using provided phone & name
+        const sellerNumber = phone;
+        const sellerName = name || 'Seller';
+        const waLink = `https://wa.me/${sellerNumber}?text=${encodeURIComponent(`Hello ${sellerName}, I want to buy ${gb}GB Halotel bundle (TSh ${formatNumber(total)})`)}`;
 
-Only the real ones know about this panel 
+        const secondText = `🔐 *Payment Options*\n\n*Seller:* ${sellerName}\n*Phone:* +${sellerNumber}\n*Amount:* TSh ${formatNumber(total)}\n\n1) Tap *Pay via WhatsApp* to open a message pre-filled to the seller.\n2) Or press *Contact Seller* to get direct contact details.\n\nAfter payment, reply here with your transaction ID so we can process your bundle.`;
 
-<div align="center">
-  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-    <a href="https://dashboard.katabump.com/auth/login#d6b7d6" target="_blank">
-      <img src="https://img.shields.io/badge/💎 KATABUMP ELITE - TAP-AA00FF?style=for-the-badge&logo=sparkles&logoColor=white" alt="Katabump" style="height:52px;border-radius:8px;box-shadow:0 4px 10px rgba(0,0,0,0.12);"/>
-    </a>
-  </div>
-</div>
+        const buttons = [
+            { urlButton: { displayText: 'Pay via WhatsApp', url: waLink } },
+            { quickReplyButton: { displayText: 'Contact Seller', id: `.contact ${sellerNumber} ${sellerName}` } }
+        ];
 
-<br><br>
+        await sendButtons(sock, chatId, secondText, 'Payment', buttons, message);
 
-### 🎁 Download Full Project ZIP (Offline Setup)
+    } catch (error) {
+        console.error('Error in halotel command:', error);
+        try { await sock.sendMessage(chatId, { text: '❌ Kosa limetokea. Tafadhali jaribu tena.' }, { quoted: message }); } catch (e) {}
+    }
+}
 
-Want to run it locally or on your own server? Grab the complete package instantly!
-
-<div align="center">
-  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;align-items:center">
-    <a href="https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip">
-      <img src="https://img.shields.io/badge/📦 DOWNLOAD HERE-FF3B30?style=for-the-badge&logo=dropbox&logoColor=white" alt="Download" style="height:52px;border-radius:8px;box-shadow:0 4px 10px rgba(0,0,0,0.12);"/>
-    </a>
-    <img src="https://water-billimg.onrender.com/1761205727440.png" width="200" style="border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.15);"/>
-  </div>
-</div>
-
-<h4 align="center">ᴍᴇᴇᴛ ᴅᴇᴠᴇʟᴏᴘᴇʀ</h4>
-
-<p align="center">
-  <!-- ᴏᴡɴᴇʀ ɴᴜᴍʙᴇʀ -->
-  <a href="https://wa.me/255612130873">
-    <img src="https://raw.githubusercontent.com/shizothetechie/database/main/icon/WhatsApp.png" width="12%">
-  </a>
-</p>
+module.exports = halotelCommand;
