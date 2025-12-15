@@ -79,7 +79,8 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
                 }
             };
 
-            await sock.sendMessage(chatId, { image: buf1, caption: firstText, contextInfo: external }, { quoted: message });
+            // Send the calculation text as a normal text message but attach externalAdReply
+            await sock.sendMessage(chatId, { text: firstText, contextInfo: external }, { quoted: message });
         } catch (e) {
             // fallback to sending text only if image fetch fails
             try { await sock.sendMessage(chatId, { text: firstText }, { quoted: message }); } catch (e) {}
