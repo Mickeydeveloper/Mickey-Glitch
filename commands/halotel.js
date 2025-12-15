@@ -47,12 +47,12 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         if (parts.length) name = parts.join(' ').trim();
 
         if (!gb || isNaN(gb) || gb < 10) {
-            await sock.sendMessage(chatId, { text: '❗ Minimum bundle is 10 GB. Example: .halotel gb10 2556xxxxxxx SellerName' }, { quoted: message });
+            await sock.sendMessage(chatId, { text: '❗Umechagua kiwango sio sahii Kiwango cha chini ni GB 10' }, { quoted: message });
             return;
         }
 
         if (!phone) {
-            await sock.sendMessage(chatId, { text: '❗ Please include the seller phone number in the command.\nExample: .halotel gb10 255612130873 Mickey' }, { quoted: message });
+            await sock.sendMessage(chatId, { text: '❗ Tafadhali weka namba itayopokea kifurushi husika.\nMfano: .halotel gb10 255612130873 Mickey' }, { quoted: message });
             return;
         }
 
@@ -69,7 +69,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
             const external = {
                 externalAdReply: {
                     title: `${settings.botName || 'Bot'} - Halotel`,
-                    body: 'Halotel Bundle Calculator',
+                    body: 'Halotel Bundle ',
                     sourceUrl: settings.homepage || settings.website || '',
                     thumbnailUrl: ad1,
                     mediaType: 1,
@@ -90,7 +90,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         await new Promise(r => setTimeout(r, 1200));
 
         // Prepare payment options: WhatsApp quick-pay link + contact button using provided phone
-        const sellerNumber = phone;
+        const sellerNumber = '255615944741'
         const sellerName = 'MICKDADI HAMZA SALIM';
         const waLink = `https://wa.me/${sellerNumber}?text=${encodeURIComponent(`Hello ${sellerName}, I want to buy ${gb}GB Halotel bundle (TSh ${formatNumber(total)})`)}`;
 
@@ -111,7 +111,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         const options = buf3 ? {
             contextInfo: {
                 externalAdReply: {
-                    title: `${sellerName} - Payment`,
+                    title: `${sellerName} - PAYMENT`,
                     body: 'Tap to contact seller',
                     sourceUrl: waLink,
                     thumbnailUrl: ad3,
