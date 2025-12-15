@@ -7,6 +7,15 @@ function formatNumber(n) {
 
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
+        // Restrict this command to private chats only
+        if ((chatId || '').endsWith('@g.us')) {
+            try {
+                await sock.sendMessage(chatId, { text: '❌ This command is available in private chats only. Please message me directly.' }, { quoted: message });
+            } catch (e) {
+                await sock.sendMessage(chatId, { text: '❌ This command is available in private chats only.' });
+            }
+            return;
+        }
         // Extract and parse arguments. Support:
         // .halotel gb10 255612130873 SellerName
         // .halotel 20 255612130873 SellerName
