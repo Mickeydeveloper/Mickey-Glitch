@@ -32,6 +32,7 @@ const HELP = `
 ✖ help | .menu
 ✖ ping
 ✖ alive
+✖ halotel <gb number>
 ✖ tts <text>
 ✖ owner
 ✖ attp <text>
