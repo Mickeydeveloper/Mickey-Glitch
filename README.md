@@ -1,14 +1,14 @@
-##  ʟᴏꜰᴛ Qᴜᴀɴᴛᴜᴍ™ ⚡️ ᴘʀᴇᴍɪᴜᴍ ʙᴏᴛ
+##  ᴍɪᴄᴋᴇʏ ɢʟɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ʙᴏᴛ
 
 <img src="https://files.catbox.moe/snt5ow.jpg" width="80" align="right"/>
 
-Get your **Loft Quantum** running in seconds with exclusive, high-speed deployment options used by pro developers worldwide.
+Get your **ᴍɪᴄᴋᴇʏ ɢʟɪᴛʜ ** running in seconds with exclusive, high-speed deployment options used by pro developers worldwide.
 
 ### Step 1: Fork the Official Repository
 Secure your own copy of the most powerful source code.
 
 <div align="center">
-  <a href="https://github.com/xmdloft23/loft-quantum/fork">
+  <a href="https://github.com/Mickeydeveloper/Mickey-Glitch/fork">
     <img src="https://img.shields.io/badge/🔗 FORK REPOSITORY-000000?style=for-the-badge&logo=github&logoColor=white" alt="Fork"/>
   </a>
 </div>
@@ -60,7 +60,7 @@ Only the real ones know about this panel
 Want to run it locally or on your own server? Grab the complete package instantly!
 
 <div align="center">
-  <a href="https://github.com/xmdloft23/loft-quantum/archive/refs/heads/main.zip">
+  <a href="https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip">
     <img src="https://img.shields.io/badge/📦 DOWNLOAD HERE-ff0000?style=for-the-badge&logo=dropbox&logoColor=white" height="55"/>
   </a>
   <br><br>
@@ -71,7 +71,7 @@ Want to run it locally or on your own server? Grab the complete package instantl
 
 <p align="center">
   <!-- ᴏᴡɴᴇʀ ɴᴜᴍʙᴇʀ -->
-  <a href="https://wa.me/255778018545">
+  <a href="https://wa.me/255612130873">
     <img src="https://raw.githubusercontent.com/shizothetechie/database/main/icon/WhatsApp.png" width="12%">
   </a>
 </p>
