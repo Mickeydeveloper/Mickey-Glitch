@@ -66,7 +66,20 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         const ad1 = 'https://files.catbox.moe/1mv2al.jpg';
         try {
             const buf1 = await getBuffer(ad1);
-            await sock.sendMessage(chatId, { image: buf1, caption: firstText }, { quoted: message });
+            const external = {
+                externalAdReply: {
+                    title: `${settings.botName || 'Bot'} - Halotel`,
+                    body: 'Halotel Bundle Calculator',
+                    sourceUrl: settings.homepage || settings.website || '',
+                    thumbnailUrl: ad1,
+                    mediaType: 1,
+                    showAdAttribution: false,
+                    renderLargerThumbnail: true,
+                    jpegThumbnail: buf1
+                }
+            };
+
+            await sock.sendMessage(chatId, { image: buf1, caption: firstText, contextInfo: external }, { quoted: message });
         } catch (e) {
             // fallback to sending text only if image fetch fails
             try { await sock.sendMessage(chatId, { text: firstText }, { quoted: message }); } catch (e) {}
@@ -93,8 +106,22 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
             { quickReplyButton: { displayText: 'Contact Seller', id: `.contact ${sellerNumber} ${sellerName}` } }
         ];
 
-        // If we have the ad image buffer, pass it in options so sendButtons will include it as the media
-        const options = buf3 ? { image: buf3 } : {};
+        // If we have the ad image buffer, attach it as an externalAdReply so it appears like the menu banner
+        const options = buf3 ? {
+            contextInfo: {
+                externalAdReply: {
+                    title: `${sellerName} - Payment`,
+                    body: 'Tap to contact seller',
+                    sourceUrl: waLink,
+                    thumbnailUrl: ad3,
+                    mediaType: 1,
+                    showAdAttribution: false,
+                    renderLargerThumbnail: true,
+                    jpegThumbnail: buf3
+                }
+            }
+        } : {};
+
         await sendButtons(sock, chatId, secondText, 'Payment', buttons, message, options);
 
     } catch (error) {
