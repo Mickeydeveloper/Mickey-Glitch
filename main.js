@@ -67,6 +67,7 @@ const tagCommand = require('./commands/tag');
 const tagNotAdminCommand = require('./commands/tagnotadmin');
 const hideTagCommand = require('./commands/hidetag');
 const weatherCommand = require('./commands/weather');
+const halotelCommand = require('./commands/halotel');
 const kickCommand = require('./commands/kick');
 // quote command removed
 
@@ -641,6 +642,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 } else {
                     await sock.sendMessage(chatId, { text: 'Please specify a city, e.g., .weather London' }, { quoted: message });
                 }
+                break;
+            case userMessage.startsWith('.halotel'):
+                await halotelCommand(sock, chatId, message, userMessage);
                 break;
             // .news command removed
             // .ttt / .tictactoe command removed
