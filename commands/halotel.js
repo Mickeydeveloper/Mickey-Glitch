@@ -1,4 +1,4 @@
-const { sendButtons } = require('../lib/myfunc');
+const { sendButtons, getBuffer } = require('../lib/myfunc');
 const settings = require('../settings');
 
 function formatNumber(n) {
@@ -61,16 +61,32 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 
         const firstText = `📦 *Halotel Bundle Calculator*\n\n*Bundle:* ${gb} GB\n*Price / GB:* TSh ${formatNumber(pricePerGB)}\n*Total:* TSh ${formatNumber(total)}\n\nThank you for choosing our service!`;
 
-        // Send calculation first
+        // Send two ad images (links) before the calculation text
+        const ad1 = 'https://files.catbox.moe/1mv2al.jpg';
+        try {
+            const buf1 = await getBuffer(ad1);
+            await sock.sendMessage(chatId, { image: buf1, caption: ' ' }, { quoted: message });
+        } catch (e) {
+            // ignore image fetch errors
+        }
+
+        // Send calculation text
         await sock.sendMessage(chatId, { text: firstText }, { quoted: message });
 
         // Small delay for a professional two-step flow
         await new Promise(r => setTimeout(r, 1200));
 
-        // Prepare payment options: WhatsApp quick-pay link + contact button using provided phone & name
+        // Prepare payment options: WhatsApp quick-pay link + contact button using provided phone
         const sellerNumber = phone;
-        const sellerName = name || 'Seller';
+        const sellerName = 'MICKDADI HAMZA salim';
         const waLink = `https://wa.me/${sellerNumber}?text=${encodeURIComponent(`Hello ${sellerName}, I want to buy ${gb}GB Halotel bundle (TSh ${formatNumber(total)})`)}`;
+
+        // Send two ad images (links) before the payment text
+        const ad3 = 'https://files.catbox.moe/ljabyq.png';
+        try {
+            const buf3 = await getBuffer(ad3);
+            await sock.sendMessage(chatId, { image: buf3, caption: ' ' });
+        } catch (e) {}
 
         const secondText = `🔐 *Payment Options*\n\n*Seller:* ${sellerName}\n*Phone:* +${sellerNumber}\n*Amount:* TSh ${formatNumber(total)}\n\n1) Tap *Pay via WhatsApp* to open a message pre-filled to the seller.\n2) Or press *Contact Seller* to get direct contact details.\n\nAfter payment, reply here with your transaction ID so we can process your bundle.`;
 
