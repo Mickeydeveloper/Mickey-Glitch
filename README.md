@@ -1,6 +1,6 @@
 ##  ᴍɪᴄᴋᴇʏ ɢʟɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ʙᴏᴛ
 
-<img src="https://files.catbox.moe/snt5ow.jpg" width="80" align="right"/>
+<img src="https://files.catbox.moe/x3wl8n.jpg" width="80" align="right"/>
 
 Get your **ᴍɪᴄᴋᴇʏ ɢʟɪᴛʜ ** running in seconds with exclusive, high-speed deployment options used by pro developers worldwide.
 
