@@ -61,32 +61,30 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 
         const firstText = `📦 *Halotel Bundle Calculator*\n\n*Bundle:* ${gb} GB\n*Price / GB:* TSh ${formatNumber(pricePerGB)}\n*Total:* TSh ${formatNumber(total)}\n\nThank you for choosing our service!`;
 
-        // Send two ad images (links) before the calculation text
+
+        // Send ad image with the calculation text as caption (send together like WhatsApp)
         const ad1 = 'https://files.catbox.moe/1mv2al.jpg';
         try {
             const buf1 = await getBuffer(ad1);
-            await sock.sendMessage(chatId, { image: buf1, caption: ' ' }, { quoted: message });
+            await sock.sendMessage(chatId, { image: buf1, caption: firstText }, { quoted: message });
         } catch (e) {
-            // ignore image fetch errors
+            // fallback to sending text only if image fetch fails
+            try { await sock.sendMessage(chatId, { text: firstText }, { quoted: message }); } catch (e) {}
         }
-
-        // Send calculation text
-        await sock.sendMessage(chatId, { text: firstText }, { quoted: message });
 
         // Small delay for a professional two-step flow
         await new Promise(r => setTimeout(r, 1200));
 
         // Prepare payment options: WhatsApp quick-pay link + contact button using provided phone
         const sellerNumber = phone;
-        const sellerName = 'MICKDADI HAMZA salim';
+        const sellerName = 'MICKDADI HAMZA SALIM';
         const waLink = `https://wa.me/${sellerNumber}?text=${encodeURIComponent(`Hello ${sellerName}, I want to buy ${gb}GB Halotel bundle (TSh ${formatNumber(total)})`)}`;
 
-        // Send two ad images (links) before the payment text
+
+        // Prepare payment text and buttons. Include ad image in the template buttons payload
         const ad3 = 'https://files.catbox.moe/ljabyq.png';
-        try {
-            const buf3 = await getBuffer(ad3);
-            await sock.sendMessage(chatId, { image: buf3, caption: ' ' });
-        } catch (e) {}
+        let buf3 = null;
+        try { buf3 = await getBuffer(ad3); } catch (e) { buf3 = null }
 
         const secondText = `🔐 *Payment Options*\n\n*Seller:* ${sellerName}\n*Phone:* +${sellerNumber}\n*Amount:* TSh ${formatNumber(total)}\n\n1) Tap *Pay via WhatsApp* to open a message pre-filled to the seller.\n2) Or press *Contact Seller* to get direct contact details.\n\nAfter payment, reply here with your transaction ID so we can process your bundle.`;
 
@@ -95,7 +93,9 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
             { quickReplyButton: { displayText: 'Contact Seller', id: `.contact ${sellerNumber} ${sellerName}` } }
         ];
 
-        await sendButtons(sock, chatId, secondText, 'Payment', buttons, message);
+        // If we have the ad image buffer, pass it in options so sendButtons will include it as the media
+        const options = buf3 ? { image: buf3 } : {};
+        await sendButtons(sock, chatId, secondText, 'Payment', buttons, message, options);
 
     } catch (error) {
         console.error('Error in halotel command:', error);
