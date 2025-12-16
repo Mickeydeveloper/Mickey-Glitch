@@ -116,20 +116,15 @@ async function handleAntiStatusMention(sock, chatId, message) {
       }
 
       try {
-        const participant = message.key.participant || message.key.remoteJid;
+        // Delete the message using the message key
         await sock.sendMessage(chatId, {
-          delete: {
-            remoteJid: chatId,
-            fromMe: false,
-            id: message.key.id,
-            participant
-          }
+          delete: message.key
         });
         try {
-          await sock.sendMessage(chatId, { text: '⛔ A status-mention message was removed by anti-status-mention.' }, { quoted: message });
+          await sock.sendMessage(chatId, { text: '⛔ A status-mention message was removed by anti-status-mention.' });
         } catch (e) {}
       } catch (e) {
-        // ignore
+        console.error('Failed to delete status mention message:', e?.message || e);
       }
     }
   } catch (err) {
