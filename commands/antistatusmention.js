@@ -1,114 +1,91 @@
-const fs = require('fs');
-const path = require('path');
-const isAdmin = require('../lib/isAdmin');
+const { DataTypes } = require('sequelize');
+const { database } = require('../settings');
 
-function loadState() {
-  try {
-    const raw = fs.readFileSync(path.join(__dirname, '..', 'data', 'antistatusmention.json'), 'utf8');
-    const state = JSON.parse(raw);
-    if (!state.perGroup) state.perGroup = {};
-    return state;
-  } catch (e) {
-    return { perGroup: {} };
-  }
-}
+const AntiStatusMentionDB = database.define('antistatusmention', {
+    status: {
+        type: DataTypes.ENUM('off', 'warn', 'delete', 'remove'),
+        defaultValue: 'warn',
+        allowNull: false
+    },
+    action: {
+        type: DataTypes.ENUM('warn', 'delete', 'remove'),
+        defaultValue: 'warn',
+        allowNull: false
+    },
+    warn_limit: {
+        type: DataTypes.INTEGER,
+        defaultValue: 3,
+        allowNull: false
+    }
+}, {
+    timestamps: true
+});
 
-function saveState(state) {
-  fs.writeFileSync(path.join(__dirname, '..', 'data', 'antistatusmention.json'), JSON.stringify(state, null, 2));
-}
+// Store warn counts in memory
+const statusWarnCounts = new Map();
 
-function isEnabledForChat(state, chatId) {
-  if (!state) return false;
-  if (typeof state.perGroup?.[chatId] === 'boolean') return !!state.perGroup[chatId];
-  return false;
-}
-
-async function handleAntiStatusMention(sock, chatId, message) {
-  try {
-    if (!chatId || !chatId.endsWith('@g.us')) return;
-    const state = loadState();
-    if (!isEnabledForChat(state, chatId)) return;
-
-    // Get message text (from conversation, caption, etc.)
-    const msg = message.message || {};
-    const text = (
-      msg.conversation ||
-      msg.extendedTextMessage?.text ||
-      msg.imageMessage?.caption ||
-      msg.videoMessage?.caption ||
-      ''
-    ).trim();
-
-    if (!text) return;
-
-    // Improved regex to catch exact spam patterns like:
-    // "@ This group was mentioned."
-    // "This group was mention"
-    // "this group was mentioned"
-    // and similar variations
-    const phraseRegex = /\b(?:@?\s*this\s+group\s+was\s+mention(?:ed)?|this\s+group\s+was\s+mention(?:ed)?|group\s+was\s+mention(?:ed)?|mentioned\s+this\s+group)\b/i;
-
-    if (!phraseRegex.test(text)) return;
-
-    // Check if bot is admin before deleting
+async function initAntiStatusMentionDB() {
     try {
-      const adminInfo = await isAdmin(sock, chatId, sock.user?.id || sock.user?.jid || '');
-      if (!adminInfo.isBotAdmin) return;
-    } catch (e) {
-      // Continue anyway if check fails
+        await AntiStatusMentionDB.sync({ alter: true });
+        console.log('AntiStatusMention table ready');
+    } catch (error) {
+        console.error('Error initializing AntiStatusMention table:', error);
+        throw error;
     }
+}
 
-    // Delete the message
+async function getAntiStatusMentionSettings() {
     try {
-      const participant = message.key.participant || message.key.remoteJid;
-      await sock.sendMessage(chatId, {
-        delete: {
-          remoteJid: chatId,
-          fromMe: false,
-          id: message.key.id,
-          participant
-        }
-      });
-
-      // Optional notification
-      await sock.sendMessage(chatId, {
-        text: '⛔ Status-mention spam message removed.'
-      }, { quoted: message });
-    } catch (e) {
-      // Ignore errors during deletion
+        const [settings] = await AntiStatusMentionDB.findOrCreate({
+            where: {},
+            defaults: {}
+        });
+        return settings;
+    } catch (error) {
+        console.error('Error getting anti-status-mention settings:', error);
+        return { 
+            status: 'off', 
+            action: 'warn', 
+            warn_limit: 3
+        };
     }
-  } catch (err) {
-    console.error('handleAntiStatusMention error:', err?.message || err);
-  }
 }
 
-async function groupAntiStatusToggleCommand(sock, chatId, message, args) {
-  try {
-    if (!chatId.endsWith('@g.us')) return sock.sendMessage(chatId, { text: 'This command only works in groups.' }, { quoted: message });
-
-    const sender = message.key.participant || message.key.remoteJid;
-    const adminInfo = await isAdmin(sock, chatId, sender);
-    if (!adminInfo.isSenderAdmin && !message.key.fromMe) {
-      return sock.sendMessage(chatId, { text: 'Only group admins can use this command.' }, { quoted: message });
+async function updateAntiStatusMentionSettings(updates) {
+    try {
+        const settings = await getAntiStatusMentionSettings();
+        return await settings.update(updates);
+    } catch (error) {
+        console.error('Error updating anti-status-mention settings:', error);
+        return null;
     }
-
-    const onoff = (args || '').trim().toLowerCase();
-    if (!onoff || !['on', 'off'].includes(onoff)) {
-      return sock.sendMessage(chatId, { text: 'Usage: .antistatus on|off' }, { quoted: message });
-    }
-
-    const state = loadState();
-    state.perGroup = state.perGroup || {};
-    state.perGroup[chatId] = onoff === 'on';
-    saveState(state);
-
-    return sock.sendMessage(chatId, {
-      text: `Anti-status-mention is now ${state.perGroup[chatId] ? 'ENABLED' : 'DISABLED'} in this group.`
-    }, { quoted: message });
-  } catch (e) {
-    console.error('groupAntiStatusToggleCommand error:', e);
-    return sock.sendMessage(chatId, { text: 'Error toggling anti-status-mention.' }, { quoted: message });
-  }
 }
 
-module.exports = { handleAntiStatusMention, groupAntiStatusToggleCommand };
+function getStatusWarnCount(userJid) {
+    return statusWarnCounts.get(userJid) || 0;
+}
+
+function incrementStatusWarnCount(userJid) {
+    const current = getStatusWarnCount(userJid);
+    statusWarnCounts.set(userJid, current + 1);
+    return current + 1;
+}
+
+function resetStatusWarnCount(userJid) {
+    statusWarnCounts.delete(userJid);
+}
+
+function clearAllStatusWarns() {
+    statusWarnCounts.clear();
+}
+
+module.exports = {
+    initAntiStatusMentionDB,
+    getAntiStatusMentionSettings,
+    updateAntiStatusMentionSettings,
+    getStatusWarnCount,
+    incrementStatusWarnCount,
+    resetStatusWarnCount,
+    clearAllStatusWarns,
+    AntiStatusMentionDB
+};
