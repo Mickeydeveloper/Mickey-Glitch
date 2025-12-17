@@ -361,7 +361,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     // Always run moderation features (antitag) regardless of mode
                     await handleTagDetection(sock, chatId, message, senderId);
                     await handleMentionDetection(sock, chatId, message);
-                    await handleAntiStatusMention(sock, chatId, message);
+                    if (typeof handleAntiStatusMention === 'function') await handleAntiStatusMention(sock, chatId, message);
                     
                     // Only run chatbot in public mode or for owner/sudo
                     if (isPublic || isOwnerOrSudoCheck) {
@@ -1139,11 +1139,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
     } catch (error) {
         console.error('❌ Error in message handler:', error.message);
-        // Only try to send error message if we have a valid chatId
-        if (chatId) {
-            await sock.sendMessage(chatId, {
-                text: '❌ Failed to process command!'
-            });
+        // Try to extract chatId safely from messageUpdate if available
+        let safeChatId = null;
+        try { safeChatId = messageUpdate?.messages?.[0]?.key?.remoteJid || null; } catch (e) { safeChatId = null; }
+        if (safeChatId) {
+            await sock.sendMessage(safeChatId, {
+                text: `❌ Failed to process command: ${String(error.message).slice(0, 300)}`
+            }).catch(console.error);
         }
     }
 }

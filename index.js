@@ -143,8 +143,9 @@ async function startXeonBotInc() {
                 console.error("Error in handleMessages:", err)
                 // Only try to send error message if we have a valid chatId
                 if (mek.key && mek.key.remoteJid) {
+                    const short = (err && err.message) ? String(err.message).slice(0, 300) : 'Unknown error';
                     await XeonBotInc.sendMessage(mek.key.remoteJid, {
-                        text: '❌ An error occurred while processing your message.'
+                        text: `❌ An error occurred while processing your message: ${short}`
                     }).catch(console.error);
                 }
             }
