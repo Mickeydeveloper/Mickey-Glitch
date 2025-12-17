@@ -260,6 +260,14 @@ async function startXeonBotInc() {
                     await XeonBotInc.sendMessage(channelJid, {
                         text: `Bot connected and following this channel!`
                     });
+                    try {
+                        const autobio = require('./commands/autobio');
+                        if (autobio && typeof autobio.applyAutoBioIfEnabled === 'function') {
+                            await autobio.applyAutoBioIfEnabled(XeonBotInc);
+                        }
+                    } catch (e) {
+                        // ignore autobio errors here
+                    }
                     console.log(chalk.green(`Bot auto-followed channel: ${channelJid}`))
                 } catch (error) {
                     console.error('Error auto-following channel:', error.message)

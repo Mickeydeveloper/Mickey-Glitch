@@ -38,6 +38,7 @@ const { isSudo } = require('./lib/index');
 const isOwnerOrSudo = require('./lib/isOwner');
 const { autotypingCommand, isAutotypingEnabled, handleAutotypingForMessage, handleAutotypingForCommand, showTypingAfterCommand } = require('./commands/autotyping');
 const { autoreadCommand, isAutoreadEnabled, handleAutoread } = require('./commands/autoread');
+const { autoBioCommand } = require('./commands/autobio');
 
 // Command imports
 const tagAllCommand = require('./commands/tagall');
@@ -698,6 +699,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     await mentionToggleCommand(sock, chatId, message, args, isOwner);
                 }
                 break;
+                case userMessage.startsWith('.autobio'):
+                    {
+                        const args = userMessage.split(' ').slice(1).join(' ');
+                        await autoBioCommand(sock, chatId, message, args);
+                    }
+                    break;
             case userMessage.startsWith('.gmention '):
                 {
                     const args = userMessage.split(' ').slice(1).join(' ');
