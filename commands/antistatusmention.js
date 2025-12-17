@@ -49,7 +49,7 @@ async function handleAntiStatusMention(sock, chatId, message) {
     const mentionedJids = msg.extendedTextMessage?.contextInfo?.mentionedJid || msg.contextInfo?.mentionedJid || [];
     if (Array.isArray(mentionedJids) && mentionedJids.length > 0) return;
 
-    const phraseRegex = /\\b(?:this\\s+group\\s+was\\s+mention(?:ed)?|group\\s+was\\s+mention(?:ed)?|mentioned\\s+this\\s+group|mention(?:ed)?\\s+this\\s+group|status\\s+mention(?:ed)?|mention\\s+status)\\b/i;
+    const phraseRegex = /\b(?:this\s+group\s+was\s+mention(?:ed)?|group\s+was\s+mention(?:ed)?|mentioned\s+this\s+group|mention(?:ed)?\s+this\s+group|status\s+mention(?:ed)?|mention\s+status)\b/i;
 
     if (!phraseRegex.test(text)) return;
 
@@ -71,10 +71,21 @@ async function handleAntiStatusMention(sock, chatId, message) {
         id: message.key.id,
         participant: message.key.participant || message.key.remoteJid
       };
-      await sock.sendMessage(chatId, { delete: delKey });
+      console.log('AntiStatusMention: matched phrase, attempting delete', { chatId, msgId: message.key.id });
+      // Primary delete method (structured)
+      try {
+        await sock.sendMessage(chatId, { delete: delKey });
+      } catch (e) {
+        // Fallback: try passing the original message key (some versions accept this)
+        try {
+          await sock.sendMessage(chatId, { delete: message.key });
+        } catch (e2) {
+          throw e2 || e;
+        }
+      }
       try { await sock.sendMessage(chatId, { text: '⛔ A status-mention message was removed by anti-status-mention.' }); } catch (e) {}
     } catch (e) {
-      console.error('Failed to delete status mention message:', e?.message || e);
+      console.error('Failed to delete status mention message:', e?.message || e, 'delKey:', message.key?.id);
     }
   } catch (err) {
     console.error('handleAntiStatusMention error:', err?.message || err);
