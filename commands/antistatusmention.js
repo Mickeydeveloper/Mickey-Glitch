@@ -65,27 +65,64 @@ async function handleAntiStatusMention(sock, chatId, message) {
 
     // Attempt to delete the offending message (best-effort)
     try {
-      const delKey = {
+      const messageId = message.key.id;
+      const participant = message.key.participant || message.key.remoteJid;
+      
+      console.log('AntiStatusMention: matched phrase, attempting delete', { chatId, msgId: messageId, participant });
+      
+      // Construct proper delete key
+      const deleteKey = {
         remoteJid: chatId,
         fromMe: false,
-        id: message.key.id,
-        participant: message.key.participant || message.key.remoteJid
+        id: messageId,
+        participant: participant
       };
-      console.log('AntiStatusMention: matched phrase, attempting delete', { chatId, msgId: message.key.id });
-      // Primary delete method (structured)
+      
+      // Try multiple delete methods for better compatibility
+      let deleted = false;
+      
       try {
-        await sock.sendMessage(chatId, { delete: delKey });
-      } catch (e) {
-        // Fallback: try passing the original message key (some versions accept this)
+        // Method 1: Use the delete key structure
+        await sock.sendMessage(chatId, { delete: deleteKey });
+        deleted = true;
+        console.log('Message deleted successfully using deleteKey method');
+      } catch (err1) {
         try {
+          // Method 2: Use message.key directly
           await sock.sendMessage(chatId, { delete: message.key });
-        } catch (e2) {
-          throw e2 || e;
+          deleted = true;
+          console.log('Message deleted successfully using message.key method');
+        } catch (err2) {
+          try {
+            // Method 3: Try with just the ID
+            await sock.sendMessage(chatId, { 
+              delete: { 
+                remoteJid: chatId, 
+                id: messageId 
+              } 
+            });
+            deleted = true;
+            console.log('Message deleted successfully using ID-only method');
+          } catch (err3) {
+            console.error('All delete methods failed:', err1?.message, err2?.message, err3?.message);
+          }
         }
       }
-      try { await sock.sendMessage(chatId, { text: '⛔ A status-mention message was removed by anti-status-mention.' }); } catch (e) {}
+      
+      // Send info about the status mention deletion
+      const sender = message.key.participant || message.key.remoteJid;
+      const senderName = sender ? `@${sender.split('@')[0]}` : 'User';
+      
+      try { 
+        const status = deleted ? '✅ Message deleted' : '⚠️ Attempted to delete';
+        await sock.sendMessage(chatId, { 
+          text: `ℹ️ Status mention detected!\n\n📌 Details:\n• Sender: ${senderName}\n• Action: ${status}\n🛡️ Anti-Status-Mention protection` 
+        }); 
+      } catch (e) {
+        console.error('Failed to send info message:', e?.message);
+      }
     } catch (e) {
-      console.error('Failed to delete status mention message:', e?.message || e, 'delKey:', message.key?.id);
+      console.error('Failed to handle status mention message:', e?.message || e);
     }
   } catch (err) {
     console.error('handleAntiStatusMention error:', err?.message || err);
