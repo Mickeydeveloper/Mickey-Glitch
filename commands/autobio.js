@@ -52,9 +52,9 @@ async function autoBioCommand(sock, chatId, message, args) {
 // Compose bio text
 function buildAutoBio() {
   const ownerNum = (settings.ownerNumber || '').replace(/[^0-9]/g, '');
-  const ownerDisplay = ownerNum ? `Thanks to owner: +${ownerNum}` : 'Thanks to owner';
+  const ownerDisplay = ownerNum ? `Owner: +${ownerNum}` : 'Owner';
   const now = new Date().toLocaleString();
-  return `🤖 Bot connected — ${now}\n${ownerDisplay}`;
+  return `✨ Powered by Mickey Bot\n⏰ ${now}\n💯 ${ownerDisplay}`;
 }
 
 // Apply autobio if enabled for this bot instance
