@@ -130,6 +130,7 @@ const { igsCommand } = require('./commands/igs');
 const { anticallCommand, readState: readAnticallState } = require('./commands/anticall');
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
+const phoneCommand = require('./commands/phone');
 // sora command removed
 
 // Global settings
@@ -646,6 +647,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.halotel'):
                 await halotelCommand(sock, chatId, message, userMessage);
+                break;
+            case userMessage.startsWith('.phone'):
+                const phoneQuery = userMessage.slice(6).trim();
+                await phoneCommand(sock, chatId, message, phoneQuery);
                 break;
             // .news command removed
             // .ttt / .tictactoe command removed

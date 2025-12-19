@@ -41,6 +41,7 @@ const HELP = `
 🔹 ping
 🔹 alive
 🔹 halotel <gb number>
+🔹 phone <device name>
 🔹 tts <text>
 🔹 owner
 🔹 attp <text>
