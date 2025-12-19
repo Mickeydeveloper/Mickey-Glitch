@@ -25,14 +25,14 @@ const HELP = `
 ╰━━━━━━━━━━━━━━━━━━━━━━━━╯
 
 🔹 *Bot Name:* Mickey Glitch
-🔹 *Owner:* Mickey Mozy
+🔹 *Owner:* Mozy24
 🔹 *Version:* 3.0.5
 🔹 *Uptime:* ${getUptime()}
-🔹 *Prefix:* .
+🔹 *Database* zenith base
 
-▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔
      Welcome, Glitch User! 
-▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
 
 🔹 * • General Commands*
 🔹 help | menu
@@ -180,7 +180,7 @@ const HELP = `
 🔹 facepalm
 
 ╭━━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✨ Powered by Mickey Glitch Bot ✨
+   ✨ Mickey Glitch Bot ✨
 ╰━━━━━━━━━━━━━━━━━━━━━━━━╯
 `;
 
