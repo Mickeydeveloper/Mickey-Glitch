@@ -19,19 +19,21 @@ function getUptime() {
  * Main HELP MESSAGE – Premium Glitch Style
  */
 const HELP = `
-╭━━━━━━━━━━━━━━━━━━━━━━╮
-      🐙 *MICKEY GLITCH BOT* 🐙
-          ✧ Premium Mickey Bots ✧
-╰━━━━━━━━━━━━━━━━━━━━━━╯
+╭━━━━━━━━━━━━━━━━━━━━━━━━╮
+        *MICKEY GLITCH BOT* 
+           ✧ Premium Bot ✧
+╰━━━━━━━━━━━━━━━━━━━━━━━━╯
 
 🔹 *Bot Name:* Mickey Glitch
 🔹 *Owner:* Mozy24
 🔹 *Version:* 3.0.5
 🔹 *Uptime:* ${getUptime()}
-🔹 *Database* zenith base
+🔹 *Database:* Zenith Base
+🔹 *Status:* ✅ Online & Active
 
-    ▔▔▔
-     Welcome, Glitch User! 
+╭━━━━━━━━━━━━━━━━━━━━━━━━╮
+    Welcome to Glitch Power!
+╰━━━━━━━━━━━━━━━━━━━━━━━━╯ 
 
 
 🔹 * • General Commands*
