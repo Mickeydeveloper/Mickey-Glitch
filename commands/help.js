@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────
-//  MR LOFT – MODERN PREMIUM HELP MENU
+//  MODERN PREMIUM HELP MENU
 // ───────────────────────────────────────────────
 const axios = require("axios");
 const settings = require('../settings');
@@ -21,7 +21,7 @@ function getUptime() {
 const HELP = `
 ╭━━━━━━━━━━━━━━━━━━━━━━━━╮
       🐙 *MICKEY GLITCH BOT* 🐙
-          ✧ ＰＯＷＥＲＥＤ  ＢＹ  ＧＬＩＴＣＨ  ✧
+          ✧ Premium Mickey Bots ✧
 ╰━━━━━━━━━━━━━━━━━━━━━━━━╯
 
 🔹 *Bot Name:* Mickey Glitch
@@ -31,10 +31,10 @@ const HELP = `
 🔹 *Prefix:* .
 
 ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
-     🎀 Welcome, Glitch User! 🎀
+     Welcome, Glitch User! 
 ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
 
-🔹 *Page 01 • General Commands*
+🔹 * • General Commands*
 🔹 help | menu
 🔹 ping
 🔹 alive
@@ -52,7 +52,7 @@ const HELP = `
 🔹 url
 🔹 fancy
 
-🔹 *Page 02 • Group Management*
+🔹 *• Group Management*
 🔹 ban @user
 🔹 promote @user
 🔹 demote @user
@@ -78,7 +78,7 @@ const HELP = `
 🔹 setgname <name>
 🔹 setgpp
 
-🔹 *Page 03 • Bot Settings*
+🔹 *• Bot Settings*
 🔹 mode <public/private>
 🔹 clearsession
 🔹 antidelete
@@ -97,7 +97,7 @@ const HELP = `
 🔹 setmention
 🔹 mention <on/off>
 
-🔹 *Page 04 • Media & Stickers*
+🔹 * • Media & Stickers*
 🔹 blur <reply image>
 🔹 simage
 🔹 sticker
@@ -107,18 +107,18 @@ const HELP = `
 🔹 igs <insta link>
 🔹 igsc <insta link>
 
-🔹 *Page 07 • AI Commands*
+🔹 *• AI Commands*
 🔹 gpt <question>
 🔹 gemini <question>
 🔹 imagine <prompt>
 
-🔹 *Page 08 • Fun Effects*
+🔹 * Fun Effects*
 🔹 compliment @user
 🔹 character @user
 🔹 wasted @user
 🔹 stupid @user [text]
 
-🔹 *Page 09 • Logo Makers*
+🔹 * • Logo Makers*
 🔹 metallic <text>
 🔹 ice <text>
 🔹 snow <text>
@@ -138,7 +138,7 @@ const HELP = `
 🔹 glitch <text>
 🔹 fire <text>
 
-🔹 *Page 10 • Downloader*
+🔹 *• Downloader*
 🔹 play <song>
 🔹 song <song>
 🔹 spotify <query>
@@ -148,7 +148,7 @@ const HELP = `
 🔹 video <song>
 🔹 ytmp4 <link>
 
-🔹 *Page 11 • Meme Templates*
+🔹 *• Meme Templates*
 🔹 heart
 🔹 horny
 🔹 circle
@@ -166,7 +166,7 @@ const HELP = `
 🔹 passed
 🔹 triggered
 
-🔹 *Page 12 • Anime Reactions*
+🔹 *• Anime Reactions*
 🔹 neko
 🔹 waifu
 🔹 loli
