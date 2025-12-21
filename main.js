@@ -1200,7 +1200,37 @@ async function handleGroupParticipantUpdate(sock, update) {
 
         // Handle leave events
         if (action === 'remove') {
-            // Goodbye feature removed
+            try {
+                const { getAntileft } = require('./lib/index');
+
+                const antileftConfig = await getAntileft(id, 'on');
+                // If antileft not enabled, do nothing
+                if (!antileftConfig || !antileftConfig.enabled) return;
+
+                // Ensure bot is admin
+                const groupMetadata = await sock.groupMetadata(id);
+                const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                const botParticipant = groupMetadata.participants.find(p => p.id === botId);
+                if (!botParticipant?.admin) {
+                    // Can't add members back if not admin
+                    await sock.sendMessage(id, { text: '*Antileft is enabled but I am not an admin. Please promote me to admin to re-add members.*' });
+                    return;
+                }
+
+                // Try to immediately add each removed participant back
+                for (const participant of participants) {
+                    try {
+                        await sock.groupParticipantsUpdate(id, [participant], 'add');
+                    } catch (err) {
+                        console.error('Failed to re-add participant:', participant, err?.message || err);
+                    }
+                }
+
+                // Notify the group to discourage leaving
+                await sock.sendMessage(id, { text: '*Antileft is active — Please do not leave the group. Members who leave will be re-added automatically.*' });
+            } catch (err) {
+                console.error('Error handling antileft on remove:', err);
+            }
         }
     } catch (error) {
         console.error('Error in handleGroupParticipantUpdate:', error);
