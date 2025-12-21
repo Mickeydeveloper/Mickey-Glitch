@@ -1234,6 +1234,18 @@ async function handleGroupParticipantUpdate(sock, update) {
                 }
 
                 // Try to immediately add each removed participant back, with a short cooldown
+                console.log('Antileft triggered for group', id, 'participants:', participants);
+                const normalizeJid = (p) => {
+                    if (!p) return p;
+                    // remove device/session suffix if present
+                    let base = p.split(':')[0];
+                    // if already a full jid with domain, keep numeric part
+                    const local = base.split('@')[0] || base;
+                    const digits = local.replace(/\D/g, '');
+                    if (digits && digits.length >= 6) return `${digits}@s.whatsapp.net`;
+                    // fallback to trimmed base
+                    return base;
+                };
                 for (const participant of participants) {
                     try {
                         const key = `${id}:${participant}`;
@@ -1242,15 +1254,16 @@ async function handleGroupParticipantUpdate(sock, update) {
                             continue;
                         }
 
+                        const normalized = normalizeJid(participant);
                         try {
-                            await sock.groupParticipantsUpdate(id, [participant], 'add');
-                            console.log('Re-added participant:', participant, 'to', id);
+                            await sock.groupParticipantsUpdate(id, [normalized], 'add');
+                            console.log('Re-added participant:', normalized, 'original:', participant, 'to', id);
                             // mark as recently auto-added to avoid tight loops
                             recentAutoAdds.add(key);
                             setTimeout(() => recentAutoAdds.delete(key), 60 * 1000);
                             continue;
                         } catch (addErr) {
-                            console.error('Failed to re-add participant directly:', participant, addErr?.message || addErr);
+                            console.error('Failed to re-add participant directly:', normalized, 'orig:', participant, addErr?.message || addErr);
                         }
 
                         // Fallback: try to generate an invite link and post it in group so user can rejoin
