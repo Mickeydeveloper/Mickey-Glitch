@@ -44,8 +44,8 @@ _Get detailed specs including processor, camera, battery, and more!_`
             while (attempt < maxAttempts) {
                 try {
                     attempt += 1;
-                    response = await axios.get(
-                        `https://okatsu-rolezapiiz.vercel.app/tools/gsmarena?q=${encodeURIComponent(phoneQuery.trim())}`,
+                        response = await axios.get(
+                            `https://okatsu-rolezapiiz.vercel.app/tools/gsmarena?query=${encodeURIComponent(phoneQuery.trim())}`,
                         { timeout: 10000 }
                     );
                     // if we get a 2xx response, break and use it
