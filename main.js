@@ -1223,11 +1223,9 @@ async function handleGroupParticipantUpdate(sock, update) {
                 // If antileft not enabled, do nothing
                 if (!antileftConfig || !antileftConfig.enabled) return;
 
-                // Ensure bot is admin
-                const groupMetadata = await sock.groupMetadata(id);
-                const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-                const botParticipant = groupMetadata.participants.find(p => p.id === botId);
-                if (!botParticipant?.admin) {
+                // Ensure bot is admin (use helper to handle different ID formats)
+                const adminStatusForBot = await isAdmin(sock, id, sock.user.id);
+                if (!adminStatusForBot.isBotAdmin) {
                     // Can't add members back if not admin
                     await sock.sendMessage(id, { text: '*Antileft is enabled but I am not an admin. Please promote me to admin to re-add members.*' });
                     return;
