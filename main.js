@@ -60,9 +60,8 @@ const ownerCommand = require('./commands/owner');
 const deleteCommand = require('./commands/delete');
 const { handleAntilinkCommand, handleLinkDetection } = require('./commands/antilink');
 const { handleAntitagCommand, handleTagDetection } = require('./commands/antitag');
-const antileftCommand = require('./commands/antileft');
-// In-memory set to prevent repeated auto-add attempts for the same user
-const recentAutoAdds = new Set();
+
+// (removed antileft feature) in-memory set no longer used
 const { Antilink } = require('./lib/antilink');
 const { handleMentionDetection, mentionToggleCommand, setMentionCommand, groupMentionToggleCommand } = require('./commands/mention');
 const { handleAntiStatusMention, groupAntiStatusToggleCommand } = require('./commands/antistatusmention');
@@ -383,7 +382,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         // List of admin commands
-        const adminCommands = ['.mute', '.unmute', '.ban', '.unban', '.promote', '.demote', '.kick', '.tagall', '.tagnotadmin', '.hidetag', '.antilink', '.antitag', '.antileft', '.setgdesc', '.setgname', '.setgpp'];
+        const adminCommands = ['.mute', '.unmute', '.ban', '.unban', '.promote', '.demote', '.kick', '.tagall', '.tagnotadmin', '.hidetag', '.antilink', '.antitag', '.setgdesc', '.setgname', '.setgpp'];
         const isAdminCommand = adminCommands.some(cmd => userMessage.startsWith(cmd));
 
         // List of owner commands
@@ -634,21 +633,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 await handleAntitagCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message);
                 break;
-            case userMessage.startsWith('.antileft'):
-                if (!isGroup) {
-                    await sock.sendMessage(chatId, {
-                        text: 'This command can only be used in groups.'
-                    }, { quoted: message });
-                    return;
-                }
-                if (!isBotAdmin) {
-                    await sock.sendMessage(chatId, {
-                        text: 'Please make the bot an admin first.'
-                    }, { quoted: message });
-                    return;
-                }
-                await antileftCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message);
-                break;
+            // .antileft command removed
             case userMessage === '.meme':
                 await memeCommand(sock, chatId, message);
                 break;
@@ -1218,108 +1203,7 @@ async function handleGroupParticipantUpdate(sock, update) {
 
         // Handle leave events
         if (action === 'remove') {
-            try {
-                const { getAntileft } = require('./lib/index');
-
-                const antileftConfig = await getAntileft(id, 'on');
-                // If antileft not enabled, do nothing
-                if (!antileftConfig || !antileftConfig.enabled) return;
-
-                // Ensure bot is admin (use helper to handle different ID formats)
-                const adminStatusForBot = await isAdmin(sock, id, sock.user.id);
-                if (!adminStatusForBot.isBotAdmin) {
-                    // Can't add members back if not admin
-                    await sock.sendMessage(id, { text: '*Antileft is enabled but I am not an admin. Please promote me to admin to re-add members.*' });
-                    return;
-                }
-
-                // Try to immediately add each removed participant back, with a short cooldown
-                console.log('Antileft triggered for group', id, 'participants:', participants);
-                const normalizeJid = (p) => {
-                    if (!p) return p;
-                    // remove device/session suffix if present
-                    let base = p.split(':')[0];
-                    // if already a full jid with domain, keep numeric part
-                    const local = base.split('@')[0] || base;
-                    const digits = local.replace(/\D/g, '');
-                    if (digits && digits.length >= 6) return `${digits}@s.whatsapp.net`;
-                    // fallback to trimmed base
-                    return base;
-                };
-                for (const participant of participants) {
-                    try {
-                        const key = `${id}:${participant}`;
-                        if (recentAutoAdds.has(key)) {
-                            console.log('Skipping auto-add (recent):', key);
-                            continue;
-                        }
-
-                        const normalized = normalizeJid(participant);
-                        try {
-                            await sock.groupParticipantsUpdate(id, [normalized], 'add');
-                            console.log('Re-added participant:', normalized, 'original:', participant, 'to', id);
-                            // mark as recently auto-added to avoid tight loops
-                            recentAutoAdds.add(key);
-                            setTimeout(() => recentAutoAdds.delete(key), 60 * 1000);
-                            continue;
-                        } catch (addErr) {
-                            console.error('Failed to re-add participant directly:', normalized, 'orig:', participant, addErr?.message || addErr);
-                        }
-
-                        // Fallback: try to generate an invite link and post it in group so user can rejoin
-                        try {
-                            let inviteCode = null;
-                            if (typeof sock.groupInviteCode === 'function') {
-                                try {
-                                    inviteCode = await sock.groupInviteCode(id);
-                                } catch (cErr) {
-                                    console.warn('groupInviteCode failed:', cErr?.message || cErr);
-                                }
-                            }
-
-                            if (!inviteCode && typeof sock.groupInviteCode !== 'function' && sock.groupMetadata) {
-                                // Older/newer Baileys versions may expose invite code differently; attempt groupMetadata approach
-                                try {
-                                    const meta = await sock.groupMetadata(id);
-                                    inviteCode = meta?.inviteCode || meta?.invite || null;
-                                } catch (mErr) {
-                                    console.warn('Failed to read group metadata for invite code:', mErr?.message || mErr);
-                                }
-                            }
-
-                            const displayName = (await sock.groupMetadata(id)).subject || id;
-                            const mention = participant;
-
-                            if (inviteCode) {
-                                const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
-                                await sock.sendMessage(id, { text: `@${mention.split('@')[0]} I couldn't add you automatically. Join again using this link: ${inviteLink}`, mentions: [mention] });
-                                console.log('Posted invite link in group for', participant);
-                                // throttle
-                                const key2 = `${id}:${participant}`;
-                                recentAutoAdds.add(key2);
-                                setTimeout(() => recentAutoAdds.delete(key2), 60 * 1000);
-                            } else {
-                                // If invite generation isn't available, notify group admins and the user
-                                await sock.sendMessage(id, { text: `@${participant.split('@')[0]} I couldn't re-add you automatically and couldn't generate an invite link. Please rejoin manually or ask an admin to invite you.`, mentions: [participant] });
-                                console.warn('No invite code available for group', id, 'participant', participant);
-                            }
-                        } catch (fallbackErr) {
-                            console.error('Error in antileft fallback for participant', participant, fallbackErr?.message || fallbackErr);
-                        }
-                    } catch (err) {
-                        console.error('Unexpected error handling antileft for participant', participant, err?.message || err);
-                    }
-                }
-
-                // Notify the group to discourage leaving
-                try {
-                    await sock.sendMessage(id, { text: '*Antileft is active — Please do not leave the group. Members who leave will be re-added automatically.*' });
-                } catch (nErr) {
-                    console.error('Failed to send antileft notice in group:', nErr?.message || nErr);
-                }
-            } catch (err) {
-                console.error('Error handling antileft on remove:', err);
-            }
+            // Goodbye feature removed
         }
     } catch (error) {
         console.error('Error in handleGroupParticipantUpdate:', error);
