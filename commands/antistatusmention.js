@@ -15,7 +15,9 @@ function loadState() {
 
 function saveState(state) {
   try {
-    fs.writeFileSync(path.join(__dirname, '..', 'data', 'antistatusmention.json'), JSON.stringify(state, null, 2));
+    const dataDir = path.join(__dirname, '..', 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'antistatusmention.json'), JSON.stringify(state, null, 2));
   } catch (e) {
     // ignore write errors
   }
@@ -82,19 +84,21 @@ async function handleAntiStatusMention(sock, chatId, message) {
       let deleted = false;
       
       try {
-        // Method 1: Use the delete key structure
-        await sock.sendMessage(chatId, { delete: deleteKey });
-        deleted = true;
-        console.log('Message deleted successfully using deleteKey method');
-      } catch (err1) {
-        try {
-          // Method 2: Use message.key directly
+        // Preferred: use the original message key (works with Baileys)
+        if (message.key) {
           await sock.sendMessage(chatId, { delete: message.key });
           deleted = true;
           console.log('Message deleted successfully using message.key method');
+        }
+      } catch (err1) {
+        try {
+          // Fallback: structured delete key with participant
+          await sock.sendMessage(chatId, { delete: deleteKey });
+          deleted = true;
+          console.log('Message deleted successfully using deleteKey fallback');
         } catch (err2) {
           try {
-            // Method 3: Try with just the ID
+            // Fallback: ID-only delete
             await sock.sendMessage(chatId, { 
               delete: { 
                 remoteJid: chatId, 
@@ -102,9 +106,9 @@ async function handleAntiStatusMention(sock, chatId, message) {
               } 
             });
             deleted = true;
-            console.log('Message deleted successfully using ID-only method');
+            console.log('Message deleted successfully using ID-only fallback');
           } catch (err3) {
-            console.error('All delete methods failed:', err1?.message, err2?.message, err3?.message);
+            console.error('All delete methods failed:', err1?.message || err1, err2?.message || err2, err3?.message || err3);
           }
         }
       }

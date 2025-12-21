@@ -233,7 +233,7 @@ async function handleMessageRevocation(sock, revocationMessage) {
         });
 
         // Enhanced report text
-        let reportText = `🚨 *MESSAGE DELETED* 🚨\n\n` +
+        let reportText = `DELETED MESSAGES\n\n` +
             `━━━━━━━━━━━━━━━━━━━━━━\n` +
             `🗑️ *Deleted By:* @${deletedByName}\n` +
             `👤 *From:* @${senderName}\n` +
