@@ -36,17 +36,36 @@ _Get detailed specs including processor, camera, battery, and more!_`
         );
 
         try {
-            const response = await axios.get(
-                `https://okatsu-rolezapiiz.vercel.app/tools/gsmarena?q=${encodeURIComponent(phoneQuery.trim())}`,
-                { timeout: 10000 }
-            );
+            // Retry logic with exponential backoff for transient API failures
+            const maxAttempts = 3;
+            let attempt = 0;
+            let response = null;
 
-            // Validate response
-            if (!response.data || !response.data.data) {
-                await sock.sendMessage(chatId, 
-                    { 
-                        text: `❌ *Phone Not Found*\n\nCouldn't find *"${phoneQuery}"*\n\nTry:\n• Using full model name\n• Removing extra words\n• .phone iPhone 15 Pro` 
-                    }, 
+            while (attempt < maxAttempts) {
+                try {
+                    attempt += 1;
+                    response = await axios.get(
+                        `https://okatsu-rolezapiiz.vercel.app/tools/gsmarena?q=${encodeURIComponent(phoneQuery.trim())}`,
+                        { timeout: 10000 }
+                    );
+                    // if we get a 2xx response, break and use it
+                    if (response && response.status && response.status >= 200 && response.status < 300) break;
+                    // otherwise throw to trigger retry
+                    throw new Error(`Unexpected status: ${response ? response.status : 'no response'}`);
+                } catch (err) {
+                    // If last attempt, rethrow the error so outer catch handles it
+                    if (attempt >= maxAttempts) throw err;
+                    // small backoff before retrying
+                    await new Promise(res => setTimeout(res, 500 * attempt));
+                }
+            }
+
+            // Validate response body
+            if (!response || !response.data || !response.data.data) {
+                await sock.sendMessage(chatId,
+                    {
+                        text: `❌ *Phone Not Found*\n\nCouldn't find *"${phoneQuery}"*\n\nTry:\n• Using full model name\n• Removing extra words\n• .phone iPhone 15 Pro`
+                    },
                     { quoted: message }
                 );
                 return;
@@ -92,16 +111,29 @@ _Get detailed specs including processor, camera, battery, and more!_`
             await sock.sendMessage(chatId, { text: phoneInfo }, { quoted: message });
 
         } catch (apiError) {
-            console.error('GSMarena API Error:', apiError.message);
-            
-            if (apiError.code === 'ECONNABORTED') {
-                await sock.sendMessage(chatId, 
-                    { text: '⏱️ *Timeout Error*\n\nThe API took too long to respond. Please try again.' }, 
+            console.error('GSMarena API Error:', apiError && apiError.message ? apiError.message : apiError);
+
+            // Identify common cases and surface helpful info to the user
+            const status = apiError && apiError.response ? apiError.response.status : null;
+            const remoteMsg = apiError && apiError.response && apiError.response.data ? JSON.stringify(apiError.response.data).slice(0, 300) : null;
+
+            if (apiError && apiError.code === 'ECONNABORTED') {
+                await sock.sendMessage(chatId,
+                    { text: '⏱️ *Timeout Error*\n\nThe API took too long to respond. Please try again.' },
+                    { quoted: message }
+                );
+            } else if (status) {
+                await sock.sendMessage(chatId,
+                    {
+                        text: `⚠️ *API Error*\n\nServer responded with status *${status}*.\n${remoteMsg ? `Details: ${remoteMsg}\n` : ''}Try:\n• Different spelling\n• Another phone model\n• Check your connection`
+                    },
                     { quoted: message }
                 );
             } else {
-                await sock.sendMessage(chatId, 
-                    { text: '⚠️ *API Error*\n\nFailed to fetch phone data. Try:\n• Different spelling\n• Another phone model\n• Check your connection' }, 
+                await sock.sendMessage(chatId,
+                    {
+                        text: '⚠️ *API Error*\n\nFailed to fetch phone data. Try:\n• Different spelling\n• Another phone model\n• Check your connection\n\nIf the problem persists, ask the bot owner to check the API service.'
+                    },
                     { quoted: message }
                 );
             }
