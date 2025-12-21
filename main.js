@@ -61,6 +61,8 @@ const deleteCommand = require('./commands/delete');
 const { handleAntilinkCommand, handleLinkDetection } = require('./commands/antilink');
 const { handleAntitagCommand, handleTagDetection } = require('./commands/antitag');
 const antileftCommand = require('./commands/antileft');
+// In-memory set to prevent repeated auto-add attempts for the same user
+const recentAutoAdds = new Set();
 const { Antilink } = require('./lib/antilink');
 const { handleMentionDetection, mentionToggleCommand, setMentionCommand, groupMentionToggleCommand } = require('./commands/mention');
 const { handleAntiStatusMention, groupAntiStatusToggleCommand } = require('./commands/antistatusmention');
@@ -1231,17 +1233,77 @@ async function handleGroupParticipantUpdate(sock, update) {
                     return;
                 }
 
-                // Try to immediately add each removed participant back
+                // Try to immediately add each removed participant back, with a short cooldown
                 for (const participant of participants) {
                     try {
-                        await sock.groupParticipantsUpdate(id, [participant], 'add');
+                        const key = `${id}:${participant}`;
+                        if (recentAutoAdds.has(key)) {
+                            console.log('Skipping auto-add (recent):', key);
+                            continue;
+                        }
+
+                        try {
+                            await sock.groupParticipantsUpdate(id, [participant], 'add');
+                            console.log('Re-added participant:', participant, 'to', id);
+                            // mark as recently auto-added to avoid tight loops
+                            recentAutoAdds.add(key);
+                            setTimeout(() => recentAutoAdds.delete(key), 60 * 1000);
+                            continue;
+                        } catch (addErr) {
+                            console.error('Failed to re-add participant directly:', participant, addErr?.message || addErr);
+                        }
+
+                        // Fallback: try to generate an invite link and post it in group so user can rejoin
+                        try {
+                            let inviteCode = null;
+                            if (typeof sock.groupInviteCode === 'function') {
+                                try {
+                                    inviteCode = await sock.groupInviteCode(id);
+                                } catch (cErr) {
+                                    console.warn('groupInviteCode failed:', cErr?.message || cErr);
+                                }
+                            }
+
+                            if (!inviteCode && typeof sock.groupInviteCode !== 'function' && sock.groupMetadata) {
+                                // Older/newer Baileys versions may expose invite code differently; attempt groupMetadata approach
+                                try {
+                                    const meta = await sock.groupMetadata(id);
+                                    inviteCode = meta?.inviteCode || meta?.invite || null;
+                                } catch (mErr) {
+                                    console.warn('Failed to read group metadata for invite code:', mErr?.message || mErr);
+                                }
+                            }
+
+                            const displayName = (await sock.groupMetadata(id)).subject || id;
+                            const mention = participant;
+
+                            if (inviteCode) {
+                                const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
+                                await sock.sendMessage(id, { text: `@${mention.split('@')[0]} I couldn't add you automatically. Join again using this link: ${inviteLink}`, mentions: [mention] });
+                                console.log('Posted invite link in group for', participant);
+                                // throttle
+                                const key2 = `${id}:${participant}`;
+                                recentAutoAdds.add(key2);
+                                setTimeout(() => recentAutoAdds.delete(key2), 60 * 1000);
+                            } else {
+                                // If invite generation isn't available, notify group admins and the user
+                                await sock.sendMessage(id, { text: `@${participant.split('@')[0]} I couldn't re-add you automatically and couldn't generate an invite link. Please rejoin manually or ask an admin to invite you.`, mentions: [participant] });
+                                console.warn('No invite code available for group', id, 'participant', participant);
+                            }
+                        } catch (fallbackErr) {
+                            console.error('Error in antileft fallback for participant', participant, fallbackErr?.message || fallbackErr);
+                        }
                     } catch (err) {
-                        console.error('Failed to re-add participant:', participant, err?.message || err);
+                        console.error('Unexpected error handling antileft for participant', participant, err?.message || err);
                     }
                 }
 
                 // Notify the group to discourage leaving
-                await sock.sendMessage(id, { text: '*Antileft is active — Please do not leave the group. Members who leave will be re-added automatically.*' });
+                try {
+                    await sock.sendMessage(id, { text: '*Antileft is active — Please do not leave the group. Members who leave will be re-added automatically.*' });
+                } catch (nErr) {
+                    console.error('Failed to send antileft notice in group:', nErr?.message || nErr);
+                }
             } catch (err) {
                 console.error('Error handling antileft on remove:', err);
             }
