@@ -62,7 +62,7 @@ _Get detailed specs including processor, camera, battery, and more!_`
             // Validate API response
             if (!response?.data?.status || !response.data.result) {
                 await sock.sendMessage(chatId, {
-                    text: `❌ *Phone Not Found*\n\nNo information found for *"${phoneQuery.trim()}"*.\n\nTips:\n• Use the full model name\n• Try different spelling\n• Example: .phone iPhone 15 Pro Max`
+                    text: `❌ *Phone Not Found*\n\nNo information found for *"${phoneQuery.trim()}"*.\n\nTips:\n• Use the full model name (e.g., Samsung Galaxy A05)\n• Try different spelling`
                 }, { quoted: message });
                 return;
             }
@@ -76,7 +76,7 @@ _Get detailed specs including processor, camera, battery, and more!_`
                 return value ? String(value).trim() : 'N/A';
             };
 
-            // Extract all fields safely
+            // Extract fields
             const name = (result.phoneName || 'N/A').trim();
 
             let brand = 'N/A';
@@ -122,7 +122,7 @@ _Get detailed specs including processor, camera, battery, and more!_`
                 if (miscPrice !== 'N/A') price = miscPrice;
             }
 
-            // Final list of specifications
+            // Specifications list
             const specsList = [
                 { label: '📛 Device',    value: name },
                 { label: '🏢 Brand',      value: brand },
@@ -138,23 +138,20 @@ _Get detailed specs including processor, camera, battery, and more!_`
                 { label: '💵 Price',      value: price }
             ];
 
-            // Build the message text properly
-            let phoneInfo = `╭━━━━━━━━━━━━━━━━━━━━━━━━╮
-       📱 *PHONE INFORMATION*
-╰━━━━━━━━━━━━━━━━━━━━━━━━╯
+            // Build the message text using simple + concatenation (safest way)
+            let phoneInfo = "╭━━━━━━━━━━━━━━━━━━━━━━━━╮\n";
+            phoneInfo += "       📱 *PHONE INFORMATION*\n";
+            phoneInfo += "╰━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n";
 
-`;
-
-            // Add each valid spec
             specsList.forEach(item => {
                 if (item.value && item.value !== 'N/A' && item.value.trim() !== '') {
-                    phoneInfo += `\( {item.label}: * \){item.value}*\n`;
+                    phoneInfo += item.label + ": *" + item.value + "*\n";
                 }
             });
 
-            phoneInfo += `\n╭━━━━━━━━━━━━━━━━━━━━━━━━╮
-    ✨ Powered by GSMArena ✨
-╰━━━━━━━━━━━━━━━━━━━━━━━━╯`;
+            phoneInfo += "\n╭━━━━━━━━━━━━━━━━━━━━━━━━╮\n";
+            phoneInfo += "    ✨ Powered by GSMArena ✨\n";
+            phoneInfo += "╰━━━━━━━━━━━━━━━━━━━━━━━━╯";
 
             // Send with image if available
             const sendOptions = result.imageUrl 
