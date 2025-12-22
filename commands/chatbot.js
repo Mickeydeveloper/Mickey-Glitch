@@ -1,4 +1,4 @@
-// File: mickey-autoreply.js
+// File: islam-autoreply.js
 const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
@@ -28,24 +28,16 @@ async function showTyping(sock, jid) {
     }
 }
 
-// AI Reply from API only
+// AI Reply from ZellAPI Islam endpoint
 async function getSmartReply(messageText, senderName = "jamaa") {
-    const prompt = `Kama Mickey, msee wa Westlands, mzaliwa '98, mjanja na mcheshi.
-Jibu fupi (1-3 sentensi), sheng poa, emoji nyingi 😂😭🤣🙄😏🫵.
-Usiseme kitu kuhusu bot au AI.
-
-\( {senderName}: " \){messageText}"
-
-Jibu tu kama Mickey:`;
-
     for (let i = 0; i < 3; i++) {
         try {
-            const res = await fetch(`https://okatsu-rolezapiiz.vercel.app/ai/gemini?text=${encodeURIComponent(prompt)}`, {
+            const res = await fetch(`https://zellapi.autos/ai/islam?text=${encodeURIComponent(messageText)}`, {
                 timeout: 12000
             });
             if (!res.ok) continue;
             const data = await res.json();
-            const reply = (data.result || data.text || "").trim();
+            const reply = (data.result || data.text || data.response || "").trim();
             if (reply && reply.length > 5) return reply;
         } catch (e) {
             console.debug(`API retry ${i+1} failed:`, e.message);
@@ -64,11 +56,11 @@ async function sendReply(sock, chatId, text, quoted) {
     }
 }
 
-// Command: .chatbot on/off/status (admin only in groups)
+// Command: .islam on/off/status (admin only in groups)
 async function handleChatbotCommand(sock, m) {
     const chatId = m.key.remoteJid;
     const text = (m.message?.conversation || m.message?.extendedTextMessage?.text || '').trim().toLowerCase();
-    if (!text.startsWith('.chatbot')) return;
+    if (!text.startsWith('.islam')) return;
 
     const isGroup = chatId.endsWith('@g.us');
     const fromMe = m.key.fromMe;
@@ -87,7 +79,7 @@ async function handleChatbotCommand(sock, m) {
     }
 
     if (isGroup && !isAdmin) {
-        await sock.sendMessage(chatId, { text: '⛔ Only admins wanaeza turn Mickey on au off hapa 🙏' }, { quoted: m });
+        await sock.sendMessage(chatId, { text: '⛔ Only admins can turn the Islam AI on or off here 🙏\n⛔ Admin pekee ndio wanaweza washa au zima Islam AI hapa 🙏' }, { quoted: m });
         return;
     }
 
@@ -97,25 +89,24 @@ async function handleChatbotCommand(sock, m) {
     if (arg === 'on') {
         chatbotStates.set(chatId, true);
         await sock.sendMessage(chatId, { 
-            text: '✅ *Mickey ako online sasa!* 🫡\nSasa nitareply tu nikimention 😂🔥' 
+            text: '✅ *Islam AI is now active!* 🫡\nI will reply when mentioned with beneficial Islamic knowledge 🤲🔥\n\n✅ *Islam AI ameanza kufanya kazi sasa!* 🫡\nNitajibu nikimention na ilmu ya Kiislamu yenye manufaa 🤲🔥' 
         }, { quoted: m });
 
     } else if (arg === 'off') {
         chatbotStates.set(chatId, false);
         await sock.sendMessage(chatId, { 
-            text: '🔇 *Mickey amelala...* 😴\nHapana mentions, hapana replies. Peace at last 🙏' 
+            text: '🔇 *Islam AI is resting now...* 😴\nNo mentions, no replies. Peace be upon you 🙏\n\n🔇 *Islam AI amelala sasa...* 😴\nHapana mention, hapana majibu. Amani iwe juu yenu 🙏' 
         }, { quoted: m });
 
     } else {
         // Show current status
         const isEnabled = chatbotStates.get(chatId) === true;
         const status = isEnabled ? '✅ *ON*' : '🔇 *OFF* (default)';
-        const info = isGroup 
-            ? 'Hadi admin awashe na .chatbot on' 
-            : 'Private chats ziko active daima 😂';
+        const infoEn = isGroup ? 'Ask an admin to turn it on with .islam on' : 'Private chats are always active 🤲';
+        const infoSw = isGroup ? 'Mwambie admin awashe kwa .islam on' : 'Private chat ziko active kila wakati 🤲';
 
         await sock.sendMessage(chatId, { 
-            text: `*Mickey Chatbot Status*\n\nGroup hii: \( {status}\n \){info}\n\nCommands:\n.chatbot on → washa\n.chatbot off → zima` 
+            text: `*Islam AI Chatbot Status* | *Hali ya Islam AI Chatbot*\n\nIn this group: ${status}\nDi group hii: \( {status}\n\n \){infoEn}\n${infoSw}\n\nCommands | Amri:\n.islam on → turn on | washa\n.islam off → turn off | zima` 
         }, { quoted: m });
     }
 }
@@ -163,7 +154,7 @@ async function handleChatbotResponse(sock, m) {
         await showTyping(sock, chatId);
 
         const replyNow = async () => {
-            const aiReply = await getSmartReply(text, m.pushName || "Bro");
+            const aiReply = await getSmartReply(text, m.pushName || "Brother");
             if (aiReply) {
                 await new Promise(r => setTimeout(r, humanDelay()));
                 await sendReply(sock, chatId, aiReply, m);
