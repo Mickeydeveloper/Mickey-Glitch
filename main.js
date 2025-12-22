@@ -784,8 +784,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     return;
                 }
 
-                const match = userMessage.slice(8).trim();
-                await handleChatbotCommand(sock, chatId, message, match);
+                // Pass the full message object to the chatbot handler (it expects the message)
+                await handleChatbotCommand(sock, message);
+                break;
+            case userMessage.startsWith('.islam'):
+                // `.islam` is an alias/command for the islam chatbot (handles on/off/status)
+                await handleChatbotCommand(sock, message);
                 break;
             case userMessage.startsWith('.take') || userMessage.startsWith('.steal'):
                 {
