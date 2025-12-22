@@ -19,43 +19,168 @@ function getUptime() {
  * Main HELP MESSAGE – Premium Glitch Style
  */
 const HELP = `
-╔════════════════════════╗
-║    MICKEY GLITCH BOT   ║
-╚════════════════════════╝
+╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮
+┃   ✦  ${settings.botName || 'Mickey Glitch'}  ✦   — Premium
+┃
+┃  Owner : ${settings.botOwner || 'Mozy24'} (${settings.ownerNumber ? '+' + settings.ownerNumber : 'contact'})
+┃  Version: ${settings.version || '3.0.5'}  •  Uptime: ${getUptime()}
+┃  Status : ✅ Online & Active
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
 
-${settings.botName || 'Mickey Glitch'} • ${settings.ownerName || 'Mozy24'}
-Version: ${settings.version || '3.0.5'}  •  Uptime: ${getUptime()}
-Prefix: ${settings.prefix || '.'}
+╭━━━━━━━━━━━━━━━━━━━━━━━━╮
+┃    Welcome to Glitch Power — useful commands below
+╰━━━━━━━━━━━━━━━━━━━━━━━━╯
 
-How to use
-- Send ${settings.prefix || '.'}help <command> for details
-- Reply to a message and use commands that act on messages (e.g., .sticker)
 
-Top commands
-- ${settings.prefix || '.'}help — show this menu
-- ${settings.prefix || '.'}ping — bot latency
-- ${settings.prefix || '.'}alive — bot status
-- ${settings.prefix || '.'}owner — contact owner
-- ${settings.prefix || '.'}settings — bot configuration
+➤ * • General Commands*
+➤ help | menu
+➤ ping
+➤ alive
+➤ halotel <gb number>
+➤ phone <device name>
+➤ tts <text>
+➤ owner
+➤ attp <text>
+➤ lyrics <song>
+➤ groupinfo
+➤ staff | admins
+➤ vv
+➤ trt <text> <lang>
+➤ ss <link>
+➤ jid
+➤ url
+➤ fancy
 
-Grouped commands (quick reference)
-- Moderation: ${settings.prefix || '.'}ban @user, ${settings.prefix || '.'}kick, ${settings.prefix || '.'}mute <min>, ${settings.prefix || '.'}warn
-- Protection: ${settings.prefix || '.'}antilink <on/off>, ${settings.prefix || '.'}antibadword <on/off>, ${settings.prefix || '.'}antidelete <on/off>, ${settings.prefix || '.'}antistatusmention <on/off>
-- Group tools: ${settings.prefix || '.'}promote @user, ${settings.prefix || '.'}demote @user, ${settings.prefix || '.'}tagall, ${settings.prefix || '.'}resetlink
-- Media & Stickers: ${settings.prefix || '.'}sticker (reply), ${settings.prefix || '.'}simage, ${settings.prefix || '.'}blur, ${settings.prefix || '.'}emojimix
-- Downloads: ${settings.prefix || '.'}play <query>, ${settings.prefix || '.'}song <query>, ${settings.prefix || '.'}instagram <link>, ${settings.prefix || '.'}tiktok <link>
-- AI & Chat: ${settings.prefix || '.'}gpt <question>, ${settings.prefix || '.'}imagine <prompt>
+➤ *• Group Management*
+➤ ban @user
+➤ promote @user
+➤ demote @user
+➤ mute <minutes>
+➤ unmute
+➤ delete | del
+➤ kick @user
+➤ add <number>
+➤ warn @user
+➤ antilink
+➤ antibadword
+➤ clear
+➤ tag <text>
+➤ tagall
+➤ tagnotadmin
+➤ hidetag <msg>
+➤ chatbot
+➤ resetlink
+➤ antitag <on/off>
+➤ welcome <on/off>
+➤ goodbye <on/off>
+➤ setgdesc <desc>
+➤ setgname <name>
+➤ setgpp
 
-Useful notes
-- Admin commands: the bot must be an admin to perform admin actions.
-- Mention format: @1234567890 to target a user.
-- For command-specific options use ${settings.prefix || '.'}help <command>.
+➤ *• Bot Settings*
+➤ mode <public/private>
+➤ clearsession
+➤ antidelete
+➤ cleartmp
+➤ update
+➤ settings
+➤ setpp
+➤ autoreact <on/off>
+➤ autostatus <on/off>
+➤ autostatus react <on/off>
+➤ autotying <on/off>
+➤ autoread <on/off>
+➤ anticall <on/off>
+➤ pmblocker <on/off/status>
+➤ pmblocker setmsg <text>
+➤ setmention
+➤ mention <on/off>
 
-Need more? Contact: ${settings.ownerContact || 'https://github.com'}
+➤ * • Media & Stickers*
+➤ blur <reply image>
+➤ simage
+➤ sticker
+➤ tgsticker <link>
+➤ take <packname>
+➤ emojimix <emoji1>+<emoji2>
+➤ igs <insta link>
+➤ igsc <insta link>
 
-╔════════════════════════╗
-║   Enjoy Mickey Glitch   ║
-╚════════════════════════╝
+➤ *• AI Commands*
+➤ gpt <question>
+➤ gemini <question>
+➤ imagine <prompt>
+
+➤ * Fun Effects*
+➤ compliment @user
+➤ character @user
+➤ wasted @user
+➤ stupid @user [text]
+
+➤ * • Logo Makers*
+➤ metallic <text>
+➤ ice <text>
+➤ snow <text>
+➤ impressive <text>
+➤ matrix <text>
+➤ light <text>
+➤ neon <text>
+➤ devil <text>
+➤ purple <text>
+➤ thunder <text>
+➤ leaves <text>
+➤ 1917 <text>
+➤ arena <text>
+➤ hacker <text>
+➤ sand <text>
+➤ blackpink <text>
+➤ glitch <text>
+➤ fire <text>
+
+➤ *• Downloader*
+➤ play <song>
+➤ song <song>
+➤ spotify <query>
+➤ instagram <link>
+➤ facebook <link>
+➤ tiktok <link>
+➤ video <song>
+➤ ytmp4 <link>
+
+➤ *• Meme Templates*
+➤ heart
+➤ horny
+➤ circle
+➤ lgbt
+➤ lolice
+➤ its-so-stupid
+➤ namecard
+➤ oogway
+➤ tweet
+➤ ytcomment
+➤ comrade
+➤ gay
+➤ glass
+➤ jail
+➤ passed
+➤ triggered
+
+➤ *• Anime Reactions*
+➤ neko
+➤ waifu
+➤ loli
+➤ nom
+➤ poke
+➤ cry
+➤ kiss
+➤ pat
+➤ hug
+➤ wink
+➤ facepalm
+
+╭━━━━━━━━━━━━━━━━━━━━╮
+  ✨ Mickey Glitch Bot ✨
+╰━━━━━━━━━━━━━━━━━━━━╯
 `;
 /**
  * Send premium help menu
