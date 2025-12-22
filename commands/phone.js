@@ -59,10 +59,10 @@ _Get detailed specs including processor, camera, battery, and more!_`
                 }
             }
 
-            // Check response structure
+            // Validate API response
             if (!response?.data?.status || !response.data.result) {
                 await sock.sendMessage(chatId, {
-                    text: `❌ *Phone Not Found*\n\nNo information found for *"${phoneQuery.trim()}"*.\n\nTips:\n• Use full model name\n• Try different spelling\n• Example: .phone iPhone 15 Pro Max`
+                    text: `❌ *Phone Not Found*\n\nNo information found for *"${phoneQuery.trim()}"*.\n\nTips:\n• Use the full model name\n• Try different spelling\n• Example: .phone iPhone 15 Pro Max`
                 }, { quoted: message });
                 return;
             }
@@ -70,13 +70,13 @@ _Get detailed specs including processor, camera, battery, and more!_`
             const result = response.data.result;
             const specs = result.specs || {};
 
-            // Safe get with trim
+            // Safe accessor
             const getSpec = (category, key) => {
                 const value = specs[category]?.[key];
                 return value ? String(value).trim() : 'N/A';
             };
 
-            // Extract fields
+            // Extract all fields safely
             const name = (result.phoneName || 'N/A').trim();
 
             let brand = 'N/A';
@@ -122,32 +122,33 @@ _Get detailed specs including processor, camera, battery, and more!_`
                 if (miscPrice !== 'N/A') price = miscPrice;
             }
 
-            // List of specs to show
-            const specifications = [
-                { label: '📛 Device',   value: name },
-                { label: '🏢 Brand',     value: brand },
-                { label: '📅 Release',   value: release },
-                { label: '💾 Memory',    value: memory },
-                { label: '🖥️ Processor',value: processor },
-                { label: '📷 Camera',    value: camera },
-                { label: '🔋 Battery',   value: battery },
-                { label: '🔌 Charging',  value: charging },
-                { label: '📱 Display',   value: display },
-                { label: '⚖️ Weight',    value: weight },
-                { label: '🎨 Colors',    value: colors },
-                { label: '💵 Price',     value: price }
+            // Final list of specifications
+            const specsList = [
+                { label: '📛 Device',    value: name },
+                { label: '🏢 Brand',      value: brand },
+                { label: '📅 Release',    value: release },
+                { label: '💾 Memory',     value: memory },
+                { label: '🖥️ Processor', value: processor },
+                { label: '📷 Camera',     value: camera },
+                { label: '🔋 Battery',    value: battery },
+                { label: '🔌 Charging',   value: charging },
+                { label: '📱 Display',    value: display },
+                { label: '⚖️ Weight',     value: weight },
+                { label: '🎨 Colors',     value: colors },
+                { label: '💵 Price',      value: price }
             ];
 
-            // Build the formatted text correctly
+            // Build the message text properly
             let phoneInfo = `╭━━━━━━━━━━━━━━━━━━━━━━━━╮
        📱 *PHONE INFORMATION*
 ╰━━━━━━━━━━━━━━━━━━━━━━━━╯
 
 `;
 
-            specifications.forEach(spec => {
-                if (spec.value && spec.value !== 'N/A') {
-                    phoneInfo += `\( {spec.label}: * \){spec.value}*\n`;
+            // Add each valid spec
+            specsList.forEach(item => {
+                if (item.value && item.value !== 'N/A' && item.value.trim() !== '') {
+                    phoneInfo += `\( {item.label}: * \){item.value}*\n`;
                 }
             });
 
@@ -156,24 +157,24 @@ _Get detailed specs including processor, camera, battery, and more!_`
 ╰━━━━━━━━━━━━━━━━━━━━━━━━╯`;
 
             // Send with image if available
-            const msgOptions = result.imageUrl 
+            const sendOptions = result.imageUrl 
                 ? { image: { url: result.imageUrl }, caption: phoneInfo }
                 : { text: phoneInfo };
 
-            await sock.sendMessage(chatId, msgOptions, { quoted: message });
+            await sock.sendMessage(chatId, sendOptions, { quoted: message });
 
         } catch (apiError) {
             console.error('GSMarena API Error:', apiError.message || apiError);
 
-            let errorText = '⚠️ *Failed to fetch data*\nPlease check your spelling or try again later.';
+            let errorMsg = '⚠️ *Failed to fetch data*\nPlease check your spelling or try again later.';
 
             if (apiError.code === 'ECONNABORTED') {
-                errorText = '⏱️ *Timeout*\nThe API took too long. Please try again.';
+                errorMsg = '⏱️ *Timeout*\nThe API took too long. Please try again.';
             } else if (apiError.response?.status) {
-                errorText = `⚠️ *API Error (${apiError.response.status})*\nTry a different query.`;
+                errorMsg = `⚠️ *API Error (${apiError.response.status})*\nTry a different query.`;
             }
 
-            await sock.sendMessage(chatId, { text: errorText }, { quoted: message });
+            await sock.sendMessage(chatId, { text: errorMsg }, { quoted: message });
         }
 
     } catch (error) {
@@ -184,5 +185,6 @@ _Get detailed specs including processor, camera, battery, and more!_`
     }
 };
 
+// Command metadata
 module.exports.command = 'phone';
 module.exports.description = 'Get phone specifications from GSMarena';
