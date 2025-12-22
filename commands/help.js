@@ -20,170 +20,37 @@ function getUptime() {
  */
 const HELP = `
 ╭━━━━━━━━━━━━━━━━━━━━━━━━╮
-        *MICKEY GLITCH BOT* 
-           ✧ Premium Bot ✧
+      MICKEY GLITCH
+      ✧ Premium Bot ✧
 ╰━━━━━━━━━━━━━━━━━━━━━━━━╯
 
-🔹 *Bot Name:* Mickey Glitch
-🔹 *Owner:* Mozy24
-🔹 *Version:* 3.0.5
-🔹 *Uptime:* ${getUptime()}
-🔹 *Database:* Zenith Base
-🔹 *Status:* ✅ Online & Active
+Name: ${settings.botName || 'Mickey Glitch'}
+Owner: ${settings.ownerName || 'Mozy24'}
+Version: ${settings.version || '3.0.5'}
+Uptime: ${getUptime()}
+Prefix: ${settings.prefix || '.'}
 
-╭━━━━━━━━━━━━━━━━━━━━━━━━╮
-    Welcome to Glitch Power!
-╰━━━━━━━━━━━━━━━━━━━━━━━━╯ 
+Usage:
+- Send ${settings.prefix || '.'}help <command> for details about a command
+- Example: ${settings.prefix || '.'}play Despacito
 
+Quick categories (use ${settings.prefix || '.'}help <command>):
+- General: help, ping, alive, owner, jid, url, ss, tts
+- Group: ban, promote, demote, mute, unmute, kick, add, tagall, resetlink
+- Moderation: antilink, antibadword, antidelete, antistatusmention
+- Media & Stickers: sticker, simage, blur, tgsticker, take, emojimix
+- AI/Chat: gpt, gemini, imagine, chatbot
+- Downloads: play, song, spotify, instagram, tiktok, ytmp4
 
-🔹 * • General Commands*
-🔹 help | menu
-🔹 ping
-🔹 alive
-🔹 halotel <gb number>
-🔹 phone <device name>
-🔹 tts <text>
-🔹 owner
-🔹 attp <text>
-🔹 lyrics <song>
-🔹 groupinfo
-🔹 staff | admins
-🔹 vv
-🔹 trt <text> <lang>
-🔹 ss <link>
-🔹 jid
-🔹 url
-🔹 fancy
+Tips:
+- Admin-only commands require the bot to be an admin.
+- Use mentions like @user when the command needs a target.
+- Configure settings with the ${settings.prefix || '.'}settings command.
 
-🔹 *• Group Management*
-🔹 ban @user
-🔹 promote @user
-🔹 demote @user
-🔹 mute <minutes>
-🔹 unmute
-🔹 delete | del
-🔹 kick @user
-🔹 add <number>
-🔹 warn @user
-🔹 antilink
-🔹 antibadword
-🔹 clear
-🔹 tag <text>
-🔹 tagall
-🔹 tagnotadmin
-🔹 hidetag <msg>
-🔹 chatbot
-🔹 resetlink
-🔹 antitag <on/off>
-🔹 welcome <on/off>
-🔹 goodbye <on/off>
-🔹 setgdesc <desc>
-🔹 setgname <name>
-🔹 setgpp
-
-🔹 *• Bot Settings*
-🔹 mode <public/private>
-🔹 clearsession
-🔹 antidelete
-🔹 cleartmp
-🔹 update
-🔹 settings
-🔹 setpp
-🔹 autoreact <on/off>
-🔹 autostatus <on/off>
-🔹 autostatus react <on/off>
-🔹 autotying <on/off>
-🔹 autoread <on/off>
-🔹 anticall <on/off>
-🔹 pmblocker <on/off/status>
-🔹 pmblocker setmsg <text>
-🔹 setmention
-🔹 mention <on/off>
-
-🔹 * • Media & Stickers*
-🔹 blur <reply image>
-🔹 simage
-🔹 sticker
-🔹 tgsticker <link>
-🔹 take <packname>
-🔹 emojimix <emoji1>+<emoji2>
-🔹 igs <insta link>
-🔹 igsc <insta link>
-
-🔹 *• AI Commands*
-🔹 gpt <question>
-🔹 gemini <question>
-🔹 imagine <prompt>
-
-🔹 * Fun Effects*
-🔹 compliment @user
-🔹 character @user
-🔹 wasted @user
-🔹 stupid @user [text]
-
-🔹 * • Logo Makers*
-🔹 metallic <text>
-🔹 ice <text>
-🔹 snow <text>
-🔹 impressive <text>
-🔹 matrix <text>
-🔹 light <text>
-🔹 neon <text>
-🔹 devil <text>
-🔹 purple <text>
-🔹 thunder <text>
-🔹 leaves <text>
-🔹 1917 <text>
-🔹 arena <text>
-🔹 hacker <text>
-🔹 sand <text>
-🔹 blackpink <text>
-🔹 glitch <text>
-🔹 fire <text>
-
-🔹 *• Downloader*
-🔹 play <song>
-🔹 song <song>
-🔹 spotify <query>
-🔹 instagram <link>
-🔹 facebook <link>
-🔹 tiktok <link>
-🔹 video <song>
-🔹 ytmp4 <link>
-
-🔹 *• Meme Templates*
-🔹 heart
-🔹 horny
-🔹 circle
-🔹 lgbt
-🔹 lolice
-🔹 its-so-stupid
-🔹 namecard
-🔹 oogway
-🔹 tweet
-🔹 ytcomment
-🔹 comrade
-🔹 gay
-🔹 glass
-🔹 jail
-🔹 passed
-🔹 triggered
-
-🔹 *• Anime Reactions*
-🔹 neko
-🔹 waifu
-🔹 loli
-🔹 nom
-🔹 poke
-🔹 cry
-🔹 kiss
-🔹 pat
-🔹 hug
-🔹 wink
-🔹 facepalm
+Need help or want a feature? Contact the owner: ${settings.ownerContact || 'https://github.com'}
 
 ╭━━━━━━━━━━━━━━━━━━━━╮
-   ✨ Mickey Glitch Bot ✨
+  ✨ Mickey Glitch Bot ✨
 ╰━━━━━━━━━━━━━━━━━━━━╯
 `;
 
