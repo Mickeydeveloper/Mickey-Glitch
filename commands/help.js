@@ -19,41 +19,44 @@ function getUptime() {
  * Main HELP MESSAGE – Premium Glitch Style
  */
 const HELP = `
-╭━━━━━━━━━━━━━━━━━━━━━━━━╮
-      MICKEY GLITCH
-      ✧ Premium Bot ✧
-╰━━━━━━━━━━━━━━━━━━━━━━━━╯
+╔════════════════════════╗
+║    MICKEY GLITCH BOT   ║
+╚════════════════════════╝
 
-Name: ${settings.botName || 'Mickey Glitch'}
-Owner: ${settings.ownerName || 'Mozy24'}
-Version: ${settings.version || '3.0.5'}
-Uptime: ${getUptime()}
+${settings.botName || 'Mickey Glitch'} • ${settings.ownerName || 'Mozy24'}
+Version: ${settings.version || '3.0.5'}  •  Uptime: ${getUptime()}
 Prefix: ${settings.prefix || '.'}
 
-Usage:
-- Send ${settings.prefix || '.'}help <command> for details about a command
-- Example: ${settings.prefix || '.'}play Despacito
+How to use
+- Send ${settings.prefix || '.'}help <command> for details
+- Reply to a message and use commands that act on messages (e.g., .sticker)
 
-Quick categories (use ${settings.prefix || '.'}help <command>):
-- General: help, ping, alive, owner, jid, url, ss, tts
-- Group: ban, promote, demote, mute, unmute, kick, add, tagall, resetlink
-- Moderation: antilink, antibadword, antidelete, antistatusmention
-- Media & Stickers: sticker, simage, blur, tgsticker, take, emojimix
-- AI/Chat: gpt, gemini, imagine, chatbot
-- Downloads: play, song, spotify, instagram, tiktok, ytmp4
+Top commands
+- ${settings.prefix || '.'}help — show this menu
+- ${settings.prefix || '.'}ping — bot latency
+- ${settings.prefix || '.'}alive — bot status
+- ${settings.prefix || '.'}owner — contact owner
+- ${settings.prefix || '.'}settings — bot configuration
 
-Tips:
-- Admin-only commands require the bot to be an admin.
-- Use mentions like @user when the command needs a target.
-- Configure settings with the ${settings.prefix || '.'}settings command.
+Grouped commands (quick reference)
+- Moderation: ${settings.prefix || '.'}ban @user, ${settings.prefix || '.'}kick, ${settings.prefix || '.'}mute <min>, ${settings.prefix || '.'}warn
+- Protection: ${settings.prefix || '.'}antilink <on/off>, ${settings.prefix || '.'}antibadword <on/off>, ${settings.prefix || '.'}antidelete <on/off>, ${settings.prefix || '.'}antistatusmention <on/off>
+- Group tools: ${settings.prefix || '.'}promote @user, ${settings.prefix || '.'}demote @user, ${settings.prefix || '.'}tagall, ${settings.prefix || '.'}resetlink
+- Media & Stickers: ${settings.prefix || '.'}sticker (reply), ${settings.prefix || '.'}simage, ${settings.prefix || '.'}blur, ${settings.prefix || '.'}emojimix
+- Downloads: ${settings.prefix || '.'}play <query>, ${settings.prefix || '.'}song <query>, ${settings.prefix || '.'}instagram <link>, ${settings.prefix || '.'}tiktok <link>
+- AI & Chat: ${settings.prefix || '.'}gpt <question>, ${settings.prefix || '.'}imagine <prompt>
 
-Need help or want a feature? Contact the owner: ${settings.ownerContact || 'https://github.com'}
+Useful notes
+- Admin commands: the bot must be an admin to perform admin actions.
+- Mention format: @1234567890 to target a user.
+- For command-specific options use ${settings.prefix || '.'}help <command>.
 
-╭━━━━━━━━━━━━━━━━━━━━╮
-  ✨ Mickey Glitch Bot ✨
-╰━━━━━━━━━━━━━━━━━━━━╯
+Need more? Contact: ${settings.ownerContact || 'https://github.com'}
+
+╔════════════════════════╗
+║   Enjoy Mickey Glitch   ║
+╚════════════════════════╝
 `;
-
 /**
  * Send premium help menu
  */
