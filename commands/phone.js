@@ -3,6 +3,7 @@ const axios = require('axios');
 /**
  * Phone Information Command
  * Fetches phone specifications from GSMarena API
+ * Sends the phone image first (like WhatsApp ads), then specs as caption
  */
 module.exports = async function (sock, chatId, message, phoneQuery) {
     try {
@@ -138,7 +139,7 @@ _Get detailed specs including processor, camera, battery, and more!_`
                 { label: '💵 Price',      value: price }
             ];
 
-            // Build the message text using simple + concatenation (safest way)
+            // Build specs text using safe concatenation
             let phoneInfo = "╭━━━━━━━━━━━━━━━━━━━━━━━━╮\n";
             phoneInfo += "       📱 *PHONE INFORMATION*\n";
             phoneInfo += "╰━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n";
@@ -153,12 +154,18 @@ _Get detailed specs including processor, camera, battery, and more!_`
             phoneInfo += "    ✨ Powered by GSMArena ✨\n";
             phoneInfo += "╰━━━━━━━━━━━━━━━━━━━━━━━━╯";
 
-            // Send with image if available
-            const sendOptions = result.imageUrl 
-                ? { image: { url: result.imageUrl }, caption: phoneInfo }
-                : { text: phoneInfo };
-
-            await sock.sendMessage(chatId, sendOptions, { quoted: message });
+            // Check if phone image exists
+            if (result.imageUrl) {
+                // Send image FIRST with full specs as caption (exactly like WhatsApp ads)
+                await sock.sendMessage(chatId, {
+                    image: { url: result.imageUrl },
+                    caption: phoneInfo,
+                    jpegThumbnail: null // Optional: let WhatsApp generate thumbnail
+                }, { quoted: message });
+            } else {
+                // Fallback: send as text only if no image
+                await sock.sendMessage(chatId, { text: phoneInfo }, { quoted: message });
+            }
 
         } catch (apiError) {
             console.error('GSMarena API Error:', apiError.message || apiError);
