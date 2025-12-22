@@ -257,8 +257,8 @@ async function startXeonBotInc() {
                 try {
                     const channelJid = '120363398106360290@newsletter'
                     await delay(1500);
-                    await XeonBotInc.sendMessage(channelJid, {
-                        text: `Bot connected and following this channel!`
+                    
+              
                     });
                     try {
                         const autobio = require('./commands/autobio');
