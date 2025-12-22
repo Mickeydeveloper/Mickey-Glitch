@@ -1,168 +1,188 @@
 // File: islam-autoreply.js
+
 const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
 
+// Temporary directory (optional, kept if you plan to add media features later)
 const TEMP_DIR = path.join(__dirname, 'temp');
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
+if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
 
-// Maps
-const lastReply = new Map();
-const chatbotStates = new Map();
+// State storage
+const chatbotStates = new Map(); // chatId → true/false (enabled/disabled)
+const lastReply = new Map();     // "chatId:senderId" → timestamp
 
 // Human-like behavior
-const humanDelay = () => Math.floor(Math.random() * 5000) + 2000;
-const shouldReply = () => Math.random() < 0.82;
-const replyLate = () => Math.random() < 0.20;
+const humanDelay = () => Math.floor(Math.random() * 4000) + 2000; // 2–6 seconds
+const shouldReply = () => Math.random() < 0.85;                   // 85% chance
+const replyLate = () => Math.random() < 0.25;                     // 25% delayed reply
 
-// Typing animation
+// Show typing indicator
 async function showTyping(sock, jid) {
+    if (!jid) return;
     try {
-        if (!jid) return;
         await sock.presenceSubscribe(jid);
         await sock.sendPresenceUpdate('composing', jid);
-        await new Promise(r => setTimeout(r, humanDelay()));
+        await new Promise(resolve => setTimeout(resolve, humanDelay()));
         await sock.sendPresenceUpdate('available', jid);
     } catch (e) {
-        console.debug('Typing failed:', e.message);
+        console.debug('Typing indicator failed:', e.message);
     }
 }
 
-// AI Reply
+// Fetch AI response with retry
 async function getSmartReply(messageText) {
     for (let i = 0; i < 3; i++) {
         try {
             const res = await fetch(`https://zellapi.autos/ai/islam?text=${encodeURIComponent(messageText)}`, {
-                timeout: 12000
+                timeout: 15000
             });
             if (!res.ok) continue;
+
             const data = await res.json();
-            const reply = (data.result || data.text || data.response || "").trim();
-            if (reply && reply.length > 5) return reply;
+            const reply = (data.result || data.text || data.response || '').trim();
+
+            if (reply && reply.length > 8) return reply;
         } catch (e) {
-            console.debug(`API retry ${i+1} failed:`, e.message);
+            console.debug(`AI API attempt ${i + 1} failed:`, e.message);
         }
         await new Promise(r => setTimeout(r, 2000));
     }
-    return null;
+    return null; // Fallback if all attempts fail
 }
 
-// Send reply
+// Send text reply
 async function sendReply(sock, chatId, text, quoted) {
     try {
         await sock.sendMessage(chatId, { text }, { quoted });
     } catch (e) {
-        console.error('Send failed:', e.message);
+        console.error('Failed to send reply:', e.message);
     }
 }
 
-// ===== COMMAND HANDLER =====
-async function handleChatbotCommand(sock, m) {
-    if (!m || !m.key || !m.key.remoteJid) return;
+// Extract text from any message type safely
+function extractText(m) {
+    if (!m?.message) return '';
 
+    const msg = m.message;
+
+    // Order matters: most common first
+    if (msg.conversation) return msg.conversation;
+    if (msg.extendedTextMessage?.text) return msg.extendedTextMessage.text;
+    if (msg.imageMessage?.caption) return msg.imageMessage.caption;
+    if (msg.videoMessage?.caption) return msg.videoMessage.caption;
+    if (msg.documentMessage?.caption) return msg.documentMessage.caption;
+    if (msg.audioMessage?.caption) return msg.audioMessage.caption || ''; // Rare
+
+    return '';
+}
+
+// ===== COMMAND: .islam on | off | status =====
+async function handleChatbotCommand(sock, m) {
     const chatId = m.key.remoteJid;
     const fromMe = m.key.fromMe;
+    const sender = m.key.participant || m.key.remoteJid;
+    const isGroup = chatId.endsWith('@g.us');
 
-    // IMPROVED: Better text extraction for all message types
-    let text = '';
-    if (m.message?.conversation) text = m.message.conversation;
-    else if (m.message?.extendedTextMessage?.text) text = m.message.extendedTextMessage.text;
-    else if (m.message?.imageMessage?.caption) text = m.message.imageMessage.caption;
-    else if (m.message?.videoMessage?.caption) text = m.message.videoMessage.caption;
-    else return; // Not a text-based message
-
-    text = text.trim().toLowerCase();
+    const text = extractText(m).trim().toLowerCase();
     if (!text.startsWith('.islam')) return;
 
-    console.log(`[Islam AI] Command received: ${text} from ${m.key.participant || m.key.remoteJid}`);
+    console.log(`[Islam AI] Command: "${text}" from ${sender}`);
 
-    const isGroup = chatId.endsWith('@g.us');
-    const sender = m.key.participant || m.key.remoteJid;
-
-    // Admin check
+    // Admin check (only for groups)
     let isAdmin = fromMe;
     if (isGroup && !fromMe) {
         try {
-            const meta = await sock.groupMetadata(chatId);
-            const participant = meta.participants.find(p => p.id === sender);
-            isAdmin = participant?.admin === 'admin' || participant?.admin === 'superadmin';
+            const metadata = await sock.groupMetadata(chatId);
+            const participant = metadata.participants.find(p => p.id === sender);
+            isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
         } catch (err) {
-            console.error('Group metadata error:', err);
+            console.error('Failed to fetch group metadata:', err);
         }
     }
 
     if (isGroup && !isAdmin) {
-        await sendReply(sock, chatId, '⛔ Only admins can turn the Islam AI on or off here 🙏\n⛔ Admin pekee ndio wanaweza washa au zima Islam AI hapa 🙏', m);
+        await sendReply(sock, chatId, '⛔ Only admins can control Islam AI in groups 🙏\n⛔ Admin pekee ndio wanaweza kudhibiti Islam AI hapa 🙏', m);
         return;
     }
 
-    const args = text.split(' ');
-    const arg = args[1]?.toLowerCase();
+    const args = text.split(/\s+/);
+    const command = args[1];
 
-    if (arg === 'on') {
+    if (command === 'on') {
         chatbotStates.set(chatId, true);
-        await sendReply(sock, chatId, '✅ *Islam AI is now active!* 🫡\nI will reply when mentioned with beneficial Islamic knowledge 🤲🔥\n\n✅ *Islam AI ameanza kufanya kazi sasa!* 🫡\nNitajibu nikimention na ilmu ya Kiislamu yenye manufaa 🤲🔥', m);
+        await sendReply(sock, chatId,
+            '✅ *Islam AI is now ACTIVE!* 🫡\nI will reply when mentioned with beneficial Islamic reminders 🤲\n\n' +
+            '✅ *Islam AI sasa AMEAMKA!* 🫡\nNitajibu nikimention na ilmu yenye kufaa 🤲', m);
 
-    } else if (arg === 'off') {
+    } else if (command === 'off') {
         chatbotStates.set(chatId, false);
-        await sendReply(sock, chatId, '🔇 *Islam AI is resting now...* 😴\nNo mentions, no replies. Peace be upon you 🙏\n\n🔇 *Islam AI amelala sasa...* 😴\nHapana mention, hapana majibu. Amani iwe juu yenu 🙏', m);
+        await sendReply(sock, chatId,
+            '🔇 *Islam AI is now resting...* 😴\nNo replies until turned on again.\n\n' +
+            '🔇 *Islam AI amelala sasa...* 😴\nHapana majibu mpaka awashwe tena.', m);
 
     } else {
-        const isEnabled = chatbotStates.get(chatId) === true;
-        const status = isEnabled ? '✅ *ON*' : '🔇 *OFF* (default)';
-        const infoEn = isGroup ? 'Ask an admin to turn it on with .islam on' : 'Private chats are always active 🤲';
-        const infoSw = isGroup ? 'Mwambie admin awashe kwa .islam on' : 'Private chat ziko active kila wakati 🤲';
+        const enabled = chatbotStates.get(chatId) === true;
+        const status = enabled ? '✅ *ON*' : '🔇 *OFF*';
+        const noteEn = isGroup ? 'Ask an admin to enable with `.islam on`' : 'Always active in private chats 🤲';
+        const noteSw = isGroup ? 'Mwambie admin awashe kwa `.islam on`' : 'Private chats ziko active daima 🤲';
 
-        await sendReply(sock, chatId, `*Islam AI Chatbot Status* | *Hali ya Islam AI Chatbot*\n\nIn this group: ${status}\nDi group hii: \( {status}\n\n \){infoEn}\n${infoSw}\n\nCommands | Amri:\n.islam on → turn on | washa\n.islam off → turn off | zima`, m);
+        await sendReply(sock, chatId,
+            `*Islam AI Status* | *Hali ya Islam AI*\n\n` +
+            `In this chat: ${status}\n` +
+            `Hapa: ${status}\n\n` +
+            `\( {noteEn}\n \){noteSw}\n\n` +
+            `Commands | Amri:\n.islam on  → enable\n.islam off → disable`, m);
     }
 }
 
-// ===== AUTO REPLY HANDLER =====
+// ===== AUTO-REPLY LOGIC =====
 async function handleChatbotResponse(sock, m) {
     try {
-        if (!m || !m.key || !m.key.remoteJid) return;
-
         const chatId = m.key.remoteJid;
         const fromMe = m.key.fromMe;
         const isGroup = chatId.endsWith('@g.us');
+        const senderId = m.key.participant || m.key.remoteJid;
 
-        // Get message text (same improved method)
-        let text = '';
-        if (m.message?.conversation) text = m.message.conversation;
-        else if (m.message?.extendedTextMessage?.text) text = m.message.extendedTextMessage.text;
-        else if (m.message?.imageMessage?.caption) text = m.message.imageMessage.caption || '';
-        else if (m.message?.videoMessage?.caption) text = m.message.videoMessage.caption || '';
-        else return;
+        if (fromMe || chatId.includes('status@broadcast')) return;
 
-        text = text.trim();
-        if (!text || fromMe || text.toLowerCase().startsWith('.islam') || chatId.includes('status')) return;
+        const text = extractText(m).trim();
+        if (!text || text.toLowerCase().startsWith('.islam')) return;
 
-        // Check if enabled
+        // Determine if bot is enabled
         const explicitState = chatbotStates.get(chatId);
         const isEnabled = explicitState === true || (!isGroup && explicitState !== false);
         if (!isEnabled) return;
 
-        // Mention check
-        const context = m.message?.extendedTextMessage?.contextInfo || m.message?.imageMessage?.contextInfo || m.message?.videoMessage?.contextInfo;
-        const mentionedJid = context?.mentionedJid || [];
-        const botJid = sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : null;
+        // Check if bot is mentioned (only required in groups)
+        let isMentioned = false;
+        if (isGroup) {
+            const contextInfo = 
+                m.message?.extendedTextMessage?.contextInfo ||
+                m.message?.imageMessage?.contextInfo ||
+                m.message?.videoMessage?.contextInfo;
 
-        const isMentioned = botJid && mentionedJid.includes(botJid);
-        if (isGroup && !isMentioned) return;
+            const mentionedJids = contextInfo?.mentionedJid || [];
+            const botNumber = sock.user?.id?.split(':')[0] + '@s.whatsapp.net';
 
-        // Anti-spam
-        const senderId = isGroup ? m.key.participant : m.key.remoteJid;
-        if (!senderId) return;
+            isMentioned = botNumber && mentionedJids.includes(botNumber);
+            if (!isMentioned) return;
+        }
+
+        // Anti-spam: max 1 reply every 6 seconds per user per chat
         const spamKey = `\( {chatId}: \){senderId}`;
         const now = Date.now();
         if ((lastReply.get(spamKey) || 0) + 6000 > now) return;
         lastReply.set(spamKey, now);
 
+        // Random human-like decision
         if (!shouldReply()) return;
 
         await showTyping(sock, chatId);
 
-        const replyNow = async () => {
+        const sendAiReply = async () => {
             const aiReply = await getSmartReply(text);
             if (aiReply) {
                 await new Promise(r => setTimeout(r, humanDelay()));
@@ -171,13 +191,14 @@ async function handleChatbotResponse(sock, m) {
         };
 
         if (replyLate()) {
-            setTimeout(replyNow, 10000 + Math.random() * 20000);
+            const delay = 10000 + Math.random() * 20000; // 10–30 seconds
+            setTimeout(sendAiReply, delay);
         } else {
-            await replyNow();
+            await sendAiReply();
         }
 
     } catch (err) {
-        console.error('Chatbot error:', err);
+        console.error('Islam AI autoreply error:', err);
     }
 }
 
