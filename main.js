@@ -89,7 +89,6 @@ const blurCommand = require('./commands/img-blur');
 // github command removed
 const { handleAntiBadwordCommand, handleBadwordDetection } = require('./lib/antibadword');
 const antibadwordCommand = require('./commands/antibadword');
-const { handleChatbotCommand, handleChatbotResponse } = require('./commands/chatbot');
 const takeCommand = require('./commands/take');
 // flirt command removed
 const characterCommand = require('./commands/character');
@@ -367,10 +366,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     await handleMentionDetection(sock, chatId, message);
                     if (typeof handleAntiStatusMention === 'function') await handleAntiStatusMention(sock, chatId, message);
                     
-                    // Only run chatbot in public mode or for owner/sudo
-                    if (isPublic || isOwnerOrSudoCheck) {
-                        await handleChatbotResponse(sock, chatId, message, userMessage, senderId);
-                    }
+                    // Chatbot feature removed
                 }
                 return;
             }
@@ -771,26 +767,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
                 await antibadwordCommand(sock, chatId, message, senderId, isSenderAdmin);
                 break;
-            case userMessage.startsWith('.chatbot'):
-                if (!isGroup) {
-                    await sock.sendMessage(chatId, { text: 'This command can only be used in groups.' }, { quoted: message });
-                    return;
-                }
-
-                // Check if sender is admin or bot owner
-                const chatbotAdminStatus = await isAdmin(sock, chatId, senderId);
-                if (!chatbotAdminStatus.isSenderAdmin && !message.key.fromMe) {
-                    await sock.sendMessage(chatId, { text: '*Only admins or bot owner can use this command*' }, { quoted: message });
-                    return;
-                }
-
-                // Pass the full message object to the chatbot handler (it expects the message)
-                await handleChatbotCommand(sock, message);
-                break;
-            case userMessage.startsWith('.islam'):
-                // `.islam` is an alias/command for the islam chatbot (handles on/off/status)
-                await handleChatbotCommand(sock, message);
-                break;
+            // chatbot/.islam commands removed
             case userMessage.startsWith('.take') || userMessage.startsWith('.steal'):
                 {
                     const isSteal = userMessage.startsWith('.steal');
@@ -1120,8 +1097,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 if (isGroup) {
                     // Handle non-command group messages
                     if (userMessage) {  // Make sure there's a message
-                        await handleChatbotResponse(sock, chatId, message, userMessage, senderId);
-                    }
+                            // chatbot auto-response removed
+                        }
                     await handleTagDetection(sock, chatId, message, senderId);
                     await handleMentionDetection(sock, chatId, message);
                 }
