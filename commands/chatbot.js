@@ -58,6 +58,9 @@ async function sendReply(sock, chatId, text, quoted) {
 
 // Command: .islam on/off/status (admin only in groups)
 async function handleChatbotCommand(sock, m) {
+    // FIX: Safety check for m.key
+    if (!m || !m.key || !m.key.remoteJid) return;
+
     const chatId = m.key.remoteJid;
     const text = (m.message?.conversation || m.message?.extendedTextMessage?.text || '').trim().toLowerCase();
     if (!text.startsWith('.islam')) return;
@@ -114,6 +117,9 @@ async function handleChatbotCommand(sock, m) {
 // Main response handler
 async function handleChatbotResponse(sock, m) {
     try {
+        // FIX: Safety check for m and m.key
+        if (!m || !m.key || !m.key.remoteJid) return;
+
         const chatId = m.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
         const fromMe = m.key.fromMe;
