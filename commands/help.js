@@ -59,6 +59,7 @@ const HELP = `
 ➤ unmute
 ➤ delete | del
 ➤ kick @user
+  kick all
 ➤ add <number>
 ➤ warn @user
 ➤ antilink
