@@ -213,7 +213,7 @@ async function handleStatusUpdate(sock, status) {
         await sock.readMessages([key]).catch(() => {});
         await reactToStatus(sock, key);
 
-        if (message?.message) {
+            if (message?.message) {
             await forwardStatusToOwner(sock, message);
         }
     } catch (error) {
