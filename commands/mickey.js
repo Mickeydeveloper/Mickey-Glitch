@@ -29,17 +29,39 @@ async function mickeyCommand(sock, chatId, message) {
 
     // The API sometimes returns plain text or JSON; try parse JSON first
     const raw = await res.text();
-    let reply = raw;
+    let reply = null;
     try {
       const j = JSON.parse(raw);
-      reply = j.result || j.message || j.data || JSON.stringify(j);
+      // Safely extract text from common fields (may be string or nested object)
+      const extract = (v) => {
+        if (v == null) return null;
+        if (typeof v === 'string') return v.trim();
+        if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+        if (Array.isArray(v)) return v.map(extract).filter(Boolean).join('\n');
+        if (typeof v === 'object') {
+          if (typeof v.text === 'string') return v.text.trim();
+          if (typeof v.answer === 'string') return v.answer.trim();
+          if (typeof v.result === 'string') return v.result.trim();
+          if (typeof v.message === 'string') return v.message.trim();
+          if (typeof v.data === 'string') return v.data.trim();
+          const parts = Object.values(v).map(extract).filter(Boolean);
+          if (parts.length) return parts.join('\n');
+          return JSON.stringify(v);
+        }
+        return String(v);
+      };
+
+      reply = extract(j.result) || extract(j.message) || extract(j.data) || extract(j);
     } catch (e) {
       // not JSON, use raw text
+      reply = raw;
     }
 
-    if (!reply || reply.length === 0) reply = 'No response from API.';
+    if (!reply || String(reply).trim().length === 0) reply = 'No response from API.';
 
-    await sock.sendMessage(chatId, { text: `🤖 Mickey (Sunnah AI)\n\n${reply}` }, { quoted: message });
+    // Limit message length
+    const out = String(reply).trim().slice(0, 1500);
+    await sock.sendMessage(chatId, { text: `🤖 Mickey (Sunnah AI)\n\n${out}` }, { quoted: message });
   } catch (err) {
     await sock.sendMessage(chatId, { text: '⚠️ Error: ' + (err.message || err) }, { quoted: message });
   }
