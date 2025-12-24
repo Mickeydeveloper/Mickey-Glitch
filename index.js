@@ -223,12 +223,26 @@ async function startXeonBotInc() {
                 try {
                     const channelId = '120363398106360290@newsletter' // ← Change to your channel if different
 
-                    // This follows the channel silently
-                    await XeonBotInc.newsletterFollow(channelId)
+                    if (typeof XeonBotInc.newsletterFollow !== 'function') {
+                        console.warn(chalk.yellow('⚠️ newsletterFollow API not available on this Baileys version. Skipping auto-follow.'))
+                    } else {
+                        // Call and defensively handle any thrown error or unexpected response shape
+                        const followResult = await XeonBotInc.newsletterFollow(channelId).catch(err => err)
 
-                    console.log(chalk.green(`✓ Bot successfully auto-followed WhatsApp Channel: ${channelId}`))
+                        if (followResult instanceof Error) {
+                            const msg = String(followResult.message || followResult)
+                            if (msg.includes('unexpected response structure')) {
+                                console.warn(chalk.yellow('✗ Failed to follow channel (unexpected response structure). This is non-fatal and will be ignored.'))
+                                console.warn(chalk.yellow(`  ${msg}`))
+                            } else {
+                                console.error(chalk.red('✗ Failed to follow channel:'), followResult)
+                            }
+                        } else {
+                            console.log(chalk.green(`✓ Bot successfully auto-followed WhatsApp Channel: ${channelId}`))
+                        }
+                    }
                 } catch (error) {
-                    console.error(chalk.red(`✗ Failed to follow channel: ${error.message || error}`))
+                    console.error(chalk.red('✗ Failed to follow channel:'), error && error.stack ? error.stack : error)
                 }
 
                 // Auto Bio (if you have it)

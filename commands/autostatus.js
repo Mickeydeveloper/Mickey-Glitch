@@ -47,7 +47,7 @@ function getOwnerJid(sock) {
     // return '255612130873@s.whatsapp.net'; // ← Uncomment & set your real number if different
 }
 
-// IMPROVED: Forward status with premium caption showing sender details
+// Forward status to owner (attempt to detect original sender when forwarded)
 async function forwardStatusToOwner(sock, message) {
     try {
         if (!config.forwardToOwner) return;
@@ -58,51 +58,55 @@ async function forwardStatusToOwner(sock, message) {
         const msgType = message.message;
         if (!msgType?.imageMessage && !msgType?.videoMessage) return;
 
-        const senderJid = message.key.participant || message.key.remoteJid;
-        const senderNumber = senderJid.split('@')[0];
+        const senderJid = (message.key && (message.key.participant || message.key.remoteJid)) || '';
+        const senderNumber = senderJid.split('@')[0] || 'unknown';
 
-        // Get contact info (pushname, verified name)
-        let displayName = senderNumber;
-        let isVerified = '';
+        // Detect original sender from contextInfo when media is forwarded
+        let originalSender = null;
+        const ctx = message.message?.imageMessage?.contextInfo
+            || message.message?.videoMessage?.contextInfo
+            || message.message?.extendedTextMessage?.contextInfo
+            || message.contextInfo;
 
-        try {
-            const contact = await sock.getContactById(senderJid);
-            const name = contact?.notify || contact?.name || contact?.verifiedName;
-            if (name && name !== senderNumber) {
-                displayName = name;
+        if (ctx) {
+            if (ctx.participant) {
+                originalSender = ctx.participant.split('@')[0];
+            } else if (ctx.quotedMessage && ctx.quotedMessage.key) {
+                originalSender = (ctx.quotedMessage.key.participant || ctx.quotedMessage.key.remoteJid || '').split('@')[0] || null;
+            } else if (ctx.forwardingScore || ctx.isForwarded) {
+                if (ctx.forwardingV2) {
+                    if (ctx.forwardingV2.senderId) originalSender = ctx.forwardingV2.senderId.split('@')[0];
+                    if (!originalSender && ctx.forwardingV2.participant) originalSender = ctx.forwardingV2.participant.split('@')[0];
+                }
             }
-            if (contact?.verifiedName) {
-                isVerified = ' ✅';
-            }
-        } catch (e) {
-            // Fallback to number if contact fetch fails
         }
 
-        // Format time and date
+        // Try to resolve display name
+        let displayName = senderNumber;
+        let isVerified = '';
+        try {
+            if (typeof sock.getContactById === 'function') {
+                const contact = await sock.getContactById(senderJid);
+                const name = contact?.notify || contact?.name || contact?.verifiedName;
+                if (name && name !== senderNumber) displayName = name;
+                if (contact?.verifiedName) isVerified = ' ✅';
+            }
+        } catch (e) {
+            // ignore
+        }
+
         const now = new Date();
-        const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        const date = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+        const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const date = now.toLocaleDateString();
 
-        // Premium Glitch-Style Caption
-        const caption = `
-╭━━━━━━━━✦ New Status ✦━━━━━━━━╮
-┃                               ┃
-┃  👤 From   : \( {displayName} \){isVerified}
-┃  📱 Number : ${senderNumber}
-┃  🕐 Time   : ${time}
-┃  📅 Date   : ${date}
-┃                               ┃
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+        const fromLine = originalSender && originalSender !== senderNumber
+            ? `${displayName} (${senderNumber}) — forwarded from ${originalSender}`
+            : `${displayName} (${senderNumber})`;
 
-✨ Saved by Mickey Glitch ✨
-`.trim();
+        const caption = `New Private Status\nFrom: ${fromLine}${isVerified}\nTime: ${date} ${time}`;
 
-        await sock.sendMessage(ownerJid, {
-            forward: message,
-            caption: caption
-        });
-
-        console.log(`Status forwarded from \( {displayName} ( \){senderNumber})`);
+        await sock.sendMessage(ownerJid, { forward: message, caption });
+        console.log(`Forwarded status from ${senderNumber}${originalSender ? ` (orig: ${originalSender})` : ''}`);
     } catch (error) {
         console.error('Forward error:', error.message);
     }
