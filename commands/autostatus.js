@@ -2,188 +2,190 @@ const fs = require('fs');
 const path = require('path');
 const isOwnerOrSudo = require('../lib/isOwner');
 
-// Path to store auto status configuration
+// Config path
 const configPath = path.join(__dirname, '../data/autoStatus.json');
 
-// Initialize config file if it doesn't exist
-if (!fs.existsSync(configPath)) {
-    fs.writeFileSync(configPath, JSON.stringify({ 
-        // Force both features enabled by default
-        enabled: true,
-        // Keep reactions enabled by default — feature enforced
-        reactOn: true
-    }));
+// Ensure data folder exists
+if (!fs.existsSync(path.dirname(configPath))) {
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
 }
 
+// Config: only forwarding toggle
+let config = {
+    enabled: true,            // Auto view + react → always ON
+    reactOn: true,            // Auto react → always ON
+    forwardToOwner: true      // Forward status media to your number
+};
+
+if (fs.existsSync(configPath)) {
+    try {
+        const loaded = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        config = { ...config, ...loaded };
+    } catch (e) {
+        console.error('Failed to load config, using defaults');
+    }
+} else {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+}
+
+// Save config
+function saveConfig() {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+}
+
+// Get the number where statuses should be forwarded (your personal number)
+function getOwnerJid(sock) {
+    // Change this to your actual personal number if bot runs on different number
+    // Example: return '255712345678@s.whatsapp.net';
+    
+    // Default: forwards to the bot's own number (common for self-hosted bots)
+    return sock.user?.id?.split(':')[0] + '@s.whatsapp.net';
+}
+
+// Forward status media to owner
+async function forwardStatusToOwner(sock, message) {
+    try {
+        if (!config.forwardToOwner) return;
+
+        const ownerJid = getOwnerJid(sock);
+        if (!ownerJid) {
+            console.log('Owner JID not found – cannot forward');
+            return;
+        }
+
+        const msgType = message.message;
+
+        // Only forward images and videos from status
+        if (msgType.imageMessage || msgType.videoMessage) {
+            const sender = message.key.participant || message.key.remoteJid;
+            const senderNumber = sender.split('@')[0];
+
+            const caption = `New Private Status\nFrom: ${senderNumber}\nTime: ${new Date().toLocaleString()}`;
+
+            // Forward the original media with caption
+            await sock.sendMessage(ownerJid, {
+                forward: message,
+                caption: caption
+            });
+
+            console.log(`Status forwarded from ${senderNumber} to owner`);
+        }
+    } catch (error) {
+        console.error('Error forwarding status:', error.message);
+    }
+}
+
+// Command: autostatussave on/off
 async function autoStatusCommand(sock, chatId, msg, args) {
     try {
         const senderId = msg.key.participant || msg.key.remoteJid;
         const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
-        
+
         if (!msg.key.fromMe && !isOwner) {
             await sock.sendMessage(chatId, { 
-                text: '❌ This command can only be used by the owner!'
-            });
+                text: 'This command is only for the owner!'
+            }, { quoted: msg });
             return;
         }
 
-        // This feature is enforced as always ON. Provide status summary only.
-        const status = 'enabled';
-        const reactStatus = 'enabled';
+        const command = args.toLowerCase().trim();
+
+        if (command === 'on' || command === 'off') {
+            config.forwardToOwner = command === 'on';
+            saveConfig();
+
+            await sock.sendMessage(chatId, {
+                text: `*Auto Status Forwarding Updated*\n\n` +
+                      `Auto View: Always ON\n` +
+                      `Auto React: Always ON\n` +
+                      `Forward to You: ${config.forwardToOwner ? 'Enabled' : 'Disabled'}\n\n` +
+                      `Now private statuses will ${config.forwardToOwner ? 'be sent directly to your number' : 'not be forwarded'}.`
+            }, { quoted: msg });
+
+            console.log(`Status forwarding: ${config.forwardToOwner ? 'ON' : 'OFF'}`);
+            return;
+        }
+
+        // Show current status
+        const ownerJid = getOwnerJid(sock);
+        const ownerNum = ownerJid ? ownerJid.split('@')[0] : 'Unknown';
+
         await sock.sendMessage(chatId, {
-            text: `🔒 *Auto Status is Always On*\n\n📱 *Auto Status View:* ${status}\n💫 *Status Reactions:* ${reactStatus}\n\nNote: These features are enforced and cannot be disabled.`
-        });
-        return;
+            text: `*Auto Status Features*\n\n` +
+                  `Auto View: Always Enabled\n` +
+                  `Auto React (🤍): Always Enabled\n` +
+                  `Forward Statuses to You: ${config.forwardToOwner ? 'Enabled' : 'Disabled'}\n` +
+                  `Target Number: \`${ownerNum}\`\n\n` +
+                  `Commands:\n` +
+                  `• \`autostatussave on\` → Enable forwarding\n` +
+                  `• \`autostatussave off\` → Disable forwarding\n` +
+                  `• \`autostatussave\` → View status`
+        }, { quoted: msg });
 
     } catch (error) {
         console.error('Error in autostatus command:', error);
-        await sock.sendMessage(chatId, { 
-            text: '❌ Error occurred while managing auto status!\n' + error.message
-        });
+        await sock.sendMessage(chatId, { text: 'Error updating settings!' }, { quoted: msg });
     }
 }
 
-// Function to check if auto status is enabled
-function isAutoStatusEnabled() {
-    try {
-        // Enforced: always enabled
-        return true;
-    } catch (error) {
-        console.error('Error checking auto status config:', error);
-        // If config cannot be read, default to enabled so feature stays on
-        return true;
-    }
-}
+// Always enabled checks
+function isAutoStatusEnabled() { return true; }
+function isStatusReactionEnabled() { return true; }
 
-// Function to check if status reactions are enabled
-function isStatusReactionEnabled() {
-    try {
-        // Enforced: always enabled
-        return true;
-    } catch (error) {
-        console.error('Error checking status reaction config:', error);
-        return true;
-    }
-}
-
-// Function to react to status using proper method
+// React to status with heart
 async function reactToStatus(sock, statusKey) {
-    try {
-        if (!isStatusReactionEnabled()) {
-            return;
-        }
+    if (!isStatusReactionEnabled()) return;
 
-        // Use the proper relayMessage method for status reactions
-        await sock.relayMessage(
-            'status@broadcast',
-            {
-                reactionMessage: {
-                    key: {
-                        remoteJid: 'status@broadcast',
-                        id: statusKey.id,
-                        participant: statusKey.participant || statusKey.remoteJid,
-                        fromMe: false
-                    },
-                    text: '🤍'
-                }
-            },
-            {
-                messageId: statusKey.id,
-                statusJidList: [statusKey.remoteJid, statusKey.participant || statusKey.remoteJid]
+    try {
+        await sock.relayMessage('status@broadcast', {
+            reactionMessage: {
+                key: statusKey,
+                text: '🤍'
             }
-        );
-        
-        // Removed success log - only keep errors
+        }, { messageId: statusKey.id });
     } catch (error) {
-        console.error('❌ Error reacting to status:', error.message);
+        console.error('Failed to react:', error.message);
     }
 }
 
-// Function to handle status updates
+// Main handler
 async function handleStatusUpdate(sock, status) {
     try {
-        if (!isAutoStatusEnabled()) {
-            return;
-        }
+        if (!isAutoStatusEnabled()) return;
 
-        // Add delay to prevent rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        let message = null;
+        let key = null;
 
-        // Handle status from messages.upsert
+        // Extract message and key from different formats
         if (status.messages && status.messages.length > 0) {
-            const msg = status.messages[0];
-            if (msg.key && msg.key.remoteJid === 'status@broadcast') {
-                try {
-                    await sock.readMessages([msg.key]);
-                    const sender = msg.key.participant || msg.key.remoteJid;
-                    
-                    // React to status if enabled
-                    await reactToStatus(sock, msg.key);
-                    
-                    // Removed success log - only keep errors
-                } catch (err) {
-                    if (err.message?.includes('rate-overlimit')) {
-                        console.log('⚠️ Rate limit hit, waiting before retrying...');
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        await sock.readMessages([msg.key]);
-                    } else {
-                        throw err;
-                    }
-                }
-                return;
-            }
+            message = status.messages[0];
+            key = message.key;
+        } else if (status.key) {
+            message = status;
+            key = status.key;
+        } else if (status.reaction?.key) {
+            key = status.reaction.key;
         }
 
-        // Handle direct status updates
-        if (status.key && status.key.remoteJid === 'status@broadcast') {
-            try {
-                await sock.readMessages([status.key]);
-                const sender = status.key.participant || status.key.remoteJid;
-                
-                // React to status if enabled
-                await reactToStatus(sock, status.key);
-                
-                // Removed success log - only keep errors
-            } catch (err) {
-                if (err.message?.includes('rate-overlimit')) {
-                    console.log('⚠️ Rate limit hit, waiting before retrying...');
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    await sock.readMessages([status.key]);
-                } else {
-                    throw err;
-                }
-            }
-            return;
-        }
+        if (!key || key.remoteJid !== 'status@broadcast') return;
 
-        // Handle status in reactions
-        if (status.reaction && status.reaction.key.remoteJid === 'status@broadcast') {
-            try {
-                await sock.readMessages([status.reaction.key]);
-                const sender = status.reaction.key.participant || status.reaction.key.remoteJid;
-                
-                // React to status if enabled
-                await reactToStatus(sock, status.reaction.key);
-                
-                // Removed success log - only keep errors
-            } catch (err) {
-                if (err.message?.includes('rate-overlimit')) {
-                    console.log('⚠️ Rate limit hit, waiting before retrying...');
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    await sock.readMessages([status.reaction.key]);
-                } else {
-                    throw err;
-                }
-            }
-            return;
+        // Mark as seen
+        await sock.readMessages([key]).catch(() => {});
+
+        // React
+        await reactToStatus(sock, key);
+
+        // Forward image/video status to owner
+        if (message && message.message) {
+            await forwardStatusToOwner(sock, message);
         }
 
     } catch (error) {
-        console.error('❌ Error in auto status view:', error.message);
+        console.error('Error in status handler:', error.message);
     }
 }
 
 module.exports = {
     autoStatusCommand,
     handleStatusUpdate
-}; 
+};
