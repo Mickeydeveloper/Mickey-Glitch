@@ -3,6 +3,29 @@ const fetch = require('node-fetch');
 // Usage: .mickey <text>
 // Example: .mickey what is the sunnah for morning?
 
+function extractText(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value.map(extractText).filter(Boolean).join('\n');
+  }
+  if (typeof value === 'object') {
+    // Common fields
+    if (typeof value.text === 'string') return value.text.trim();
+    if (typeof value.answer === 'string') return value.answer.trim();
+    if (typeof value.result === 'string') return value.result.trim();
+    if (typeof value.message === 'string') return value.message.trim();
+    if (typeof value.data === 'string') return value.data.trim();
+
+    // Try deeper extraction
+    const parts = Object.values(value).map(extractText).filter(Boolean);
+    if (parts.length) return parts.join('\n');
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
 async function mickeyCommand(sock, chatId, message) {
   try {
     const text = (
@@ -27,40 +50,25 @@ async function mickeyCommand(sock, chatId, message) {
       return;
     }
 
-    // The API sometimes returns plain text or JSON; try parse JSON first
     const raw = await res.text();
     let reply = null;
+
+    // Try JSON parse first
     try {
       const j = JSON.parse(raw);
-      // Safely extract text from common fields (may be string or nested object)
-      const extract = (v) => {
-        if (v == null) return null;
-        if (typeof v === 'string') return v.trim();
-        if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-        if (Array.isArray(v)) return v.map(extract).filter(Boolean).join('\n');
-        if (typeof v === 'object') {
-          if (typeof v.text === 'string') return v.text.trim();
-          if (typeof v.answer === 'string') return v.answer.trim();
-          if (typeof v.result === 'string') return v.result.trim();
-          if (typeof v.message === 'string') return v.message.trim();
-          if (typeof v.data === 'string') return v.data.trim();
-          const parts = Object.values(v).map(extract).filter(Boolean);
-          if (parts.length) return parts.join('\n');
-          return JSON.stringify(v);
-        }
-        return String(v);
-      };
-
-      reply = extract(j.result) || extract(j.message) || extract(j.data) || extract(j);
+      reply = extractText(j.result) || extractText(j.message) || extractText(j.data) || extractText(j);
     } catch (e) {
-      // not JSON, use raw text
+      // not JSON
       reply = raw;
     }
 
     if (!reply || String(reply).trim().length === 0) reply = 'No response from API.';
 
-    // Limit message length
-    const out = String(reply).trim().slice(0, 1500);
+    // Limit message length to avoid flooding
+    const maxLen = 1500;
+    let out = String(reply).trim();
+    if (out.length > maxLen) out = out.slice(0, maxLen - 3) + '...';
+
     await sock.sendMessage(chatId, { text: `🤖 Mickey (Sunnah AI)\n\n${out}` }, { quoted: message });
   } catch (err) {
     await sock.sendMessage(chatId, { text: '⚠️ Error: ' + (err.message || err) }, { quoted: message });
