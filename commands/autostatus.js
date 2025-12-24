@@ -17,12 +17,13 @@ let config = {
     forwardToOwner: true
 };
 
+// Load config
 if (fs.existsSync(configPath)) {
     try {
         const loaded = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         config = { ...config, ...loaded };
     } catch (e) {
-        console.error('Failed to load autoStatus config:', e.message);
+        console.error('Config load error:', e.message);
     }
 } else {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -34,18 +35,15 @@ function saveConfig() {
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
         return true;
     } catch (error) {
-        console.error('Failed to save config file:', error.message);
+        console.error('Config save failed:', error.message);
         return false;
     }
 }
 
-// Get owner JID (change this if bot number ≠ your personal number)
+// Change this if your personal number ≠ bot number
 function getOwnerJid(sock) {
-    // OPTION 1: Forward to bot's own number (default for most self-bots)
     return sock.user?.id?.split(':')[0] + '@s.whatsapp.net';
-
-    // OPTION 2: Replace with your personal number (uncomment if needed)
-    // return '255700000000@s.whatsapp.net'; // ← Your real number here
+    // return '255612130873@s.whatsapp.net'; // ← Uncomment & set your number here if needed
 }
 
 // Forward status to owner
@@ -54,116 +52,99 @@ async function forwardStatusToOwner(sock, message) {
         if (!config.forwardToOwner) return;
 
         const ownerJid = getOwnerJid(sock);
-        if (!ownerJid) {
-            console.log('Owner JID not available');
-            return;
-        }
+        if (!ownerJid) return;
 
         const msgType = message.message;
-        if (!msgType.imageMessage && !msgType.videoMessage) return;
+        if (!msgType?.imageMessage && !msgType?.videoMessage) return;
 
         const sender = message.key.participant || message.key.remoteJid;
         const senderNumber = sender.split('@')[0];
 
         const caption = `New Private Status\nFrom: ${senderNumber}\nTime: ${new Date().toLocaleString()}`;
 
-        await sock.sendMessage(ownerJid, {
-            forward: message,
-            caption: caption
-        });
-
+        await sock.sendMessage(ownerJid, { forward: message, caption });
         console.log(`Forwarded status from ${senderNumber}`);
     } catch (error) {
-        console.error('Error forwarding:', error.message);
+        console.error('Forward error:', error.message);
     }
 }
 
-// Fixed Command Handler
+// Premium Glitch-Style Menu
+const getStatusMenu = (targetNum, isEnabled) => `
+╭━━━━━━━━✦ Auto Status ✦━━━━━━━━╮
+┃                               ┃
+┃  📱 View    : Always Active 🔒 ┃
+┃  💫 React   : Always Active 🤍 ┃
+┃  ➡️ Forward : ${isEnabled ? '✅ ENABLED' : '❌ DISABLED'}       ┃
+┃  👤 Target  : ${targetNum}     ┃
+┃                               ┃
+┃  ✧ Commands ✧                 ┃
+┃  • on   → Enable forwarding   ┃
+┃  • off  → Disable forwarding  ┃
+┃  • (no arg) → Show menu       ┃
+┃                               ┃
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+✨ Mickey Glitch is watching all statuses for you ✨
+`.trim();
+
+// Command handler
 async function autoStatusCommand(sock, chatId, msg, args) {
     try {
         const senderId = msg.key.participant || msg.key.remoteJid;
         const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
 
         if (!msg.key.fromMe && !isOwner) {
-            await sock.sendMessage(chatId, { 
-                text: 'This command is only for the owner!' 
-            }, { quoted: msg });
+            await sock.sendMessage(chatId, { text: '❌ Owner-only command!' }, { quoted: msg });
             return;
         }
 
-        // Safely extract and clean the argument
-        let command = '';
-        if (args && typeof args === 'string') {
-            command = args.trim().toLowerCase();
-        }
+        const command = args && typeof args === 'string' ? args.trim().toLowerCase() : '';
 
-        // Handle on/off
         if (command === 'on' || command === 'off') {
             const newState = command === 'on';
             config.forwardToOwner = newState;
 
             if (saveConfig()) {
+                const status = newState ? 'ENABLED ✅' : 'DISABLED ❌';
                 await sock.sendMessage(chatId, {
-                    text: `*Auto Status Forwarding: ${newState ? 'ENABLED ✅' : 'DISABLED ❌'}*\n\n` +
-                          `Private statuses (images/videos) will now ${newState ? '' : 'NOT '}be forwarded to your number.\n\n` +
-                          `Auto View: Always ON\n` +
-                          `Auto React (🤍): Always ON`
+                    text: `✦ *Forwarding \( {status}*\n\n \){newState ? 'Now receiving all private statuses!' : 'Forwarding stopped.'} ✨`
                 }, { quoted: msg });
-
-                console.log(`Status forwarding turned ${newState ? 'ON' : 'OFF'} by owner`);
             } else {
-                await sock.sendMessage(chatId, {
-                    text: 'Failed to save settings! Check server permissions or disk space.'
-                }, { quoted: msg });
+                await sock.sendMessage(chatId, { text: '❌ Failed to save settings!' }, { quoted: msg });
             }
             return;
         }
 
-        // Show current status (no args or invalid)
+        // Show beautiful menu
         const ownerJid = getOwnerJid(sock);
         const ownerNum = ownerJid ? ownerJid.split('@')[0] : 'Unknown';
 
         await sock.sendMessage(chatId, {
-            text: `*Auto Status Features*\n\n` +
-                  `Auto View: Always Enabled 🔒\n` +
-                  `Auto React (🤍): Always Enabled 🔒\n` +
-                  `Forward to Your Number: ${config.forwardToOwner ? '✅ Enabled' : '❌ Disabled'}\n` +
-                  `Target: \`${ownerNum}\`\n\n` +
-                  `*Commands:*\n` +
-                  `• autostatussave on  → Enable forwarding\n` +
-                  `• autostatussave off → Disable forwarding\n` +
-                  `• autostatussave     → Show this menu`
+            text: getStatusMenu(ownerNum, config.forwardToOwner)
         }, { quoted: msg });
 
     } catch (error) {
-        console.error('Critical error in autoStatusCommand:', error);
-        await sock.sendMessage(chatId, { 
-            text: 'Unexpected error occurred. Check bot console.' 
-        }, { quoted: msg });
+        console.error('Command error:', error);
+        await sock.sendMessage(chatId, { text: '⚠️ Error occurred!' }, { quoted: msg });
     }
 }
 
-// Checkers
+// Feature checks
 function isAutoStatusEnabled() { return true; }
 function isStatusReactionEnabled() { return true; }
 
-// React to status
+// React with white heart
 async function reactToStatus(sock, statusKey) {
     if (!isStatusReactionEnabled()) return;
-
     try {
         await sock.relayMessage('status@broadcast', {
-            reactionMessage: {
-                key: statusKey,
-                text: '🤍'
-            }
+            reactionMessage: { key: statusKey, text: '🤍' }
         }, { messageId: statusKey.id });
-    } catch (error) {
-        // Silent fail for reactions
-    }
+    } catch (e) {}
 }
 
-// Main handler
+// Status update handler
 async function handleStatusUpdate(sock, status) {
     try {
         if (!isAutoStatusEnabled()) return;
@@ -184,15 +165,13 @@ async function handleStatusUpdate(sock, status) {
         if (!key || key.remoteJid !== 'status@broadcast') return;
 
         await sock.readMessages([key]).catch(() => {});
-
         await reactToStatus(sock, key);
 
         if (message?.message) {
             await forwardStatusToOwner(sock, message);
         }
-
     } catch (error) {
-        console.error('Error in handleStatusUpdate:', error.message);
+        console.error('Handler error:', error.message);
     }
 }
 
