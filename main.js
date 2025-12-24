@@ -91,8 +91,6 @@ const { handleAntiBadwordCommand, handleBadwordDetection } = require('./lib/anti
 const antibadwordCommand = require('./commands/antibadword');
 
 const antileftCommand = require('./commands/antileft');
-const { handleChatbotCommand, handleChatbotResponse } = require('./commands/chatbot');
-
 
 const takeCommand = require('./commands/take');
 // flirt command removed
