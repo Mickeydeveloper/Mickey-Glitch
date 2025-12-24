@@ -40,13 +40,14 @@ function saveConfig() {
     }
 }
 
-// Change this if your personal number ≠ bot number
+// Set your target number here (where statuses are forwarded)
+// Default: bot's own number. Change if you use a different personal number
 function getOwnerJid(sock) {
     return sock.user?.id?.split(':')[0] + '@s.whatsapp.net';
-    // return '255612130873@s.whatsapp.net'; // ← Uncomment & set your number here if needed
+    // return '255612130873@s.whatsapp.net'; // ← Uncomment & set your real number if different
 }
 
-// Forward status to owner
+// IMPROVED: Forward status with premium caption showing sender details
 async function forwardStatusToOwner(sock, message) {
     try {
         if (!config.forwardToOwner) return;
@@ -57,19 +58,57 @@ async function forwardStatusToOwner(sock, message) {
         const msgType = message.message;
         if (!msgType?.imageMessage && !msgType?.videoMessage) return;
 
-        const sender = message.key.participant || message.key.remoteJid;
-        const senderNumber = sender.split('@')[0];
+        const senderJid = message.key.participant || message.key.remoteJid;
+        const senderNumber = senderJid.split('@')[0];
 
-        const caption = `New Private Status\nFrom: ${senderNumber}\nTime: ${new Date().toLocaleString()}`;
+        // Get contact info (pushname, verified name)
+        let displayName = senderNumber;
+        let isVerified = '';
 
-        await sock.sendMessage(ownerJid, { forward: message, caption });
-        console.log(`Forwarded status from ${senderNumber}`);
+        try {
+            const contact = await sock.getContactById(senderJid);
+            const name = contact?.notify || contact?.name || contact?.verifiedName;
+            if (name && name !== senderNumber) {
+                displayName = name;
+            }
+            if (contact?.verifiedName) {
+                isVerified = ' ✅';
+            }
+        } catch (e) {
+            // Fallback to number if contact fetch fails
+        }
+
+        // Format time and date
+        const now = new Date();
+        const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const date = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
+        // Premium Glitch-Style Caption
+        const caption = `
+╭━━━━━━━━✦ New Status ✦━━━━━━━━╮
+┃                               ┃
+┃  👤 From   : \( {displayName} \){isVerified}
+┃  📱 Number : ${senderNumber}
+┃  🕐 Time   : ${time}
+┃  📅 Date   : ${date}
+┃                               ┃
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+✨ Saved by Mickey Glitch ✨
+`.trim();
+
+        await sock.sendMessage(ownerJid, {
+            forward: message,
+            caption: caption
+        });
+
+        console.log(`Status forwarded from \( {displayName} ( \){senderNumber})`);
     } catch (error) {
         console.error('Forward error:', error.message);
     }
 }
 
-// Premium Glitch-Style Menu
+// Premium Menu
 const getStatusMenu = (targetNum, isEnabled) => `
 ╭━━━━━━━━✦ Auto Status ✦━━━━━━━━╮
 ┃                               ┃
@@ -107,8 +146,11 @@ async function autoStatusCommand(sock, chatId, msg, args) {
 
             if (saveConfig()) {
                 const status = newState ? 'ENABLED ✅' : 'DISABLED ❌';
+                const feedback = newState 
+                    ? 'Now receiving all private statuses instantly! ✨' 
+                    : 'Status forwarding stopped.';
                 await sock.sendMessage(chatId, {
-                    text: `✦ *Forwarding \( {status}*\n\n \){newState ? 'Now receiving all private statuses!' : 'Forwarding stopped.'} ✨`
+                    text: `✦ *Forwarding \( {status}*\n\n \){feedback}`
                 }, { quoted: msg });
             } else {
                 await sock.sendMessage(chatId, { text: '❌ Failed to save settings!' }, { quoted: msg });
@@ -116,7 +158,7 @@ async function autoStatusCommand(sock, chatId, msg, args) {
             return;
         }
 
-        // Show beautiful menu
+        // Show menu
         const ownerJid = getOwnerJid(sock);
         const ownerNum = ownerJid ? ownerJid.split('@')[0] : 'Unknown';
 
@@ -144,7 +186,7 @@ async function reactToStatus(sock, statusKey) {
     } catch (e) {}
 }
 
-// Status update handler
+// Main handler
 async function handleStatusUpdate(sock, status) {
     try {
         if (!isAutoStatusEnabled()) return;
