@@ -65,7 +65,6 @@ const { handleAntitagCommand, handleTagDetection } = require('./commands/antitag
 const { Antilink } = require('./lib/antilink');
 const { handleMentionDetection, mentionToggleCommand, setMentionCommand, groupMentionToggleCommand } = require('./commands/mention');
 const { handleAntiStatusMention, groupAntiStatusToggleCommand } = require('./commands/antistatusmention');
-const memeCommand = require('./commands/meme');
 const tagCommand = require('./commands/tag');
 const tagNotAdminCommand = require('./commands/tagnotadmin');
 const hideTagCommand = require('./commands/hidetag');
@@ -73,10 +72,6 @@ const weatherCommand = require('./commands/weather');
 const halotelCommand = require('./commands/halotel');
 const kickCommand = require('./commands/kick');
 // quote command removed
-
-// simage command removed
-// hangman command removed
-// trivia command removed
 const { complimentCommand } = require('./commands/compliment');
 // insult command removed
 const { lyricsCommand } = require('./commands/lyrics');
@@ -106,7 +101,6 @@ const viewOnceCommand = require('./commands/viewonce');
 const clearSessionCommand = require('./commands/clearsession');
 const { autoStatusCommand, handleStatusUpdate } = require('./commands/autostatus');
 // simp command removed
-const { stupidCommand } = require('./commands/stupid');
 const stickerTelegramCommand = require('./commands/stickertelegram');
 const textmakerCommand = require('./commands/textmaker');
 const { handleAntideleteCommand, handleMessageRevocation, storeMessage } = require('./commands/antidelete');
@@ -125,8 +119,6 @@ const { addCommandReaction, handleAreactCommand } = require('./lib/reactions');
 const imagineCommand = require('./commands/imagine');
 const videoCommand = require('./commands/video');
 const sudoCommand = require('./commands/sudo');
-// misc command removed
-const { animeCommand } = require('./commands/anime');
 // pies command removed
 const stickercropCommand = require('./commands/stickercrop');
 const updateCommand = require('./commands/update');
@@ -649,9 +641,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
                 await antileftCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message);
                 break;
-            case userMessage === '.meme':
-                await memeCommand(sock, chatId, message);
-                break;
             // .joke command removed
             // .quote command removed
             // .fact command removed
@@ -670,33 +659,23 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 const phoneQuery = userMessage.slice(6).trim();
                 await phoneCommand(sock, chatId, message, phoneQuery);
                 break;
-            // .news command removed
-            // .ttt / .tictactoe command removed
+           
             // .move command removed
             case userMessage === '.topmembers':
                 topMembers(sock, chatId, isGroup);
                 break;
-            // .hangman command removed
-            // .guess command removed
-            // .trivia command removed
+           
             // .answer command removed
             case userMessage.startsWith('.compliment'):
                 await complimentCommand(sock, chatId, message);
                 break;
-            // .insult command removed
+            
             // .8ball command removed
             case userMessage.startsWith('.lyrics'):
                 const songTitle = userMessage.split(' ').slice(1).join(' ');
                 await lyricsCommand(sock, chatId, songTitle, message);
                 break;
-            // .simp command removed
-            case userMessage.startsWith('.stupid') || userMessage.startsWith('.itssostupid') || userMessage.startsWith('.iss'):
-                const stupidQuotedMsg = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-                const stupidMentionedJid = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                const stupidArgs = userMessage.split(' ').slice(1);
-                await stupidCommand(sock, chatId, stupidQuotedMsg, stupidMentionedJid, senderId, stupidArgs);
-                break;
-            // .dare command removed
+           
             // .truth command removed
             case userMessage === '.clear':
                 if (isGroup) await clearCommand(sock, chatId);
@@ -1009,13 +988,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 {
                     const parts = userMessage.trim().split(/\s+/);
                     const args = ['tonikawa', ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage.startsWith('.its-so-stupid'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = ['its-so-stupid', ...parts.slice(1)];
                     await miscCommand(sock, chatId, message, args);
                 }
                 break;
