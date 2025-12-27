@@ -1,5 +1,63 @@
 const fetch = require('node-fetch');
 
+async function translateText(textToTranslate, lang) {
+    if (!textToTranslate) return { ok: false, error: 'No text to translate' };
+
+    // Try multiple translation APIs in sequence
+    let translatedText = null;
+    let used = null;
+    let error = null;
+
+    try {
+        const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${lang}&dt=t&q=${encodeURIComponent(textToTranslate)}`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data[0] && data[0][0] && data[0][0][0]) {
+                translatedText = data[0][0][0];
+                used = 'google';
+            }
+        }
+    } catch (e) {
+        error = e;
+    }
+
+    if (!translatedText) {
+        try {
+            const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(textToTranslate)}&langpair=auto|${lang}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.responseData && data.responseData.translatedText) {
+                    translatedText = data.responseData.translatedText;
+                    used = 'mymemory';
+                }
+            }
+        } catch (e) {
+            error = e;
+        }
+    }
+
+    if (!translatedText) {
+        try {
+            const response = await fetch(`https://api.dreaded.site/api/translate?text=${encodeURIComponent(textToTranslate)}&lang=${lang}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.translated) {
+                    translatedText = data.translated;
+                    used = 'dreaded';
+                }
+            }
+        } catch (e) {
+            error = e;
+        }
+    }
+
+    if (!translatedText) {
+        return { ok: false, error: error ? String(error) : 'All translation APIs failed' };
+    }
+
+    return { ok: true, translated: translatedText, used };
+}
+
 async function handleTranslateCommand(sock, chatId, message, match) {
     try {
         // Show typing indicator
@@ -42,60 +100,15 @@ async function handleTranslateCommand(sock, chatId, message, match) {
             });
         }
 
-        // Try multiple translation APIs in sequence
-        let translatedText = null;
-        let error = null;
+        const result = await translateText(textToTranslate, lang);
 
-        // Try API 1 (Google Translate API)
-        try {
-            const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${lang}&dt=t&q=${encodeURIComponent(textToTranslate)}`);
-            if (response.ok) {
-                const data = await response.json();
-                if (data && data[0] && data[0][0] && data[0][0][0]) {
-                    translatedText = data[0][0][0];
-                }
-            }
-        } catch (e) {
-            error = e;
-        }
-
-        // If API 1 fails, try API 2
-        if (!translatedText) {
-            try {
-                const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(textToTranslate)}&langpair=auto|${lang}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data && data.responseData && data.responseData.translatedText) {
-                        translatedText = data.responseData.translatedText;
-                    }
-                }
-            } catch (e) {
-                error = e;
-            }
-        }
-
-        // If API 2 fails, try API 3
-        if (!translatedText) {
-            try {
-                const response = await fetch(`https://api.dreaded.site/api/translate?text=${encodeURIComponent(textToTranslate)}&lang=${lang}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data && data.translated) {
-                        translatedText = data.translated;
-                    }
-                }
-            } catch (e) {
-                error = e;
-            }
-        }
-
-        if (!translatedText) {
-            throw new Error('All translation APIs failed');
+        if (!result.ok) {
+            throw new Error(result.error || 'Translation failed');
         }
 
         // Send translation
         await sock.sendMessage(chatId, {
-            text: `${translatedText}`,
+            text: `${result.translated}`,
         }, {
             quoted: message
         });
@@ -110,5 +123,6 @@ async function handleTranslateCommand(sock, chatId, message, match) {
 }
 
 module.exports = {
-    handleTranslateCommand
+    handleTranslateCommand,
+    translateText
 }; 

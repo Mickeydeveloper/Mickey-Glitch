@@ -1,5 +1,26 @@
 const fetch = require('node-fetch');
 
+async function fetchWithRetries(url, options = {}, retries = 2, timeoutMs = 60000) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(id);
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      return res;
+    } catch (e) {
+      if (attempt === retries) {
+        console.error('fetchWithRetries: final failure for', url, e && e.message ? e.message : e);
+        return null;
+      }
+      const backoff = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s...
+      await new Promise((r) => setTimeout(r, backoff));
+    }
+  }
+  return null;
+}
+
 // Usage: .mickey <text>
 // Example: .mickey what is the sunnah for morning?
 
@@ -41,6 +62,8 @@ function extractText(value) {
   return String(value);
 }
 
+const { translateText } = require('./translate');
+
 async function mickeyCommand(sock, chatId, message) {
   try {
     // Extract user text from various WhatsApp message types
@@ -64,26 +87,20 @@ async function mickeyCommand(sock, chatId, message) {
       return;
     }
 
-    const encodedQuery = encodeURIComponent(query);
-    const url = `https://zellapi.autos/ai/alquran?text=${encodedQuery}`;
+const encodedQuery = encodeURIComponent(query);
+const url = `https://zellapi.autos/ai/alquran?text=${encodedQuery}`;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+const res = await fetchWithRetries(url, {}, 3, 15000);
+if (!res) {
+  await sock.sendMessage(
+    chatId,
+    { text: '❌ API request failed or timed out.' },
+    { quoted: message }
+  );
+  return;
+}
 
-    const res = await fetch(url, { signal: controller.signal });
-
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      await sock.sendMessage(
-        chatId,
-        { text: `❌ API Error: ${res.status} ${res.statusText}` },
-        { quoted: message }
-      );
-      return;
-    }
-
-    const raw = await res.text();
+const raw = await res.text();
     let reply = 'No response from API.';
 
     // Try to parse as JSON first
@@ -113,6 +130,21 @@ async function mickeyCommand(sock, chatId, message) {
     let output = reply.trim();
     if (output.length > maxLen) {
       output = output.slice(0, maxLen - 3) + '...';
+    }
+
+    // Attempt to translate the response to English and include it
+    try {
+      const t = await translateText(output, 'en');
+      if (t && t.ok && t.translated && t.translated.trim().length > 0) {
+        await sock.sendMessage(
+          chatId,
+          { text: `🤖 Mickey (Sunnah AI)\n\n${output}\n\n🌐 English translation:\n${t.translated}` },
+          { quoted: message }
+        );
+        return;
+      }
+    } catch (e) {
+      // ignore translation errors and send original
     }
 
     await sock.sendMessage(
