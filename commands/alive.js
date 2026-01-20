@@ -11,89 +11,92 @@ const tagsMap = {
   gacha: '🎲 Gacha RPG',
   rg: '🔰 Registration',
   group: '👥 Groups',
-  nable: '🎛️ Features',
+  enable: '🎛️ Features',
   nsfw: '🔞 NSFW +18',
-  buscadores: '🔎 Search Tools',
+  tools: '🧰 Tools',
   sticker: '🌈 Stickers',
   econ: '💰 Economy',
-  convertidor: '🌀 Converters',
-  logo: '🎀 Logo Generator',
-  tools: '🧰 Tools',
-  randow: '🎁 Random',
-  efec: '🎶 Audio Effects',
   owner: '👑 Creator'
 };
 
-let handler = async (m, { conn, usedPrefix }) => {
-  // Safety: Define a local reply function in case m.reply is missing
-  const safeReply = async (text) => {
-    return await conn.sendMessage(m.chat, { text }, { quoted: m });
-  };
-
+let handler = async (m, { conn, usedPrefix: _p }) => {
   try {
-    const userId = (m.mentionedJid && m.mentionedJid[0]) || m.sender;
-    
-    // Safety check for global database
-    const user = global.db?.data?.users?.[userId] || {};
-    const name = await conn.getName(userId);
+    const name = await conn.getName(m.sender);
     const fecha = moment.tz('Africa/Nairobi').format('DD/MM/YYYY');
     const hora = moment.tz('Africa/Nairobi').format('HH:mm:ss');
     const uptime = clockString(process.uptime() * 1000);
+    
+    // Database Safety
+    const user = global.db?.data?.users?.[m.sender] || {};
     const totalreg = Object.keys(global.db?.data?.users || {}).length;
     const limit = user.limit || user.limite || 0;
 
-    const botTag = conn.user?.jid?.split('@')[0] || 'bot';
-    const isSubBot = conn.user?.jid !== global.conn?.user?.jid;
-    
-    const botOfc = isSubBot
-      ? `🔗 *Sub Bot of:* wa.me/${global.conn?.user?.jid?.split('@')[0]}`
-      : `🌐 *Official Bot:* wa.me/${botTag}`;
+    // Command Grouping Logic Fix
+    let help = Object.values(global.plugins).filter(plugin => !plugin.disabled).map(plugin => {
+      return {
+        help: Array.isArray(plugin.tags) ? plugin.help : [plugin.help],
+        tags: Array.isArray(plugin.tags) ? plugin.tags : [plugin.tags],
+        prefix: 'customPrefix' in plugin,
+        limit: plugin.limit,
+        premium: plugin.premium,
+        enabled: !plugin.disabled,
+      };
+    });
 
-    // Group commands by tags
-    const grouped = {};
-    const plugins = Object.values(global.plugins || {}).filter(p => !p.disabled && p.command);
-
-    for (const plugin of plugins) {
-      const cmds = Array.isArray(plugin.command) ? plugin.command : [plugin.command];
-      const tagList = Array.isArray(plugin.tags) ? plugin.tags : (plugin.tags ? [plugin.tags] : ['main']);
-      const tag = tagList[0];
-
-      if (!grouped[tag]) grouped[tag] = [];
-      for (const cmd of cmds) {
-        if (typeof cmd === 'string') {
-          // Clean regex characters from command names
-          grouped[tag].push(cmd.replace(/^\^|\/|\.|\?|\[|\]|\$/g, ''));
+    const groups = {};
+    for (let plugin of Object.values(global.plugins)) {
+        if (!plugin || plugin.disabled) continue;
+        
+        // Ensure tags exists
+        const tags = Array.isArray(plugin.tags) ? plugin.tags : (plugin.tags ? [plugin.tags] : ['main']);
+        
+        for (let tag of tags) {
+            if (!(tag in groups)) groups[tag] = [];
+            
+            // Extract command strings
+            let commands = [];
+            if (plugin.command) {
+                if (Array.isArray(plugin.command)) commands = plugin.command;
+                else if (plugin.command instanceof RegExp) commands = [plugin.command.source];
+                else commands = [plugin.command];
+            }
+            
+            for (let cmd of commands) {
+                // Clean the command string from regex junk
+                const cleanCmd = typeof cmd === 'string' ? cmd.replace(/^\^|\/|\.|\?|\[|\]|\$|\(|\)|\|/g, '') : '';
+                if (cleanCmd) groups[tag].push(cleanCmd);
+            }
         }
-      }
     }
 
-    // Build the menu text
-    let menuBody = `╭─◇ *ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ* ◇─╮\n`;
-    menuBody += `│ 🙋 *User:* ${name}\n`;
-    menuBody += `│ 🏷 *Limit:* ${limit}\n`;
-    menuBody += `│ 📅 *Date:* ${fecha}\n`;
-    menuBody += `│ ⏱ *Time:* ${hora}\n`;
-    menuBody += `│ ⏳ *Uptime:* ${uptime}\n`;
-    menuBody += `│ 👥 *Users:* ${totalreg}\n`;
-    menuBody += `│ ${botOfc}\n`;
-    menuBody += `╰──────────────╯\n`;
+    // Header Text
+    let menuBody = `╭─◇ *ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ* ◇─╮
+│ 🙋 *User:* ${name}
+│ 🏷 *Limit:* ${limit}
+│ 📅 *Date:* ${fecha}
+│ ⏱ *Time:* ${hora}
+│ ⏳ *Uptime:* ${uptime}
+│ 👥 *Users:* ${totalreg}
+╰──────────────╯\n`;
 
-    const sortedTags = Object.keys(grouped).sort();
-    for (const tag of sortedTags) {
+    // Sort and Build Sections
+    const sortedTags = Object.keys(groups).sort();
+    for (let tag of sortedTags) {
+      if (!groups[tag].length) continue;
       const sectionName = tagsMap[tag] || `📚 ${tag.toUpperCase()}`;
       menuBody += `\n╭─── *${sectionName}* ───╮\n`;
       
-      const commands = [...new Set(grouped[tag])].sort();
-      for (const cmd of commands) {
-        menuBody += `│ • ${usedPrefix}${cmd}\n`;
+      // Filter unique commands and sort
+      let uniqueCmds = [...new Set(groups[tag])].sort();
+      for (let cmd of uniqueCmds) {
+        menuBody += `│ • ${_p}${cmd}\n`;
       }
       menuBody += `╰─────────────────────╯\n`;
     }
 
-    menuBody += `\n✨ *Type ${usedPrefix}menu to see command* ✨\n`;
-    menuBody += `\n🌸 Hello ${name}, thank you for using my bot.`;
+    menuBody += `\n✨ *Powered by Mickey From Tanzania* ✨`;
 
-    // Send via conn.sendMessage instead of m.reply for safety
+    // Send with Newsletter Forwarding
     await conn.sendMessage(m.chat, {
       text: menuBody.trim(),
       contextInfo: {
@@ -105,10 +108,10 @@ let handler = async (m, { conn, usedPrefix }) => {
           serverMessageId: -1,
         },
         externalAdReply: {
-          title: `ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ Menu`,
-          body: `Bot active for ${name}`,
+          title: `ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ v2.0`,
+          body: `Bot connected successfully`,
           thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
-          sourceUrl: 'https://whatsapp.com',
+          sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
           mediaType: 1,
           renderLargerThumbnail: true,
         }
@@ -117,7 +120,7 @@ let handler = async (m, { conn, usedPrefix }) => {
 
   } catch (error) {
     console.error('CRITICAL ERROR IN MENU:', error);
-    await safeReply('❌ *Error loading commands.*\nStaff have been notified.');
+    conn.reply(m.chat, '❌ *The menu encountered a glitch.*\nPlease contact the developer.', m);
   }
 };
 
@@ -128,8 +131,8 @@ handler.command = /^(menu|help|commands|cmd)$/i;
 module.exports = handler;
 
 function clockString(ms) {
-  let h = Math.floor(ms / 3600000);
-  let m = Math.floor((ms % 3600000) / 60000);
-  let s = Math.floor((ms % 60000) / 1000);
+  let h = isNaN(ms) ? '--' : Math.floor(ms / 3600000);
+  let m = isNaN(ms) ? '--' : Math.floor((ms % 3600000) / 60000);
+  let s = isNaN(ms) ? '--' : Math.floor((ms % 60000) / 1000);
   return [h, m, s].map(v => v.toString().padStart(2, 0)).join(':');
 }
