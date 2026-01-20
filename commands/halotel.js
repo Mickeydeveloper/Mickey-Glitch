@@ -1,9 +1,10 @@
 const { sendButtons, getBuffer } = require('../lib/myfunc');
+const { toPTT } = require('./lib/converter'); // Path to the code you just shared
 const settings = require('../settings');
 const axios = require('axios');
 
 // ────────────────────────────────────────────────
-const PRICE_PER_GB = 1000; // Fixed Cost per 1GB
+const PRICE_PER_GB = 1000; 
 const MIN_GB = 10;
 const SELLER_NUMBER = '255615944741';
 const SELLER_JID = `${SELLER_NUMBER}@s.whatsapp.net`;
@@ -41,28 +42,21 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
             return await sock.sendMessage(chatId, { text: menu }, { quoted: message });
         }
 
-        // --- FIXED CALCULATION LOGIC ---
-        // Clean numbers: remove any text or '+' from input
+        // --- CALCULATION LOGIC ---
         let cleanArgs = args.map(a => a.replace(/[^0-9.]/g, ''));
-        
-        // Find GB (The first number that is >= MIN_GB)
         let gbAmount = parseFloat(cleanArgs.find(a => parseFloat(a) >= MIN_GB));
-        
-        // Find Phone (The number that looks like a phone number)
         let phoneNumber = cleanArgs.find(a => a.length >= 9 && a.length <= 13);
 
         if (!gbAmount || isNaN(gbAmount)) {
-            return await sock.sendMessage(chatId, { text: `❌ Kindly specify an amount of *at least ${MIN_GB} GB*.` });
+            return await sock.sendMessage(chatId, { text: `❌ Kindly specify at least *${MIN_GB} GB*.` });
         }
         if (!phoneNumber) {
-            return await sock.sendMessage(chatId, { text: `❌ Please provide a valid *recipient phone number*.` });
+            return await sock.sendMessage(chatId, { text: `❌ Please provide a valid *recipient number*.` });
         }
 
-        // Calculate Total Cost
         const totalCost = gbAmount * PRICE_PER_GB;
         const orderRef = `HTL-${Math.floor(1000 + Math.random() * 9000)}`;
 
-        // --- CLEANER DISPLAY ---
         const orderInfo = `✨ *ORDER CONFIRMED*
 
 📦 *Bundle:* ${gbAmount} GB
@@ -90,11 +84,12 @@ _Pay then click confirm below:_`;
         let banner = null;
         try { banner = await getBuffer(AD_BANNER_2); } catch (e) {}
 
-        await sendButtons(sock, chatId, orderInfo, 'Fast & Secure Delivery', buttons, message, {
+        // Send Order Summary
+        await sendButtons(sock, chatId, orderInfo, 'Mickey Glitch Technology', buttons, message, {
             contextInfo: {
                 externalAdReply: {
                     title: `Total: TSh ${formatNumber(totalCost)}`,
-                    body: `Buying ${gbAmount} GB for ${phoneNumber}`,
+                    body: `Order ID: ${orderRef}`,
                     thumbnail: banner,
                     mediaType: 1,
                     renderLargerThumbnail: true
@@ -102,21 +97,33 @@ _Pay then click confirm below:_`;
             }
         });
 
-        // --- FIXED AUDIO PLAYBACK ---
+        // --- NEW AUDIO CONVERSION SYSTEM ---
         setTimeout(async () => {
             try {
+                // 1. Download the raw MP3
                 const response = await axios.get(CONFIRMATION_AUDIO, { responseType: 'arraybuffer' });
+                const rawBuffer = Buffer.from(response.data);
+
+                // 2. Convert using your toPTT (FFMPEG) formula
+                // We pass 'mp3' as the input extension for the temp file
+                const opusBuffer = await toPTT(rawBuffer, 'mp3');
+
+                // 3. Send the converted professional Voice Note
                 await sock.sendMessage(chatId, {
-                    audio: Buffer.from(response.data),
-                    mimetype: 'audio/ogg; codecs=opus', // Native WhatsApp Format
+                    audio: opusBuffer,
+                    mimetype: 'audio/ogg; codecs=opus',
                     ptt: true 
                 }, { quoted: message });
-            } catch (e) {}
+                
+                console.log(`[Audio] Order ${orderRef} converted and sent successfully.`);
+            } catch (e) {
+                console.error('[Audio Error]', e.message);
+            }
         }, 1500);
 
         // Notify Seller
         await sock.sendMessage(SELLER_JID, {
-            text: `🔔 *New Order:* ${orderRef}\n📦 ${gbAmount}GB @ TSh ${PRICE_PER_GB}\n💰 Total: TSh ${formatNumber(totalCost)}\n📱 To: ${phoneNumber}`
+            text: `🔔 *New Order:* ${orderRef}\n📦 ${gbAmount}GB\n💰 Total: TSh ${formatNumber(totalCost)}\n📱 To: ${phoneNumber}`
         });
 
     } catch (error) {
