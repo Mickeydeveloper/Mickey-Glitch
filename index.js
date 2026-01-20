@@ -28,13 +28,15 @@ const {
 const NodeCache = require("node-cache")
 const pino = require("pino")
 const readline = require("readline")
-const { rmSync, existsSync } = require('fs')
 
-// --- CONFIGURATION ---
-const channelRD = { id: '120363398106360290@newsletter', name: 'Mickey From Tanzania' };
+// ================= [ CONFIGURATION & GLOBALS ] =================
 global.botname = "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™"
 global.themeemoji = "•"
 let phoneNumber = "255615858685"
+const channelRD = { 
+    id: '120363398106360290@newsletter', 
+    name: 'Mickey From Tanzania' 
+};
 
 // Import lightweight store
 const store = require('./lib/lightweight_store')
@@ -43,10 +45,7 @@ const settings = require('./settings')
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000)
 
 // Memory optimization
-setInterval(() => {
-    if (global.gc) global.gc()
-}, 60_000)
-
+setInterval(() => { if (global.gc) global.gc() }, 60_000)
 setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024
     if (used > 450) process.exit(1)
@@ -60,6 +59,7 @@ const question = (text) => {
     return Promise.resolve(settings.ownerNumber || phoneNumber)
 }
 
+// ================= [ START BOT ENGINE ] =================
 async function startXeonBotInc() {
     try {
         let { version } = await fetchLatestBaileysVersion()
@@ -84,7 +84,7 @@ async function startXeonBotInc() {
             msgRetryCounterCache
         })
 
-        // Newsletter Forwarding Context Helper
+        // Reusable Newsletter Forwarding Context
         const newsletterForward = {
             contextInfo: {
                 forwardingScore: 999,
@@ -97,42 +97,10 @@ async function startXeonBotInc() {
             }
         }
 
-        // ================= [ BUTTON FUNCTION ENGINE ] =================
-        XeonBotInc.sendButton = async (jid, text, footer, buttons, quoted, options = {}) => {
-            let messageButtons = buttons.map(btn => ({
-                buttonId: btn.id,
-                buttonText: { displayText: btn.displayText },
-                type: 1
-            }))
-
-            let buttonMessage = {
-                text: text,
-                footer: footer,
-                buttons: messageButtons,
-                headerType: 1,
-                viewOnce: true,
-                ...newsletterForward // Apply newsletter info to buttons
-            }
-
-            if (options.image) {
-                const media = await prepareWAMessageMedia({ image: options.image }, { upload: XeonBotInc.waUploadToServer })
-                buttonMessage.imageMessage = media.imageMessage
-                buttonMessage.headerType = 4
-            } else if (options.video) {
-                const media = await prepareWAMessageMedia({ video: options.video }, { upload: XeonBotInc.waUploadToServer })
-                buttonMessage.videoMessage = media.videoMessage
-                buttonMessage.headerType = 5
-            }
-
-            const msg = generateWAMessageFromContent(jid, { buttonsMessage: buttonMessage }, { quoted, userJid: XeonBotInc.user.id })
-            await XeonBotInc.relayMessage(jid, msg.message, { messageId: msg.key.id })
-            return msg
-        }
-
+        // ================= [ MESSAGE HANDLING ] =================
         XeonBotInc.ev.on('creds.update', saveCreds)
         store.bind(XeonBotInc.ev)
 
-        // Message handling
         XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
             try {
                 const mek = chatUpdate.messages?.[0]
@@ -156,15 +124,7 @@ async function startXeonBotInc() {
             }
         })
 
-        XeonBotInc.decodeJid = (jid) => {
-            if (!jid) return jid
-            if (/:\d+@/gi.test(jid)) {
-                let decode = jidDecode(jid) || {}
-                return decode.user && decode.server && decode.user + '@' + decode.server || jid
-            } else return jid
-        }
-
-        // Connection Update
+        // ================= [ CONNECTION UPDATE ] =================
         XeonBotInc.ev.on('connection.update', async (s) => {
             const { connection, lastDisconnect } = s
             if (connection === 'open') {
@@ -172,10 +132,24 @@ async function startXeonBotInc() {
                 
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
                 
-                // Send Video with Newsletter Forwarding Info
+                // Professional Connection Dashboard
+                const professionalCaption = `
+╔══════════════════════╗
+║   *CONNECTION SUCCESS* ╚══════════════════════╝
+
+✨ *SYSTEM STATUS:* Online
+🤖 *BOT NAME:* ${global.botname}
+📡 *CHANNEL:* ${channelRD.name}
+🕒 *TIME:* ${new Date().toLocaleString()}
+⚙️ *RAM USAGE:* ${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB
+
+> *Verified System Boot Sequence Completed.*
+`.trim()
+
+                // Send Professional Video Notification with Newsletter Forward
                 await XeonBotInc.sendMessage(botJid, { 
                     video: { url: 'https://files.catbox.moe/usg5b4.mp4' }, 
-                    caption: `✨ *${global.botname}* is now online!`,
+                    caption: professionalCaption,
                     ...newsletterForward
                 })
             }
@@ -186,7 +160,15 @@ async function startXeonBotInc() {
             }
         })
 
-        // Pairing Code Logic
+        // ================= [ UTILS & PAIRING ] =================
+        XeonBotInc.decodeJid = (jid) => {
+            if (!jid) return jid
+            if (/:\d+@/gi.test(jid)) {
+                let decode = jidDecode(jid) || {}
+                return decode.user && decode.server && decode.user + '@' + decode.server || jid
+            } else return jid
+        }
+
         if (pairingCode && !XeonBotInc.authState.creds.registered) {
             let phoneNumberInput = (global.phoneNumber || await question(chalk.bgBlack(chalk.greenBright(`Input Number: `)))).replace(/[^0-9]/g, '')
             setTimeout(async () => {
