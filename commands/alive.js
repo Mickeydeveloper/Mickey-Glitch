@@ -4,10 +4,10 @@ const moment = require('moment-timezone');
  * Mickey Glitch Alive Command
  * FIX: Cannot read properties of undefined (reading 'fromMe')
  */
-const aliveCommand = async (conn, m, text, usedPrefix, command) => {
+const aliveCommand = async (conn, chatId, message) => {
   try {
     // 1. Safe Name & Data Retrieval
-    const name = m.pushName || (conn.user && conn.user.name) || 'User';
+    const name = message.pushName || (conn.user && conn.user.name) || 'User';
     const uptime = clockString(process.uptime() * 1000);
     const date = moment.tz('Africa/Nairobi').format('DD/MM/YYYY');
     const time = moment.tz('Africa/Nairobi').format('HH:mm:ss');
@@ -23,10 +23,8 @@ const aliveCommand = async (conn, m, text, usedPrefix, command) => {
 
 _System is running perfectly glitch-free._`.trim();
 
-    // 3. FIX: Safe Message Sending
-    // We check if m.quoted exists before trying to access its properties.
-    // By passing 'm' directly as quoted, we avoid the 'fromMe' error.
-    await conn.sendMessage(m.chat, {
+    // 3. Safe Message Sending
+    await conn.sendMessage(chatId, {
       text: statusText,
       contextInfo: {
         isForwarded: true,
@@ -45,16 +43,15 @@ _System is running perfectly glitch-free._`.trim();
         }
       }
     }, { 
-      // This is the safety fix: quote the current message directly
-      quoted: m 
+      quoted: message 
     });
 
   } catch (error) {
     // If the error happens again, the bot won't crash
     console.error('Alive Command Failure:', error.message);
     
-    // Fallback message with zero external dependencies
-    await conn.sendMessage(m.chat, { text: '✨ *Bot is Online*' }, { quoted: m });
+    // Fallback message
+    await conn.sendMessage(chatId, { text: '✨ *Bot is Online*' }, { quoted: message });
   }
 };
 
