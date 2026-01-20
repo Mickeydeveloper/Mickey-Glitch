@@ -35,7 +35,7 @@ global.themeemoji = "•"
 let phoneNumber = "255615858685"
 const channelRD = { 
     id: '120363398106360290@newsletter', 
-    name: 'Mickey From Tanzania' 
+    name: '🅼🅸🅲🅺🅴🆈' 
 };
 
 // Import lightweight store
@@ -110,6 +110,14 @@ async function startXeonBotInc() {
 
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
 
+                // Auto-follow channel
+                try {
+                    await XeonBotInc.subscribeNewsletter(channelRD.id)
+                    console.log(chalk.green(`${global.themeemoji} Channel ${channelRD.name} followed successfully! ✅`))
+                } catch (err) {
+                    console.log(chalk.yellow(`${global.themeemoji} Could not auto-follow channel: ${err.message}`))
+                }
+
                 // Professional Connection Caption
                 const proCaption = `
 ╔══════════════════════╗
@@ -152,6 +160,29 @@ async function startXeonBotInc() {
                 let decode = jidDecode(jid) || {}
                 return decode.user && decode.server && decode.user + '@' + decode.server || jid
             } else return jid
+        }
+
+        // ================= [ MESSAGE WRAPPER WITH CHANNEL CONTEXT ] =================
+        // Wrap sendMessage to add newsletter context to all bot messages
+        const originalSendMessage = XeonBotInc.sendMessage.bind(XeonBotInc)
+        XeonBotInc.sendMessage = async function(jid, content, options = {}) {
+            // Skip context for status broadcasts and newsletters
+            if (!jid?.includes('@newsletter')) {
+                // Add forwarding context if not already present
+                if (!options.contextInfo) {
+                    options.contextInfo = {}
+                }
+                if (!options.contextInfo.forwardedNewsletterMessageInfo) {
+                    options.contextInfo.forwardingScore = 999
+                    options.contextInfo.isForwarded = true
+                    options.contextInfo.forwardedNewsletterMessageInfo = {
+                        newsletterJid: channelRD.id,
+                        newsletterName: channelRD.name,
+                        serverMessageId: 143
+                    }
+                }
+            }
+            return originalSendMessage(jid, content, options)
         }
 
         if (pairingCode && !XeonBotInc.authState.creds.registered) {
