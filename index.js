@@ -5,10 +5,10 @@ const chalk = require('chalk')
 const FileType = require('file-type')
 const path = require('path')
 const axios = require('axios')
-const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require('./main');
+const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require('./main')
 const PhoneNumber = require('awesome-phonenumber')
 const { imageToWebp, videoToWebp, writeExifImg, writeExifVid } = require('./lib/exif')
-const { smsg, isUrl, generateMessageTag, getBuffer, getSizeMedia, fetch, await, sleep, reSize } = require('./lib/myfunc')
+const { smsg, isUrl, generateMessageTag, getBuffer, getSizeMedia, fetch, sleep, reSize } = require('./lib/myfunc')
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -39,21 +39,400 @@ store.readFromFile()
 const settings = require('./settings')
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000)
 
-// Memory optimization
+// ===== MEMORY OPTIMIZATION =====
+// Garbage collection every 60 seconds
 setInterval(() => {
     if (global.gc) {
         global.gc()
-        console.log('🧹 Garbage collection completed')
+        console.log(chalk.yellow('🧹 Garbage collection completed'))
     }
-}, 60_000)
+}, 60000)
 
+// RAM threshold check - restart if exceeds 500MB
 setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024
-    if (used > 400) {
-        console.log('⚠️ RAM too high (>400MB), restarting bot...')
+    if (used > 500) {
+        console.log(chalk.red('⚠️ RAM too high (>500MB), restarting bot...'))
         process.exit(1)
     }
-}, 30_000)
+}, 30000)
+
+let phoneNumber = "255615858685"
+let owner = {}
+try {
+    owner = JSON.parse(fs.readFileSync('./data/owner.json', 'utf-8'))
+} catch (err) {
+    console.warn(chalk.yellow('⚠️ Could not read owner.json, using default'))
+    owner = {}
+}
+
+global.botname = "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™"
+global.themeemoji = "•"
+
+const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code")
+const useMobile = process.argv.includes("--mobile")
+
+const rl = process.stdin.isTTY ? readline.createInterface({ input: process.stdin, output: process.stdout }) : null
+const question = (text) => {
+    if (rl) {
+        return new Promise((resolve) => rl.question(text, resolve))
+    } else {
+        return Promise.resolve(settings.ownerNumber || phoneNumber)
+    }
+}
+
+async function startXeonBotInc() {
+    try {
+        let { version, isLatest } = await fetchLatestBaileysVersion()
+        const { state, saveCreds } = await useMultiFileAuthState(`./session`)
+        const msgRetryCounterCache = new NodeCache()
+
+        const XeonBotInc = makeWASocket({
+            version,
+            logger: pino({ level: 'silent' }),
+            printQRInTerminal: !pairingCode,
+            browser: ["Ubuntu", "Chrome", "20.0.04"],
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+            },
+            markOnlineOnConnect: true,
+            generateHighQualityLinkPreview: true,
+            syncFullHistory: false,
+            getMessage: async (key) => {
+                let jid = jidNormalizedUser(key.remoteJid)
+                let msg = await store.loadMessage(jid, key.id)
+                return msg?.message || ""
+            },
+            msgRetryCounterCache,
+            defaultQueryTimeoutMs: 60000,
+            connectTimeoutMs: 60000,
+            keepAliveIntervalMs: 10000,
+        })
+
+        XeonBotInc.ev.on('creds.update', saveCreds)
+        store.bind(XeonBotInc.ev)
+
+        // ===== FORWARD MESSAGE AS CHANNEL FORWARD =====
+        const channelRD = { id: '120363398106360290@newsletter', name: '𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™' }
+        try {
+            const origSendMessage = XeonBotInc.sendMessage.bind(XeonBotInc)
+            XeonBotInc.sendMessage = async (jid, message, options = {}) => {
+                try {
+                    if (!message || typeof message !== 'object') return origSendMessage(jid, message, options)
+                    if (message.contextInfo?.isForwarded || jid === channelRD.id) {
+                        return origSendMessage(jid, message, options)
+                    }
+
+                    const originalMsg = {
+                        key: { remoteJid: channelRD.id, fromMe: false, id: generateMessageID() },
+                        message: message
+                    }
+
+                    const forwardContent = generateForwardMessageContent(originalMsg)
+                    const waMessage = generateWAMessageFromContent(jid, forwardContent, {})
+
+                    waMessage.message = waMessage.message || {}
+                    waMessage.message.contextInfo = waMessage.message.contextInfo || {}
+                    waMessage.message.contextInfo.isForwarded = true
+                    waMessage.message.contextInfo.forwardingScore = 999
+                    waMessage.message.contextInfo.forwardedNewsletterMessageInfo = {
+                        newsletterJid: channelRD.id,
+                        newsletterName: channelRD.name,
+                        serverMessageId: -1
+                    }
+
+                    await XeonBotInc.relayMessage(jid, waMessage.message, { messageId: waMessage.key.id })
+                    return waMessage
+                } catch (err) {
+                    let fallbackMessage = message && typeof message === 'object' ? message : { text: String(message || '') }
+                    fallbackMessage.contextInfo = fallbackMessage.contextInfo || {}
+                    fallbackMessage.contextInfo.isForwarded = true
+                    fallbackMessage.contextInfo.forwardingScore = 999
+                    fallbackMessage.contextInfo.forwardedNewsletterMessageInfo = {
+                        newsletterJid: channelRD.id,
+                        newsletterName: channelRD.name,
+                        serverMessageId: -1
+                    }
+                    return origSendMessage(jid, fallbackMessage, options)
+                }
+            }
+        } catch (e) {
+            console.warn(chalk.yellow('⚠️ Could not wrap sendMessage to forward from channel'))
+        }
+
+        // ===== MESSAGE HANDLER =====
+        XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
+            try {
+                const mek = chatUpdate.messages?.[0]
+                if (!mek?.message) return
+
+                // Handle ephemeral messages
+                if (Object.keys(mek.message)[0] === 'ephemeralMessage') {
+                    mek.message = mek.message.ephemeralMessage.message
+                }
+
+                // Handle status broadcasts
+                if (mek.key?.remoteJid === 'status@broadcast') {
+                    await handleStatus(XeonBotInc, chatUpdate)
+                    return
+                }
+
+                // Private mode check
+                if (!XeonBotInc.public && !mek.key.fromMe && chatUpdate.type === 'notify') {
+                    const isGroup = mek.key?.remoteJid?.endsWith('@g.us')
+                    if (!isGroup) return
+                }
+
+                // Skip relay messages
+                if (mek.key?.id?.startsWith('BAE5') && mek.key.id.length === 16) return
+
+                // Clear retry cache
+                if (XeonBotInc?.msgRetryCounterCache) {
+                    XeonBotInc.msgRetryCounterCache.clear()
+                }
+
+                await handleMessages(XeonBotInc, chatUpdate, true)
+            } catch (err) {
+                console.error(chalk.red("❌ Error in messages.upsert:"), err?.message || err)
+            }
+        })
+
+        // ===== CONTACT HANDLER =====
+        XeonBotInc.decodeJid = (jid) => {
+            if (!jid) return jid
+            if (/:\d+@/gi.test(jid)) {
+                let decode = jidDecode(jid) || {}
+                return decode.user && decode.server && decode.user + '@' + decode.server || jid
+            } else return jid
+        }
+
+        XeonBotInc.ev.on('contacts.update', update => {
+            for (let contact of update) {
+                let id = XeonBotInc.decodeJid(contact.id)
+                if (store && store.contacts) store.contacts[id] = { id, name: contact.notify }
+            }
+        })
+
+        // ===== GET NAME FUNCTION =====
+        XeonBotInc.getName = (jid, withoutContact = false) => {
+            id = XeonBotInc.decodeJid(jid)
+            withoutContact = XeonBotInc.withoutContact || withoutContact
+            let v
+            if (id.endsWith("@g.us")) {
+                return new Promise(async (resolve) => {
+                    v = store.contacts[id] || {}
+                    if (!(v.name || v.subject)) v = await XeonBotInc.groupMetadata(id) || {}
+                    resolve(v.name || v.subject || PhoneNumber('+' + id.replace('@s.whatsapp.net', '')).getNumber('international'))
+                })
+            }
+            else {
+                v = id === '0@s.whatsapp.net' ? { id, name: 'WhatsApp' } :
+                    id === XeonBotInc.decodeJid(XeonBotInc.user.id) ? XeonBotInc.user :
+                    (store.contacts[id] || {})
+            }
+            return (withoutContact ? '' : v.name) || v.subject || v.verifiedName || PhoneNumber('+' + jid.replace('@s.whatsapp.net', '')).getNumber('international')
+        }
+
+        XeonBotInc.public = true
+        XeonBotInc.serializeM = (m) => smsg(XeonBotInc, m, store)
+
+        // ===== PAIRING CODE =====
+        if (pairingCode && !XeonBotInc.authState.creds.registered) {
+            if (useMobile) throw new Error('Cannot use pairing code with mobile api')
+
+            let phoneNumberInput
+            if (!!global.phoneNumber) {
+                phoneNumberInput = global.phoneNumber
+            } else {
+                phoneNumberInput = await question(chalk.bgBlack(chalk.greenBright(`Please type your WhatsApp number 😍\nFormat: 6281376552730 : `)))
+            }
+
+            phoneNumberInput = phoneNumberInput.replace(/[^0-9]/g, '')
+            const pn = require('awesome-phonenumber')
+            if (!pn('+' + phoneNumberInput).isValid()) {
+                console.log(chalk.red('❌ Invalid number. Try again.'))
+                process.exit(1)
+            }
+
+            setTimeout(async () => {
+                let code = await XeonBotInc.requestPairingCode(phoneNumberInput)
+                code = code?.match(/.{1,4}/g)?.join("-") || code
+                console.log(chalk.black(chalk.bgGreen(`Your Pairing Code : `)), chalk.black(chalk.white(code)))
+            }, 3000)
+        }
+
+        // ===== CONNECTION UPDATE HANDLER =====
+        XeonBotInc.ev.on('connection.update', async (s) => {
+            const { connection, lastDisconnect } = s
+
+            if (connection === 'connecting') {
+                console.log(chalk.yellow('🔄 Connecting to WhatsApp...'))
+            }
+
+            if (connection === 'open') {
+                console.log(chalk.magenta('\n✨ Bot Connected Successfully! ✨\n'))
+                console.log(chalk.yellow(`📱 Account: ` + JSON.stringify(XeonBotInc.user, null, 2)))
+
+                // Send online notification
+                try {
+                    const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
+                    const onlineCaption = `✨ *𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™* is now online!\n\n🕒 Time: ${new Date().toLocaleString()}\n🔋 Status: Active & Ready\n🟢 Connection: Established\n⚡ Bot Version: ${settings.version}\n\n_Ready to assist. Type .help for commands_`
+                    
+                    await XeonBotInc.sendMessage(botJid, { text: onlineCaption })
+                } catch (e) {
+                    // Silent fail
+                }
+
+                await delay(2000)
+
+                // ===== AUTO-FOLLOW CHANNEL =====
+                try {
+                    const channelId = '120363398106360290@newsletter'
+                    const followMethods = ['subscribeBroadcast', 'subscribeNewsletter', 'subscribeToChannel', 'followChannel', 'follow']
+
+                    for (const methodName of followMethods) {
+                        if (typeof XeonBotInc[methodName] === 'function') {
+                            try {
+                                await XeonBotInc[methodName](channelId)
+                                console.log(chalk.green(`✓ Auto-followed channel`))
+                                break
+                            } catch (err) {
+                                continue
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.debug(chalk.yellow('⚠️ Auto-follow skipped'))
+                }
+
+                // ===== AUTO BIO =====
+                try {
+                    const autobio = require('./commands/autobio')
+                    if (autobio && typeof autobio.applyAutoBioIfEnabled === 'function') {
+                        await autobio.applyAutoBioIfEnabled(XeonBotInc)
+                    }
+                } catch (e) {
+                    // Silent fail
+                }
+
+                // Success logs
+                console.log(chalk.cyan(`\n< ================================================== >`))
+                console.log(chalk.magenta(`${global.themeemoji} WA NUMBER: ${owner}`))
+                console.log(chalk.magenta(`${global.themeemoji} CREDIT: 𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™`))
+                console.log(chalk.green(`${global.themeemoji} ☀️ Bot Connected Successfully! ✅`))
+                console.log(chalk.blue(`Bot Version: ${settings.version}`))
+                console.log(chalk.cyan(`< ================================================== >\n`))
+            }
+
+            if (connection === 'close') {
+                const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut
+                const statusCode = lastDisconnect?.error?.output?.statusCode
+
+                console.log(chalk.red(`❌ Connection closed. Reconnect: ${shouldReconnect}`))
+
+                if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+                    rmSync('./session', { recursive: true, force: true })
+                    console.log(chalk.yellow('⚠️ Session deleted. Restart and re-authenticate.'))
+                }
+
+                if (shouldReconnect) {
+                    await delay(5000)
+                    startXeonBotInc()
+                }
+            }
+        })
+
+        // ===== ANTICALL HANDLER =====
+        const antiCallNotified = new Set()
+        XeonBotInc.ev.on('call', async (calls) => {
+            try {
+                const { readState: readAnticallState } = require('./commands/anticall')
+                const state = readAnticallState()
+                if (!state?.enabled) return
+
+                for (const call of calls) {
+                    const caller = call.from || call.peerJid
+                    if (!caller) continue
+
+                    try {
+                        if (typeof XeonBotInc.rejectCall === 'function') {
+                            await XeonBotInc.rejectCall(call.id, caller)
+                        }
+                    } catch (rejectErr) {
+                        console.debug('Could not reject call')
+                    }
+
+                    // Send notification once per minute
+                    if (!antiCallNotified.has(caller)) {
+                        antiCallNotified.add(caller)
+                        setTimeout(() => antiCallNotified.delete(caller), 60000)
+                        try {
+                            await XeonBotInc.sendMessage(caller, { text: '📵 Calls are blocked.' })
+                        } catch (e) {
+                            console.debug('Could not send anticall message')
+                        }
+                    }
+
+                    // Block caller
+                    setTimeout(async () => {
+                        try {
+                            await XeonBotInc.updateBlockStatus(caller, 'block')
+                        } catch (blockErr) {
+                            console.debug('Could not block caller')
+                        }
+                    }, 1000)
+                }
+            } catch (err) {
+                console.error(chalk.red('[Anticall] Error:'), err?.message || err)
+            }
+        })
+
+        // ===== GROUP PARTICIPANT UPDATE HANDLER =====
+        XeonBotInc.ev.on('group-participants.update', async (update) => {
+            try {
+                await handleGroupParticipantUpdate(XeonBotInc, update)
+            } catch (err) {
+                console.error(chalk.red('[GroupParticipant] Error:'), err?.message || err)
+            }
+        })
+
+        return XeonBotInc
+
+    } catch (error) {
+        console.error(chalk.red('❌ Fatal error in startXeonBotInc:'), error?.message || error)
+        await delay(5000)
+        startXeonBotInc()
+    }
+}
+
+// ===== START BOT =====
+startXeonBotInc().catch(err => {
+    console.error(chalk.red('❌ Fatal startup error:'), err?.message || err)
+    process.exit(1)
+})
+
+// ===== GLOBAL ERROR HANDLERS =====
+process.on('uncaughtException', (err) => {
+    console.error(chalk.red('❌ Uncaught Exception:'), err?.message || err)
+})
+
+process.on('unhandledRejection', (reason) => {
+    console.error(chalk.red('❌ Unhandled Rejection:'), reason?.message || reason)
+})
+
+// ===== AUTO RELOAD (DEVELOPMENT MODE) =====
+if (process.env.NODE_ENV !== 'production') {
+    let file = require.resolve(__filename)
+    fs.watchFile(file, () => {
+        fs.unwatchFile(file)
+        console.log(chalk.redBright(`🔄 Auto-reloading...`))
+        delete require.cache[file]
+        require(file)
+    })
+}
+
+module.exports = { startXeonBotInc }
 
 let phoneNumber = "255615858685"
 let owner = {}
