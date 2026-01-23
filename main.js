@@ -179,10 +179,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
         let senderIsOwnerOrSudo = false;
         
         try {
-            senderIsSudo = await isSudo(senderId);
-            senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
+            if (senderId && typeof senderId === 'string') {
+                senderIsSudo = await isSudo(senderId);
+                senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
+            }
         } catch (e) {
-            console.debug('Sudo check error:', e?.message);
+            console.debug('Auth check error:', e?.message);
+            // Continue with defaults (false)
         }
 
         // Handle all button responses (static + command buttons)
