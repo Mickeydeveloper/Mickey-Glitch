@@ -1,16 +1,13 @@
 // help.js
-// ──────────────────────────────────────────────────────────────
-//  🎯 ADVANCED HELP SYSTEM - Command List
-//  Dynamically reads from commands/ folder
-// ──────────────────────────────────────────────────────────────
+// Last meaningful update: improved string interpolation + fallback + readability
 
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
-const os = require('os');
+const os   = require('os');
 const settings = require('../settings');
 
 /**
- * Command Categories – update this list when you add new commands
+ * Command categories (update this object when adding/removing commands)
  */
 const COMMAND_CATEGORIES = {
     admin:    ['ban', 'unban', 'kick', 'promote', 'demote', 'mute', 'unmute', 'warn', 'warnings', 'clear'],
@@ -22,7 +19,7 @@ const COMMAND_CATEGORIES = {
     utility:  ['ping', 'alive', 'update', 'checkupdates', 'settings', 'weather', 'translate', 'tts'],
     owner:    ['owner', 'pair', 'sudo', 'staff', 'resetlink', 'phone', 'halotel'],
     auto:     ['autostatus', 'autoread', 'autotyping', 'autobio', 'antitag', 'antidelete', 'antilink', 'antibadword'],
-    ai:       ['ai', 'chatbot', 'imagine', 'txt2img']   // ← add new ai commands here if needed
+    ai:       ['ai', 'chatbot']
 };
 
 const EXCLUDE = ['help', 'index', 'main'];
@@ -31,27 +28,35 @@ function getUptime() {
     const t = process.uptime();
     const h = Math.floor(t / 3600);
     const m = Math.floor((t % 3600) / 60);
-    const s = t % 60 | 0;
+    const s = Math.floor(t % 60);
     return `${h}h ${m}m ${s}s`;
 }
 
-function getCommandDescription(filepath) {
+function getCommandDescription(filePath) {
     try {
-        const content = fs.readFileSync(filepath, 'utf-8');
-        const lines = content.split(/\r?\n/).slice(0, 12);
-        for (let line of lines) {
-            line = line.trim();
-            if (!line) continue;
-            if (line.startsWith('//'))  return line.replace(/^\/\/\s*/, '').trim();
-            if (line.startsWith('/*'))  return line.replace(/^\/\*\s*/, '').replace(/\*\/$/, '').trim();
-            if (line.startsWith('*'))   return line.replace(/^\*\s*/, '').trim();
+        const content = fs.readFileSync(filePath, 'utf8');
+        const lines = content.split(/\r?\n/).slice(0, 15);
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            if (trimmed.startsWith('//')) {
+                return trimmed.replace(/^\/\/\s*/, '');
+            }
+            if (trimmed.startsWith('/*')) {
+                return trimmed.replace(/^\/\*\s?/, '').replace(/\*\/$/, '');
+            }
+            if (trimmed.startsWith('*')) {
+                return trimmed.replace(/^\*\s?/, '');
+            }
         }
-    } catch {}
+    } catch {
+        // silent fail
+    }
     return '';
 }
 
-function getCategoryEmoji(category) {
-    const emojis = {
+function emojiForCategory(cat) {
+    const map = {
         admin:    '👮‍♂️',
         group:    '👥',
         fun:      '🎭',
@@ -61,12 +66,12 @@ function getCategoryEmoji(category) {
         utility:  '🛠️',
         owner:    '👑',
         auto:     '🤖',
-        ai:       '🧠',
+        ai:       '🧠'
     };
-    return emojis[category] || '📦';
+    return map[cat] || '📦';
 }
 
-function loadAllCommands() {
+function loadCommands() {
     const dir = __dirname;
     let files;
     try {
@@ -76,59 +81,64 @@ function loadAllCommands() {
     }
 
     return files
-        .filter(file => file.endsWith('.js'))
-        .map(file => path.basename(file, '.js'))
+        .filter(f => f.endsWith('.js'))
+        .map(f => path.basename(f, '.js'))
         .filter(name => !EXCLUDE.includes(name))
         .sort((a, b) => a.localeCompare(b))
         .map(name => {
-            const fullPath = path.join(dir, name + '.js');
-            const desc = getCommandDescription(fullPath);
-            let cat = 'other';
+            const fp = path.join(dir, name + '.js');
+            const desc = getCommandDescription(fp);
+            let category = 'other';
 
-            for (const [category, cmdNames] of Object.entries(COMMAND_CATEGORIES)) {
-                if (cmdNames.includes(name)) {
-                    cat = category;
+            for (const [cat, cmds] of Object.entries(COMMAND_CATEGORIES)) {
+                if (cmds.includes(name)) {
+                    category = cat;
                     break;
                 }
             }
 
-            return { name, desc, category: cat };
+            return { name, desc, category };
         });
 }
 
-function buildHelpContent(cmds, opts) {
-    const { runtime, ramUsed, ramTotal, time, username } = opts;
-    const prefix = settings.prefix || '.';
+function buildHelpMessage(cmds, opts = {}) {
+    const {
+        runtime   = getUptime(),
+        mode      = settings.commandMode || 'public',
+        prefix    = settings.prefix || '.',
+        ramUsed   = (process.memoryUsage().rss / 1e9).toFixed(2),
+        ramTotal  = (os.totalmem() / 1e9).toFixed(2),
+        time      = new Date().toLocaleTimeString('en-GB', { hour12: false }),
+        username  = 'Unknown'
+    } = opts;
 
-    const groups = {};
+    const groups = { other: [] };
     Object.keys(COMMAND_CATEGORIES).forEach(c => groups[c] = []);
-    groups.other = [];
 
     cmds.forEach(cmd => {
-        const target = groups[cmd.category] || groups.other;
-        target.push(cmd);
+        (groups[cmd.category] || groups.other).push(cmd);
     });
 
     let text = `🎯 *\( {settings.botName || 'Mickey Glitch'} Commands*  v \){settings.version || '?.?'}\n\n`;
 
-    text += `▸ Uptime  : ${runtime}\n`;
-    text += `▸ Mode    : ${settings.commandMode || 'public'}\n`;
-    text += `▸ Prefix  : ${prefix}\n`;
-    text += `▸ RAM     : ${ramUsed} / ${ramTotal} GB\n`;
-    text += `▸ Time    : ${time}\n`;
-    text += `▸ User    : ${username || 'Unknown'}\n\n`;
+    text += `▸ Uptime    : ${runtime}\n`;
+    text += `▸ Mode      : ${mode}\n`;
+    text += `▸ Prefix    : ${prefix}\n`;
+    text += `▸ RAM       : ${ramUsed} / ${ramTotal} GB\n`;
+    text += `▸ Time      : ${time}\n`;
+    text += `▸ User      : ${username}\n\n`;
 
     for (const [cat, list] of Object.entries(groups)) {
         if (list.length === 0) continue;
 
-        const emoji = getCategoryEmoji(cat);
+        const emoji = emojiForCategory(cat);
         const title = cat.charAt(0).toUpperCase() + cat.slice(1);
 
         text += `\( {emoji} * \){title}* (${list.length})\n`;
 
         list.forEach(cmd => {
-            const descPart = cmd.desc ? ` — ${cmd.desc}` : '';
-            text += `  • \( {prefix} \){cmd.name}${descPart}\n`;
+            const desc = cmd.desc ? ` — ${cmd.desc}` : '';
+            text += `  • \( {prefix} \){cmd.name}${desc}\n`;
         });
 
         text += '\n';
@@ -141,76 +151,77 @@ function buildHelpContent(cmds, opts) {
     return text;
 }
 
-const FALLBACK_TEXT = `⚠️ Couldn't generate command list right now.\nPlease try again later.`;
+const FALLBACK = `⚠️  Could not generate command list right now.\nPlease try again later.`;
 
 async function helpCommand(sock, chatId, msg) {
-    if (!sock || !chatId) return;
+    if (!sock || !chatId) {
+        console.error("[help] sock or chatId missing");
+        return;
+    }
 
     try {
-        const runtime   = getUptime();
-        const prefix    = settings.prefix || '.';
-        const timeNow   = new Date().toLocaleTimeString('en-GB', { hour12: false });
-        const usedGB    = (process.memoryUsage().rss / 1e9).toFixed(2);
-        const totalGB   = (os.totalmem() / 1e9).toFixed(2);
+        // Basic info
+        const runtime = getUptime();
+        const prefix  = settings.prefix || '.';
+        const timeNow = new Date().toLocaleTimeString('en-GB', { hour12: false });
+        const usedGB  = (process.memoryUsage().rss / 1e9).toFixed(2);
+        const totalGB = (os.totalmem() / 1e9).toFixed(2);
 
+        // Try to get better username
         let username = 'Unknown';
         try {
-            const senderJid = msg.key?.participant || msg.key?.remoteJid;
-            if (senderJid?.includes('@s.whatsapp.net')) {
-                username = await sock.getName?.(senderJid) || senderJid.split('@')[0];
+            const jid = msg.key?.participant || msg.key?.remoteJid;
+            if (jid?.includes('@s.whatsapp.net')) {
+                username = (await sock.getName?.(jid)) || jid.split('@')[0];
             }
         } catch {}
 
-        const commands = loadAllCommands();
+        const commands = loadCommands();
 
         if (commands.length === 0) {
-            await sock.sendMessage(chatId, { text: FALLBACK_TEXT }, { quoted: msg });
+            await sock.sendMessage(chatId, { text: FALLBACK }, { quoted: msg });
             return;
         }
 
-        const content = buildHelpContent(commands, {
+        const content = buildHelpMessage(commands, {
             runtime,
+            mode: settings.commandMode,
+            prefix,
             ramUsed: usedGB,
             ramTotal: totalGB,
             time: timeNow,
             username
         });
 
-        // ─── Split if message is too long (WhatsApp ~4096 char limit) ───
-        const MAX_SAFE = 3800;
-
-        if (content.length <= MAX_SAFE) {
+        // Safe send with splitting
+        const MAX = 3800;
+        if (content.length <= MAX) {
             await sock.sendMessage(chatId, { text: content }, { quoted: msg });
             return;
         }
 
-        // Chunking
+        // split into chunks
         const parts = [];
-        let chunk = '';
-        for (const line of content.split('\n')) {
-            if (chunk.length + line.length + 1 > MAX_SAFE) {
-                parts.push(chunk.trimEnd());
-                chunk = line + '\n';
+        let part = '';
+        content.split('\n').forEach(line => {
+            if (part.length + line.length + 1 > MAX) {
+                parts.push(part.trimEnd());
+                part = line + '\n';
             } else {
-                chunk += line + '\n';
+                part += line + '\n';
             }
-        }
-        if (chunk.trim()) parts.push(chunk.trimEnd());
+        });
+        if (part.trim()) parts.push(part.trimEnd());
 
         for (let i = 0; i < parts.length; i++) {
-            await sock.sendMessage(chatId, {
-                text: parts[i]
-            }, { quoted: msg });
-
-            if (i < parts.length - 1) {
-                await new Promise(r => setTimeout(r, 800)); // prevent rate limit
-            }
+            await sock.sendMessage(chatId, { text: parts[i] }, { quoted: msg });
+            if (i < parts.length - 1) await new Promise(r => setTimeout(r, 700));
         }
 
     } catch (err) {
-        console.error('[help] error →', err);
+        console.error("[help] error:", err);
         await sock.sendMessage(chatId, {
-            text: `Error: \( {err.message || '?'}\n\n \){FALLBACK_TEXT}`
+            text: `Error generating help:\n\( {err.message || '?'}\n\n \){FALLBACK}`
         }, { quoted: msg });
     }
 }
