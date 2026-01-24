@@ -5,7 +5,7 @@ const path = require('path');
 async function facebookCommand(sock, chatId, message) {
     try {
         const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
-        const url = text.split(' ').slice(1).join(' ').trim();
+        let url = text.split(' ').slice(1).join(' ').trim();
 
         if (!url) {
             return await sock.sendMessage(chatId, { text: 'Please provide a Facebook video URL. Example: .fb https://www.facebook.com/...' }, { quoted: message });
@@ -15,58 +15,68 @@ async function facebookCommand(sock, chatId, message) {
             return await sock.sendMessage(chatId, { text: 'That is not a Facebook link.' }, { quoted: message });
         }
 
+        // Optional: Normalize short share links to reel format (helps some APIs)
+        if (url.includes('/share/r/')) {
+            const idMatch = url.match(/\/share\/r\/([a-zA-Z0-9]+)/);
+            if (idMatch && idMatch[1]) {
+                url = `https://www.facebook.com/reel/${idMatch[1]}`;
+            }
+        }
+
         await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
-        // New API as requested
         const apiUrl = `https://api.vreden.my.id/api/v1/download/facebook?url=${encodeURIComponent(url)}`;
         const res = await axios.get(apiUrl, { 
-            timeout: 20000, 
-            headers: { 'User-Agent': 'Mozilla/5.0' }, 
-            validateStatus: s => s >= 200 && s < 500 
+            timeout: 25000, 
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }, 
+            validateStatus: s => s < 500 
         });
         const data = res.data || {};
 
-        // Extract video URL with HD priority → SD fallback
         let fbvid = null;
         let quality = 'Unknown';
+        let apiErrorMsg = data.message || data.error || null;
 
-        // Priority: HD
-        if (data.result?.download?.hd && typeof data.result.download.hd === 'string' && data.result.download.hd.startsWith('http')) {
-            fbvid = data.result.download.hd;
-            quality = 'HD';
-        }
-        // Fallback: SD
-        else if (data.result?.download?.sd && typeof data.result.download.sd === 'string' && data.result.download.sd.startsWith('http')) {
-            fbvid = data.result.download.sd;
-            quality = 'SD';
+        if (data.status === true) {
+            // Priority: HD
+            if (data.result?.download?.hd && typeof data.result.download.hd === 'string' && data.result.download.hd.startsWith('http')) {
+                fbvid = data.result.download.hd;
+                quality = 'HD';
+            }
+            // Fallback: SD
+            else if (data.result?.download?.sd && typeof data.result.download.sd === 'string' && data.result.download.sd.startsWith('http')) {
+                fbvid = data.result.download.sd;
+                quality = 'SD';
+            }
         }
 
-        // Extra fallback: any other potential URL in response
+        // Extra fallback: Scan for any direct .mp4 URL in the entire response (rare safety net)
         if (!fbvid) {
-            const extra = [
-                data.result?.download?.normal,
-                data.result?.url,
-                data.video,
-                data.url,
-                data.download
-            ].find(u => typeof u === 'string' && u.startsWith('http'));
-
-            if (extra) {
-                fbvid = extra;
-                quality = 'Default';
+            const jsonStr = JSON.stringify(data);
+            const mp4Matches = jsonStr.match(/"(https?:\/\/[^"]+\.mp4[^"]*)"/gi);
+            if (mp4Matches && mp4Matches.length > 0) {
+                fbvid = mp4Matches[0].replace(/"/g, ''); // remove quotes
+                quality = 'Extracted';
             }
         }
 
         const title = data.result?.title || data.title || 'Facebook Video';
 
         if (!fbvid) {
-            return await sock.sendMessage(chatId, { text: '❌ Could not find a downloadable video URL. Try another link or check if the video is public.' }, { quoted: message });
+            let errText = '❌ Could not find a downloadable video URL.';
+            if (apiErrorMsg) {
+                errText += `\nAPI says: ${apiErrorMsg}`;
+            } else if (data.status === false) {
+                errText += '\nVideo may be private, restricted, or not supported by the downloader.';
+            }
+            errText += '\nTry another public video/link.';
+            return await sock.sendMessage(chatId, { text: errText }, { quoted: message });
         }
 
-        // Caption with quality info
+        // Caption with quality
         const caption = title ? `📝 \( {title} ( \){quality})` : `Facebook Video (${quality})`;
 
-        // Try sending directly via URL (faster, no disk I/O)
+        // Attempt 1: Send directly via URL (fastest)
         try {
             await sock.sendMessage(chatId, { 
                 video: { url: fbvid }, 
@@ -74,18 +84,18 @@ async function facebookCommand(sock, chatId, message) {
                 caption 
             }, { quoted: message });
             return;
-        } catch (err) {
-            console.error('Remote send failed, falling back to local download:', err.message);
+        } catch (sendErr) {
+            console.error('Direct URL send failed:', sendErr.message);
         }
 
-        // Fallback: Download to temp file
+        // Fallback: Download locally and send
         const tmpDir = path.join(process.cwd(), 'tmp');
         if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
         const tempFile = path.join(tmpDir, `fb_${Date.now()}.mp4`);
 
         const videoResp = await axios.get(fbvid, { 
             responseType: 'stream', 
-            timeout: 60000, 
+            timeout: 90000,  // longer for big videos
             headers: { 
                 'User-Agent': 'Mozilla/5.0', 
                 'Referer': 'https://www.facebook.com/' 
@@ -100,8 +110,8 @@ async function facebookCommand(sock, chatId, message) {
             writer.on('error', reject);
         });
 
-        if (!fs.existsSync(tempFile) || fs.statSync(tempFile).size === 0) {
-            throw new Error('Downloaded file is empty or failed');
+        if (!fs.existsSync(tempFile) || fs.statSync(tempFile).size < 1000) {
+            throw new Error('Downloaded file invalid or empty');
         }
 
         await sock.sendMessage(chatId, { 
@@ -110,12 +120,14 @@ async function facebookCommand(sock, chatId, message) {
             caption 
         }, { quoted: message });
 
-        // Cleanup temp file
-        try { fs.unlinkSync(tempFile); } catch (e) { console.error('Temp file cleanup failed:', e.message); }
+        // Cleanup
+        try { fs.unlinkSync(tempFile); } catch (e) { console.error('Cleanup failed:', e.message); }
 
     } catch (error) {
-        console.error('Facebook command error:', error.message);
-        await sock.sendMessage(chatId, { text: 'An error occurred while processing the Facebook link. Try again or use a different video.' }, { quoted: message });
+        console.error('Facebook downloader error:', error.message);
+        await sock.sendMessage(chatId, { 
+            text: 'An error occurred processing the link. The video might be private or the downloader is temporarily down. Try a different public video.' 
+        }, { quoted: message });
     }
 }
 
