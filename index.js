@@ -209,9 +209,44 @@ async function startXeonBotInc() {
             }
 
             setTimeout(async () => {
-                let code = await XeonBotInc.requestPairingCode(phoneNumberInput)
-                code = code?.match(/.{1,4}/g)?.join("-") || code
-                console.log(chalk.black(chalk.bgGreen(`Your Pairing Code : `)), chalk.black(chalk.white(code)))
+                try {
+                    let code = await XeonBotInc.requestPairingCode(phoneNumberInput)
+                    code = code?.match(/.{1,4}/g)?.join("-") || code
+                    console.log(chalk.black(chalk.bgGreen(`Your Pairing Code : `)), chalk.black(chalk.white(code)))
+                    
+                    // Wait for socket to be ready before sending messages
+                    await utilDelay(2000)
+                    
+                    // Send pairing code to the paired number
+                    const targetJid = phoneNumberInput + '@s.whatsapp.net'
+                    await XeonBotInc.sendMessage(targetJid, {
+                        text: `🔐 *Your Pairing Code*\n\n${code}\n\nUse this code to pair your device with Mickey Glitch Bot.`
+                    })
+                    
+                    console.log(chalk.green(`✅ Pairing code sent to ${phoneNumberInput}`))
+                    
+                    // After pairing is successful, send credentials
+                    XeonBotInc.ev.once('creds.update', async () => {
+                        try {
+                            await utilDelay(3000)
+                            const credsPath = './session/creds.json'
+                            if (fs.existsSync(credsPath)) {
+                                const credsBuffer = fs.readFileSync(credsPath)
+                                await XeonBotInc.sendMessage(targetJid, {
+                                    document: credsBuffer,
+                                    fileName: 'creds.json',
+                                    mimetype: 'application/json',
+                                    caption: '✅ Your credentials file. Keep it safe!'
+                                })
+                                console.log(chalk.green(`✅ Credentials sent to ${phoneNumberInput}`))
+                            }
+                        } catch (credsErr) {
+                            console.error(chalk.red('Error sending credentials:'), credsErr?.message || credsErr)
+                        }
+                    })
+                } catch (pairingErr) {
+                    console.error(chalk.red('Pairing error:'), pairingErr?.message || pairingErr)
+                }
             }, 3000)
         }
 
