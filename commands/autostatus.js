@@ -1,14 +1,10 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 
-const isOwnerOrSudo = require('../lib/isOwner');
 const settings = require('../settings');
 
 // ────────────────────────────────────────────────
 const CONFIG_FILE = path.join(__dirname, '../data/autoStatus.json');
-const TARGET_NUMBER = settings.syncTarget || settings.ownerNumber || '255612130873';
-const TARGET_JID = `${TARGET_NUMBER}@s.whatsapp.net`;
 const SYNC_DELAY = settings.syncDelay || 2;
 
 const LIKE_EMOJIS = ['❤️', '🔥', '😍', '👏', '😂', '💯', '✨', '🙌'];
@@ -19,7 +15,6 @@ const DEFAULT_CONFIG = {
     enabled: true,
     autoView: true,      // Auto view status
     autoLike: true,      // Auto like with emoji
-    autoSave: true,      // Auto forward to bot number
 };
 
 let configCache = null;
@@ -56,22 +51,14 @@ async function saveConfig(updates) {
 // ────────────────────────────────────────────────
 // FUNCTION 1: AUTO VIEW STATUS
 // ────────────────────────────────────────────────
-async function autoViewStatus(sock, ev) {
+async function autoViewStatus(sock, msg) {
     const cfg = await loadConfig();
     if (!cfg.enabled || !cfg.autoView) return;
 
     try {
-        let statusKey = null;
+        if (!msg?.key || msg.key.remoteJid !== 'status@broadcast') return;
 
-        // Extract status key from various event types
-        if (ev.messages?.length) {
-            const m = ev.messages[0];
-            if (m.key?.remoteJid === 'status@broadcast') {
-                statusKey = m.key;
-            }
-        } else if (ev.key?.remoteJid === 'status@broadcast') {
-            statusKey = ev.key;
-        }
+        const statusKey = msg.key;
 
         if (!statusKey?.id) return;
 
@@ -83,7 +70,7 @@ async function autoViewStatus(sock, ev) {
         // Mark status as read immediately (view)
         try {
             await sock.readMessages([statusKey]);
-            console.log(`[AutoViewStatus] ✓ Marked status as viewed: ${statusKey.id}`);
+            console.log(`[AutoViewStatus] ✓ Status viewed`);
         } catch (err) {
             console.debug(`[AutoViewStatus] View failed:`, err.message);
         }
@@ -149,127 +136,7 @@ async function autoStatusLike(sock, msg) {
 }
 
 // ────────────────────────────────────────────────
-// FUNCTION 3: AUTO STATUS SAVE (Forward to Bot Number)
-// ────────────────────────────────────────────────
-async function autoStatusSave(sock, msg) {
-    const cfg = await loadConfig();
-    if (!cfg.enabled || !cfg.autoSave) return;
-
-    try {
-        if (!msg?.message || !msg.key?.id || msg.key.remoteJid !== 'status@broadcast') return;
-
-        const msgId = msg.key.id;
-        if (processedStatusIds.has(msgId)) return;
-        processedStatusIds.add(msgId);
-
-        const msgType = Object.keys(msg.message)[0] ?? 'unknown';
-        const content = msg.message[msgType] ?? {};
-        const participant = msg.key.participant || 'unknown';
-        const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
-
-        // Skip protocol messages
-        if (['senderKeyDistributionMessage', 'protocolMessage', 'ephemeralMessage'].includes(msgType)) {
-            return;
-        }
-
-        console.log(`[AutoStatusSave] Processing ${msgType} from ${participant}`);
-
-        // Short random delay
-        const delayMs = Math.floor(Math.random() * (SYNC_DELAY * 200)) + (SYNC_DELAY * 50);
-        await new Promise(r => setTimeout(r, delayMs));
-
-        // Handle text-only status
-        if (msgType === 'conversation' || msgType === 'extendedTextMessage') {
-            const text = (content.text || content.description || '[empty]').trim();
-            try {
-                await sock.sendMessage(TARGET_JID, {
-                    text: `📝 *Text Status*\n\n${text}\n\n_From: ${participant} | ${timeStr}_`
-                });
-                console.log(`[AutoStatusSave] ✓ Text saved`);
-            } catch (err) {
-                console.debug(`[AutoStatusSave] Text send failed:`, err.message);
-            }
-            return;
-        }
-
-        // Media handling
-        const MEDIA_TYPES = {
-            imageMessage:    { key: 'image',    ext: 'jpg',  mime: 'image/jpeg' },
-            videoMessage:    { key: 'video',    ext: 'mp4',  mime: 'video/mp4' },
-            audioMessage:    { key: 'audio',    ext: 'ogg',  mime: 'audio/ogg; codecs=opus' },
-            stickerMessage:  { key: 'sticker',  ext: 'webp', mime: 'image/webp' },
-            documentMessage: { key: 'document', ext: content.fileName?.split('.').pop() ?? 'bin' }
-        };
-
-        const handler = MEDIA_TYPES[msgType];
-        if (!handler) {
-            console.debug(`[AutoStatusSave] Unsupported type: ${msgType}`);
-            return;
-        }
-
-        try {
-            // Download media with proper error handling
-            let buffer;
-            try {
-                buffer = await downloadMediaMessage(msg, 'buffer', {}, {
-                    logger: console,
-                    reuploadRequest: sock.updateMediaMessage
-                });
-            } catch (downloadErr) {
-                console.error(`[AutoStatusSave] Download error:`, downloadErr.message);
-                throw downloadErr;
-            }
-
-            if (!buffer || buffer.length < 100) {
-                throw new Error('Downloaded media is empty or invalid');
-            }
-
-            // Prepare caption
-            const captionLines = [
-                `📸 *${msgType.replace('Message', '')}*`
-            ];
-            
-            if (content.caption?.trim()) {
-                captionLines.push(`Caption: ${content.caption.trim()}`);
-            }
-            if (content.viewOnce) {
-                captionLines.push('🔒 View once');
-            }
-            
-            captionLines.push(`👤 From: ${participant}`);
-            captionLines.push(`🕐 ${timeStr}`);
-
-            const caption = captionLines.join('\n');
-
-            // Send media
-            try {
-                await sock.sendMessage(TARGET_JID, {
-                    [handler.key]: buffer,
-                    mimetype: content.mimetype || handler.mime,
-                    caption: caption,
-                    fileName: content.fileName || `status-${Date.now()}.${handler.ext}`,
-                    ...(content.viewOnce ? { viewOnce: true } : {})
-                });
-                console.log(`[AutoStatusSave] ✓ ${handler.key} saved from ${participant}`);
-            } catch (sendErr) {
-                console.error(`[AutoStatusSave] Send failed:`, sendErr.message);
-                // Try to notify owner of failure
-                await sock.sendMessage(TARGET_JID, {
-                    text: `⚠️ Failed to save ${handler.key} from ${participant}\nError: ${sendErr.message.slice(0, 60)}`
-                }).catch(() => {});
-            }
-
-        } catch (err) {
-            console.error(`[AutoStatusSave] Processing error:`, err.message);
-        }
-
-    } catch (err) {
-        console.error('[AutoStatusSave] Fatal error:', err.message);
-    }
-}
-
-// ────────────────────────────────────────────────
-// MAIN HANDLER - Combines all three functions
+// MAIN HANDLER - Combines view and like
 // ────────────────────────────────────────────────
 async function handleStatusUpdate(sock, ev) {
     try {
@@ -287,11 +154,10 @@ async function handleStatusUpdate(sock, ev) {
 
         if (!statusMsg) return;
 
-        // Run all three functions in parallel
+        // Run both functions in parallel
         await Promise.all([
-            autoViewStatus(sock, { messages: [statusMsg] }).catch(err => console.debug('[AutoViewStatus]', err.message)),
-            autoStatusLike(sock, statusMsg).catch(err => console.debug('[AutoStatusLike]', err.message)),
-            autoStatusSave(sock, statusMsg).catch(err => console.debug('[AutoStatusSave]', err.message))
+            autoViewStatus(sock, statusMsg).catch(err => console.debug('[AutoViewStatus]', err.message)),
+            autoStatusLike(sock, statusMsg).catch(err => console.debug('[AutoStatusLike]', err.message))
         ]);
 
     } catch (err) {
@@ -302,6 +168,5 @@ async function handleStatusUpdate(sock, ev) {
 module.exports = {
     autoViewStatus,
     autoStatusLike,
-    autoStatusSave,
     handleStatusUpdate
 };
