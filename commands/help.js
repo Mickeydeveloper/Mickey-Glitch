@@ -124,12 +124,13 @@ function buildHelpMessage(cmdList, opts = {}) {
     }
   });
 
-  const header = `🎯 *${settings.botName || '𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑'} - COMMAND CENTER* v${settings.version || '?.?'}\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `👑 *Owner:* ${settings.botOwner || 'Mickey'} | 👤 *User:* ${name || user || 'Unknown'}\n` +
-    `⏱ *Uptime:* ${runtime || getUptime()} | 🎛 *Mode:* ${mode || settings.commandMode || 'public'}\n` +
-    `📍 *Prefix:* ${prefix || '.'} | 💾 *RAM:* ${ramUsed || '?'}/${ramTotal || '?'}GB\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  const header = `🎯 *${settings.botName || '𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑'} - COMMAND CENTER* v${settings.version || '?.?'}\n\n` +
+    `▸ Runtime: ${runtime || getUptime()}\n` +
+    `▸ Mode: ${mode || settings.commandMode || 'public'}\n` +
+    `▸ Prefix: ${prefix || '.'}\n` +
+    `▸ RAM: ${ramUsed || '?'} / ${ramTotal || '?'} GB\n` +
+    `▸ Time: ${time || new Date().toLocaleTimeString('en-GB', { hour12: false })}\n` +
+    `▸ User: ${name || user || 'Unknown'}\n\n`;
 
   let content = header;
 
