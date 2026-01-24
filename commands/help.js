@@ -196,7 +196,7 @@ async function helpCommand(sock, chatId, message) {
 
     const cmdList = listCommandFiles();
     if (!cmdList.length) {
-      await sock.sendMessage(chatId, { text: FALLBACK }, { quoted: message });
+      await sock.sendMessage(chatId, { text: FALLBACK });
       return;
     }
 
@@ -211,43 +211,27 @@ async function helpCommand(sock, chatId, message) {
       name: displayName
     });
 
-    // If message is large, send as a text file instead to avoid truncation issues
-    if (helpText.length > 4000) {
-      try {
-        const tmpPath = path.join(os.tmpdir(), `help-${Date.now()}.txt`);
-        fs.writeFileSync(tmpPath, helpText, 'utf8');
-        const fileBuf = fs.readFileSync(tmpPath);
-        await sock.sendMessage(chatId, {
-          document: fileBuf,
-          fileName: `help_${settings.botName?.replace(/\s+/g, '_') || 'bot'}_${new Date().toISOString().slice(0,10)}.txt`,
-          mimetype: 'text/plain',
-          caption: `📚 Help — full command list (v${settings.version || '?.?'})`
-        }, { quoted: message });
-        try { fs.unlinkSync(tmpPath); } catch (_) {}
-      } catch (e) {
-        console.error('Failed to send help as file:', e);
-        await sock.sendMessage(chatId, { text: helpText }, { quoted: message });
-      }
+    // Always send as document for better compatibility across all chats
+    try {
+      const tmpPath = path.join(os.tmpdir(), `help-${Date.now()}.txt`);
+      fs.writeFileSync(tmpPath, helpText, 'utf8');
+      const fileBuf = fs.readFileSync(tmpPath);
+      
+      await sock.sendMessage(chatId, {
+        document: fileBuf,
+        fileName: `help_${settings.botName?.replace(/\s+/g, '_') || 'bot'}_${new Date().toISOString().slice(0,10)}.txt`,
+        mimetype: 'text/plain',
+        caption: `📚 Help — Command List (v${settings.version || '?.?'})`
+      });
+      
+      try { fs.unlinkSync(tmpPath); } catch (_) {}
+      return;
+    } catch (e) {
+      console.error('Failed to send help as file:', e);
+      // Fallback to text message
+      await sock.sendMessage(chatId, { text: helpText });
       return;
     }
-
-    // Normal text message with externalAdReply card
-    await sock.sendMessage(chatId, {
-      text: helpText,
-      contextInfo: {
-        mentionedJid: senderJid ? [senderJid] : undefined,
-        externalAdReply: {
-          title: `${settings.botName || 'Mickey Glitch'} — Commands`,
-          body: `v${settings.version || '?.?'}`,
-          thumbnailUrl: BANNER,
-          sourceUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
-          mediaType: 1,
-          mediaUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
-          showAdAttribution: true,
-          renderLargerThumbnail: true
-        }
-      }
-    }, { quoted: message });
 
   } catch (error) {
     console.error('helpCommand Error:', error);
