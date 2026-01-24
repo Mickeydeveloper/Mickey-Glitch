@@ -196,7 +196,25 @@ async function helpCommand(sock, chatId, msg) {
         // Safe send with splitting
         const MAX = 3800;
         if (content.length <= MAX) {
-            await sock.sendMessage(chatId, { text: content }, { quoted: msg });
+            await sock.sendMessage(chatId, {
+                text: content,
+                contextInfo: {
+                    isForwarded: true,
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: '120363398106360290@newsletter',
+                        newsletterName: 'ѪЇCКЄЧ',
+                        serverMessageId: -1
+                    },
+                    externalAdReply: {
+                        title: `${settings.botName || 'Mickey Glitch'} Commands`,
+                        body: `Available Commands: ${commands.length}`,
+                        thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
+                        sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
+            }, { quoted: msg });
             return;
         }
 
@@ -214,7 +232,25 @@ async function helpCommand(sock, chatId, msg) {
         if (part.trim()) parts.push(part.trimEnd());
 
         for (let i = 0; i < parts.length; i++) {
-            await sock.sendMessage(chatId, { text: parts[i] }, { quoted: msg });
+            await sock.sendMessage(chatId, {
+                text: parts[i],
+                contextInfo: {
+                    isForwarded: true,
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: '120363398106360290@newsletter',
+                        newsletterName: 'Mickey From Tanzania',
+                        serverMessageId: -1
+                    },
+                    externalAdReply: {
+                        title: `${settings.botName || 'Mickey Glitch'} Commands`,
+                        body: `Available Commands: ${commands.length}`,
+                        thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
+                        sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
+            }, { quoted: msg });
             if (i < parts.length - 1) await new Promise(r => setTimeout(r, 700));
         }
 

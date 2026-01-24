@@ -238,7 +238,7 @@ async function startXeonBotInc() {
                             isForwarded: true,
                             forwardedNewsletterMessageInfo: {
                                 newsletterJid: '120363398106360290@newsletter',
-                                newsletterName: '𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™',
+                                newsletterName: 'ѪЇCКЄЧ',
                                 serverMessageId: -1
                             },
                             externalAdReply: {
