@@ -130,6 +130,7 @@ const { anticallCommand, readState: readAnticallState } = require('./commands/an
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const phoneCommand = require('./commands/phone');
+const pairCommand = require('./commands/pair');
 // sora command removed
 
 // Global settings
@@ -891,8 +892,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     await sock.sendMessage(chatId, { text: 'This command can only be used in groups.' }, { quoted: message });
                 }
                 break;
-            // ...existing code...
-            // .github/.git/.repo command removed
+            case userMessage.startsWith('.pair'):
+                {
+                    const args = userMessage.split(' ').slice(1).join(' ');
+                    console.log(chalk.cyan(`[PAIR] Command triggered with args: ${args}`));
+                    await pairCommand(sock, chatId, message, args);
+                }
+                break;
             case userMessage.startsWith('.antibadword'):
                 if (!isGroup) {
                     await sock.sendMessage(chatId, { text: 'This command can only be used in groups.' }, { quoted: message });
