@@ -5,176 +5,164 @@ const path = require('path');
 
 async function pairCommand(sock, chatId, message, q) {
     try {
-        console.log(chalk.blue(`[PAIR] Command received with query: ${q}`));
+        console.log(chalk.blue(`[PAIR] Command received → query: ${q || '<empty>'}`));
 
-        if (!q) {
-            return await sock.sendMessage(chatId, {
-                text: "*🔐 Internal Pairing System*\n\n📝 *Usage:*\n.pair <phone_number>\n\n*Example:*\n.pair 6281376552730\n\n*Features:*\n✅ Uses internal WhatsApp pairing\n✅ Sends pairing code via message\n✅ Auto-sends credentials after pairing\n✅ No external API required\n\n⚠️ *Note:* Target number must be registered on WhatsApp"
-            });
+        if (!q || q.trim() === '') {
+            return await sock.sendMessage(chatId, { text: 
+`*🔐 Internal Pairing System*
+
+📝 *Usage:*
+.pair <phone_number>   or   .pair 255715123456,255620987654
+
+*Examples:*
+.pair 6281376552730
+.pair 255715123456
+
+*Features:*
+✅ Uses WhatsApp native pairing
+✅ Sends code directly to the number
+✅ Auto-sends session credentials after successful link
+⚠️ Target number must be registered on WhatsApp
+⚠️ Code expires in ~5 minutes
+` });
         }
 
-        const numbers = q.split(',')
-            .map((v) => v.replace(/[^0-9]/g, ''))
-            .filter((v) => v.length > 5 && v.length < 20);
+        const numbers = q.split(/[,;\s]+/)
+            .map(v => v.replace(/[^0-9]/g, ''))
+            .filter(v => v.length >= 9 && v.length <= 15);
 
         if (numbers.length === 0) {
-            return await sock.sendMessage(chatId, {
-                text: "❌ Invalid number format! Please use correct format.\nExample: .pair 6281376552730"
-            });
+            return await sock.sendMessage(chatId, { text: "❌ No valid phone numbers found.\nExample: .pair 255715123456" });
         }
 
-        for (const number of numbers) {
-            console.log(chalk.blue(`[PAIR] Processing number: ${number}`));
-
+        for (const rawNumber of numbers) {
+            const number = rawNumber.startsWith('0') ? '255' + rawNumber.slice(1) : rawNumber;
             const whatsappID = number + '@s.whatsapp.net';
-            
-            // Check if number exists on WhatsApp
+
+            console.log(chalk.blue(`[PAIR] Processing → ${number}`));
+
+            // 1. Check if number exists on WhatsApp
+            let exists = false;
             try {
-                console.log(chalk.blue(`[PAIR] Checking if ${number} exists on WhatsApp...`));
-                const result = await sock.onWhatsApp(whatsappID);
-                
-                if (!result || !result[0]?.exists) {
-                    console.log(chalk.red(`[PAIR] Number ${number} not found on WhatsApp`));
-                    return await sock.sendMessage(chatId, {
-                        text: `❌ Number ${number} is not registered on WhatsApp!`
-                    });
-                }
-                console.log(chalk.green(`[PAIR] Number ${number} exists on WhatsApp`));
-            } catch (checkErr) {
-                console.error(chalk.red(`[PAIR] Error checking WhatsApp: ${checkErr.message}`));
+                const check = await sock.onWhatsApp(whatsappID);
+                exists = check?.[0]?.exists === true;
+            } catch (err) {
+                console.warn(chalk.yellow(`[PAIR] onWhatsApp failed for ${number}: ${err.message}`));
             }
 
-            try {
-                await sock.sendMessage(chatId, {
-                    text: `⏳ Generating pairing code for ${number}...\n\n⏱️ Please wait...`
-                });
-
-                console.log(chalk.blue(`[PAIR] Checking if requestPairingCode method exists...`));
-                
-                // Check if the method exists
-                if (typeof sock.requestPairingCode !== 'function') {
-                    console.log(chalk.red(`[PAIR] requestPairingCode method not found`));
-                    console.log(chalk.yellow(`[PAIR] Available methods: ${Object.getOwnPropertyNames(Object.getPrototypeOf(sock)).filter(m => typeof sock[m] === 'function').join(', ')}`));
-                    
-                    return await sock.sendMessage(chatId, {
-                        text: '❌ Pairing method not available on this bot version.\n\nPlease use: node index.js --pairing-code'
-                    });
-                }
-
-                console.log(chalk.blue(`[PAIR] Requesting pairing code for ${number}...`));
-                
-                // Request pairing code
-                let pairingCode = await sock.requestPairingCode(number);
-                
-                if (!pairingCode) {
-                    console.log(chalk.red(`[PAIR] No pairing code returned`));
-                    throw new Error('Failed to generate pairing code - no response from server');
-                }
-
-                console.log(chalk.green(`[PAIR] Pairing code generated: ${pairingCode}`));
-
-                // Format pairing code
-                const formattedCode = pairingCode?.match(/.{1,4}/g)?.join("-") || pairingCode;
-                console.log(chalk.green(`[PAIR] Formatted code: ${formattedCode}`));
-
-                // Send pairing code to target number
-                const pairingMessage = `🔐 *Mickey Glitch Bot - Pairing Code*\n\n*Your Pairing Code:*\n${formattedCode}\n\n✅ *Setup Instructions:*\n1. Open WhatsApp on your device\n2. Go to Settings → Linked Devices\n3. Tap "Link a Device"\n4. Choose "Link with Phone Number"\n5. Enter this code when prompted\n\n⏰ *Code Expires In:* ~5 minutes\n⚠️ *Keep This Code Private!*\n\n_After successful pairing, your credentials will be automatically sent._`;
-
-                console.log(chalk.blue(`[PAIR] Sending pairing code to ${number}...`));
-                await sleep(1000);
-                
-                await sock.sendMessage(whatsappID, {
-                    text: pairingMessage
-                });
-
-                console.log(chalk.green(`[PAIR] Pairing code message sent to ${number}`));
-
-                // Notify user
-                await sock.sendMessage(chatId, {
-                    text: `✅ *Pairing code sent to ${number}*\n\n🔐 Code: ${formattedCode}\n\n⏳ Waiting for device to pair...\n\nOnce paired, credentials will be auto-sent.`
-                });
-
-                // Setup credential listener
-                console.log(chalk.blue(`[PAIR] Setting up credential update listener...`));
-                
-                let credentialListenerAdded = false;
-                const handleCredUpdate = async () => {
-                    if (credentialListenerAdded) return; // Prevent duplicate executions
-                    credentialListenerAdded = true;
-                    
-                    console.log(chalk.green(`[PAIR] Credential update detected!`));
-                    
-                    try {
-                        await sleep(2000);
-                        
-                        // Send credentials file
-                        const credsPath = path.join(__dirname, '../session/creds.json');
-                        console.log(chalk.blue(`[PAIR] Looking for credentials at: ${credsPath}`));
-                        
-                        if (fs.existsSync(credsPath)) {
-                            console.log(chalk.green(`[PAIR] Credentials file found!`));
-                            const credsBuffer = fs.readFileSync(credsPath);
-                            
-                            console.log(chalk.blue(`[PAIR] Sending credentials to ${number}...`));
-                            await sock.sendMessage(whatsappID, {
-                                document: credsBuffer,
-                                fileName: 'creds.json',
-                                mimetype: 'application/json',
-                                caption: '✅ *Your Session Credentials*\n\n🔐 This is your authentication file. Keep it safe!\n\n⚠️ *Important:*\n• Never share this file\n• Store securely\n• Do not delete from bot'
-                            });
-
-                            console.log(chalk.green(`[PAIR] Credentials sent to ${number}`));
-
-                            await sock.sendMessage(chatId, {
-                                text: `✅ *Pairing Complete!*\n\n🎉 ${number} successfully paired!\n✅ Credentials sent to the paired number.`
-                            });
-                        } else {
-                            console.log(chalk.yellow(`[PAIR] Credentials file not found at ${credsPath}`));
-                            console.log(chalk.yellow(`[PAIR] Available files in session:`));
-                            try {
-                                const sessionFiles = fs.readdirSync(path.join(__dirname, '../session'));
-                                console.log(chalk.yellow(sessionFiles.join(', ')));
-                            } catch (e) {
-                                console.log(chalk.yellow(`Could not list session files`));
-                            }
-                        }
-                    } catch (err) {
-                        console.error(chalk.red(`[PAIR] Error sending credentials: ${err.message}`));
-                    } finally {
-                        // Remove listener
-                        if (sock.ev && typeof sock.ev.removeListener === 'function') {
-                            sock.ev.removeListener('creds.update', handleCredUpdate);
-                        }
-                    }
-                };
-
-                sock.ev.on('creds.update', handleCredUpdate);
-
-                // Timeout after 5 minutes
-                const timeoutId = setTimeout(() => {
-                    console.log(chalk.yellow(`[PAIR] Pairing timeout for ${number}`));
-                    if (sock.ev && typeof sock.ev.removeListener === 'function') {
-                        sock.ev.removeListener('creds.update', handleCredUpdate);
-                    }
-                }, 5 * 60 * 1000);
-
-            } catch (pairingError) {
-                console.error(chalk.red(`[PAIR] Pairing error: ${pairingError.message}`));
-                console.error(pairingError);
-                
-                await sock.sendMessage(chatId, {
-                    text: `❌ Pairing failed: ${pairingError?.message || 'Unknown error'}\n\nMake sure the number is valid and registered on WhatsApp.`
-                });
+            if (!exists) {
+                await sock.sendMessage(chatId, { text: `❌ ${number} is not registered on WhatsApp.` });
+                continue;
             }
+
+            // 2. Notify user we're starting
+            await sock.sendMessage(chatId, { text: `⏳ Generating pairing code for ${number}...` });
+
+            // 3. Safety check: method exists?
+            if (typeof sock.requestPairingCode !== 'function') {
+                console.log(chalk.red(`[PAIR] sock.requestPairingCode is not available`));
+                await sock.sendMessage(chatId, { text: 
+`❌ Pairing feature not available in this bot version.
+
+Try running the bot with:
+node yourfile.js --pairing-code
+
+Or update Baileys library:
+npm install @whiskeysockets/baileys@latest` });
+                continue;
+            }
+
+            // 4. Request code
+            let code;
+            try {
+                code = await sock.requestPairingCode(number);
+                if (!code || code.length < 6) throw new Error("Empty or invalid code received");
+            } catch (err) {
+                console.error(chalk.red(`[PAIR] requestPairingCode failed → ${err.message}`));
+                let msg = "❌ Failed to generate pairing code.";
+                if (err?.output?.statusCode === 429) msg += "\nRate limit — wait 10–30 minutes and try again.";
+                if (err?.output?.statusCode === 405) msg += "\nServer rejected request — try QR pairing instead.";
+                await sock.sendMessage(chatId, { text: msg });
+                continue;
+            }
+
+            const formatted = code.match(/.{1,4}/g)?.join('-') || code;
+
+            // 5. Send code to target number
+            const pairingText = 
+`🔐 *Mickey Glitch™ Pairing Code*
+
+Your code: *${formatted}*
+
+How to use:
+1. Open WhatsApp → Settings → Linked Devices
+2. Tap "Link with phone number"
+3. Enter the code above
+
+Code expires in ~5 minutes.
+Keep it private!
+
+After linking, your session file will be sent here automatically.`;
+
+            await sock.sendMessage(whatsappID, { text: pairingText });
+
+            // 6. Confirm to command sender
+            await sock.sendMessage(chatId, { text: 
+`✅ Pairing code sent to *${number}*
+
+Code: ${formatted}
+
+Waiting for device to link...
+Credentials will be sent automatically once paired.` });
+
+            // 7. Listen for creds update (one-time per number)
+            let listenerAdded = false;
+
+            const credsHandler = async () => {
+                if (listenerAdded) return;
+                listenerAdded = true;
+
+                console.log(chalk.green(`[PAIR] creds.update fired → sending to ${number}`));
+
+                try {
+                    await sleep(2500); // give time for file write
+
+                    const credsPath = path.join(process.cwd(), 'session', 'creds.json');
+
+                    if (!fs.existsSync(credsPath)) {
+                        console.warn(chalk.yellow(`[PAIR] creds.json not found at ${credsPath}`));
+                        return;
+                    }
+
+                    const buffer = fs.readFileSync(credsPath);
+
+                    await sock.sendMessage(whatsappID, {
+                        document: buffer,
+                        fileName: 'creds.json',
+                        mimetype: 'application/json',
+                        caption: `✅ *Pairing Successful!*\n\nYour session credentials file.\n\n⚠️ Keep this file PRIVATE!\nNever share it.\nStore it safely.`
+                    });
+
+                    await sock.sendMessage(chatId, { text: `🎉 Pairing completed!\nCredentials sent to ${number}.` });
+
+                } catch (err) {
+                    console.error(chalk.red(`[PAIR] Error sending creds → ${err.message}`));
+                }
+            };
+
+            sock.ev.on('creds.update', credsHandler);
+
+            // Auto-remove listener after timeout
+            setTimeout(() => {
+                sock.ev.removeListener('creds.update', credsHandler);
+                console.log(chalk.dim(`[PAIR] Listener removed for ${number} (timeout)`));
+            }, 6 * 60 * 1000); // 6 minutes
         }
-    } catch (error) {
-        console.error(chalk.red(`[PAIR] Command error: ${error.message}`));
-        console.error(error);
-        
-        await sock.sendMessage(chatId, {
-            text: `❌ Error: ${error?.message || error}`
-        });
+
+    } catch (err) {
+        console.error(chalk.red(`[PAIR] Fatal error: ${err.message}`), err);
+        await sock.sendMessage(chatId, { text: `❌ Unexpected error: ${err.message || 'Unknown'}` });
     }
 }
 
-module.exports = pairCommand; 
+module.exports = pairCommand;
