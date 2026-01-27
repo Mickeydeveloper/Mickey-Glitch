@@ -5,284 +5,299 @@ const path = require('path');
 const { toAudio } = require('../lib/converter');
 
 const AXIOS_DEFAULTS = {
-    timeout: 45000,
-    headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Encoding': 'identity'
-    }
+	timeout: 60000,
+	headers: {
+		'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+		'Accept': 'application/json, text/plain, */*'
+	}
 };
 
-/**
- * Retry logic with exponential backoff + status code awareness
- */
-async function tryRequest(getter, maxAttempts = 4) {
-    let lastError;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-            const res = await getter();
-            return res;
-        } catch (err) {
-            lastError = err;
-            const status = err.response?.status;
-
-            // Do NOT retry on these permanent/forbidden statuses
-            if ([400, 401, 403, 404, 451].includes(status)) {
-                throw err;
-            }
-
-            // Rate limit → longer wait
-            if (status === 429) {
-                await new Promise(r => setTimeout(r, 8000 * attempt));
-                continue;
-            }
-
-            // Normal backoff for 5xx or network errors
-            if (attempt < maxAttempts) {
-                const delay = 2000 * Math.pow(1.8, attempt - 1); // ~2s → 3.6s → 6.5s → 11.7s
-                console.log(`[Retry] Attempt ${attempt} failed → waiting ${Math.round(delay/1000)}s`);
-                await new Promise(r => setTimeout(r, delay));
-            }
-        }
-    }
-    throw lastError;
+async function tryRequest(getter, attempts = 3) {
+	let lastError;
+	for (let attempt = 1; attempt <= attempts; attempt++) {
+		try {
+			return await getter();
+		} catch (err) {
+			lastError = err;
+			if (attempt < attempts) {
+				await new Promise(r => setTimeout(r, 1000 * attempt));
+			}
+		}
+	}
+	throw lastError;
 }
 
-/**
- * Convert query or link to valid YouTube URL
- */
-async function convertQueryToYoutubeLink(query) {
-    try {
-        query = query.trim();
-
-        if (!query) throw new Error('Empty query');
-
-        // Already a YouTube link?
-        if (query.includes('youtube.com') || query.includes('youtu.be')) {
-            // Very basic validation
-            if (!query.startsWith('http')) query = 'https://' + query;
-            return { url: query };
-        }
-
-        console.log('[Search] Query:', query);
-        const search = await yts(query);
-
-        if (!search?.videos?.length) {
-            throw new Error('No results found');
-        }
-
-        const video = search.videos[0];
-        console.log('[Search] Selected:', video.title, video.url);
-
-        return {
-            url: video.url,
-            title: video.title,
-            thumbnail: video.thumbnail,
-            timestamp: video.timestamp,
-            author: video.author?.name || 'Unknown'
-        };
-    } catch (err) {
-        console.error('[Search] Failed:', err.message);
-        throw new Error('Could not find video: ' + err.message);
-    }
-}
-
-/**
- * Try Yupra API
- */
 async function getYupraDownloadByUrl(youtubeUrl) {
-    try {
-        const apiUrl = `https://api.srihub.store/download/ytmp3?url=${encodeURIComponent(youtubeUrl)}`;
-        console.log('[Yupra] Request:', apiUrl);
-
-        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-
-        if (!res?.data?.success || !res?.data?.data?.download_url) {
-            throw new Error('Invalid response - no download_url');
-        }
-
-        return {
-            download: res.data.data.download_url,
-            title: res.data.data.title || 'Unknown Title',
-            thumbnail: res.data.data.thumbnail || ''
-        };
-    } catch (err) {
-        console.error('[Yupra] Error:', err.message, err.response?.status);
-        throw err;
-    }
+	const apiUrl = `https://api.yupra.my.id/api/downloader/ytmp3?url=${encodeURIComponent(youtubeUrl)}`;
+	const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
+	if (res?.data?.success && res?.data?.data?.download_url) {
+		return {
+			download: res.data.data.download_url,
+			title: res.data.data.title,
+			thumbnail: res.data.data.thumbnail
+		};
+	}
+	throw new Error('Yupra returned no download');
 }
 
-/**
- * Try Okatsu fallback API
- */
 async function getOkatsuDownloadByUrl(youtubeUrl) {
-    try {
-        const apiUrl = `https://api.yupra.my.id/api/downloader/ytmp3?url=${encodeURIComponent(youtubeUrl)}`;
-        console.log('[Okatsu] Request:', apiUrl);
-
-        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-
-        if (!res?.data?.dl) {
-            throw new Error('Invalid response - no dl field');
-        }
-
-        return {
-            download: res.data.dl,
-            title: res.data.title || 'Unknown Title',
-            thumbnail: res.data.thumb || ''
-        };
-    } catch (err) {
-        console.error('[Okatsu] Error:', err.message, err.response?.status);
-        throw err;
-    }
+	const apiUrl = `https://okatsu-rolezapiiz.vercel.app/downloader/ytmp3?url=${encodeURIComponent(youtubeUrl)}`;
+	const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
+	// Okatsu response shape: { status, creator, title, format, thumb, duration, cached, dl }
+	if (res?.data?.dl) {
+		return {
+			download: res.data.dl,
+			title: res.data.title,
+			thumbnail: res.data.thumb
+		};
+	}
+	throw new Error('Okatsu ytmp3 returned no download');
 }
 
-/**
- * Get audio link with fallback + better error handling
- */
-async function getAudioDownloadLink(youtubeUrl) {
-    let errors = [];
-
-    // 1. Try Yupra
-    try {
-        return await getYupraDownloadByUrl(youtubeUrl);
-    } catch (err) {
-        errors.push(`Yupra: \( {err.message} ( \){err.response?.status || 'network'})`);
-        console.log('[Fallback] Yupra failed → trying Okatsu');
-    }
-
-    // 2. Try Okatsu
-    try {
-        return await getOkatsuDownloadByUrl(youtubeUrl);
-    } catch (err) {
-        errors.push(`Okatsu: \( {err.message} ( \){err.response?.status || 'network'})`);
-    }
-
-    throw new Error(`Both services failed: ${errors.join(' | ')}`);
-}
-
-/**
- * Download audio → try arraybuffer first, then stream
- */
-async function downloadAudioBuffer(audioUrl) {
-    const config = {
-        timeout: 120000,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        validateStatus: status => status >= 200 && status < 400,
-        headers: {
-            'User-Agent': AXIOS_DEFAULTS.headers['User-Agent'],
-            'Accept': '*/*',
-            'Accept-Encoding': 'identity'
-        }
-    };
-
-    try {
-        console.log('[Download] Trying arraybuffer...');
-        const res = await axios.get(audioUrl, { ...config, responseType: 'arraybuffer' });
-        const buffer = Buffer.from(res.data);
-        console.log('[Download] Success (arraybuffer):', buffer.length, 'bytes');
-        return buffer;
-    } catch (err1) {
-        console.log('[Download] Arraybuffer failed:', err1.message);
-    }
-
-    try {
-        console.log('[Download] Trying stream...');
-        const res = await axios.get(audioUrl, { ...config, responseType: 'stream' });
-
-        const chunks = [];
-        res.data.on('data', chunk => chunks.push(chunk));
-        await new Promise((resolve, reject) => {
-            res.data.on('end', resolve);
-            res.data.on('error', reject);
-        });
-
-        const buffer = Buffer.concat(chunks);
-        console.log('[Download] Success (stream):', buffer.length, 'bytes');
-        return buffer;
-    } catch (err2) {
-        throw new Error(`Download failed completely: ${err2.message}`);
-    }
-}
-
-// ────────────────────────────────────────────────
-// The rest of your functions remain mostly unchanged
-// (detectAudioFormat, convertToMP3IfNeeded, cleanupTempFiles, sendNotification)
-// ────────────────────────────────────────────────
-
-/**
- * Main command – now sends direct download link
- */
 async function songCommand(sock, chatId, message) {
     try {
-        const text = (
-            message.message?.conversation ||
-            message.message?.extendedTextMessage?.text ||
-            ''
-        ).trim();
-
+        const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
         if (!text) {
-            await sock.sendMessage(chatId, { text: 'Usage: .song <name or YouTube link>' }, { quoted: message });
+            await sock.sendMessage(chatId, { text: 'Usage: .song <song name or YouTube link>' }, { quoted: message });
             return;
         }
 
-        console.log('[Play] Query:', text);
-
-        // 1. Find YouTube video
-        const videoData = await convertQueryToYoutubeLink(text);
-
-        // 2. Get direct download link
-        const audioData = await getAudioDownloadLink(videoData.url);
-        const audioUrl = audioData.download;
-
-        if (!audioUrl || !audioUrl.startsWith('http')) {
-            throw new Error('Invalid download URL received');
+        let video;
+        if (text.includes('youtube.com') || text.includes('youtu.be')) {
+			video = { url: text };
+        } else {
+			const search = await yts(text);
+			if (!search || !search.videos.length) {
+                await sock.sendMessage(chatId, { text: 'No results found.' }, { quoted: message });
+                return;
+            }
+			video = search.videos[0];
         }
 
-        // Optional: send nice notification first
-        await sendNotification(sock, chatId, message, {
-            title: audioData.title || videoData.title,
-            timestamp: videoData.timestamp,
-            thumbnail: audioData.thumbnail || videoData.thumbnail,
-            url: videoData.url
-        });
+        // Inform user with ad-style thumbnail (like alive.js)
+        await sock.sendMessage(chatId, {
+            text: `🎵 Downloading: *${video.title}*\n⏱ Duration: ${video.timestamp}`,
+            contextInfo: {
+                externalAdReply: {
+                    title: video.title || 'Mickey Glitch Music',
+                    body: 'Downloading audio...',
+                    thumbnailUrl: video.thumbnail,
+                    sourceUrl: video.url || video.thumbnail,
+                    mediaType: 1,
+                    showAdAttribution: false,
+                    renderLargerThumbnail: true
+                }
+            }
+        }, { quoted: message });
 
-        // 3. Send clean response with link
-        const reply = `🎵 *${audioData.title || videoData.title}*
+		// Try Yupra primary, then Okatsu fallback
+		let audioData;
+		try {
+			// 1) Primary: Yupra by youtube url
+			console.log('[Play] Trying Yupra API...');
+			audioData = await getYupraDownloadByUrl(video.url);
+			console.log('[Play] Yupra success, audio URL:', audioData.download?.slice(0, 50) + '...');
+		} catch (e1) {
+			console.log('[Play] Yupra failed:', e1?.message, 'Trying Okatsu...');
+			try {
+				// 2) Fallback: Okatsu by youtube url
+				audioData = await getOkatsuDownloadByUrl(video.url);
+				console.log('[Play] Okatsu success, audio URL:', audioData.download?.slice(0, 50) + '...');
+			} catch (e2) {
+				console.error('[Play] Both APIs failed. Yupra:', e1?.message, 'Okatsu:', e2?.message);
+				throw new Error(`All download APIs failed - Yupra: ${e1?.message}, Okatsu: ${e2?.message}`);
+			}
+		}
 
-📥 Direct MP3 link:
-${audioUrl}
+		const audioUrl = audioData?.download || audioData?.dl || audioData?.url;
+		if (!audioUrl) {
+			throw new Error('No valid audio URL returned from downloader API');
+		}
 
-⏱ Duration: ${videoData.timestamp || '—'}
-🔗 YouTube: ${videoData.url}`;
+		// Download audio to buffer - try arraybuffer first, fallback to stream
+		let audioBuffer;
+		try {
+			console.log('[Play] Downloading audio (arraybuffer mode)...');
+			const audioResponse = await axios.get(audioUrl, {
+				responseType: 'arraybuffer',
+				timeout: 90000,
+				maxContentLength: Infinity,
+				maxBodyLength: Infinity,
+				decompress: true,
+				validateStatus: s => s >= 200 && s < 400,
+				headers: {
+					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+					'Accept': '*/*',
+					'Accept-Encoding': 'identity'
+				}
+			});
+			audioBuffer = Buffer.from(audioResponse.data);
+			console.log('[Play] Downloaded:', audioBuffer.length, 'bytes');
+		} catch (e1) {
+			console.log('[Play] Arraybuffer failed:', e1?.message, 'Trying stream mode...');
+			try {
+				const audioResponse = await axios.get(audioUrl, {
+					responseType: 'stream',
+					timeout: 90000,
+					maxContentLength: Infinity,
+					maxBodyLength: Infinity,
+					validateStatus: s => s >= 200 && s < 400,
+					headers: {
+						'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+						'Accept': '*/*',
+						'Accept-Encoding': 'identity'
+					}
+				});
+				const chunks = [];
+				let receivedBytes = 0;
+				await new Promise((resolve, reject) => {
+					audioResponse.data.on('data', c => {
+						chunks.push(c);
+						receivedBytes += c.length;
+					});
+					audioResponse.data.on('end', resolve);
+					audioResponse.data.on('error', reject);
+				});
+				audioBuffer = Buffer.concat(chunks);
+				console.log('[Play] Stream downloaded:', receivedBytes, 'bytes');
+			} catch (e2) {
+				throw new Error(`Failed to download audio - Arraybuffer: ${e1?.message}, Stream: ${e2?.message}`);
+			}
+		}
 
-        await sock.sendMessage(chatId, { text: reply }, { quoted: message });
+		// Validate buffer
+		if (!audioBuffer || audioBuffer.length === 0) {
+			console.error('[Play] Audio buffer is empty!');
+			throw new Error('Downloaded audio buffer is empty - file may be corrupted or unavailable');
+		}
 
-        console.log('[Play] Link sent successfully');
+		console.log('[Play] Buffer size:', audioBuffer.length, 'bytes, starting conversion...');
+
+		// Detect actual file format from signature
+		const firstBytes = audioBuffer.slice(0, 12);
+		const hexSignature = firstBytes.toString('hex');
+		const asciiSignature = firstBytes.toString('ascii', 4, 8);
+
+		let actualMimetype = 'audio/mpeg';
+		let fileExtension = 'mp3';
+		let detectedFormat = 'unknown';
+
+		// Check for MP4/M4A (ftyp box)
+		if (asciiSignature === 'ftyp' || hexSignature.startsWith('000000')) {
+			// Check if it's M4A (audio/mp4)
+			const ftypBox = audioBuffer.slice(4, 8).toString('ascii');
+			if (ftypBox === 'ftyp') {
+				detectedFormat = 'M4A/MP4';
+				actualMimetype = 'audio/mp4';
+				fileExtension = 'm4a';
+			}
+		}
+		// Check for MP3 (ID3 tag or MPEG frame sync)
+		else if (audioBuffer.toString('ascii', 0, 3) === 'ID3' || 
+		         (audioBuffer[0] === 0xFF && (audioBuffer[1] & 0xE0) === 0xE0)) {
+			detectedFormat = 'MP3';
+			actualMimetype = 'audio/mpeg';
+			fileExtension = 'mp3';
+		}
+		// Check for OGG/Opus
+		else if (audioBuffer.toString('ascii', 0, 4) === 'OggS') {
+			detectedFormat = 'OGG/Opus';
+			actualMimetype = 'audio/ogg; codecs=opus';
+			fileExtension = 'ogg';
+		}
+		// Check for WAV
+		else if (audioBuffer.toString('ascii', 0, 4) === 'RIFF') {
+			detectedFormat = 'WAV';
+			actualMimetype = 'audio/wav';
+			fileExtension = 'wav';
+		}
+		else {
+			// Default to M4A since that's what the signature often suggests
+			actualMimetype = 'audio/mp4';
+			fileExtension = 'm4a';
+			detectedFormat = 'Unknown (defaulting to M4A)';
+		}
+
+		// Convert to MP3 if not already MP3
+		let finalBuffer = audioBuffer;
+		let finalMimetype = 'audio/mpeg';
+		let finalExtension = 'mp3';
+
+		if (fileExtension !== 'mp3') {
+			try {
+				console.log('[Play] Converting', detectedFormat, 'to MP3...');
+				finalBuffer = await toAudio(audioBuffer, fileExtension);
+				if (!finalBuffer || finalBuffer.length === 0) {
+					console.error('[Play] Conversion returned empty buffer!');
+					throw new Error('Conversion returned empty buffer');
+				}
+				console.log('[Play] Conversion success:', finalBuffer.length, 'bytes');
+				finalMimetype = 'audio/mpeg';
+				finalExtension = 'mp3';
+			} catch (convErr) {
+				console.error('[Play] Conversion error:', convErr?.message);
+				throw new Error(`Failed to convert ${detectedFormat} to MP3: ${convErr.message}`);
+			}
+		} else {
+			console.log('[Play] Audio already MP3, no conversion needed');
+		}
+
+		// Send buffer as MP3
+		console.log('[Play] Sending audio:', finalBuffer.length, 'bytes, mimetype:', finalMimetype);
+		await sock.sendMessage(chatId, {
+			audio: finalBuffer,
+			mimetype: finalMimetype,
+			fileName: `${(audioData.title || video.title || 'song')}.${finalExtension}`,
+			ptt: false
+		}, { quoted: message });
+		console.log('[Play] Audio sent successfully!');
+
+		// Cleanup: Delete temp files created during conversion
+		try {
+			const tempDir = path.join(__dirname, '../temp');
+			if (fs.existsSync(tempDir)) {
+				const files = fs.readdirSync(tempDir);
+				const now = Date.now();
+				files.forEach(file => {
+					const filePath = path.join(tempDir, file);
+					try {
+						const stats = fs.statSync(filePath);
+						// Delete temp files older than 10 seconds (conversion temp files)
+						if (now - stats.mtimeMs > 10000) {
+							// Check if it's a temp audio file (mp3, m4a, or numeric timestamp files from converter)
+							if (file.endsWith('.mp3') || file.endsWith('.m4a') || /^\d+\.(mp3|m4a)$/.test(file)) {
+								fs.unlinkSync(filePath);
+							}
+						}
+					} catch (e) {
+						// Ignore individual file errors
+					}
+				});
+			}
+		} catch (cleanupErr) {
+			// Ignore cleanup errors
+		}
 
     } catch (err) {
-        console.error('[Play] Failed:', err.message);
-
-        let userMsg = '❌ Something went wrong.';
-
-        const msg = err.message.toLowerCase();
-
-        if (msg.includes('no results') || msg.includes('could not find')) {
-            userMsg = '❌ Song not found. Try a different name or link.';
-        } else if (msg.includes('both services failed') || msg.includes('api')) {
-            if (msg.includes('429') || msg.includes('timeout')) {
-                userMsg = '❌ Service is busy right now. Try again in a minute.';
-            } else if (msg.includes('403') || msg.includes('forbidden') || msg.includes('451')) {
-                userMsg = '❌ Download blocked (copyright/legal reason). Try another song.';
-            } else {
-                userMsg = '❌ Download services are having issues. Try again later.';
-            }
-        } else if (msg.includes('invalid') || msg.includes('url')) {
-            userMsg = '❌ Invalid YouTube link. Please check it.';
+        console.error('[Play] ERROR:', err?.message || err);
+        const errorMsg = err?.message || String(err);
+        const isApiError = errorMsg.includes('API') || errorMsg.includes('downloader');
+        const isAudioError = errorMsg.includes('audio') || errorMsg.includes('empty') || errorMsg.includes('buffer');
+        
+        let userMsg = '❌ Failed to download song.';
+        if (isApiError) {
+            userMsg = '❌ Download service unavailable. Try again later or use another song.';
+        } else if (isAudioError) {
+            userMsg = '❌ Audio file is corrupted or unavailable. Try a different song.';
+        } else {
+            userMsg = `❌ Error: ${errorMsg.slice(0, 100)}`;
         }
-
-        await sock.sendMessage(chatId, { text: userMsg }, { quoted: message });
+        
+        try {
+            await sock.sendMessage(chatId, { text: userMsg }, { quoted: message });
+        } catch (sendErr) {
+            console.error('[Play] Failed to send error message:', sendErr?.message);
+        }
     }
 }
 
