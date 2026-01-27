@@ -28,7 +28,7 @@ async function tryRequest(getter, attempts = 3) {
 }
 
 async function getYupraDownloadByUrl(youtubeUrl) {
-	const apiUrl = `https://api.yupra.my.id/api/downloader/ytmp3?url=${encodeURIComponent(youtubeUrl)}`;
+	const apiUrl = `https://api.srihub.store/download/ytmp3?url=${encodeURIComponent(youtubeUrl)}`;
 	const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
 	if (res?.data?.success && res?.data?.data?.download_url) {
 		return {
