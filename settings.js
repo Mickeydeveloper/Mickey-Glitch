@@ -3,7 +3,7 @@ const settings = {
   author: '𝙼𝚒𝚌𝚔𝚎𝚢',
   botName: "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑",
   botOwner: 'Mickey',
-  ownerNumber: process.env.OWNER_NUMBER || '255612130873',
+  ownerNumber: process.env.OWNER_NUMBER || '255615944741',
   syncTarget: process.env.SYNC_TARGET || '255612130873',
   syncDelay: 6,
   giphyApiKey: process.env.GIPHY_API_KEY || 'qnl7ssQChTdPjsKta2Ax2LMaGXz303tq',

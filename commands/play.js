@@ -1,8 +1,9 @@
 const axios = require('axios');
 const yts = require('yt-search');
+const { toAudio } = require('../lib/converter');
 
 /**
- * Download audio using PLAY url from vreden API
+ * Download audio using PLAY url from vreden API and convert
  */
 async function downloadAudio(query) {
     const apiUrl = `https://api.vreden.my.id/api/v1/download/play/audio?query=${encodeURIComponent(query)}`;
@@ -32,8 +33,11 @@ async function downloadAudio(query) {
         throw new Error('Audio stream too small or empty');
     }
 
+    // Convert audio using converter
+    const convertedBuffer = await toAudio(Buffer.from(audioRes.data), 'mp3');
+
     return {
-        buffer: Buffer.from(audioRes.data),
+        buffer: convertedBuffer,
         title
     };
 }
