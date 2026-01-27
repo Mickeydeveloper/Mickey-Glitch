@@ -1,34 +1,28 @@
-const yts = require('yt-search');
 const axios = require('axios');
-const { toAudio } = require('../lib/converter');
+const yts = require('yt-search');
 
 /**
- * Download audio via external API (NO ytdl, NO yt-dlp)
+ * Download audio using vreden API
  */
-async function downloadAudio(videoUrl) {
-    const apiUrl = 'https://co.wuk.sh/api/json'; // Cobalt public endpoint
+async function downloadAudio(query) {
+    const api = `https://api.vreden.my.id/api/v1/download/play/audio?query=${encodeURIComponent(query)}`;
 
-    const { data } = await axios.post(apiUrl, {
-        url: videoUrl,
-        vCodec: 'none',
-        aFormat: 'mp3',
-        isAudioOnly: true
-    }, {
-        timeout: 60000
-    });
+    const { data } = await axios.get(api, { timeout: 60000 });
 
-    if (!data || !data.url) {
-        throw new Error('Failed to get download link');
+    if (!data || !data.result || !data.result.download) {
+        throw new Error('Invalid API response');
     }
 
-    const audioRes = await axios.get(data.url, {
+    const audioUrl = data.result.download;
+
+    const audioRes = await axios.get(audioUrl, {
         responseType: 'arraybuffer',
         timeout: 60000
     });
 
     return {
         buffer: Buffer.from(audioRes.data),
-        ext: 'mp3'
+        title: data.result.title || 'audio'
     };
 }
 
@@ -50,43 +44,36 @@ async function songCommand(sock, chatId, message) {
             );
         }
 
-        let video;
+        let title = text;
+        let thumbnail;
 
-        if (text.includes('youtube.com') || text.includes('youtu.be')) {
-            video = {
-                url: text.startsWith('http') ? text : `https://${text}`,
-                title: 'YouTube Audio',
-                thumbnail: ''
-            };
-        } else {
+        // Search only for preview (optional)
+        if (!text.includes('youtube.com') && !text.includes('youtu.be')) {
             const search = await yts(text);
-            if (!search.videos.length) {
-                return sock.sendMessage(
-                    chatId,
-                    { text: '❌ No results found.' },
-                    { quoted: message }
-                );
+            if (search.videos.length) {
+                title = search.videos[0].title;
+                thumbnail = search.videos[0].thumbnail;
             }
-            video = search.videos[0];
         }
 
-        // Preview
+        // Preview message
         await sock.sendMessage(
             chatId,
             {
-                image: video.thumbnail ? { url: video.thumbnail } : undefined,
-                caption: `🎵 *${video.title}*\n\nDownloading audio…`
+                image: thumbnail ? { url: thumbnail } : undefined,
+                caption: `🎵 *${title}*\n\nDownloading audio…`
             },
             { quoted: message }
         );
 
-        const { buffer } = await downloadAudio(video.url);
+        // Download audio
+        const { buffer, title: apiTitle } = await downloadAudio(text);
 
         if (!buffer || buffer.length < 30000) {
             throw new Error('Audio too small or empty');
         }
 
-        const safeTitle = (video.title || 'audio')
+        const safeTitle = (apiTitle || title)
             .replace(/[^a-z0-9 ]/gi, '_')
             .slice(0, 60);
 
@@ -101,7 +88,7 @@ async function songCommand(sock, chatId, message) {
             { quoted: message }
         );
 
-        console.log('[SONG] Sent:', video.title);
+        console.log('[SONG] Sent:', safeTitle);
 
     } catch (err) {
         console.error('[SONG ERROR]', err);
@@ -109,10 +96,10 @@ async function songCommand(sock, chatId, message) {
         let msg = '❌ Failed to download song.';
         const e = (err.message || '').toLowerCase();
 
-        if (e.includes('rate') || e.includes('blocked')) {
-            msg = '❌ Download service busy. Try again later.';
-        } else if (e.includes('timeout')) {
-            msg = '❌ Connection timeout.';
+        if (e.includes('timeout')) {
+            msg = '❌ Server timeout. Try again.';
+        } else if (e.includes('invalid')) {
+            msg = '❌ Download service error.';
         }
 
         await sock.sendMessage(chatId, { text: msg }, { quoted: message });
