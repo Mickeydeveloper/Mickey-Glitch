@@ -332,7 +332,7 @@ async function sendNotification(sock, chatId, message, videoData) {
 }
 
 /**
- * Main play command function
+ * Main play command function - Send download link only
  */
 async function songCommand(sock, chatId, message) {
 	try {
@@ -349,10 +349,7 @@ async function songCommand(sock, chatId, message) {
 		const videoData = await convertQueryToYoutubeLink(text.trim());
 		console.log('[Play] Got YouTube link:', videoData.url);
 
-		// Step 2: Notify user
-		await sendNotification(sock, chatId, message, videoData);
-
-		// Step 3: Get audio download link from API
+		// Step 2: Get audio download link from API
 		const audioData = await getAudioDownloadLink(videoData.url);
 		const audioUrl = audioData?.download || audioData?.dl;
 		if (!audioUrl) {
@@ -360,43 +357,27 @@ async function songCommand(sock, chatId, message) {
 		}
 		console.log('[Play] Got download URL from API');
 
-		// Step 4: Download audio buffer
-		const audioBuffer = await downloadAudioBuffer(audioUrl);
-		if (!audioBuffer || audioBuffer.length === 0) {
-			throw new Error('Downloaded audio buffer is empty - file may be corrupted or unavailable');
-		}
+		// Step 3: Send download link to user
+		const responseMsg = `🎵 *${audioData.title || videoData.title || 'Song'}*
 
-		// Step 5: Detect audio format
-		const { actualMimetype, fileExtension, detectedFormat } = detectAudioFormat(audioBuffer);
-		console.log('[Play] Detected format:', detectedFormat);
+📥 Download Link:
+${audioUrl}
 
-		// Step 6: Convert to MP3 if needed
-		const { finalBuffer, finalMimetype, finalExtension } = await convertToMP3IfNeeded(audioBuffer, fileExtension);
+🔗 YouTube: ${videoData.url}`;
 
-		// Step 7: Send audio to user
-		console.log('[Play] Sending audio:', finalBuffer.length, 'bytes');
-		await sock.sendMessage(chatId, {
-			audio: finalBuffer,
-			mimetype: finalMimetype,
-			fileName: `${(audioData.title || videoData.title || 'song')}.${finalExtension}`,
-			ptt: false
-		}, { quoted: message });
-		console.log('[Play] Audio sent successfully!');
-
-		// Step 8: Cleanup temp files
-		await cleanupTempFiles();
+		console.log('[Play] Sending download link to user');
+		await sock.sendMessage(chatId, { text: responseMsg }, { quoted: message });
+		console.log('[Play] Download link sent successfully!');
 
 	} catch (err) {
 		console.error('[Play] ERROR:', err?.message || err);
 		const errorMsg = err?.message || String(err);
 		
-		let userMsg = '❌ Failed to download song.';
+		let userMsg = '❌ Failed to get song download link.';
 		if (errorMsg.includes('YouTube') || errorMsg.includes('search')) {
 			userMsg = '❌ Could not find the song. Try another search term.';
 		} else if (errorMsg.includes('API') || errorMsg.includes('downloader')) {
 			userMsg = '❌ Download service unavailable. Try again later.';
-		} else if (errorMsg.includes('audio') || errorMsg.includes('buffer') || errorMsg.includes('empty')) {
-			userMsg = '❌ Audio file corrupted. Try a different song.';
 		}
 		
 		try {
