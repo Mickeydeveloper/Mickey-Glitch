@@ -1,265 +1,213 @@
-// help.js
-// Last meaningful update: improved string interpolation + fallback + readability
-
-const fs   = require('fs');
+// ──────────────────────────────────────────────────────────────
+//  Help – Text-based, auto-synced from `commands/` folder (no slides)
+// ──────────────────────────────────────────────────────────────
+const fs = require('fs');
 const path = require('path');
-const os   = require('os');
+const os = require('os');
 const settings = require('../settings');
 
 /**
- * Command categories (update this object when adding/removing commands)
+ * NOTE:
+ * - This help command auto-builds the command list by reading the `commands/` folder.
+ * - To hide commands from the help output, add their filename (without extension) to `EXCLUDE`.
  */
-const COMMAND_CATEGORIES = {
-    admin:    ['ban', 'unban', 'kick', 'promote', 'demote', 'mute', 'unmute', 'warn', 'warnings', 'clear'],
-    group:    ['groupmanage', 'tagall', 'tagnotadmin', 'tag', 'mention', 'hidetag'],
-    fun:      ['compliment', 'character', 'wasted', 'emojimix', 'textmaker'],
-    media:    ['sticker', 'sticker-alt', 'stickercrop', 'stickertelegram', 'img-blur', 'video', 'url', 'lyrics'],
-    social:   ['instagram', 'facebook', 'tiktok', 'spotify', 'youtube'],
-    download: ['play', 'igs', 'imagine'],
-    utility:  ['ping', 'alive', 'update', 'checkupdates', 'settings', 'weather', 'translate', 'tts'],
-    owner:    ['owner', 'pair', 'sudo', 'staff', 'resetlink', 'phone', 'halotel'],
-    auto:     ['autostatus', 'autoread', 'autotyping', 'autobio', 'antitag', 'antidelete', 'antilink', 'antibadword'],
-    ai:       ['ai', 'chatbot']
-};
+const EXCLUDE = [
+  'help' // exclude self by default; add other command base names here (e.g., 'debug')
+];
 
-const EXCLUDE = ['help', 'index', 'main'];
+// Banner image used in externalAdReply (falls back to a hosted image)
+const BANNER = 'https://water-billimg.onrender.com/1761205727440.png';
+
+// No paging — always show the full, auto-synced command list
 
 function getUptime() {
-    const t = process.uptime();
-    const h = Math.floor(t / 3600);
-    const m = Math.floor((t % 3600) / 60);
-    const s = Math.floor(t % 60);
-    return `${h}h ${m}m ${s}s`;
+  const uptime = process.uptime();
+  const hours = Math.floor(uptime / 3600);
+  const minutes = Math.floor((uptime % 3600) / 60);
+  const seconds = Math.floor(uptime % 60);
+  return `${hours}h ${minutes}m ${seconds}s`;
+}
+
+function readMessageText(message) {
+  if (!message) return '';
+  return (
+    message.message?.conversation ||
+    message.message?.extendedTextMessage?.text ||
+    message.message?.imageMessage?.caption ||
+    message.message?.videoMessage?.caption ||
+    ''
+  ).trim();
 }
 
 function getCommandDescription(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const lines = raw.split(/\r?\n/).slice(0, 8);
+    for (const ln of lines) {
+      const t = ln.trim();
+      if (!t) continue;
+      if (t.startsWith('//')) return t.replace(/^\/\/\s?/, '').trim();
+      if (t.startsWith('/*')) return t.replace(/^\/\*\s?/, '').replace(/\*\/$/, '').trim();
+      if (t.startsWith('*')) return t.replace(/^\*\s?/, '').trim();
+    }
+  } catch (e) {
+    // ignore and return empty description
+  }
+  return '';
+}
+
+function listCommandFiles() {
+  const commandsDir = __dirname; // this file is in commands/
+  let files = [];
+  try {
+    files = fs.readdirSync(commandsDir);
+  } catch (e) {
+    return [];
+  }
+  const cmds = files
+    .filter(f => f.endsWith('.js'))
+    .map(f => path.basename(f, '.js'))
+    .filter(name => !EXCLUDE.includes(name))
+    .sort((a, b) => a.localeCompare(b))
+    .map(name => {
+      const fp = path.join(commandsDir, `${name}.js`);
+      const desc = getCommandDescription(fp);
+      return { name, desc };
+    });
+  return cmds;
+}
+
+function buildHelpMessage(cmdList, opts = {}) {
+  const total = cmdList.length;
+  const {
+    runtime,
+    mode,
+    prefix,
+    ramUsed,
+    ramTotal,
+    time,
+    user,
+    name
+  } = opts;
+
+  const header = `┏━━〔 ${settings.botName || '𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑'} 〕━━┓\n` +
+    `┃ 👑 Owner : ${settings.botOwner || 'Mickey'}\n` +
+    `┃ ✨ User  : ${name || user || 'Unknown'}  |  🔖 v${settings.version || '?.?'}\n` +
+    `┃ ⏱ Uptime : ${runtime || getUptime()}  |  ⌚ ${time || new Date().toLocaleTimeString('en-GB', { hour12: false })}\n` +
+    `┃ 🛡 Mode  : ${mode || settings.commandMode || 'public'}  |  Prefix: ${prefix || settings.prefix || '.'}\n` +
+    `┃ 🧠 RAM   : ${ramUsed || '?'} / ${ramTotal || '?'} GB\n` +
+    `┗━━━━━━━━━━━━━━━━━━━━━━┛\n\n`;
+
+  const title = `*• Commands (${total})*\n\n`;
+
+  const list = cmdList.map(c => {
+    const nameStr = `${prefix}${c.name}`;
+    const descStr = c.desc ? ` — ${c.desc}` : '';
+    return `• ${nameStr}${descStr}`;
+  }).join('\n');
+
+  const footer = `\n\n*Total commands:* ${total}  —  *Excluded:* ${EXCLUDE.length}`;
+
+  return header + title + list + footer;
+} 
+
+const FALLBACK = `*Help*\nUnable to build dynamic help list.`;
+
+async function helpCommand(sock, chatId, message) {
+  if (!sock || !chatId) return console.error('Missing sock or chatId');
+
+  try {
+    const text = readMessageText(message);
+
+    // Gather runtime & system info to display in header
+    const runtime = getUptime();
+    const mode = settings.commandMode || 'public';
+    const prefix = settings.prefix || '.';
+    const timeNow = new Date().toLocaleTimeString('en-GB', { hour12: false });
+    const memUsedGB = (process.memoryUsage().rss / (1024 ** 3)).toFixed(2);
+    const memTotalGB = (os.totalmem() / (1024 ** 3)).toFixed(2);
+
+    // Determine requesting user (best-effort) and resolve display name where possible
+    let senderJid = null;
+    let userId = 'Unknown';
+    let displayName = 'Unknown';
     try {
-        const content = fs.readFileSync(filePath, 'utf8');
-        const lines = content.split(/\r?\n/).slice(0, 15);
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            if (trimmed.startsWith('//')) {
-                return trimmed.replace(/^\/\/\s*/, '');
-            }
-            if (trimmed.startsWith('/*')) {
-                return trimmed.replace(/^\/\*\s?/, '').replace(/\*\/$/, '');
-            }
-            if (trimmed.startsWith('*')) {
-                return trimmed.replace(/^\*\s?/, '');
-            }
+      const sender = message?.key?.participant || message?.key?.from || message?.sender || message?.participant;
+      if (sender) {
+        senderJid = typeof sender === 'string' ? sender : String(sender);
+        userId = senderJid.split('@')[0];
+        try {
+          if (typeof sock.getName === 'function') {
+            displayName = await sock.getName(senderJid);
+          } else {
+            displayName = userId;
+          }
+        } catch (e) {
+          displayName = userId;
         }
-    } catch {
-        // silent fail
-    }
-    return '';
-}
+      }
+    } catch (e) {}
 
-function emojiForCategory(cat) {
-    const map = {
-        admin:    '👮‍♂️',
-        group:    '👥',
-        fun:      '🎭',
-        media:    '🖼️',
-        social:   '🌐',
-        download: '⬇️',
-        utility:  '🛠️',
-        owner:    '👑',
-        auto:     '🤖',
-        ai:       '🧠'
-    };
-    return map[cat] || '📦';
-}
-
-function loadCommands() {
-    const dir = __dirname;
-    let files;
-    try {
-        files = fs.readdirSync(dir);
-    } catch {
-        return [];
+    const cmdList = listCommandFiles();
+    if (!cmdList.length) {
+      await sock.sendMessage(chatId, { text: FALLBACK }, { quoted: message });
+      return;
     }
 
-    return files
-        .filter(f => f.endsWith('.js'))
-        .map(f => path.basename(f, '.js'))
-        .filter(name => !EXCLUDE.includes(name))
-        .sort((a, b) => a.localeCompare(b))
-        .map(name => {
-            const fp = path.join(dir, name + '.js');
-            const desc = getCommandDescription(fp);
-            let category = 'other';
-
-            for (const [cat, cmds] of Object.entries(COMMAND_CATEGORIES)) {
-                if (cmds.includes(name)) {
-                    category = cat;
-                    break;
-                }
-            }
-
-            return { name, desc, category };
-        });
-}
-
-function buildHelpMessage(cmds, opts = {}) {
-    const {
-        runtime   = getUptime(),
-        mode      = settings.commandMode || 'public',
-        prefix    = settings.prefix || '.',
-        ramUsed   = (process.memoryUsage().rss / 1e9).toFixed(2),
-        ramTotal  = (os.totalmem() / 1e9).toFixed(2),
-        time      = new Date().toLocaleTimeString('en-GB', { hour12: false }),
-        username  = 'Unknown'
-    } = opts;
-
-    const groups = { other: [] };
-    Object.keys(COMMAND_CATEGORIES).forEach(c => groups[c] = []);
-
-    cmds.forEach(cmd => {
-        (groups[cmd.category] || groups.other).push(cmd);
+    const helpText = buildHelpMessage(cmdList, {
+      runtime,
+      mode,
+      prefix,
+      ramUsed: memUsedGB,
+      ramTotal: memTotalGB,
+      time: timeNow,
+      user: userId,
+      name: displayName
     });
 
-    let text = `🎯 *${settings.botName || 'Mickey Glitch'} Commands*  v ${settings.version || '?.?'}\n\n`;
-
-    text += `▸ Uptime    : ${runtime}\n`;
-    text += `▸ Mode      : ${mode}\n`;
-    text += `▸ Prefix    : ${prefix}\n`;
-    text += `▸ RAM       : ${ramUsed} / ${ramTotal} GB\n`;
-    text += `▸ Time      : ${time}\n`;
-    text += `▸ User      : ${username}\n\n`;
-
-    for (const [cat, list] of Object.entries(groups)) {
-        if (list.length === 0) continue;
-
-        const emoji = emojiForCategory(cat);
-        const title = cat.charAt(0).toUpperCase() + cat.slice(1);
-
-        text += `${emoji} *${title}* (${list.length})\n`;
-
-        list.forEach(cmd => {
-            const desc = cmd.desc ? ` — ${cmd.desc}` : '';
-            text += `  • ${prefix}${cmd.name}${desc}\n`;
-        });
-
-        text += '\n';
-    }
-
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `✨ Total: ${cmds.length} commands   |   Prefix: ${prefix}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-    return text;
-}
-
-const FALLBACK = `⚠️  Could not generate command list right now.\nPlease try again later.`;
-
-async function helpCommand(sock, chatId, msg) {
-    if (!sock || !chatId) {
-        console.error("[help] sock or chatId missing");
-        return;
-    }
-
-    try {
-        // Basic info
-        const runtime = getUptime();
-        const prefix  = settings.prefix || '.';
-        const timeNow = new Date().toLocaleTimeString('en-GB', { hour12: false });
-        const usedGB  = (process.memoryUsage().rss / 1e9).toFixed(2);
-        const totalGB = (os.totalmem() / 1e9).toFixed(2);
-
-        // Try to get better username
-        let username = 'Unknown';
-        try {
-            const jid = msg.key?.participant || msg.key?.remoteJid;
-            if (jid?.includes('@s.whatsapp.net')) {
-                username = (await sock.getName?.(jid)) || jid.split('@')[0];
-            }
-        } catch {}
-
-        const commands = loadCommands();
-
-        if (commands.length === 0) {
-            await sock.sendMessage(chatId, { text: FALLBACK }, { quoted: msg });
-            return;
-        }
-
-        const content = buildHelpMessage(commands, {
-            runtime,
-            mode: settings.commandMode,
-            prefix,
-            ramUsed: usedGB,
-            ramTotal: totalGB,
-            time: timeNow,
-            username
-        });
-
-        // Safe send with splitting
-        const MAX = 3800;
-        if (content.length <= MAX) {
-            await sock.sendMessage(chatId, {
-                text: content,
-                contextInfo: {
-                    isForwarded: true,
-                    forwardedNewsletterMessageInfo: {
-                        newsletterJid: '120363398106360290@newsletter',
-                        newsletterName: 'ѪЇCКЄЧ',
-                        serverMessageId: -1
-                    },
-                    externalAdReply: {
-                        title: `${settings.botName || 'Mickey Glitch'} Commands`,
-                        body: `Available Commands: ${commands.length}`,
-                        thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
-                        sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
-                        mediaType: 1,
-                        renderLargerThumbnail: true
-                    }
-                }
-            }, { quoted: msg });
-            return;
-        }
-
-        // split into chunks
-        const parts = [];
-        let part = '';
-        content.split('\n').forEach(line => {
-            if (part.length + line.length + 1 > MAX) {
-                parts.push(part.trimEnd());
-                part = line + '\n';
-            } else {
-                part += line + '\n';
-            }
-        });
-        if (part.trim()) parts.push(part.trimEnd());
-
-        for (let i = 0; i < parts.length; i++) {
-            await sock.sendMessage(chatId, {
-                text: parts[i],
-                contextInfo: {
-                    isForwarded: true,
-                    forwardedNewsletterMessageInfo: {
-                        newsletterJid: '120363398106360290@newsletter',
-                        newsletterName: 'Mickey From Tanzania',
-                        serverMessageId: -1
-                    },
-                    externalAdReply: {
-                        title: `${settings.botName || 'Mickey Glitch'} Commands`,
-                        body: `Available Commands: ${commands.length}`,
-                        thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
-                        sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
-                        mediaType: 1,
-                        renderLargerThumbnail: true
-                    }
-                }
-            }, { quoted: msg });
-            if (i < parts.length - 1) await new Promise(r => setTimeout(r, 700));
-        }
-
-    } catch (err) {
-        console.error("[help] error:", err);
+    // If message is large, send as a text file instead to avoid truncation issues
+    if (helpText.length > 4000) {
+      try {
+        const tmpPath = path.join(os.tmpdir(), `help-${Date.now()}.txt`);
+        fs.writeFileSync(tmpPath, helpText, 'utf8');
+        const fileBuf = fs.readFileSync(tmpPath);
         await sock.sendMessage(chatId, {
-            text: `Error generating help:\n${err.message || '?'}\n\n${FALLBACK}`
-        }, { quoted: msg });
+          document: fileBuf,
+          fileName: `help_${settings.botName?.replace(/\s+/g, '_') || 'bot'}_${new Date().toISOString().slice(0,10)}.txt`,
+          mimetype: 'text/plain',
+          caption: `📚 Help — full command list (v${settings.version || '?.?'})`
+        }, { quoted: message });
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+      } catch (e) {
+        console.error('Failed to send help as file:', e);
+        await sock.sendMessage(chatId, { text: helpText }, { quoted: message });
+      }
+      return;
     }
+
+    // Normal text message with externalAdReply card
+    await sock.sendMessage(chatId, {
+      text: helpText,
+      contextInfo: {
+        mentionedJid: senderJid ? [senderJid] : undefined,
+        externalAdReply: {
+          title: `${settings.botName || 'Mickey Glitch'} — Commands`,
+          body: `v${settings.version || '?.?'}`,
+          thumbnailUrl: BANNER,
+          sourceUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
+          mediaType: 1,
+          mediaUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
+          showAdAttribution: true,
+          renderLargerThumbnail: true
+        }
+      }
+    }, { quoted: message });
+
+  } catch (error) {
+    console.error('helpCommand Error:', error);
+    const msg = `*Error:* ${error?.message || error}\n\n${FALLBACK}`;
+    await sock.sendMessage(chatId, { text: msg }, { quoted: message });
+  }
 }
 
 module.exports = helpCommand;
