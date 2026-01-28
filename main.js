@@ -566,7 +566,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
             const pinVerified = await checkPinVerification(senderId);
             if (!pinVerified) {
                 await sock.sendMessage(chatId, { 
-                    text: `🔐 *PIN REQUIRED*\n\nThis bot requires PIN authorization.\n\n📌 Command: .pin 0000\n\n(Use your PIN instead of 0000)` 
+                    text: `🔐 *PIN REQUIRED*\n\nThis bot requires PIN authorization.\n\n📌 Command: .pin <pincode>` 
                 }, { quoted: message });
                 return;
             }
