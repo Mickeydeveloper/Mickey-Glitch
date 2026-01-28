@@ -125,28 +125,10 @@ async function startXeonBotInc() {
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
 
                 // Welcome message (with fake forward look)
-                const proCaption = `
-╔════════════════════════════════╗
-║  ✨ *MICKEY GLITCH BOT* ✨   ║
-║      🟢 ONLINE & ACTIVE      ║
-╚════════════════════════════════╝
-
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 📊 *SYSTEM STATUS*
-┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
-┃ ✨ *Status:* Connected
-┃ 🤖 *Bot Name:* ${global.botname}
-┃ 📡 *Channel:* ${channelRD.name}
-┃ 🕒 *Time:* ${new Date().toLocaleString('en-GB')}
-┃ ⚙️ *RAM:* ${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB
-┃ 📌 *Version:* v3.1.0
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-✅ *Boot Sequence: COMPLETED*
-🔧 *All Systems: OPERATIONAL*
-🎯 *Status: READY TO SERVE*
-
-_Mickey Glitch is fully online!_`.trim()
+                const proCaption = `✨ *MICKEY GLITCH BOT* ✨
+🟢 *Online & Ready*
+📡 ${channelRD.name} | 💾 ${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB
+🎯 All Systems Operational`.trim()
 
                 await XeonBotInc.sendMessage(botJid, {
                     text: proCaption,
@@ -159,7 +141,7 @@ _Mickey Glitch is fully online!_`.trim()
                         },
                         externalAdReply: {
                             title: `ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴠ3.1.0`,
-                            body: `🟢 System Online`,
+                            body: `Hosted by Mickey Glitch`,
                             thumbnailUrl: 'https://files.catbox.moe/llc9v7.png',
                             sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
                             mediaType: 1,
