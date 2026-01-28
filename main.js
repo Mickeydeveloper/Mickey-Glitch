@@ -128,6 +128,7 @@ const updateCommand = require('./commands/update');
 const checkUpdatesCommand = require('./commands/checkupdates');
 const { igsCommand } = require('./commands/igs');
 const { anticallCommand, readState: readAnticallState } = require('./commands/anticall');
+const { pinCommand, verifyPinCommand, checkPinVerification } = require('./commands/pin');
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const phoneCommand = require('./commands/phone');
@@ -559,6 +560,18 @@ async function handleMessages(sock, messageUpdate, printLog) {
         // We'll show typing indicator after command execution if needed
         let commandExecuted = false;
 
+        // PIN Security Check - Allow .pin command always, verify others
+        const allowWithoutPin = userMessage.startsWith('.pin');
+        if (!allowWithoutPin) {
+            const pinVerified = await checkPinVerification(senderId);
+            if (!pinVerified) {
+                await sock.sendMessage(chatId, { 
+                    text: `🔐 *PIN REQUIRED*\n\nThis bot requires PIN authorization.\n\n📌 Command: .pin 0000\n\n(Use your PIN instead of 0000)` 
+                }, { quoted: message });
+                return;
+            }
+        }
+
         switch (true) {
             // .simage command removed
             case userMessage.startsWith('.add'):
@@ -602,6 +615,20 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     }
                 }
                 await unbanCommand(sock, chatId, message);
+                break;
+            case userMessage.startsWith('.pin'):
+                {
+                    const pinArgs = userMessage.split(' ').slice(1);
+                    // Check if first arg is just numbers (PIN code)
+                    if (pinArgs[0] && /^\d+$/.test(pinArgs[0])) {
+                        // User is entering PIN code
+                        await verifyPinCommand(sock, chatId, message, pinArgs[0]);
+                    } else {
+                        // User is configuring PIN (owner only)
+                        await pinCommand(sock, chatId, message, pinArgs);
+                    }
+                }
+                commandExecuted = true;
                 break;
             case userMessage === '.help' || userMessage === '.menu' || userMessage === '.bot' || userMessage === '.list' || userMessage === '.cmd' || userMessage === '.commands':
                 await helpCommand(sock, chatId, message, userMessage);
@@ -1222,7 +1249,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.checkupdates'):
                 {
-                    await checkUpdatesCommand(sock, chatId, message);
+                    const checkUpdatesArgs = userMessage.split(' ').slice(1);
+                    await checkUpdatesCommand(sock, chatId, message, checkUpdatesArgs);
                 }
                 commandExecuted = true;
                 break;
