@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const settings = require('../settings');
+const gTTS = require('gtts');
 
 /**
  * NOTE:
@@ -113,6 +114,51 @@ function buildHelpMessage(cmdList, opts = {}) {
 
 const FALLBACK = `*Help*\nUnable to build dynamic help list.`;
 
+/**
+ * Generate and send TTS audio greeting
+ */
+async function sendTTSGreeting(sock, chatId, message, displayName) {
+  try {
+    const greetingText = `Hello ${displayName}, thanks for trusting my bot. Enjoy using Mickey Glitch!`;
+    const fileName = `greeting-${Date.now()}.mp3`;
+    const dir = path.join(__dirname, '..', 'assets');
+    const filePath = path.join(dir, fileName);
+
+    // Ensure assets directory exists
+    await fs.promises.mkdir(dir, { recursive: true });
+
+    const gtts = new gTTS(greetingText, 'en');
+    
+    // Wrap save in a promise
+    await new Promise((resolve, reject) => {
+      gtts.save(filePath, (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+
+    const buffer = await fs.promises.readFile(filePath);
+    if (buffer && buffer.length > 0) {
+      await sock.sendMessage(chatId, {
+        audio: buffer,
+        mimetype: 'audio/mpeg',
+        ptt: true // Mark as Push-to-Talk (voice message)
+      }, { quoted: message });
+    }
+
+    // Cleanup
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (e) {
+      // ignore cleanup errors
+    }
+  } catch (err) {
+    console.error('[Help TTS] Error generating greeting:', err);
+    // Silently fail, don't disrupt the main help command
+  }
+}
+
+
 async function helpCommand(sock, chatId, message) {
   if (!sock || !chatId) return console.error('Missing sock or chatId');
 
@@ -202,6 +248,9 @@ async function helpCommand(sock, chatId, message) {
         }
       }
     }, { quoted: message });
+
+    // Send TTS greeting audio after help text
+    await sendTTSGreeting(sock, chatId, message, displayName);
 
   } catch (error) {
     console.error('helpCommand Error:', error);
