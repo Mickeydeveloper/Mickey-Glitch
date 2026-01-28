@@ -111,7 +111,7 @@ async function startXeonBotInc() {
 
                 await handleMessages(XeonBotInc, chatUpdate, true)
             } catch (err) {
-                console.error("messages.upsert error:", err)
+                console.log(chalk.bgRed.black('  ⚠️  MSG ERROR  ⚠️  '), chalk.red(err.message))
             }
         })
 
@@ -121,16 +121,9 @@ async function startXeonBotInc() {
 
             if (connection === 'open') {
                 console.log(chalk.bgGreen.black('  ✨  CONNECTED  ✨  '), chalk.green('Bot Online & Ready!'))
+                console.log(chalk.bgBlue.white('  📡  SYSTEM  📡  '), chalk.blue('Loading handlers...'))
 
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
-
-                // Auto subscribe newsletter
-                try {
-                    await XeonBotInc.subscribeNewsletter(channelRD.id)
-                    console.log(chalk.bgGreen.black('  ✓  CHANNEL  ✓  '), chalk.green(`Subscribed to ${channelRD.name}`))
-                } catch (err) {
-                    console.log(chalk.bgYellow.black('  ⚠  CHANNEL  ⚠  '), chalk.yellow(`Subscribe failed: ${err.message}`))
-                }
 
                 // Welcome message (with fake forward look)
                 const proCaption = `✦ *MICKEY GLITCH BOT* ✦
@@ -145,18 +138,28 @@ async function startXeonBotInc() {
 _Boot sequence completed ✅_`.trim()
 
                 await XeonBotInc.sendMessage(botJid, {
-                    image: { url: 'https://files.catbox.moe/llc9v7.png' },
+                    image: { url: '' },
                     caption: proCaption,
                     contextInfo: {
-                        forwardingScore: 999,
                         isForwarded: true,
                         forwardedNewsletterMessageInfo: {
                             newsletterJid: channelRD.id,
                             newsletterName: channelRD.name,
                             serverMessageId: fakeServerMsgId()
+                        },
+                        externalAdReply: {
+                            title: `ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴠ3.1.0`,
+                            body: `🟢 System Online`,
+                            thumbnailUrl: 'https://files.catbox.moe/llc9v7.png',
+                            sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
+                            mediaType: 1,
+                            renderLargerThumbnail: true
                         }
                     }
                 })
+                
+                console.log(chalk.bgGreen.black('  ✅  STARTUP  ✅  '), chalk.green('Bot fully operational'))
+                console.log('')
             }
 
             if (connection === 'close') {
@@ -212,6 +215,7 @@ _Boot sequence completed ✅_`.trim()
 
         // ──── Pairing code ────
         if (pairingCode && !XeonBotInc.authState.creds.registered) {
+            console.log(chalk.bgMagenta.white('  ⏳  PAIRING REQUIRED  ⏳  '), chalk.magenta('Waiting for input...'))
             let number = (global.phoneNumber || await question(chalk.bgBlack(chalk.greenBright(`Input Number: `))))
                 .replace(/[^0-9]/g, '')
 
@@ -219,6 +223,7 @@ _Boot sequence completed ✅_`.trim()
                 let code = await XeonBotInc.requestPairingCode(number)
                 console.log(chalk.bgCyan.black('  🔐  PAIRING CODE  🔐  '))
                 console.log(chalk.cyan.bold(`  ${code?.match(/.{1,4}/g)?.join("-")}`))
+                console.log(chalk.gray('Enter this code in WhatsApp'))
                 console.log('')
             }, 3000)
         }
