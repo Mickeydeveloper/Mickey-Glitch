@@ -152,7 +152,7 @@ async function startXeonBotInc() {
                         externalAdReply: {
                             title: `ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴠ3.1.0`,
                             body: `Hosted by Mickey Glitch`,
-                            thumbnailUrl: 'https://files.catbox.moe/llc9v7.png',
+                            thumbnailUrl: 'https://files.catbox.moe/jwdiuc.jpg',
                             sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
                             mediaType: 1,
                             renderLargerThumbnail: true
