@@ -2,14 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
 const isAdmin = require('../lib/isAdmin');
+const { OPENAI_CONFIG } = require('../config');
 
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
-const SYSTEM_PROMPT = process.env.CHATBOT_SYSTEM_PROMPT || 'You are a helpful WhatsApp chatbot assistant. Be concise and friendly.';
+const OPENAI_API_KEY = OPENAI_CONFIG.apiKey;
+const OPENAI_MODEL = OPENAI_CONFIG.model || 'gpt-3.5-turbo';
+const SYSTEM_PROMPT = OPENAI_CONFIG.systemPrompt || 'You are a helpful WhatsApp chatbot assistant. Be concise and friendly.';
 
 if (!OPENAI_API_KEY) {
-  console.warn('⚠️ OPENAI_API_KEY environment variable not set. Chatbot will not work.');
+  console.warn('⚠️ OPENAI_API_KEY not configured in config.js. Chatbot will not work.');
 }
 
 function loadState() {
