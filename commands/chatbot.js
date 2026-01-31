@@ -4,12 +4,13 @@ const fetch = require('node-fetch');
 const isAdmin = require('../lib/isAdmin');
 
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
+const SYSTEM_PROMPT = process.env.CHATBOT_SYSTEM_PROMPT || 'You are a helpful WhatsApp chatbot assistant. Be concise and friendly.';
 
-const API_PROVIDERS = [
-  { name: 'SriHub ChatGPT', urlTemplate: text => `https://api.srihub.store/ai/chatgpt?prompt=${encodeURIComponent(text)}` },
-  { name: 'SriHub Copilot', urlTemplate: text => `https://api.srihub.store/ai/copilot?prompt=${encodeURIComponent(text)}` },
-  { name: 'SriHub Venice',   urlTemplate: text => `https://api.srihub.store/ai/venice?prompt=${encodeURIComponent(text)}`   }
-];
+if (!OPENAI_API_KEY) {
+  console.warn('⚠️ OPENAI_API_KEY environment variable not set. Chatbot will not work.');
+}
 
 function loadState() {
   try {
@@ -50,24 +51,55 @@ function extractMessageText(msg) {
   ).trim();
 }
 
-async function tryFetchWithFallbacks(prompt) {
-  for (const provider of API_PROVIDERS) {
-    try {
-      const url = provider.urlTemplate(prompt);
-      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(12000) });
-      if (!res.ok) continue;
-      const data = await res.json().catch(() => ({}));
-      let reply = data?.response || data?.message || data?.result || data?.text || data?.content || data?.answer || JSON.stringify(data) || '';
-      reply = (reply || '').trim();
-      if (reply.length > 5) return reply;
-    } catch {}
+async function callOpenAI(prompt, conversationHistory = []) {
+  if (!OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured');
   }
-  throw new Error('All APIs failed');
+
+  try {
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...conversationHistory.slice(-4),
+      { role: 'user', content: prompt }
+    ];
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: messages,
+        max_tokens: 500,
+        temperature: 0.7
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(`OpenAI API error: ${error.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const reply = data.choices?.[0]?.message?.content || '';
+
+    if (!reply.trim()) {
+      throw new Error('Empty response from OpenAI');
+    }
+
+    return reply.trim();
+  } catch (err) {
+    console.error('OpenAI API call failed:', err.message);
+    throw err;
+  }
 }
 
 async function handleChatbotMessage(sock, chatId, message) {
   try {
-    if (!chatId || message.key?.fromMe) return;
+    if (!chatId || message.key?.fromMe || !OPENAI_API_KEY) return;
 
     const state = loadState();
     const isGroup = chatId.endsWith('@g.us');
@@ -79,23 +111,30 @@ async function handleChatbotMessage(sock, chatId, message) {
 
     await sock.sendPresenceUpdate('composing', chatId);
 
-    // Very basic history (remove next 5 lines if you don't want memory at all)
+    // Load conversation history
     state.memory[chatId] = state.memory[chatId] || [];
-    const historyStr = state.memory[chatId].slice(-4).map(m => m.content).join('\n');
-    const fullPrompt = historyStr ? `\( {historyStr}\n \){userText}` : userText;
+    const conversationHistory = state.memory[chatId].slice(-6);
 
-    const reply = await tryFetchWithFallbacks(fullPrompt);
-    let cleanReply = reply.trim() || "Sijapata jibu... jaribu tena?";
+    // Get response from OpenAI
+    const reply = await callOpenAI(userText, conversationHistory);
+    let cleanReply = reply || "Sijakamatia jibu sasa... Jaribu tena baadaye.";
 
     await sock.sendMessage(chatId, { text: cleanReply }, { quoted: message });
 
-    // Remove next 4 lines if you don't want memory
+    // Update conversation history
     state.memory[chatId].push({ role: 'user', content: userText });
     state.memory[chatId].push({ role: 'assistant', content: cleanReply });
+    
+    // Keep history manageable (keep last 20 messages)
+    if (state.memory[chatId].length > 20) {
+      state.memory[chatId] = state.memory[chatId].slice(-20);
+    }
+    
     saveState(state);
 
   } catch (err) {
-    const fallbacks = ["Kuna shida kidogo...", "Jaribu tena baadaye...", "Network inakata...", "Sijapata jibu sasa..."];
+    console.error('Chatbot error:', err);
+    const fallbacks = ["Kuna shida kidogo...", "Jaribu tena baadaye...", "Sijakamatia jibu...", "Network inakata..."];
     const randomFall = fallbacks[Math.floor(Math.random() * fallbacks.length)];
     await sock.sendMessage(chatId, { text: randomFall }, { quoted: message });
   }
