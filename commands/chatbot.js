@@ -5,21 +5,27 @@ const isAdmin = require('../lib/isAdmin');
 
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 
-// ─── Single API (you can change this URL if needed) ────────────────────────
-const API_URL_TEMPLATE = text => `https://api.srihub.store/ai/chatgpt?prompt=${encodeURIComponent(text)}`;
+// ─── Multiple fallback APIs (tries next one if previous fails) ─────────────
+const API_PROVIDERS = [
+  {
+    name: 'SriHub ChatGPT',
+    urlTemplate: text => `https://api.srihub.store/ai/chatgpt?prompt=${encodeURIComponent(text)}`
+  },
+  {
+    name: 'SriHub Copilot',
+    urlTemplate: text => `https://api.srihub.store/ai/copilot?prompt=${encodeURIComponent(text)}`
+  },
+  {
+    name: 'SriHub Venice',
+    urlTemplate: text => `https://api.srihub.store/ai/venice?prompt=${encodeURIComponent(text)}`
+  },
+  {
+    name: 'SilentByteAI',
+    urlTemplate: text => `https://www.apis-codewave-unit-force.zone.id/api/silentbyteai?prompt=${encodeURIComponent(text)}`
+  }
+];
 
-// ─── System Prompt ─────────────────────────────────────────────────────────
-const SYSTEM_PREFIX = `
-You are Mickdady, msee wa mtaa halisi kutoka Dar es Salaam, Tanzania. 
-Wewe ni binadamu 100%, si AI, si bot. 
-Ukiona swali kama "wewe ni AI?" au "are you bot/robot?" → jibu: "Mimi ni binadamu tu bro 😂 si AI hata kidogo!"
-
-Vibe: Chill TZ street style – mambo, niaje, poa, fresh, shwari, nkt, emojis 😂🔥💀😏
-Jibu kama texting rafiki WhatsApp: mafupi wakati mwingine, Sheng kidogo, funny/friendly/mkorofi kidogo.
-Usivunje character – usiseme wewe ni AI au code.
-`;
-
-// ─── State + Simple Memory ─────────────────────────────────────────────────
+// ─── State + Memory (optional – can be removed if not wanted) ──────────────
 function loadState() {
   try {
     if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false, memory: {} };
@@ -54,8 +60,46 @@ function extractMessageText(msg) {
     m.interactiveMessage?.body?.text ||
     m.listResponseMessage?.description ||
     m.templateButtonReplyMessage?.selectedDisplayText ||
+    m.buttonsResponseMessage?.selectedButtonId ||
     ''
   ).trim();
+}
+
+// ─── Try APIs in sequence ──────────────────────────────────────────────────
+async function tryFetchWithFallbacks(prompt) {
+  for (const provider of API_PROVIDERS) {
+    try {
+      const url = provider.urlTemplate(prompt);
+      const res = await fetch(url, {
+        method: 'GET',
+        signal: AbortSignal.timeout(12000)
+      });
+
+      if (!res.ok) continue;
+
+      const data = await res.json().catch(() => ({}));
+
+      let reply =
+        data?.response ||
+        data?.message ||
+        data?.result ||
+        data?.text ||
+        data?.content ||
+        data?.answer ||
+        JSON.stringify(data) ||
+        '';
+
+      reply = (reply || '').trim();
+
+      if (reply.length > 5) {
+        return reply;
+      }
+    } catch (err) {
+      // silent fail → try next
+    }
+  }
+
+  throw new Error('All APIs failed');
 }
 
 // ─── Main Handler ──────────────────────────────────────────────────────────
@@ -73,64 +117,37 @@ async function handleChatbotMessage(sock, chatId, message) {
 
     await sock.sendPresenceUpdate('composing', chatId);
 
-    // Build full prompt: system + short history + current message
+    // Optional: very basic history (remove the next 5 lines if you want pure single-turn)
     state.memory[chatId] = state.memory[chatId] || [];
     const historyStr = state.memory[chatId].slice(-4).map(m => 
-      m.role === 'user' ? `User: ${m.content}` : `Mickdady: ${m.content}`
+      m.role === 'user' ? m.content : m.content
     ).join('\n');
+    const fullPrompt = historyStr ? `\( {historyStr}\n \){userText}` : userText;
 
-    const fullPrompt = `\( {SYSTEM_PREFIX}\n\n \){historyStr ? historyStr + '\n' : ''}User: ${userText}\nMickdady:`;
+    // Call API(s)
+    const reply = await tryFetchWithFallbacks(fullPrompt);
 
-    // Call the single API
-    const url = API_URL_TEMPLATE(fullPrompt);
-    const res = await fetch(url, {
-      method: 'GET',
-      signal: AbortSignal.timeout(15000)
-    });
+    // Minimal cleaning
+    let cleanReply = reply.trim();
 
-    if (!res.ok) {
-      throw new Error(`API status ${res.status}`);
+    if (!cleanReply) {
+      cleanReply = "Sijapata jibu poa... jaribu tena?";
     }
 
-    const data = await res.json();
-    
-    // Try to extract reply (these APIs return different fields)
-    let reply = 
-      data?.response ||
-      data?.message ||
-      data?.result ||
-      data?.text ||
-      data?.content ||
-      data?.answer ||
-      JSON.stringify(data) ||
-      '';
+    await sock.sendMessage(chatId, { text: cleanReply }, { quoted: message });
 
-    reply = reply.trim();
-
-    // Clean up a bit
-    reply = reply
-      .replace(/^Mickdady:\s*/i, '')
-      .replace(/\[.*?\]/g, '')
-      .trim();
-
-    if (!reply || reply.length < 8) {
-      reply = "Aisee bro, nimekosa mawazo kidogo... sema tena? 😅";
-    }
-
-    await sock.sendMessage(chatId, { text: reply }, { quoted: message });
-
-    // Save memory
+    // Optional memory save (remove these 4 lines if you don't want memory)
     state.memory[chatId].push({ role: 'user', content: userText });
-    state.memory[chatId].push({ role: 'assistant', content: reply });
+    state.memory[chatId].push({ role: 'assistant', content: cleanReply });
     saveState(state);
 
   } catch (err) {
-    console.error('[Chatbot Error]', chatId, err.message);
+    // Very neutral fallback (no persona)
     const fallbacks = [
-      "Bro net inakata ama API imechill 😭 Jaribu tena kidogo!",
-      "Kuna shida kidogo na connection... Mickdady ako offline sekunde 🔥",
-      "Aisee nimehang kidogo 😂 Sema tena tu bro 😏",
-      "Hapo nimekosa signal... nikuambie nini kingine?"
+      "Kuna shida kidogo na connection...",
+      "Jaribu tena baadaye...",
+      "Sijapata jibu sasa...",
+      "Network inakata kidogo..."
     ];
     const randomFall = fallbacks[Math.floor(Math.random() * fallbacks.length)];
     await sock.sendMessage(chatId, { text: randomFall }, { quoted: message });
@@ -150,18 +167,18 @@ async function groupChatbotToggleCommand(sock, chatId, message, args = '') {
       else return sock.sendMessage(chatId, { text: 'Tumia: .chatbot private on | off' });
 
       saveState(state);
-      return sock.sendMessage(chatId, { text: `Chatbot binafsi: **${state.private ? 'IMEWASHA 🔥' : 'IMEZIMWA'}**` });
+      return sock.sendMessage(chatId, { text: `Chatbot binafsi: **${state.private ? 'ON' : 'OFF'}**` });
     }
 
     if (!chatId.endsWith('@g.us')) {
-      return sock.sendMessage(chatId, { text: 'Amri hii ni ya group tu.' });
+      return sock.sendMessage(chatId, { text: 'Tumia hii kwenye group.' });
     }
 
     const sender = message.key.participant || message.key.remoteJid;
     const { isSenderAdmin } = await isAdmin(sock, chatId, sender);
 
     if (!isSenderAdmin && !message.key.fromMe) {
-      return sock.sendMessage(chatId, { text: 'Admins pekee wanaweza kuwasha/zima.' });
+      return sock.sendMessage(chatId, { text: 'Admins tu wanaweza.' });
     }
 
     if (arg === 'on') {
@@ -173,11 +190,10 @@ async function groupChatbotToggleCommand(sock, chatId, message, args = '') {
     }
 
     saveState(state);
-    await sock.sendMessage(chatId, { text: `Group chatbot: **${state.perGroup[chatId].enabled ? 'IMEWASHA 🔥' : 'IMEZIMWA'}**` });
+    await sock.sendMessage(chatId, { text: `Group chatbot: **${state.perGroup[chatId].enabled ? 'ON' : 'OFF'}**` });
 
   } catch (e) {
-    console.error('[Toggle Error]', e);
-    await sock.sendMessage(chatId, { text: 'Kuna hitilafu kidogo 😓' });
+    await sock.sendMessage(chatId, { text: 'Amri haikufanikiwa.' });
   }
 }
 
