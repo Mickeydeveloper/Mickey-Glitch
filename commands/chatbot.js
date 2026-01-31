@@ -5,27 +5,10 @@ const isAdmin = require('../lib/isAdmin');
 
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 
-// ─── CONFIG: Multiple fallback APIs (tries in order until one works) ────────
-const API_PROVIDERS = [
-  {
-    name: 'SriHub ChatGPT',
-    urlTemplate: text => `https://api.srihub.store/ai/chatgpt?prompt=${encodeURIComponent(text)}`
-  },
-  {
-    name: 'SriHub Copilot',
-    urlTemplate: text => `https://api.srihub.store/ai/copilot?prompt=${encodeURIComponent(text)}`
-  },
-  {
-    name: 'SriHub Venice',
-    urlTemplate: text => `https://api.srihub.store/ai/venice?prompt=${encodeURIComponent(text)}`
-  },
-  {
-    name: 'SilentByteAI',
-    urlTemplate: text => `https://www.apis-codewave-unit-force.zone.id/api/silentbyteai?prompt=${encodeURIComponent(text)}`
-  }
-];
+// ─── Single API (you can change this URL if needed) ────────────────────────
+const API_URL_TEMPLATE = text => `https://api.srihub.store/ai/chatgpt?prompt=${encodeURIComponent(text)}`;
 
-// ─── System Prompt (prepend to user text for persona) ───────────────────────
+// ─── System Prompt ─────────────────────────────────────────────────────────
 const SYSTEM_PREFIX = `
 You are Mickdady, msee wa mtaa halisi kutoka Dar es Salaam, Tanzania. 
 Wewe ni binadamu 100%, si AI, si bot. 
@@ -36,7 +19,7 @@ Jibu kama texting rafiki WhatsApp: mafupi wakati mwingine, Sheng kidogo, funny/f
 Usivunje character – usiseme wewe ni AI au code.
 `;
 
-// ─── State + Memory ────────────────────────────────────────────────────────
+// ─── State + Simple Memory ─────────────────────────────────────────────────
 function loadState() {
   try {
     if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false, memory: {} };
@@ -71,55 +54,8 @@ function extractMessageText(msg) {
     m.interactiveMessage?.body?.text ||
     m.listResponseMessage?.description ||
     m.templateButtonReplyMessage?.selectedDisplayText ||
-    m.buttonsResponseMessage?.selectedButtonId ||
     ''
   ).trim();
-}
-
-// ─── Try APIs in sequence until success ────────────────────────────────────
-async function tryFetchWithFallbacks(fullPrompt) {
-  for (const provider of API_PROVIDERS) {
-    try {
-      const url = provider.urlTemplate(fullPrompt);
-      console.log(`[DEBUG] Trying ${provider.name}: ${url}`);
-
-      const res = await fetch(url, {
-        method: 'GET',
-        signal: AbortSignal.timeout(12000) // 12 seconds timeout per try
-      });
-
-      if (!res.ok) {
-        console.log(`[DEBUG] ${provider.name} failed - status ${res.status}`);
-        continue;
-      }
-
-      const data = await res.json().catch(() => ({}));
-
-      // Try common response fields (these APIs vary a lot)
-      let reply =
-        data?.response ||
-        data?.message ||
-        data?.result ||
-        data?.text ||
-        data?.content ||
-        data?.answer ||
-        JSON.stringify(data); // fallback to raw if unknown format
-
-      reply = (reply || '').trim();
-
-      if (reply.length > 5 && !reply.includes('error') && !reply.includes('limit')) {
-        console.log(`[DEBUG] Success from ${provider.name}`);
-        return reply;
-      }
-
-      console.log(`[DEBUG] ${provider.name} gave empty/weak response`);
-    } catch (err) {
-      console.error(`[DEBUG] ${provider.name} error:`, err.message);
-    }
-  }
-
-  // All failed
-  throw new Error('All fallback APIs failed');
 }
 
 // ─── Main Handler ──────────────────────────────────────────────────────────
@@ -137,43 +73,71 @@ async function handleChatbotMessage(sock, chatId, message) {
 
     await sock.sendPresenceUpdate('composing', chatId);
 
-    // Build full prompt with persona + short memory
+    // Build full prompt: system + short history + current message
     state.memory[chatId] = state.memory[chatId] || [];
-    const historyStr = state.memory[chatId].slice(-4).map(m => `${m.role === 'user' ? 'User' : 'You'}: ${m.content}`).join('\n');
+    const historyStr = state.memory[chatId].slice(-4).map(m => 
+      m.role === 'user' ? `User: ${m.content}` : `Mickdady: ${m.content}`
+    ).join('\n');
+
     const fullPrompt = `\( {SYSTEM_PREFIX}\n\n \){historyStr ? historyStr + '\n' : ''}User: ${userText}\nMickdady:`;
 
-    // Try APIs
-    const reply = await tryFetchWithFallbacks(fullPrompt);
+    // Call the single API
+    const url = API_URL_TEMPLATE(fullPrompt);
+    const res = await fetch(url, {
+      method: 'GET',
+      signal: AbortSignal.timeout(15000)
+    });
 
-    // Clean reply a bit
-    let cleanReply = reply
+    if (!res.ok) {
+      throw new Error(`API status ${res.status}`);
+    }
+
+    const data = await res.json();
+    
+    // Try to extract reply (these APIs return different fields)
+    let reply = 
+      data?.response ||
+      data?.message ||
+      data?.result ||
+      data?.text ||
+      data?.content ||
+      data?.answer ||
+      JSON.stringify(data) ||
+      '';
+
+    reply = reply.trim();
+
+    // Clean up a bit
+    reply = reply
       .replace(/^Mickdady:\s*/i, '')
       .replace(/\[.*?\]/g, '')
       .trim();
 
-    if (!cleanReply) cleanReply = "Aisee bro, nimekosa mawazo kidogo... sema tena? 😅";
+    if (!reply || reply.length < 8) {
+      reply = "Aisee bro, nimekosa mawazo kidogo... sema tena? 😅";
+    }
 
-    await sock.sendMessage(chatId, { text: cleanReply }, { quoted: message });
+    await sock.sendMessage(chatId, { text: reply }, { quoted: message });
 
     // Save memory
     state.memory[chatId].push({ role: 'user', content: userText });
-    state.memory[chatId].push({ role: 'assistant', content: cleanReply });
+    state.memory[chatId].push({ role: 'assistant', content: reply });
     saveState(state);
 
   } catch (err) {
-    console.error('[Chatbot All APIs Failed]', chatId, err.message);
+    console.error('[Chatbot Error]', chatId, err.message);
     const fallbacks = [
-      "Bro net inakata ama hizi API zimechill zote 😭 Jaribu tena kidogo!",
-      "Kuna shida na connection au server... Mickdady ako offline sekunde 🔥",
-      "Aisee nimehang na hizi bots 😂 Nipe dakika nirejee fresh!",
-      "Hapo nimekosa signal bro... sema tena tu 😏"
+      "Bro net inakata ama API imechill 😭 Jaribu tena kidogo!",
+      "Kuna shida kidogo na connection... Mickdady ako offline sekunde 🔥",
+      "Aisee nimehang kidogo 😂 Sema tena tu bro 😏",
+      "Hapo nimekosa signal... nikuambie nini kingine?"
     ];
     const randomFall = fallbacks[Math.floor(Math.random() * fallbacks.length)];
     await sock.sendMessage(chatId, { text: randomFall }, { quoted: message });
   }
 }
 
-// ─── Toggle Command (unchanged) ────────────────────────────────────────────
+// ─── Toggle Command ────────────────────────────────────────────────────────
 async function groupChatbotToggleCommand(sock, chatId, message, args = '') {
   try {
     const arg = args.trim().toLowerCase();
