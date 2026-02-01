@@ -12,7 +12,14 @@ async function spotifyCommand(sock, chatId, message) {
         const query = rawText.slice(used.length).trim();
 
         if (!query) {
-            await sock.sendMessage(chatId, { text: 'Usage: .spotify <song/artist/keywords>\nExample: .spotify con calma' }, { quoted: message });
+            await sock.sendMessage(chatId, { text: 'Usage: .spotify <spotify_url>\nExample: .spotify https://open.spotify.com/track/...' }, { quoted: message });
+            return;
+        }
+
+        // Ensure caller provided a Spotify URL (the downstream API expects a URL)
+        const isSpotifyUrl = /^(spotify:|https?:\/\/(open\.)?spotify\.com)\/?.+/i.test(query) || /spotify:track:/i.test(query);
+        if (!isSpotifyUrl) {
+            await sock.sendMessage(chatId, { text: 'Please provide a valid Spotify URL (track/album/playlist).\nExample: .spotify https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6' }, { quoted: message });
             return;
         }
 
@@ -48,7 +55,13 @@ async function spotifyCommand(sock, chatId, message) {
 
     } catch (error) {
         console.error('[SPOTIFY] error:', error?.message || error);
-        await sock.sendMessage(chatId, { text: 'Failed to fetch Spotify audio. Try another query later.' }, { quoted: message });
+        if (error?.response) {
+            console.error('[SPOTIFY] response status:', error.response.status);
+            console.error('[SPOTIFY] response data:', error.response.data);
+        }
+        const status = error?.response?.status;
+        const statusText = status ? ` (status ${status})` : '';
+        await sock.sendMessage(chatId, { text: `Failed to fetch Spotify audio${statusText}. Ensure you provided a valid Spotify URL, or try again later.` }, { quoted: message });
     }
 }
 
