@@ -16,7 +16,7 @@ async function spotifyCommand(sock, chatId, message) {
             return;
         }
 
-        const apiUrl = `https://okatsu-rolezapiiz.vercel.app/search/spotify?q=${encodeURIComponent(query)}`;
+        const apiUrl = `https://api.vreden.my.id/api/v1/download/spotify?url=${encodeURIComponent(query)}`;
         const { data } = await axios.get(apiUrl, { timeout: 20000, headers: { 'user-agent': 'Mozilla/5.0' } });
 
         if (!data?.status || !data?.result) {
