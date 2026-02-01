@@ -16,6 +16,13 @@ async function songCommand(sock, chatId, message) {
 
     await sock.sendMessage(chatId, { text: `> _*Searching and processing: ${title}*_` }, { quoted: message });
 
+    // Immediate lightweight reaction to acknowledge the command (emoji)
+    try {
+      await sock.sendMessage(chatId, { react: { text: '🎵', key: message.key } });
+    } catch (e) {
+      // ignore reaction errors
+    }
+
     // Search YouTube
     const searchUrl = 'https://www.googleapis.com/youtube/v3/search';
     const { data: searchData } = await axios.get(searchUrl, {
@@ -45,17 +52,23 @@ async function songCommand(sock, chatId, message) {
 
     if (!downloadUrl) throw new Error('Failed to get audio from FastAPI downloader.');
 
-    // Try to fetch content-length for nicer UI (optional)
+    // Try to surface size from FastAPI response if present (avoid extra HEAD request for speed)
     let sizeText = '';
     try {
-      const head = await axios.head(downloadUrl, { timeout: 10000 });
-      const len = head.headers['content-length'] || head.headers['Content-Length'];
-      if (len) {
-        const mb = (Number(len) / 1024 / 1024).toFixed(2);
+      const sizeCandidates = [
+        data?.results?.size,
+        data?.results?.filesize,
+        data?.results?.filesizeBytes,
+        data?.size,
+        data?.filesize
+      ];
+      const found = sizeCandidates.find(s => s && !isNaN(Number(s)));
+      if (found) {
+        const mb = (Number(found) / 1024 / 1024).toFixed(2);
         sizeText = `• Size: ${mb} MB`;
       }
     } catch (e) {
-      // ignore head errors — not critical
+      // ignore
     }
 
     // Build a clean, short title for captions and filename
@@ -66,13 +79,7 @@ async function songCommand(sock, chatId, message) {
     // Create a nicer caption with bullets and attribution
     const caption = `🎵 *${displayTitle}*\n\n🔗 ${videoUrl}\n${sizeText ? `${sizeText}\n` : ''}\n📥 Converting to MP3 and sending...\n\n> Powered by ${OWNER_NAME} Tech`;
 
-    // Buttons for quick actions (clients using Baileys support `buttons`)
-    const buttons = [
-      { buttonId: `.play ${displayTitle}`, buttonText: { displayText: '🔊 Play' }, type: 1 },
-      { buttonId: `.song ${displayTitle}`, buttonText: { displayText: '⬇️ Download' }, type: 1 }
-    ];
-
-    // Send thumbnail with rich preview (externalAdReply) and buttons
+    // Send a single thumbnail message with WhatsApp-style preview (externalAdReply)
     if (thumbnail) {
       await sock.sendMessage(chatId, {
         image: { url: thumbnail },
@@ -87,14 +94,10 @@ async function songCommand(sock, chatId, message) {
             showAdAttribution: false
           }
         },
-        buttons,
         headerType: 4
       }, { quoted: message });
     } else {
-      await sock.sendMessage(chatId, {
-        text: caption,
-        buttons,
-      }, { quoted: message });
+      await sock.sendMessage(chatId, { text: caption }, { quoted: message });
     }
 
     // Send audio via URL with sanitized filename
