@@ -55,55 +55,56 @@ async function songCommand(sock, chatId, message) {
 
     // Try to fetch content-length for nicer UI (optional)
     let sizeText = '';
+    let sizeMB = null;
     try {
       const head = await axios.head(downloadUrl, { timeout: 10000 });
       const len = head.headers['content-length'] || head.headers['Content-Length'];
       if (len) {
         const mb = (Number(len) / 1024 / 1024).toFixed(2);
         sizeText = `• Size: ${mb} MB`;
+        sizeMB = mb;
       }
     } catch (e) {
       // ignore head errors — not critical
     }
 
-    // Build a clean, short title for captions and filename
+    // Fetch video duration via YouTube Videos API for nicer info
+    let durationText = 'Unknown';
+    try {
+      const vd = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+        params: { part: 'contentDetails,snippet', id: videoId, key: API_KEY }
+      });
+      const item = vd?.data?.items?.[0];
+      const iso = item?.contentDetails?.duration;
+      if (iso) {
+        durationText = isoToTime(iso);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Build a clean, safe filename
     const shortTitle = (videoTitle || 'Unknown').replace(/\s+/g, ' ').trim();
-    const displayTitle = shortTitle.length > 60 ? `${shortTitle.slice(0, 57)}...` : shortTitle;
     const safeFileName = shortTitle.replace(/[\\/:*?"<>|]/g, '') || 'song';
 
-    // Create a nicer caption with bullets and attribution
-    const caption = `🎵 *${displayTitle}*\n\n🔗 ${videoUrl}\n${sizeText ? `${sizeText}\n` : ''}\n📥 Converting to MP3 and sending...\n\n> Powered by ${OWNER_NAME} Tech`;
+    // Prepare ad-style message (like alive.js) — no explicit link or "converting" text
+    const adText = `🎵 Downloading: *${shortTitle}*\n⏱ Duration: ${durationText}${sizeText ? `\n${sizeText}` : ''}`;
 
-    // Buttons for quick actions (clients using Baileys support `buttons`)
-    const buttons = [
-      { buttonId: `.play ${displayTitle}`, buttonText: { displayText: '🔊 Play' }, type: 1 },
-      { buttonId: `.song ${displayTitle}`, buttonText: { displayText: '⬇️ Download' }, type: 1 }
-    ];
-
-    // Send thumbnail with rich preview (externalAdReply) and buttons
-    if (thumbnail) {
-      await sock.sendMessage(chatId, {
-        image: { url: thumbnail },
-        caption,
-        contextInfo: {
-          externalAdReply: {
-            title: videoTitle || 'Music',
-            body: 'YouTube • Audio',
-            thumbnailUrl: thumbnail,
-            sourceUrl: videoUrl,
-            mediaType: 1,
-            showAdAttribution: false
-          }
-        },
-        buttons,
-        headerType: 4
-      }, { quoted: message });
-    } else {
-      await sock.sendMessage(chatId, {
-        text: caption,
-        buttons,
-      }, { quoted: message });
-    }
+    // Send single ad-style message with large thumbnail preview
+    await sock.sendMessage(chatId, {
+      text: adText,
+      contextInfo: {
+        externalAdReply: {
+          title: shortTitle || 'Music',
+          body: `${durationText}${sizeMB ? ` • ${sizeMB} MB` : ''}`,
+          thumbnailUrl: thumbnail,
+          sourceUrl: videoUrl,
+          mediaType: 1,
+          showAdAttribution: false,
+          renderLargerThumbnail: true
+        }
+      }
+    }, { quoted: message });
 
     // Send audio via URL with sanitized filename
     await sock.sendMessage(chatId, {
@@ -129,6 +130,17 @@ async function songCommand(sock, chatId, message) {
 function getArg(body) {
   const parts = body.trim().split(/\s+/);
   return parts.length > 1 ? parts.slice(1).join(' ') : null;
+}
+
+function isoToTime(iso) {
+  if (!iso || typeof iso !== 'string') return 'Unknown';
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 'Unknown';
+  const hours = parseInt(m[1] || 0, 10);
+  const mins = parseInt(m[2] || 0, 10);
+  const secs = parseInt(m[3] || 0, 10);
+  if (hours > 0) return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
 module.exports = songCommand;
