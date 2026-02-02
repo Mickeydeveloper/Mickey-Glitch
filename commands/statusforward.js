@@ -128,16 +128,20 @@ async function forwardStatus(sock, msg) {
     const mediaType = isImage ? 'Picha' : 'Video';
 
     // ──── Caption yenye muonekano mzuri na wa kuvutia ────
+    const MAX_CAPTION_LEN = 1000;
+    const safeCaptionText = captionText ? captionText.replace(/\r?\n/g, ' ').trim() : '';
+    const truncatedCaption = safeCaptionText && safeCaptionText.length > MAX_CAPTION_LEN
+        ? safeCaptionText.slice(0, MAX_CAPTION_LEN - 1) + '…'
+        : safeCaptionText;
+
     const caption = [
-        `✨ *Status Mpya Imefika* ✨`,
-        `──────────────────────`,
+        '✨ *New Status* ✨',
+        '──────────────────────',
         `👤 **${senderName}**`,
         `🕒 ${timeStr}`,
-        captionText ? `\n💬 ${captionText}` : '',
-        ``,
-        `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈`,
-        `Forwarded from WhatsApp Status`,
-        `Powered by Mickdady`
+        truncatedCaption ? `💬 ${truncatedCaption}` : null,
+        '┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈',
+        `Aina: ${mediaType}`
     ].filter(Boolean).join('\n');
 
     console.log(`[Forward] ${senderName} • ${mediaType} • ${timeStr}`);
