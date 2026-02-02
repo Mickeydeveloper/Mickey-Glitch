@@ -2,24 +2,25 @@ const axios = require('axios');
 const config = require('../config.js');
 
 const OWNER_NAME =
-  (config && config.OWNER_NAME) ||
+  config?.OWNER_NAME ||
   process.env.OWNER_NAME ||
   'Mickey';
 
-const API_KEY =
+const YT_API_KEY =
   process.env.YOUTUBE_API_KEY ||
   'AIzaSyDV11sdmCCdyyToNU-XRFMbKgAA4IEDOS0';
 
-// Main API + fallback
-const FASTAPI_PRIMARY =
+// FASTAPI PRIMARY ONLY
+const FASTAPI_URL =
   process.env.FASTAPI_URL ||
   'https://api.danscot.dev/api';
 
-const FASTAPI_FALLBACK =
-  'https://api.vreden.my.id/api/v1/download/play/audio';
+// Optional downloader API key
+const FASTAPI_KEY =
+  process.env.FASTAPI_KEY || null;
 
 /**
- * SONG COMMAND
+ * PLAY SONG COMMAND
  */
 async function songCommand(sock, chatId, message) {
   const textBody =
@@ -37,7 +38,7 @@ async function songCommand(sock, chatId, message) {
       );
     }
 
-    // Reaction (best effort)
+    // Reaction (safe)
     try {
       await sock.sendMessage(chatId, {
         react: { text: '🔎', key: message.key }
@@ -50,7 +51,7 @@ async function songCommand(sock, chatId, message) {
       { quoted: message }
     );
 
-    /* ---------------- YOUTUBE SEARCH ---------------- */
+    /* ─────── YouTube Search ─────── */
     const searchRes = await axios.get(
       'https://www.googleapis.com/youtube/v3/search',
       {
@@ -59,14 +60,14 @@ async function songCommand(sock, chatId, message) {
           q: title,
           type: 'video',
           maxResults: 1,
-          key: API_KEY
+          key: YT_API_KEY
         },
         timeout: 20000
       }
     );
 
     const video = searchRes.data?.items?.[0];
-    if (!video) throw new Error('No video found');
+    if (!video) throw new Error('No results found');
 
     const videoId = video.id.videoId;
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -75,10 +76,10 @@ async function songCommand(sock, chatId, message) {
       video.snippet.thumbnails?.high?.url ||
       video.snippet.thumbnails?.default?.url;
 
-    /* ---------------- DOWNLOAD AUDIO ---------------- */
-    const downloadUrl = await getAudioUrl(videoUrl);
+    /* ─────── FASTAPI DOWNLOAD ─────── */
+    const downloadUrl = await getAudioFromFastAPI(videoUrl);
 
-    /* ---------------- VIDEO DURATION ---------------- */
+    /* ─────── Duration ─────── */
     let durationText = 'Unknown';
     try {
       const vd = await axios.get(
@@ -87,7 +88,7 @@ async function songCommand(sock, chatId, message) {
           params: {
             part: 'contentDetails',
             id: videoId,
-            key: API_KEY
+            key: YT_API_KEY
           }
         }
       );
@@ -95,12 +96,12 @@ async function songCommand(sock, chatId, message) {
       if (iso) durationText = isoToTime(iso);
     } catch {}
 
-    /* ---------------- FILE NAME ---------------- */
+    /* ─────── File name ─────── */
     const safeName = videoTitle
       .replace(/[\\/:*?"<>|]/g, '')
       .slice(0, 80);
 
-    /* ---------------- INFO MESSAGE ---------------- */
+    /* ─────── Info message ─────── */
     await sock.sendMessage(
       chatId,
       {
@@ -119,7 +120,7 @@ async function songCommand(sock, chatId, message) {
       { quoted: message }
     );
 
-    /* ---------------- SEND AUDIO ---------------- */
+    /* ─────── Send Audio ─────── */
     await sock.sendMessage(
       chatId,
       {
@@ -141,11 +142,10 @@ async function songCommand(sock, chatId, message) {
   } catch (err) {
     console.error('❌ PLAY ERROR:', err);
 
-    const msg =
-      err.message.includes('server') ||
-      err.message.includes('Downloader')
-        ? '❌ Music server busy. Try again later.'
-        : '❌ Failed to play this song.';
+    let msg = '❌ Failed to play this song.';
+    if (err.message.includes('server')) {
+      msg = '❌ Music server busy. Try again later.';
+    }
 
     await sock.sendMessage(
       chatId,
@@ -156,44 +156,43 @@ async function songCommand(sock, chatId, message) {
 }
 
 /* ======================================================
-   AUDIO FETCHER (PRIMARY + FALLBACK)
+   FASTAPI AUDIO FETCHER (PRIMARY ONLY)
 ====================================================== */
-async function getAudioUrl(videoUrl) {
-  // 1️⃣ PRIMARY API
+async function getAudioFromFastAPI(videoUrl) {
   try {
     const res = await axios.get(
-      `${FASTAPI_PRIMARY}/youtube/downl`,
+      `${FASTAPI_URL}/youtube/downl`,
       {
-        params: { url: videoUrl, fmt: 'mp3' },
-        timeout: 60000,
+        params: {
+          url: videoUrl,
+          fmt: 'mp3',
+          ...(FASTAPI_KEY ? { key: FASTAPI_KEY } : {})
+        },
         headers: {
           'User-Agent': 'Mozilla/5.0',
           Accept: 'application/json'
-        }
+        },
+        timeout: 60000
       }
     );
 
-    const url =
+    const downloadUrl =
       res.data?.results?.download_url ||
       res.data?.results?.download ||
       res.data?.download_url;
 
-    if (url) return url;
-    throw new Error('Primary downloader failed');
-  } catch (e) {
-    console.warn('⚠️ Primary API failed, using fallback');
+    if (!downloadUrl) {
+      throw new Error('Downloader response invalid');
+    }
+
+    return downloadUrl;
+
+  } catch (err) {
+    if (err.response?.status === 500) {
+      throw new Error('Music server error');
+    }
+    throw new Error('Downloader not responding');
   }
-
-  // 2️⃣ FALLBACK API
-  const fallback = await axios.get(FASTAPI_FALLBACK, {
-    params: { query: videoUrl },
-    timeout: 60000
-  });
-
-  const fbUrl = fallback.data?.data?.download_url;
-  if (!fbUrl) throw new Error('Downloader server error');
-
-  return fbUrl;
 }
 
 /* ======================================================
