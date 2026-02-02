@@ -2,25 +2,28 @@ const axios = require('axios');
 const config = require('../config.js');
 
 const OWNER_NAME =
-  config?.OWNER_NAME ||
+  (config && config.OWNER_NAME) ||
   process.env.OWNER_NAME ||
   'Mickey';
 
-const YT_API_KEY =
+const API_KEY =
   process.env.YOUTUBE_API_KEY ||
   'AIzaSyDV11sdmCCdyyToNU-XRFMbKgAA4IEDOS0';
 
-// FASTAPI PRIMARY ONLY
-const FASTAPI_URL =
-  process.env.FASTAPI_URL ||
-  'https://api.danscot.dev/api';
-
-// Optional downloader API key
-const FASTAPI_KEY =
-  process.env.FASTAPI_KEY || null;
+/* ======================================================
+   MULTI MP3 APIS (FAST RACE)
+====================================================== */
+const MP3_APIS = [
+  url => `https://apis-malvin.vercel.app/download/dlmp3?url=${url}`,
+  url => `https://apis.davidcyriltech.my.id/youtube/mp3?url=${url}`,
+  url => `https://api.ryzendesu.vip/api/downloader/ytmp3?url=${url}`,
+  url => `https://api.dreaded.site/api/ytdl/audio?url=${url}`,
+  url => `https://jawad-tech.vercel.app/download/ytmp3?url=${url}`,
+  url => `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=${url}`
+];
 
 /**
- * PLAY SONG COMMAND
+ * SONG COMMAND
  */
 async function songCommand(sock, chatId, message) {
   const textBody =
@@ -33,12 +36,12 @@ async function songCommand(sock, chatId, message) {
     if (!title) {
       return sock.sendMessage(
         chatId,
-        { text: '❌ Please provide a song name.' },
+        { text: '❌ Please provide a video title.' },
         { quoted: message }
       );
     }
 
-    // Reaction (safe)
+    // React (safe)
     try {
       await sock.sendMessage(chatId, {
         react: { text: '🔎', key: message.key }
@@ -47,12 +50,12 @@ async function songCommand(sock, chatId, message) {
 
     await sock.sendMessage(
       chatId,
-      { text: `🔎 Searching: *${title}*` },
+      { text: `🔎 Searching for: *${title}*` },
       { quoted: message }
     );
 
     /* ─────── YouTube Search ─────── */
-    const searchRes = await axios.get(
+    const search = await axios.get(
       'https://www.googleapis.com/youtube/v3/search',
       {
         params: {
@@ -60,14 +63,14 @@ async function songCommand(sock, chatId, message) {
           q: title,
           type: 'video',
           maxResults: 1,
-          key: YT_API_KEY
+          key: API_KEY
         },
-        timeout: 20000
+        timeout: 15000
       }
     );
 
-    const video = searchRes.data?.items?.[0];
-    if (!video) throw new Error('No results found');
+    const video = search.data?.items?.[0];
+    if (!video) throw new Error('No video found');
 
     const videoId = video.id.videoId;
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -76,10 +79,10 @@ async function songCommand(sock, chatId, message) {
       video.snippet.thumbnails?.high?.url ||
       video.snippet.thumbnails?.default?.url;
 
-    /* ─────── FASTAPI DOWNLOAD ─────── */
-    const downloadUrl = await getAudioFromFastAPI(videoUrl);
+    /* ─────── FAST MP3 FETCH ─────── */
+    const downloadUrl = await fetchMp3Fast(videoUrl);
 
-    /* ─────── Duration ─────── */
+    /* ─────── Duration (optional) ─────── */
     let durationText = 'Unknown';
     try {
       const vd = await axios.get(
@@ -88,7 +91,7 @@ async function songCommand(sock, chatId, message) {
           params: {
             part: 'contentDetails',
             id: videoId,
-            key: YT_API_KEY
+            key: API_KEY
           }
         }
       );
@@ -96,12 +99,11 @@ async function songCommand(sock, chatId, message) {
       if (iso) durationText = isoToTime(iso);
     } catch {}
 
-    /* ─────── File name ─────── */
     const safeName = videoTitle
       .replace(/[\\/:*?"<>|]/g, '')
       .slice(0, 80);
 
-    /* ─────── Info message ─────── */
+    /* ─────── Info Message ─────── */
     await sock.sendMessage(
       chatId,
       {
@@ -132,7 +134,6 @@ async function songCommand(sock, chatId, message) {
       { quoted: message }
     );
 
-    // Success reaction
     try {
       await sock.sendMessage(chatId, {
         react: { text: '✅', key: message.key }
@@ -141,58 +142,45 @@ async function songCommand(sock, chatId, message) {
 
   } catch (err) {
     console.error('❌ PLAY ERROR:', err);
-
-    let msg = '❌ Failed to play this song.';
-    if (err.message.includes('server')) {
-      msg = '❌ Music server busy. Try again later.';
-    }
-
     await sock.sendMessage(
       chatId,
-      { text: msg },
+      { text: '❌ Failed to play this song. Try again.' },
       { quoted: message }
     );
   }
 }
 
 /* ======================================================
-   FASTAPI AUDIO FETCHER (PRIMARY ONLY)
+   FAST MULTI-API RACE (FIRST SUCCESS WINS)
 ====================================================== */
-async function getAudioFromFastAPI(videoUrl) {
-  try {
-    const res = await axios.get(
-      `${FASTAPI_URL}/youtube/downl`,
-      {
-        params: {
-          url: videoUrl,
-          fmt: 'mp3',
-          ...(FASTAPI_KEY ? { key: FASTAPI_KEY } : {})
-        },
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-          Accept: 'application/json'
-        },
-        timeout: 60000
-      }
-    );
+async function fetchMp3Fast(videoUrl) {
+  const requests = MP3_APIS.map(fn =>
+    axios
+      .get(fn(videoUrl), { timeout: 20000 })
+      .then(res => extractDownloadUrl(res.data))
+      .catch(() => null)
+  );
 
-    const downloadUrl =
-      res.data?.results?.download_url ||
-      res.data?.results?.download ||
-      res.data?.download_url;
+  const results = await Promise.all(requests);
+  const url = results.find(u => u && u.startsWith('http'));
 
-    if (!downloadUrl) {
-      throw new Error('Downloader response invalid');
-    }
+  if (!url) throw new Error('All MP3 servers failed');
+  return url;
+}
 
-    return downloadUrl;
-
-  } catch (err) {
-    if (err.response?.status === 500) {
-      throw new Error('Music server error');
-    }
-    throw new Error('Downloader not responding');
-  }
+/* ======================================================
+   RESPONSE PARSER (MULTI FORMAT)
+====================================================== */
+function extractDownloadUrl(data) {
+  return (
+    data?.result?.download_url ||
+    data?.result?.url ||
+    data?.data?.download ||
+    data?.data?.url ||
+    data?.download ||
+    data?.url ||
+    null
+  );
 }
 
 /* ======================================================
