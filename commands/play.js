@@ -1,146 +1,218 @@
 const axios = require('axios');
 const config = require('../config.js');
 
-const OWNER_NAME = (config && config.OWNER_NAME) || process.env.OWNER_NAME || 'Mickey';
-const API_KEY = process.env.YOUTUBE_API_KEY || 'AIzaSyDV11sdmCCdyyToNU-XRFMbKgAA4IEDOS0';
-const FASTAPI_URL = process.env.FASTAPI_URL || 'https://api.danscot.dev/api';
+const OWNER_NAME =
+  (config && config.OWNER_NAME) ||
+  process.env.OWNER_NAME ||
+  'Mickey';
 
+const API_KEY =
+  process.env.YOUTUBE_API_KEY ||
+  'AIzaSyDV11sdmCCdyyToNU-XRFMbKgAA4IEDOS0';
+
+// Main API + fallback
+const FASTAPI_PRIMARY =
+  process.env.FASTAPI_URL ||
+  'https://api.danscot.dev/api';
+
+const FASTAPI_FALLBACK =
+  'https://api.vreden.my.id/api/v1/download/play/audio';
+
+/**
+ * SONG COMMAND
+ */
 async function songCommand(sock, chatId, message) {
-  const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
+  const textBody =
+    message.message?.conversation ||
+    message.message?.extendedTextMessage?.text ||
+    '';
+
   try {
     const title = getArg(textBody);
     if (!title) {
-      await sock.sendMessage(chatId, { text: '❌ Please provide a video title.' }, { quoted: message });
-      return;
+      return sock.sendMessage(
+        chatId,
+        { text: '❌ Please provide a song name.' },
+        { quoted: message }
+      );
     }
 
-    // React to user's command to show processing (best-effort)
+    // Reaction (best effort)
     try {
-      await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
-    } catch (e) {
-      // ignore if not supported
-    }
+      await sock.sendMessage(chatId, {
+        react: { text: '🔎', key: message.key }
+      });
+    } catch {}
 
-    // Improved initial status message
-    await sock.sendMessage(chatId, { text: `🔎 Searching for: *${title}*\nPlease wait...` }, { quoted: message });
+    await sock.sendMessage(
+      chatId,
+      { text: `🔎 Searching: *${title}*` },
+      { quoted: message }
+    );
 
-    // Search YouTube
-    const searchUrl = 'https://www.googleapis.com/youtube/v3/search';
-    const { data: searchData } = await axios.get(searchUrl, {
-      params: { part: 'snippet', q: title, type: 'video', maxResults: 1, key: API_KEY },
-      timeout: 20000
-    });
+    /* ---------------- YOUTUBE SEARCH ---------------- */
+    const searchRes = await axios.get(
+      'https://www.googleapis.com/youtube/v3/search',
+      {
+        params: {
+          part: 'snippet',
+          q: title,
+          type: 'video',
+          maxResults: 1,
+          key: API_KEY
+        },
+        timeout: 20000
+      }
+    );
 
-    if (!searchData?.items || searchData.items.length === 0) {
-      throw new Error('No video found.');
-    }
+    const video = searchRes.data?.items?.[0];
+    if (!video) throw new Error('No video found');
 
-    const video = searchData.items[0];
-    const videoId = video.id?.videoId || (video.id && video.id);
+    const videoId = video.id.videoId;
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const videoTitle = video.snippet.title;
-    const thumbnail = video.snippet.thumbnails?.high?.url || video.snippet.thumbnails?.default?.url || null;
+    const thumbnail =
+      video.snippet.thumbnails?.high?.url ||
+      video.snippet.thumbnails?.default?.url;
 
-    // Call FastAPI downloader only
-    const apiUrl = `${FASTAPI_URL}/youtube/downl/`;
-    const { data } = await axios.get(apiUrl, { params: { url: videoUrl, fmt: 'mp3' }, timeout: 60000 });
+    /* ---------------- DOWNLOAD AUDIO ---------------- */
+    const downloadUrl = await getAudioUrl(videoUrl);
 
-    let downloadUrl = null;
-    if (data?.status === 'ok' && data?.results?.download_url) downloadUrl = data.results.download_url;
-    else if (data?.results?.download) downloadUrl = data.results.download;
-    else if (data?.download_url) downloadUrl = data.download_url;
-    else if (data?.data?.download_url) downloadUrl = data.data.download_url;
-
-    if (!downloadUrl) throw new Error('Failed to get audio from FastAPI downloader.');
-
-    // Try to fetch content-length for nicer UI (optional)
-    let sizeText = '';
-    let sizeMB = null;
-    try {
-      const head = await axios.head(downloadUrl, { timeout: 10000 });
-      const len = head.headers['content-length'] || head.headers['Content-Length'];
-      if (len) {
-        const mb = (Number(len) / 1024 / 1024).toFixed(2);
-        sizeText = `• Size: ${mb} MB`;
-        sizeMB = mb;
-      }
-    } catch (e) {
-      // ignore head errors — not critical
-    }
-
-    // Fetch video duration via YouTube Videos API for nicer info
+    /* ---------------- VIDEO DURATION ---------------- */
     let durationText = 'Unknown';
     try {
-      const vd = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
-        params: { part: 'contentDetails,snippet', id: videoId, key: API_KEY }
-      });
-      const item = vd?.data?.items?.[0];
-      const iso = item?.contentDetails?.duration;
-      if (iso) {
-        durationText = isoToTime(iso);
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    // Build a clean, safe filename
-    const shortTitle = (videoTitle || 'Unknown').replace(/\s+/g, ' ').trim();
-    const safeFileName = shortTitle.replace(/[\\/:*?"<>|]/g, '') || 'song';
-
-    // Prepare ad-style message (like alive.js) — no explicit link or "converting" text
-    const adText = `🎵 Downloading: *${shortTitle}*\n⏱ Duration: ${durationText}${sizeText ? `\n${sizeText}` : ''}`;
-
-    // Send single ad-style message with large thumbnail preview
-    await sock.sendMessage(chatId, {
-      text: adText,
-      contextInfo: {
-        externalAdReply: {
-          title: shortTitle || 'Music',
-          body: `${durationText}${sizeMB ? ` • ${sizeMB} MB` : ''}`,
-          thumbnailUrl: thumbnail,
-          sourceUrl: videoUrl,
-          mediaType: 1,
-          showAdAttribution: false,
-          renderLargerThumbnail: true
+      const vd = await axios.get(
+        'https://www.googleapis.com/youtube/v3/videos',
+        {
+          params: {
+            part: 'contentDetails',
+            id: videoId,
+            key: API_KEY
+          }
         }
-      }
-    }, { quoted: message });
+      );
+      const iso = vd.data?.items?.[0]?.contentDetails?.duration;
+      if (iso) durationText = isoToTime(iso);
+    } catch {}
 
-    // Send audio via URL with sanitized filename
-    await sock.sendMessage(chatId, {
-      audio: { url: downloadUrl },
-      mimetype: 'audio/mpeg',
-      fileName: `${safeFileName}.mp3`,
-      ptt: false
-    }, { quoted: message });
+    /* ---------------- FILE NAME ---------------- */
+    const safeName = videoTitle
+      .replace(/[\\/:*?"<>|]/g, '')
+      .slice(0, 80);
 
-    // Mark original command as completed (best-effort reaction)
+    /* ---------------- INFO MESSAGE ---------------- */
+    await sock.sendMessage(
+      chatId,
+      {
+        text: `🎵 *${videoTitle}*\n⏱ Duration: ${durationText}`,
+        contextInfo: {
+          externalAdReply: {
+            title: videoTitle,
+            body: `Requested by ${OWNER_NAME}`,
+            thumbnailUrl: thumbnail,
+            sourceUrl: videoUrl,
+            mediaType: 1,
+            renderLargerThumbnail: true
+          }
+        }
+      },
+      { quoted: message }
+    );
+
+    /* ---------------- SEND AUDIO ---------------- */
+    await sock.sendMessage(
+      chatId,
+      {
+        audio: { url: downloadUrl },
+        mimetype: 'audio/mpeg',
+        fileName: `${safeName}.mp3`,
+        ptt: false
+      },
+      { quoted: message }
+    );
+
+    // Success reaction
     try {
-      await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-    } catch (e) {
-      // ignore if not supported
-    }
+      await sock.sendMessage(chatId, {
+        react: { text: '✅', key: message.key }
+      });
+    } catch {}
 
   } catch (err) {
-    console.error('❌ Error in play command:', err?.message || err);
-    try { await sock.sendMessage(chatId, { text: `❌ Failed to play: ${err?.message || String(err)}` }, { quoted: message }); } catch (e) { }
+    console.error('❌ PLAY ERROR:', err);
+
+    const msg =
+      err.message.includes('server') ||
+      err.message.includes('Downloader')
+        ? '❌ Music server busy. Try again later.'
+        : '❌ Failed to play this song.';
+
+    await sock.sendMessage(
+      chatId,
+      { text: msg },
+      { quoted: message }
+    );
   }
 }
 
+/* ======================================================
+   AUDIO FETCHER (PRIMARY + FALLBACK)
+====================================================== */
+async function getAudioUrl(videoUrl) {
+  // 1️⃣ PRIMARY API
+  try {
+    const res = await axios.get(
+      `${FASTAPI_PRIMARY}/youtube/downl`,
+      {
+        params: { url: videoUrl, fmt: 'mp3' },
+        timeout: 60000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          Accept: 'application/json'
+        }
+      }
+    );
+
+    const url =
+      res.data?.results?.download_url ||
+      res.data?.results?.download ||
+      res.data?.download_url;
+
+    if (url) return url;
+    throw new Error('Primary downloader failed');
+  } catch (e) {
+    console.warn('⚠️ Primary API failed, using fallback');
+  }
+
+  // 2️⃣ FALLBACK API
+  const fallback = await axios.get(FASTAPI_FALLBACK, {
+    params: { query: videoUrl },
+    timeout: 60000
+  });
+
+  const fbUrl = fallback.data?.data?.download_url;
+  if (!fbUrl) throw new Error('Downloader server error');
+
+  return fbUrl;
+}
+
+/* ======================================================
+   HELPERS
+====================================================== */
 function getArg(body) {
   const parts = body.trim().split(/\s+/);
   return parts.length > 1 ? parts.slice(1).join(' ') : null;
 }
 
 function isoToTime(iso) {
-  if (!iso || typeof iso !== 'string') return 'Unknown';
   const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!m) return 'Unknown';
-  const hours = parseInt(m[1] || 0, 10);
-  const mins = parseInt(m[2] || 0, 10);
-  const secs = parseInt(m[3] || 0, 10);
-  if (hours > 0) return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  return `${mins}:${String(secs).padStart(2, '0')}`;
+  const h = +m[1] || 0;
+  const mnt = +m[2] || 0;
+  const s = +m[3] || 0;
+  return h
+    ? `${h}:${String(mnt).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${mnt}:${String(s).padStart(2, '0')}`;
 }
 
 module.exports = songCommand;
