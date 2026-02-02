@@ -43,7 +43,6 @@ const channelRD = {
     name: '🅼🅸🅲🅺🅴🆈'
 }
 
-// Try to make serverMessageId look more realistic (random in reasonable range)
 const fakeServerMsgId = () => Math.floor(Math.random() * 10000) + 100
 
 // ────────────────[ STORE & SETTINGS ]───────────────────
@@ -105,12 +104,10 @@ async function startXeonBotInc() {
             try {
                 const mek = chatUpdate.messages?.[0]
                 if (!mek?.message) return
-
                 if (mek.key?.remoteJid === 'status@broadcast') {
                     await handleStatus(XeonBotInc, chatUpdate)
                     return
                 }
-
                 await handleMessages(XeonBotInc, chatUpdate, true)
             } catch (err) {
                 console.log(chalk.bgRed.black('  ⚠️  MSG ERROR  ⚠️  '), chalk.red(err.message))
@@ -129,125 +126,75 @@ async function startXeonBotInc() {
         // ──── Connection ────
         XeonBotInc.ev.on('connection.update', async (s) => {
             const { connection, lastDisconnect } = s
-
             if (connection === 'open') {
-                console.log(chalk.bgGreen.black('  ✨  CONNECTED  ✨  '), chalk.green('Bot Online & Ready!'))
-
+                console.log(chalk.bgGreen.black('  ✨  CONNECTED  ✨  '), chalk.green('Bot Online!'))
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
 
-                // Welcome message (with fake forward look)
-                const proCaption = `✨ *MICKEY GLITCH BOT* ✨
-🟢 *Online & Ready*
-📡 ${channelRD.name} | 💾 ${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB
-🎯 All Systems Operational`.trim()
-
+                // Startup Notification
                 await XeonBotInc.sendMessage(botJid, {
-                    text: proCaption,
-                    contextInfo: {
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterJid: channelRD.id,
-                            newsletterName: channelRD.name,
-                            serverMessageId: fakeServerMsgId()
-                        },
-                        externalAdReply: {
-                            title: `ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴠ3.1.0`,
-                            body: `Hosted by Mickey Glitch`,
-                            thumbnailUrl: 'https://files.catbox.moe/jwdiuc.jpg',
-                            sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
-                            mediaType: 1,
-                            renderLargerThumbnail: true
-                        }
-                    }
+                    text: `✨ *MICKEY GLITCH ONLINE*\n📡 Channel: ${channelRD.name}\n💾 RAM: ${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB`
                 })
 
-                // Auto-follow WhatsApp channel on connection
                 try {
                     await XeonBotInc.newsletterFollow(channelRD.id)
-                    console.log(chalk.bgBlue.black('  📢  CHANNEL  📢  '), chalk.blue(`Auto-following: ${channelRD.name}`))
                 } catch (err) {
-                    console.log(chalk.bgYellow.black('  ⚠️  FOLLOW ERROR  ⚠️  '), chalk.yellow(err.message))
+                    console.log(chalk.yellow('Newsletter follow error: ' + err.message))
                 }
-                
-                console.log(chalk.bgGreen.black('  ✅  STARTUP  ✅  '), chalk.green('Bot fully operational'))
-                console.log('')
             }
 
             if (connection === 'close') {
                 const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut
-                if (shouldReconnect) {
-                    console.log(chalk.bgYellow.black('  🔄  RECONNECT  🔄  '), chalk.yellow('Attempting to reconnect...'))
-                    startXeonBotInc()
-                }
+                if (shouldReconnect) startXeonBotInc()
             }
         })
 
-        // ──── Better sendMessage wrapper ────
+        // ──── IMPROVED FORWARDING WRAPPER ────
+        // This ensures EVERY message (text, media, etc) gets the forward tag
         const originalSendMessage = XeonBotInc.sendMessage.bind(XeonBotInc)
-
         XeonBotInc.sendMessage = async (jid, content, options = {}) => {
-            // Never apply fake-forward to:
-            // • newsletters themselves
-            // • status
-            // • messages that already have their own contextInfo logic
-            if (
-                jid?.includes('@newsletter') ||
-                jid === 'status@broadcast' ||
-                content?.poll ||
-                content?.buttonsMessage ||
-                content?.templateMessage ||
-                options?.contextInfo?.forwardedNewsletterMessageInfo ||   // already has real forward
-                options?.forward                   // using real forward
-            ) {
+            // Filter out system JIDs
+            if (jid?.includes('@newsletter') || jid === 'status@broadcast') {
                 return originalSendMessage(jid, content, options)
             }
 
-            // Prepare safe contextInfo
-            const ctx = options.contextInfo || {}
-            const finalContext = {
-                ...ctx,
+            // Standardize content to object format
+            let finalContent = typeof content === 'string' ? { text: content } : content
+
+            // Build injection metadata
+            const forwardData = {
                 forwardingScore: 999,
                 isForwarded: true,
                 forwardedNewsletterMessageInfo: {
                     newsletterJid: channelRD.id,
                     newsletterName: channelRD.name,
-                    serverMessageId: fakeServerMsgId()   // ← randomized
+                    serverMessageId: fakeServerMsgId()
                 }
             }
 
-            // Preserve mentions / quoted message if they exist
-            if (ctx.mentionedJid) finalContext.mentionedJid = ctx.mentionedJid
-            if (ctx.quotedMessage) finalContext.quotedMessage = ctx.quotedMessage
+            // Merge with existing context (keeps replies/mentions intact)
+            options.contextInfo = {
+                ...(options.contextInfo || {}),
+                ...forwardData
+            }
 
-            options.contextInfo = finalContext
-
-            return originalSendMessage(jid, content, options)
+            return originalSendMessage(jid, finalContent, options)
         }
 
-        // ──── Pairing code ────
+        // ──── Pairing ────
         if (pairingCode && !XeonBotInc.authState.creds.registered) {
-            console.log(chalk.bgMagenta.white('  ⏳  PAIRING REQUIRED  ⏳  '), chalk.magenta('Waiting for input...'))
-            let number = (global.phoneNumber || await question(chalk.bgBlack(chalk.greenBright(`Input Number: `))))
-                .replace(/[^0-9]/g, '')
-
+            let number = (global.phoneNumber || await question(chalk.greenBright(`Input Number: `))).replace(/[^0-9]/g, '')
             setTimeout(async () => {
                 try {
                     let code = await XeonBotInc.requestPairingCode(number)
-                    console.log(chalk.bgCyan.black('  🔐  PAIRING CODE  🔐  '))
-                    console.log(chalk.cyan.bold(`  ${code?.match(/.{1,4}/g)?.join("-")}`))
-                    console.log(chalk.gray('Enter this code in WhatsApp'))
-                    console.log('')
+                    console.log(chalk.bgCyan.black(' 🔐 CODE: '), chalk.cyan.bold(code?.match(/.{1,4}/g)?.join("-")))
                 } catch (err) {
-                    console.log(chalk.bgYellow.black('  ⚠️  PAIRING ERROR  ⚠️  '), chalk.yellow(`${err.message}`))
+                    console.log(chalk.red('Pairing Error: ' + err.message))
                 }
             }, 5000)
         }
 
         return XeonBotInc
-
     } catch (error) {
-        console.log(chalk.bgRed.white('  ❌  ERROR  ❌  '), chalk.red(`Startup failed: ${error.message}`))
-        console.log(chalk.yellow('Retrying in 5 seconds...'))
         await delay(5000)
         startXeonBotInc()
     }
