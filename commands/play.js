@@ -2,93 +2,110 @@ const axios = require('axios');
 const yts = require('yt-search');
 
 /**
- * SONG COMMAND - Toleo la Subira (Haitoi Kosa Haraka)
+ * SONG COMMAND - MODERNISED & ULTRA-STABLE
+ * Kazi: Kutafuta na kutuma audio kutoka YouTube
  */
 async function songCommand(sock, chatId, message) {
+    // 1. Pata maelezo ya ombi
     const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
     const query = textBody.split(" ").slice(1).join(" ");
 
     if (!query) {
-        return sock.sendMessage(chatId, { text: '❌ Tafadhali andika jina la wimbo!' }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '❌ *Tafadhali andika jina la wimbo!* \n\nMfano: .song Love Nwantiti' }, { quoted: message });
     }
 
     try {
-        // 1. Tafuta Video
+        // Alama ya kutafuta
+        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
+
+        // 2. Tafuta video YouTube
         const search = await yts(query);
         const video = search.videos[0];
-        if (!video) return sock.sendMessage(chatId, { text: '❌ Wimbo haupatikani!' });
+
+        if (!video) {
+            return sock.sendMessage(chatId, { text: '❌ *Samahani, wimbo huo haujapatikana YouTube.*' }, { quoted: message });
+        }
 
         const videoUrl = video.url;
-        await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
-        
-        const statusMsg = await sock.sendMessage(chatId, { 
-            text: `⏳ *${video.title}*\n\nSeva inatayarisha audio yako. Tafadhali subiri kidogo...` 
-        }, { quoted: message });
+        const videoTitle = video.title;
 
-        // 2. Orodha ya API za Uhakika
-        const APIS = [
+        // Ujumbe wa kuanza download
+        const infoMessage = `🎵 *${videoTitle}*\n\n⏳ _Seva inatayarisha audio yako, tafadhali subiri kidogo..._`;
+        await sock.sendMessage(chatId, { text: infoMessage }, { quoted: message });
+
+        // 3. Orodha ya API za kudownload (Zimepangwa kwa ufanisi)
+        const DOWNLOAD_APIS = [
             `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=${encodeURIComponent(videoUrl)}`,
-            `https://apis-malvin.vercel.app/download/dlmp3?url=${encodeURIComponent(videoUrl)}`,
             `https://api.giftedtech.my.id/api/download/dlmp3?url=${encodeURIComponent(videoUrl)}`,
+            `https://apis-malvin.vercel.app/download/dlmp3?url=${encodeURIComponent(videoUrl)}`,
             `https://api.ryzendesu.vip/api/downloader/ytmp3?url=${encodeURIComponent(videoUrl)}`,
-            `https://api.dreaded.site/api/ytdl/audio?url=${encodeURIComponent(videoUrl)}`
+            `https://widipe.com/download/ytdl?url=${encodeURIComponent(videoUrl)}`
         ];
 
         let downloadUrl = null;
 
-        // 3. Mfumo wa Majaribio ya Kurudia (Retry System)
-        for (const api of APIS) {
-            let retries = 2; // Itajaribu kila seva mara 2 ikifeli
-            while (retries > 0 && !downloadUrl) {
-                try {
-                    const res = await axios.get(api, { 
-                        timeout: 80000, // Inasubiri hadi sekunde 80 (Zaidi ya dakika 1)
-                        headers: { 'User-Agent': 'Mozilla/5.0' }
-                    });
+        // 4. Mchakato wa kutafuta Link ya Audio (Retry Logic)
+        for (const api of DOWNLOAD_APIS) {
+            try {
+                // Tunapeana hadi sekunde 60 kwa kila API
+                const response = await axios.get(api, { 
+                    timeout: 60000,
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+                });
 
-                    const data = res.data;
-                    downloadUrl = data?.result?.download_url || data?.data?.download || data?.result?.url || data?.url || data?.result;
+                const data = response.data;
+                // Kuchuja link kulingana na muundo wa JSON wa API mbalimbali
+                downloadUrl = data?.result?.download_url || 
+                              data?.data?.download || 
+                              data?.result?.url || 
+                              data?.url || 
+                              data?.result ||
+                              data?.data?.mp3;
 
-                    if (downloadUrl && downloadUrl.startsWith('http')) break;
-                } catch (e) {
-                    retries--;
-                    if (retries > 0) await new Promise(resolve => setTimeout(resolve, 3000)); // Subiri sekunde 3 kabla ya kurudia
+                if (downloadUrl && downloadUrl.startsWith('http')) {
+                    break; // Tumefanikiwa kupata link!
                 }
+            } catch (err) {
+                console.log(`Seva ilifeli, tunajaribu seva nyingine...`);
+                continue; // Jaribu API inayofuata kwenye list
             }
-            if (downloadUrl) break;
         }
 
-        if (!downloadUrl) {
-            return sock.sendMessage(chatId, { text: '❌ Samahani, seva zote zimelemewa baada ya majaribio kadhaa. Jaribu tena baadae kidogo.' }, { quoted: message });
-        }
+        // 5. Kama tumepata Link, tuma Audio
+        if (downloadUrl) {
+            await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // 4. Tuma Audio (Inasubiri mpaka itume kikamilifu)
-        await sock.sendMessage(
-            chatId,
-            {
-                audio: { url: downloadUrl },
-                mimetype: 'audio/mpeg',
-                fileName: `${video.title}.mp3`,
-                contextInfo: {
-                    externalAdReply: {
-                        title: video.title,
-                        body: `Tayari kupakuliwa!`,
-                        thumbnailUrl: video.thumbnail,
-                        sourceUrl: videoUrl,
-                        mediaType: 1,
-                        renderLargerThumbnail: true
+            await sock.sendMessage(
+                chatId,
+                {
+                    audio: { url: downloadUrl },
+                    mimetype: 'audio/mpeg',
+                    fileName: `${videoTitle}.mp3`,
+                    contextInfo: {
+                        externalAdReply: {
+                            title: videoTitle,
+                            body: `Muda: ${video.timestamp} | Pakua Imekamilika`,
+                            thumbnailUrl: video.thumbnail,
+                            sourceUrl: videoUrl,
+                            mediaType: 1,
+                            renderLargerThumbnail: true
+                        }
                     }
-                }
-            },
-            { quoted: message }
-        );
+                },
+                { quoted: message }
+            );
 
-        // Futa reaction ya mwanzo na weka tiki
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+            // Alama ya kumaliza
+            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+        } else {
+            // Kama zote zimefeli
+            await sock.sendMessage(chatId, { text: '❌ *Seva zote za download ziko bize kwa sasa. Tafadhali jaribu tena baada ya muda mfupi.*' }, { quoted: message });
+            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+        }
 
-    } catch (err) {
-        console.error('Final Error Handler:', err);
-        await sock.sendMessage(chatId, { text: '❌ Imeshindikana kukamilisha ombi lako kwa sasa.' }, { quoted: message });
+    } catch (error) {
+        console.error('General Error:', error);
+        await sock.sendMessage(chatId, { text: '❌ *Hitilafu ya mfumo imetokea.*' }, { quoted: message });
     }
 }
 
