@@ -1,71 +1,90 @@
-const axios = require('axios');
-const yts = require('yt-search');
+import axios from 'axios';
+import { OWNER_NAME } from '../config.js';
 
-/**
- * SONG COMMAND - Rahisi na Yenye Ufanisi
- */
-async function songCommand(sock, chatId, message) {
-  // 1. Pata maneno yaliyoandikwa baada ya command
-  const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
-  const query = textBody.split(" ").slice(1).join(" ");
+const API_KEY = "AIzaSyDV11sdmCCdyyToNU-XRFMbKgAA4IEDOS0"; // YouTube Data API key
+const FASTAPI_URL = "https://api.danscot.dev/api"; // Your new API
 
-  if (!query) {
-    return sock.sendMessage(chatId, { text: '❌ Tafadhali andika jina la wimbo!' }, { quoted: message });
-  }
+export async function play(message, client) {
+  const remoteJid = message.key.remoteJid;
+  const messageBody = (message.message?.extendedTextMessage?.text || message.message?.conversation || '')
 
   try {
-    // 2. Search Video YouTube
-    const search = await yts(query);
-    const video = search.videos[0];
+    const title = getArg(messageBody);
 
-    if (!video) {
-      return sock.sendMessage(chatId, { text: '❌ Wimbo haujapatikana!' }, { quoted: message });
+    if (!title) {
+      await client.sendMessage(remoteJid, { text: '❌ Please provide a video title.' });
+      return;
     }
 
-    const videoUrl = video.url;
-    
-    // 3. React kuonyesha kazi imeanza
-    await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+    console.log(`🎯 Searching YouTube (API): ${title}`);
 
-    // 4. Download kutoka kwenye API yako
-    const apiEndpoint = `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=${encodeURIComponent(videoUrl)}`;
-    const response = await axios.get(apiEndpoint);
+    await client.sendMessage(remoteJid, {
+      text: `> _*Searching and processing: ${title}*_`,
+      quoted: message,
+    });
 
-    // Kwenye API hii, link ya kudownload mara nyingi ipo kwenye: data.result.download_url
-    const downloadUrl = response.data?.result?.download_url || response.data?.data?.download || response.data?.url;
-
-    if (!downloadUrl) {
-      throw new Error('API imeshindwa kutoa link ya wimbo.');
-    }
-
-    // 5. Tuma Audio kwa mtumiaji
-    await sock.sendMessage(
-      chatId,
-      {
-        audio: { url: downloadUrl },
-        mimetype: 'audio/mpeg',
-        fileName: `${video.title}.mp3`,
-        contextInfo: {
-          externalAdReply: {
-            title: video.title,
-            body: `Muda: ${video.timestamp}`,
-            thumbnailUrl: video.thumbnail,
-            sourceUrl: videoUrl,
-            mediaType: 1,
-            renderLargerThumbnail: true
-          }
-        }
+    // Step 1: Search YouTube via Data API v3
+    const searchUrl = `https://www.googleapis.com/youtube/v3/search`;
+    const { data: searchData } = await axios.get(searchUrl, {
+      params: {
+        part: "snippet",
+        q: title,
+        type: "video",
+        maxResults: 1,
+        key: API_KEY,
       },
-      { quoted: message }
-    );
+    });
 
-    // 6. Maliza kwa kuweka tiki
-    await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+    if (!searchData.items || searchData.items.length === 0) {
+      throw new Error("No video found.");
+    }
+
+    const video = searchData.items[0];
+    const videoId = video.id.videoId;
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const videoTitle = video.snippet.title;
+    const thumbnail = video.snippet.thumbnails.high.url;
+
+    console.log(`🎯 Found video: ${videoTitle} (${videoUrl})`);
+
+    // Step 2: Call new FastAPI downloader
+    const apiUrl = `${FASTAPI_URL}/youtube/downl/?url=${encodeURIComponent(videoUrl)}&fmt="mp3"`;
+    const { data } = await axios.get(apiUrl);
+
+    if (data.status !== 'ok' || !data.results?.download_url) {
+      throw new Error('❌ Failed to get audio from API.');
+    }
+
+    const downloadUrl = data.results.download_url;
+
+    // Step 3: Send thumbnail + info
+    await client.sendMessage(remoteJid, {
+      image: { url: thumbnail },
+      caption: `> 🎵 *${videoTitle}*\n\n> 🔗 ${videoUrl}\n\n> 📥 Downloading audio...\n\n> Powered By ${OWNER_NAME} Tech`,
+      quoted: message,
+    });
+
+    // Step 4: Send audio directly via URL
+    await client.sendMessage(remoteJid, {
+      audio: { url: downloadUrl },
+      mimetype: 'audio/mpeg',
+      fileName: `${videoTitle}.mp3`,
+      ptt: false,
+      quoted: message,
+    });
+
+    console.log(`✅ Audio sent: ${videoTitle}.mp3`);
 
   } catch (err) {
-    console.error('ERROR:', err);
-    await sock.sendMessage(chatId, { text: '❌ Hitilafu imetokea! Jaribu tena baadae.' }, { quoted: message });
+    console.error('❌ Error in play command:', err);
+    await client.sendMessage(remoteJid, { text: `❌ Failed to play: ${err.message}` });
   }
 }
 
-module.exports = songCommand;
+// Extract video title from the user's message
+function getArg(body) {
+  const parts = body.trim().split(/\s+/);
+  return parts.length > 1 ? parts.slice(1).join(' ') : null;
+}
+
+export default play;
