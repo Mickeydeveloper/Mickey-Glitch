@@ -2,7 +2,7 @@ const axios = require('axios');
 const yts = require('yt-search');
 
 /**
- * SONG COMMAND - Ultra Stable Version
+ * SONG COMMAND - Toleo la Subira (Haitoi Kosa Haraka)
  */
 async function songCommand(sock, chatId, message) {
     const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
@@ -13,65 +13,56 @@ async function songCommand(sock, chatId, message) {
     }
 
     try {
-        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
-
-        // 1. Search Video
+        // 1. Tafuta Video
         const search = await yts(query);
         const video = search.videos[0];
         if (!video) return sock.sendMessage(chatId, { text: '❌ Wimbo haupatikani!' });
 
         const videoUrl = video.url;
-        await sock.sendMessage(chatId, { text: `⏳ *${video.title}* inatafutwa kwenye seva...` }, { quoted: message });
+        await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+        
+        const statusMsg = await sock.sendMessage(chatId, { 
+            text: `⏳ *${video.title}*\n\nSeva inatayarisha audio yako. Tafadhali subiri kidogo...` 
+        }, { quoted: message });
 
-        // 2. Orodha ya API (Kuanzia zako hadi za dharura)
-        const ALL_APIS = [
+        // 2. Orodha ya API za Uhakika
+        const APIS = [
             `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=${encodeURIComponent(videoUrl)}`,
             `https://apis-malvin.vercel.app/download/dlmp3?url=${encodeURIComponent(videoUrl)}`,
+            `https://api.giftedtech.my.id/api/download/dlmp3?url=${encodeURIComponent(videoUrl)}`,
             `https://api.ryzendesu.vip/api/downloader/ytmp3?url=${encodeURIComponent(videoUrl)}`,
-            `https://api.giftedtech.my.id/api/download/dlmp3?url=${encodeURIComponent(videoUrl)}`, // Backup imara
-            `https://api.dreaded.site/api/ytdl/audio?url=${encodeURIComponent(videoUrl)}`,
-            `https://widipe.com/download/ytdl?url=${encodeURIComponent(videoUrl)}` // Backup nyingine
+            `https://api.dreaded.site/api/ytdl/audio?url=${encodeURIComponent(videoUrl)}`
         ];
 
         let downloadUrl = null;
-        let success = false;
 
-        // 3. Jaribu kila API moja baada ya nyingine (Hata kama inachelewa)
-        for (let i = 0; i < ALL_APIS.length; i++) {
-            try {
-                console.log(`Jaribio la Seva ${i + 1}...`);
-                
-                const res = await axios.get(ALL_APIS[i], { 
-                    timeout: 60000, // Inasubiri hadi dakika 1 kwa kila seva
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/110.0.0.0 Safari/537.36'
-                    }
-                });
+        // 3. Mfumo wa Majaribio ya Kurudia (Retry System)
+        for (const api of APIS) {
+            let retries = 2; // Itajaribu kila seva mara 2 ikifeli
+            while (retries > 0 && !downloadUrl) {
+                try {
+                    const res = await axios.get(api, { 
+                        timeout: 80000, // Inasubiri hadi sekunde 80 (Zaidi ya dakika 1)
+                        headers: { 'User-Agent': 'Mozilla/5.0' }
+                    });
 
-                const data = res.data;
-                // Kuchuja kila aina ya jibu kutoka kwa API tofauti
-                downloadUrl = data?.result?.download_url || 
-                              data?.data?.download || 
-                              data?.result?.url || 
-                              data?.url || 
-                              data?.result ||
-                              data?.data?.mp3;
+                    const data = res.data;
+                    downloadUrl = data?.result?.download_url || data?.data?.download || data?.result?.url || data?.url || data?.result;
 
-                if (downloadUrl && downloadUrl.startsWith('http')) {
-                    success = true;
-                    break; 
+                    if (downloadUrl && downloadUrl.startsWith('http')) break;
+                } catch (e) {
+                    retries--;
+                    if (retries > 0) await new Promise(resolve => setTimeout(resolve, 3000)); // Subiri sekunde 3 kabla ya kurudia
                 }
-            } catch (err) {
-                console.log(`Seva ${i + 1} imefeli, ikihamia inayofuata...`);
-                continue; 
             }
+            if (downloadUrl) break;
         }
 
-        if (!success) {
-            return sock.sendMessage(chatId, { text: '❌ Seva zote zipo chini kwa sasa. Tafadhali jaribu tena baada ya dakika 5.' }, { quoted: message });
+        if (!downloadUrl) {
+            return sock.sendMessage(chatId, { text: '❌ Samahani, seva zote zimelemewa baada ya majaribio kadhaa. Jaribu tena baadae kidogo.' }, { quoted: message });
         }
 
-        // 4. Tuma Audio
+        // 4. Tuma Audio (Inasubiri mpaka itume kikamilifu)
         await sock.sendMessage(
             chatId,
             {
@@ -81,7 +72,7 @@ async function songCommand(sock, chatId, message) {
                 contextInfo: {
                     externalAdReply: {
                         title: video.title,
-                        body: `Msanii: ${video.author.name}`,
+                        body: `Tayari kupakuliwa!`,
                         thumbnailUrl: video.thumbnail,
                         sourceUrl: videoUrl,
                         mediaType: 1,
@@ -92,11 +83,12 @@ async function songCommand(sock, chatId, message) {
             { quoted: message }
         );
 
+        // Futa reaction ya mwanzo na weka tiki
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error(err);
-        await sock.sendMessage(chatId, { text: '❌ Hitilafu kubwa imetokea. Jaribu wimbo mwingine.' }, { quoted: message });
+        console.error('Final Error Handler:', err);
+        await sock.sendMessage(chatId, { text: '❌ Imeshindikana kukamilisha ombi lako kwa sasa.' }, { quoted: message });
     }
 }
 
