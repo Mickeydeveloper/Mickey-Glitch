@@ -1,109 +1,98 @@
 const axios = require('axios');
+const yts = require('yt-search');
+const config = require('../config.js');
 
-const SETTINGS = {
-    owner: 'Mickey',
-    ytKey: process.env.YOUTUBE_API_KEY || 'AIzaSyDV11sdmCCdyyToNU-XRFMbKgAA4IEDOS0'
-};
-
-/* Updated Working APIs. 
-   Note: I've added a few more stable ones.
-*/
-const PROVIDERS = [
-    url => `https://api.giftedtech.my.id/api/download/dlmp3?url=${url}`,
-    url => `https://api.siputzx.my.id/api/dwnld/ytmp3?url=${url}`,
-    url => `https://api.zenkey.my.id/api/download/ytmp3?url=${url}`,
-    url => `https://widipe.com/download/ytdl?url=${url}`
-];
+const OWNER_NAME = (config && config.OWNER_NAME) || process.env.OWNER_NAME || 'Mickey';
 
 /**
- * Enhanced Downloader with Headers
+ * SONG COMMAND
  */
-async function getDownloadUrl(youtubeUrl) {
-    const encodedUrl = encodeURIComponent(youtubeUrl);
+async function songCommand(sock, chatId, message) {
+  const textBody =
+    message.message?.conversation ||
+    message.message?.extendedTextMessage?.text ||
+    '';
+
+  // Extract the song name or link
+  const args = textBody.trim().split(/\s+/);
+  const query = args.length > 1 ? args.slice(1).join(' ') : null;
+
+  if (!query) {
+    return sock.sendMessage(chatId, { text: '❌ Please provide a song name or YouTube link.' }, { quoted: message });
+  }
+
+  try {
+    // 1. React with Search Icon
+    try { await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } }); } catch {}
+
+    /* ─────── YouTube Search (Using yt-search) ─────── */
+    const searchResult = await yts(query);
+    const video = searchResult.videos[0]; // Get the first result
+
+    if (!video) {
+      return sock.sendMessage(chatId, { text: '❌ No results found on YouTube.' }, { quoted: message });
+    }
+
+    const videoUrl = video.url;
+    const videoTitle = video.title;
+    const timestamp = video.timestamp;
+    const thumbnail = video.thumbnail;
+
+    // 2. Inform User
+    await sock.sendMessage(chatId, { text: `📥 Downloading: *${videoTitle}*...` }, { quoted: message });
+
+    /* ─────── Download API Logic ─────── */
+    // Using your specific API URL format
+    const apiEndpoint = `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=${encodeURIComponent(videoUrl)}`;
     
-    for (const provider of PROVIDERS) {
-        try {
-            const endpoint = provider(encodedUrl);
-            
-            // Adding headers is the key to preventing "Failed" errors
-            const response = await axios.get(endpoint, { 
-                timeout: 12000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
-                }
-            });
+    const response = await axios.get(apiEndpoint, {
+      timeout: 30000, // Wait up to 30 seconds for the download link
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
+      }
+    });
 
-            const data = response.data;
-            
-            // Flexible parsing logic to handle different API structures
-            const link = 
-                data?.result?.download_url || 
-                data?.result?.url || 
-                data?.data?.url || 
-                data?.data?.mp3 || 
-                data?.url ||
-                data?.dl; // Some APIs use 'dl'
+    // Extracting the download link from your specific API response
+    const downloadUrl = response.data?.result?.download_url || response.data?.data?.download || response.data?.url;
 
-            if (link && link.startsWith('http')) return link;
-        } catch (e) {
-            console.error(`Provider failed: ${e.message}`);
-            continue; 
-        }
+    if (!downloadUrl) {
+      throw new Error('Could not retrieve a valid download link from the API.');
     }
-    throw new Error("No working download link found. Please try again in a moment.");
+
+    // Clean filename for WhatsApp stability
+    const safeName = videoTitle.replace(/[\\/:*?"<>|]/g, '').slice(0, 40);
+
+    /* ─────── Send Audio File ─────── */
+    await sock.sendMessage(
+      chatId,
+      {
+        audio: { url: downloadUrl },
+        mimetype: 'audio/mpeg',
+        fileName: `${safeName}.mp3`,
+        ptt: false, // Set to true if you want it to send as a voice note
+        contextInfo: {
+          externalAdReply: {
+            title: videoTitle,
+            body: `Duration: ${timestamp} | Requested by ${OWNER_NAME}`,
+            thumbnailUrl: thumbnail,
+            mediaType: 1,
+            showAdAttribution: true,
+            renderLargerThumbnail: true,
+            sourceUrl: videoUrl
+          }
+        }
+      },
+      { quoted: message }
+    );
+
+    // Final Success Reaction
+    try { await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }); } catch {}
+
+  } catch (err) {
+    console.error('❌ SONG ERROR:', err.message);
+    await sock.sendMessage(chatId, { text: `❌ Error: ${err.message || 'The download server is currently unavailable.'}` }, { quoted: message });
+    try { await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }); } catch {}
+  }
 }
-
-/**
- * Main Command
- */
-const songCommand = async (sock, chatId, message) => {
-    const text = message.message?.conversation || message.message?.extendedTextMessage?.text || "";
-    const query = text.split(" ").slice(1).join(" ");
-
-    if (!query) return sock.sendMessage(chatId, { text: "⚠️ Please provide a song name or link." });
-
-    try {
-        await sock.sendMessage(chatId, { react: { text: "⏳", key: message.key } });
-
-        // Search Logic
-        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=1&key=${SETTINGS.ytKey}`;
-        const searchRes = await axios.get(searchUrl);
-        const video = searchRes.data.items?.[0];
-
-        if (!video) {
-            return sock.sendMessage(chatId, { text: "❌ Video not found on YouTube." });
-        }
-
-        const videoId = video.id.videoId;
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        const title = video.snippet.title;
-
-        // Fetching Audio
-        const audioLink = await getDownloadUrl(videoUrl);
-
-        // Sending Audio
-        await sock.sendMessage(chatId, {
-            audio: { url: audioLink },
-            mimetype: 'audio/mpeg',
-            fileName: `${title}.mp3`,
-            contextInfo: {
-                externalAdReply: {
-                    title: title,
-                    body: `Downloaded for ${SETTINGS.owner}`,
-                    thumbnailUrl: video.snippet.thumbnails.high.url,
-                    sourceUrl: videoUrl,
-                    mediaType: 1,
-                    renderLargerThumbnail: true
-                }
-            }
-        }, { quoted: message });
-
-        await sock.sendMessage(chatId, { react: { text: "✅", key: message.key } });
-
-    } catch (err) {
-        await sock.sendMessage(chatId, { text: `❌ Error: ${err.message}` });
-        await sock.sendMessage(chatId, { react: { text: "❌", key: message.key } });
-    }
-};
 
 module.exports = songCommand;
