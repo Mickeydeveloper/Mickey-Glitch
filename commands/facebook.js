@@ -18,7 +18,7 @@ async function facebookCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
         // Call a simple downloader API and pick the first plausible video URL.
-        const apiUrl = `https://api.hanggts.xyz/download/facebook?url=${encodeURIComponent(url)}`;
+        const apiUrl = `https://api.vreden.my.id/api/v1/download/facebook?url=${encodeURIComponent(url)}`;
         const res = await axios.get(apiUrl, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0' }, validateStatus: s => s >= 200 && s < 500 });
         const data = res.data || {};
 
