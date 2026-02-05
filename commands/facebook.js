@@ -12,55 +12,57 @@ async function facebookCommand(sock, chatId, message) {
 
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
 
+        // 1. API Configuration
         const apiKey = "dew_SHmZ6Kcc67WTZqLfC3GGC774gANCHhtfIudTPQak";
+        // MUHIMU: Nimesahihisha API URL hapa chini
         const apiUrl = `https://api.srihub.store/download/facebook?url=${encodeURIComponent(url)}&apikey=${apiKey}`;
         
-        const res = await axios.get(apiUrl);
-        const data = res.data;
-
-        if (!data.status || !data.result) {
-            return await sock.sendMessage(chatId, { text: '❌ Imefeli kupata video. Hakikisha link ni sahihi.' }, { quoted: message });
-        }
-
-        const result = data.result;
-        const title = result.title || "Facebook Video";
-        const thumbnail = result.thumbnail || "https://i.imgur.com/Ou7969m.jpeg"; // Default image kama hakuna thumbnail
+        const res = await axios.get(apiUrl, { timeout: 15000 }).catch(() => null);
         
-        // Tunatengeneza machaguo ya ubora (HD na SD)
-        const qualities = [];
-        if (result.media.video_hd) qualities.push({ label: 'High Quality (HD)', url: result.media.video_hd, id: 'hd' });
-        if (result.media.video_sd) qualities.push({ label: 'Standard Quality (SD)', url: result.media.video_sd, id: 'sd' });
-
-        if (qualities.length === 0) {
-            return await sock.sendMessage(chatId, { text: '❌ Hakuna video inayoweza kupakuliwa.' }, { quoted: message });
+        if (!res || !res.data || !res.data.result) {
+            return await sock.sendMessage(chatId, { text: '❌ API haijapatikana au Key imekwisha. Jaribu baadae.' }, { quoted: message });
         }
 
+        const result = res.data.result;
+        const title = result.title || "Facebook Video";
+        const thumbnail = result.thumbnail || "https://wallpapercave.com/wp/wp2555083.jpg";
+        
+        // 2. Kutayarisha machaguo ya Video
         const cards = [];
+        const mediaSources = [
+            { id: 'hd', label: 'High Quality (HD)', url: result.media?.video_hd },
+            { id: 'sd', label: 'Standard Quality (SD)', url: result.media?.video_sd }
+        ].filter(v => v.url); // Inachuja kama HD au SD haipo
 
-        for (const quality of qualities) {
-            let media;
+        if (mediaSources.length === 0) {
+            return await sock.sendMessage(chatId, { text: '❌ Samahani, video hii haipatikani kwa sasa.' }, { quoted: message });
+        }
+
+        // 3. Kutengeneza Kadi za Slide
+        for (const vid of mediaSources) {
+            let imageMsg;
             try {
-                media = await prepareWAMessageMedia(
-                    { image: { url: thumbnail } },
-                    { upload: sock.waUploadToServer }
-                );
-            } catch (e) { console.error("Media upload error", e); }
+                // Tunatumia thumbnail ya video, kama ikigoma tunatumia picha ya kawaida
+                imageMsg = await prepareWAMessageMedia({ image: { url: thumbnail } }, { upload: sock.waUploadToServer });
+            } catch {
+                imageMsg = null;
+            }
 
             cards.push({
                 header: proto.Message.InteractiveMessage.Header.create({
-                    ...(media || {}),
-                    title: `*${quality.label}*`,
-                    hasMediaAttachment: !!media,
+                    ...(imageMsg || {}),
+                    title: `*${vid.label}*`,
+                    hasMediaAttachment: !!imageMsg,
                 }),
-                body: { text: `Bonyeza kitufe hapa chini kupakua video katika ubora wa ${quality.label}` },
-                footer: { text: "Loft Quantum Downloader" },
+                body: { text: `Bofya hapa chini kupakua ubora wa ${vid.id.toUpperCase()}` },
+                footer: { text: "Loft Quantum X7" },
                 nativeFlowMessage: {
                     buttons: [
                         {
                             name: "quick_reply",
                             buttonParamsJson: JSON.stringify({
-                                display_text: `Pakua ${quality.id.toUpperCase()}`,
-                                id: `dl_fb_${quality.id}`
+                                display_text: `DOWNLOAD ${vid.id.toUpperCase()}`,
+                                id: `dl_fb_${vid.id}`
                             })
                         }
                     ]
@@ -74,7 +76,7 @@ async function facebookCommand(sock, chatId, message) {
                 viewOnceMessage: {
                     message: {
                         interactiveMessage: {
-                            body: { text: `🎬 *${title}*\n\nChagua ubora wa video unayotaka kupakua kwenye kadi hizi:` },
+                            body: { text: `🎬 *VIDEO FOUND*\n\n*Title:* ${title}\n\n_Slide kushoto kuona machaguo ya ubora._` },
                             carouselMessage: { cards, messageVersion: 1 }
                         }
                     }
@@ -83,46 +85,42 @@ async function facebookCommand(sock, chatId, message) {
             { quoted: message }
         );
 
-        const sent = await sock.relayMessage(chatId, carouselMessage.message, {
-            messageId: carouselMessage.key.id
-        });
+        await sock.relayMessage(chatId, carouselMessage.message, { messageId: carouselMessage.key.id });
 
-        // LISTENER YA BUTTON
-        const listener = async (m) => {
+        // 4. Listener ya Button (Njia ya Uhakika)
+        const fbButtonListener = async (m) => {
             const mek = m.messages[0];
-            if (!mek.message) return;
+            if (!mek.message || mek.key.remoteJid !== chatId) return;
 
-            const buttonId = mek.message?.buttonsResponseMessage?.selectedButtonId || 
-                           mek.message?.templateButtonReplyMessage?.selectedId || 
-                           mek.message?.interactiveResponseMessage?.nativeFlowResponse?.paramsJson;
+            // Kupata ID ya button iliyobonyezwa
+            const response = mek.message?.interactiveResponseMessage?.nativeFlowResponse?.paramsJson;
+            if (!response) return;
 
-            if (!buttonId) return;
-
-            const parsed = JSON.parse(buttonId);
-            const selectedId = parsed.id;
-
-            if (selectedId && selectedId.startsWith('dl_fb_')) {
-                const type = selectedId.replace('dl_fb_', ''); // 'hd' au 'sd'
-                const videoUrl = type === 'hd' ? result.media.video_hd : result.media.video_sd;
+            const parsed = JSON.parse(response);
+            if (parsed.id && parsed.id.startsWith('dl_fb_')) {
+                const type = parsed.id.split('_')[2]; // 'hd' au 'sd'
+                const finalUrl = type === 'hd' ? result.media.video_hd : result.media.video_sd;
 
                 await sock.sendMessage(chatId, { react: { text: '📥', key: mek.key } });
                 
+                // Tunatuma video
                 await sock.sendMessage(chatId, { 
-                    video: { url: videoUrl }, 
+                    video: { url: finalUrl }, 
                     mimetype: 'video/mp4', 
-                    caption: `✅ Hii hapa video yako ya Facebook (${type.toUpperCase()})\n\n🔥 *Title:* ${title}` 
+                    caption: `✅ *Facebook Video (${type.toUpperCase()})*\n\n${title}` 
                 }, { quoted: mek });
 
-                // Zima listener baada ya kazi kwisha
-                sock.ev.off('messages.upsert', listener);
+                // Tunajiondoa kwenye listener ili kuzuia memory leak
+                sock.ev.off('messages.upsert', fbButtonListener);
             }
         };
 
-        sock.ev.on('messages.upsert', listener);
+        sock.ev.on('messages.upsert', fbButtonListener);
 
     } catch (error) {
-        console.error('FB Error:', error);
-        await sock.sendMessage(chatId, { text: '❌ Hitilafu imetokea kwenye mfumo.' });
+        console.error('FB Fix Error:', error);
+        // Hii itakupa maelezo zaidi kwenye console kwanini inafeli
+        await sock.sendMessage(chatId, { text: `❌ Hitilafu ya kiufundi: ${error.message}` });
     }
 }
 
