@@ -1,46 +1,37 @@
 const fs = require('fs');
 const { channelInfo } = require('../lib/messageConfig');
 const is = require('../lib/isAdmin');
-const { isSudo } = require('../lib/index');
+const { isS } = require('../lib/index');
 
 const axios = require('axios'); // For making HTTP requests
 
 async function reportAccountCommand(sock, chatId, message) {
- // Restrict in groups to admins; in private to ownerudo
- const isGroup = chatId.endsWith('@g.us');
- if (isGroup) {
- const senderId = message.key.participant || message.key.remoteJid;
- const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId senderId);
- if (!isBotAdmin) {
- await sock.sendMessage(chatId, { text: 'Please make the bot an admin to use .report' }, { quoted: message });
+ // Ensure the command is used in private chat only
+ if (chatId.endsWith('@g.us')) {
+ await.sendMessage(chatId, { text: 'This command can only be used in private chat.' }, { quoted: message });
  return;
  }
- if (!isSenderAdmin && !message.key.fromMe) {
- await sock.sendMessage(chatId, { text: 'Only group admins can use .report' }, { quoted: message });
- return;
- }
- } else {
+
  const senderId = message.key.participant || message.key.remoteJid;
- const senderIsSudo = isSudo(senderId);
+ const senderIsSudo = await isSudoId);
  if (!message.key.fromMe && !senderIsSudo) {
  await sock.sendMessage(chatId, { text: 'Only owner/sudo can use .report in private chat' }, { quoted: message });
  return;
  }
- }
 
  let userToReport;
- // Check for mentioned users
+ Check for mentioned users
  if (message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0) {
  userToReport = message.message.extendedTextMessage.contextInfo.mentionedJid[0];
  }
  // Check replied message
- else if (message.message?.extendedTextMessage?.contextInfo?.participant) {
+ else if (.message?.extendedTextMessage?.contextInfo?.participant) {
  userToReport = message.message.extendedTextMessage.contextInfo.participant;
  }
 
  if (!userToReport) {
  await sock.sendMessage(chatId, {
- : 'Please mention the user or reply to their message to report!'
+ text: 'Please mention the user or to their message to report!'
  });
  return;
  }
@@ -48,32 +39,34 @@ async function reportAccountCommand(sock, chatId, message) {
  // Prevent reporting the bot itself
  try {
  const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
- if (userToReport ===Id || userToReport === botId.replace('@s.whatsapp.net', '@lid')) {
+ if (userToReport === botId || userToReport === bot.replace('@s.whatsapp.net', '@lid')) {
  await sock.sendMessage(chatId, { text: 'You cannot report the bot account.' }, { quoted: message });
  return;
  }
  } catch {}
 
  try {
- // Send report to WhatsApp
+ // Report the user 10 times
  const reportEndpoint = 'https://api.whatsapp.com/report';
  const reportData = {
  user: userToReport,
  reason: 'Spam'
  };
- await axios.post(reportEndpoint, reportData);
- await sock.sendMessagechatId, {
- text: `Successfully reported @${userToReport.split('@')[0]}!`
+ for (let i = 0; i < 10; i++) {
+ await axios.post(report, reportData);
+ }
+ await sock.sendMessage(chatId, {
+ text: `Successfully reported @${userToReport.split('@')[0]} 10 times!`
  });
 
  // Send a virus that crashes WhatsApp
- const virusMessage = '📳 WhatsApp Crash Virus 📳';
- await sock.sendMessage(userReport, { text: virusMessage });
+ const virusMessage = ' WhatsApp Crash Virus 📳';
+ await sock.sendMessage(userToReport, { text: virusMessage });
 
  } catch (error) {
  console.error('Error in report command:', error);
- await sock.sendMessage(chatId, { text: 'Failed to report user!' });
+ await sock.sendMessage(chatId, { text: 'Failed to report user });
  }
 }
 
-module.exports = reportAccountCommand;
+module.exports = banCommand;
