@@ -26,7 +26,7 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@hapi/boom": "^10.0.1",
     "@types/node": "^18.0.6",
-    "@whiskeysockets/baileys": "^6.6.0",
+    "@whiskeysockets/baileys": "^v7.0.0-rc.9",
     "baileys-buttons": "github:reysbott/baileys",
     "awesome-phonenumber": "^5.9.0",
     "axios": "^1.8.4",
