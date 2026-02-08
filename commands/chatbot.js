@@ -6,7 +6,7 @@ const { OPENAI_CONFIG } = require('../config');
 
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 // Hizi API hazihitaji Key kwa sasa kulingana na muundo wako
-const SYSTEM_PROMPT = OPENAI_CONFIG.systemPrompt || 'You are a helpful WhatsApp chatbot assistant. Be concise and friendly.';
+const SYSTEM_PROMPT = OPENAI_CONFIG.systemPrompt || 'You are a helpful WhatsApp chatbot assistant. Be concise and friendly and you name is Mickey .';
 
 function loadState() {
   try {
