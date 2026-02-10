@@ -2,81 +2,104 @@ const moment = require('moment-timezone');
 const owners = require('../data/owner.json');
 const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
-/** 
- * Mickey Glitch Alive Command - Whiskey Baileys Interactive Version 
+/** * Mickey Glitch Alive Command - Optimized Baileys Version 
  */
 const aliveCommand = async (conn, chatId, message) => {
- try {
- // 1. Prepare Data
- const name = message.pushName || 'User';
- const uptime = clockString(process.uptime() * 1000);
- const date = moment.tz('Africa/Nairobi').format('DD/MM/YYYY');
- const time = moment.tz('Africa/Nairobi').format('HH:mm:ss');
- const ownerNumber = (Array.isArray(owners) && owners[0]) ? owners[0] : '255615944741';
+    try {
+        // 1. Data Preparation
+        const name = message.pushName || 'User';
+        const uptime = clockString(process.uptime() * 1000);
+        const date = moment.tz('Africa/Nairobi').format('DD/MM/YYYY');
+        const time = moment.tz('Africa/Nairobi').format('HH:mm:ss');
+        
+        // Ensure owner number is a string and handle potential array issues
+        const ownerNumber = Array.isArray(owners) ? owners[0] : (owners.ownerNumber || '255615944741');
+        const imageUrl = 'https://water-billimg.onrender.com/1761205727440.png';
 
- const statusText = `*───〔 ⚡ MICKEY GLITCH v3.1.0 〕───* 
-👤 *USER:* ${name}
+        const statusText = `*───〔 ⚡ MICKEY GLITCH v3.1.0 〕───* 👤 *USER:* ${name}
 🚀 *STATUS:* All Systems Operational
 📟 *UPTIME:* ${uptime}
 📅 *DATE:* ${date}
 🕒 *TIME:* ${time} (EAT)
+
 *───〔 SYSTEM METRICS 〕───*
 📡 *Latency:* Stable 🟢
 🛠️ *Connection:* Strong
 👤 *Owner:* ${ownerNumber}
+
 > *Powered by Mickey Glitch Team*`;
 
- // 2. Create Buttons (Menu & Owner)
- const buttons = [
- { name: "quick_reply", buttonParamsJson: JSON.stringify({ display_text: "📜 MENU LIST", id: ".menu" }) },
- { name: "quick_reply", buttonParamsJson: JSON.stringify({ display_text: "👤 OWNER INFO", id: ".owner" }) }
- ];
+        // 2. Button Configuration
+        const buttons = [
+            { 
+                name: "quick_reply", 
+                buttonParamsJson: JSON.stringify({ display_text: "📜 MENU LIST", id: ".menu" }) 
+            },
+            { 
+                name: "quick_reply", 
+                buttonParamsJson: JSON.stringify({ display_text: "👤 OWNER INFO", id: ".owner" }) 
+            }
+        ];
 
- // 3. Prepare Message for Relay (Whiskey Baileys Style)
- let msg = generateWAMessageFromContent(chatId, {
- viewOnceMessage: {
- message: {
- interactiveMessage: proto.Message.InteractiveMessage.fromObject({
- body: proto.Message.InteractiveMessage.Body.fromObject({ text: statusText }),
- footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: "Tap below to continue" }),
- header: proto.Message.InteractiveMessage.Header.fromObject({
- title: "MICKEY GLITCH IS ACTIVE 🟢",
- hasMediaAttachment: true,
- ...(await prepareWAMessageMedia({ image: { url: 'https://water-billimg.onrender.com/1761205727440.png' } }, { upload: conn.waUploadToServer }))
- }),
- nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({ buttons: buttons }),
- contextInfo: {
- mentionedJid: [message.sender],
- externalAdReply: {
- title: "🅼🅸🅲🅺🅴🆈 ɢʟɪᴛᴄʜ™",
- body: "System Status: Online",
- thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
- sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
- mediaType: 1,
- renderLargerThumbnail: false
- }
- }
- })
- }
- }
- }, { quoted: message });
+        // 3. Media Upload (Pre-processing the header image)
+        const media = await prepareWAMessageMedia(
+            { image: { url: imageUrl } }, 
+            { upload: conn.waUploadToServer }
+        );
 
- // 4. Send Message via relayMessage
- await conn.relayMessage(chatId, msg.message, { messageId: msg.key.id });
- } catch (error) {
- console.error('Alive Command Failure:', error.message);
- // Fallback to plain text if Relay fails
- await conn.sendMessage(chatId, {
- text: `*Mickey Glitch is Online* 🟢\nUptime: ${clockString(process.uptime() * 1000)}`
- }, { quoted: message });
- }
+        // 4. Construct Interactive Message
+        const interactiveMsg = {
+            viewOnceMessage: {
+                message: {
+                    interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+                        body: { text: statusText },
+                        footer: { text: "Tap below to explore more" },
+                        header: {
+                            title: "MICKEY GLITCH IS ACTIVE 🟢",
+                            hasMediaAttachment: true,
+                            ...media
+                        },
+                        nativeFlowMessage: {
+                            buttons: buttons
+                        },
+                        contextInfo: {
+                            mentionedJid: [message.sender],
+                            externalAdReply: {
+                                title: "🅼🅸🅺🅴🆈 ɢʟɪᴛᴄʜ™",
+                                body: "System Status: Online",
+                                thumbnail: (await conn.getFile(imageUrl)).data, // Better for direct rendering
+                                sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
+                                mediaType: 1,
+                                renderLargerThumbnail: true
+                            }
+                        }
+                    })
+                }
+            }
+        };
+
+        const msg = generateWAMessageFromContent(chatId, interactiveMsg, { quoted: message });
+
+        // 5. Execution
+        await conn.relayMessage(chatId, msg.message, { messageId: msg.key.id });
+
+    } catch (error) {
+        console.error('Alive Command Failure:', error);
+        // Clean fallback
+        await conn.sendMessage(chatId, {
+            text: `*Mickey Glitch is Online* 🟢\n\n*Uptime:* ${clockString(process.uptime() * 1000)}\n*Status:* System encountered a rendering error but remains active.`
+        }, { quoted: message });
+    }
 };
 
+/**
+ * Formats milliseconds into HH:MM:SS
+ */
 function clockString(ms) {
- let h = isNaN(ms) ? '00' : Math.floor(ms / 3600000);
- let m = isNaN(ms) ? '00' : Math.floor((ms % 3600000) / 60000);
- let s = isNaN(ms) ? '00' : Math.floor((ms % 60000) / 1000);
- return [h, m, s].map(v => v.toString().padStart(2, '0')).join(':'); 
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return [h, m, s].map(v => v.toString().padStart(2, '0')).join(':');
 }
 
 module.exports = aliveCommand;
