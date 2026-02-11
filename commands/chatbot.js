@@ -49,8 +49,8 @@ function extractMessageText(msg) {
  */
 async function callAI(userPrompt) {
   try {
-    // API URL inatumia text ya mtumiaji moja kwa moja bila system prompt
-    const apiUrl = `https://gemini-1-5-flash.bjcoderx.workers.dev/?text=${encodeURIComponent(userPrompt)}`;
+    // API URL using Hansa SriHub Copilot API
+    const apiUrl = `https://api.srihub.store/ai/copilot?prompt=${encodeURIComponent(userPrompt)}&apikey=dew_DVTcyMksTDO8ZGxBvLAG0y9P8sIj6uRJXHHwWSW5`;
 
     const response = await fetch(apiUrl, {
       method: 'GET',
@@ -61,8 +61,8 @@ async function callAI(userPrompt) {
 
     const data = await response.json();
     
-    // Kuchuja jibu kulingana na muundo wa JSON wa worker
-    const reply = data.result || data.response || data.reply || (typeof data === 'string' ? data : null);
+    // Extract reply from Hansa API response
+    const reply = data.result?.reply || data.result || data.reply || data.response || (typeof data === 'string' ? data : null);
 
     if (!reply) throw new Error('Nilipata data tupu.');
 
