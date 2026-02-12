@@ -1,42 +1,45 @@
 const moment = require('moment-timezone');
-const { getBuffer } = require('@whiskeysockets/baileys'); // if not already imported in your main file
+const { getBuffer } = require('@whiskeysockets/baileys'); // assume imported in main file or use axios/fetch alternative
 const owners = require('../data/owner.json');
 
 // ────────────────────────────────────────────────
 const CONFIG = Object.freeze({
-  BOT_NAME: 'Mickey Glitch',
-  VERSION: '3.2.4',
+  BOT_NAME:    'Mickey Glitch',
+  VERSION:     '3.2.5',
   DEFAULT_OWNER: '255615944741',
-  TIMEZONE: 'Africa/Nairobi',
-  THUMB_URL: 'https://water-billimg.onrender.com/1761205727440.png',
+  TIMEZONE:    'Africa/Nairobi',
+  THUMB_URL:   'https://water-billimg.onrender.com/1761205727440.png',
   CHANNEL_URL: 'https://whatsapp.com/channel/0029VaN1N7m7z4kcO3z8m43V',
-  FOOTER: '© Mickey Glitch Team • Fast & Stable'
+  FOOTER:      '© Mickey Glitch Team • Always Online'
 });
 
-// Pre-fetch thumbnail buffer once (if possible) or per-call — improves large preview reliability
-let cachedThumbBuffer = null;
+let cachedThumb = null; // cache buffer for faster large preview
 
+// ────────────────────────────────────────────────
 /**
- * Format uptime: "2d 14h 33m 9s"
- * @param {number} sec
+ * Formats real process uptime (seconds) → "2d 14h 33m 9s" with proper spacing
+ * @param {number} seconds - process.uptime()
  * @returns {string}
  */
-const formatUptime = (sec) => {
-  if (sec < 0 || !Number.isFinite(sec)) return '0s';
+function formatRealUptime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0 seconds';
 
-  const d = Math.floor(sec / 86400);
-  const h = Math.floor((sec % 86400) / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
 
-  return [d && `\( {d}d`, h && ` \){h}h`, m && `\( {m}m`, ` \){s}s`]
-    .filter(Boolean)
-    .join(' ') || '0s';
-};
+  const parts = [];
+  if (d > 0) parts.push(`\( {d} day \){d > 1 ? 's' : ''}`);
+  if (h > 0) parts.push(`\( {h} hour \){h > 1 ? 's' : ''}`);
+  if (m > 0) parts.push(`\( {m} minute \){m > 1 ? 's' : ''}`);
+  if (s > 0 || parts.length === 0) parts.push(`\( {s} second \){s !== 1 ? 's' : ''}`);
+
+  return parts.join(', ');
+}
 
 /**
- * Alive command – Text + large thumbnail preview (ad-style forwarded bubble)
- * No main media → fast send, clean look
+ * Alive command – Real accurate uptime + web search button
  */
 const aliveCommand = async (conn, chatId, msg) => {
   try {
@@ -44,34 +47,33 @@ const aliveCommand = async (conn, chatId, msg) => {
     const owner = Array.isArray(owners) && owners[0] || CONFIG.DEFAULT_OWNER;
 
     const now = moment.tz(CONFIG.TIMEZONE);
-    const uptime = formatUptime(process.uptime());
+    const uptimeSec = process.uptime();                    // ← real Node.js process uptime
+    const uptimeStr = formatRealUptime(uptimeSec);
 
-    // Prepare thumbnail buffer (fallback to URL if fetch fails)
-    if (!cachedThumbBuffer) {
+    // Cache thumbnail buffer once (improves large preview quality & speed)
+    if (!cachedThumb) {
       try {
-        const { buffer } = await getBuffer(CONFIG.THUMB_URL);
-        cachedThumbBuffer = buffer;
-      } catch {
-        // keep as null → baileys falls back to thumbnailUrl
-      }
+        const res = await getBuffer(CONFIG.THUMB_URL);
+        cachedThumb = res.buffer;
+      } catch {} // silent fail → fallback to URL
     }
 
     const text = `✦ *${CONFIG.BOT_NAME} STATUS* ✦
 
-*Client*  :  ${name}
-*Status*  :  *Online* ✅
-*Uptime*  :  \`${uptime}\`
-*Date*    :  ${now.format('DD MMMM YYYY')}
-*Time*    :  \`${now.format('HH:mm:ss')}\` EAT
-*Owner*   :  ${owner}
+*Client*    :  ${name}
+*Status*    :  *Online* ✅
+*Uptime*    :  ${uptimeStr}
+*Launched*  :  ${now.format('DD MMMM YYYY • HH:mm:ss')} EAT
+*Owner*     :  wa.me/${owner}
 
-→ *${CONFIG.BOT_NAME} ${CONFIG.VERSION}* • Always Ready`;
+→ *\( {CONFIG.BOT_NAME} v \){CONFIG.VERSION}* – Real process runtime since last restart`;
 
     const buttons = [
-      { index: 1, urlButton: { displayText: '👤 Chat Owner', url: `https://wa.me/${owner}` } },
-      { index: 2, callButton: { displayText: '📞 Call Owner', phoneNumber: `+${owner}` } },
-      { index: 3, quickReplyButton: { displayText: '📜 Menu', id: '.menu' } },
-      { index: 4, quickReplyButton: { displayText: '✖ Close', id: '.cls' } }
+      { index: 1, urlButton:      { displayText: '👤 Chat Owner',    url: `https://wa.me/${owner}` } },
+      { index: 2, callButton:     { displayText: '📞 Call Owner',    phoneNumber: `+${owner}` } },
+      { index: 3, quickReplyButton: { displayText: '📜 Menu',        id: '.menu' } },
+      { index: 4, quickReplyButton: { displayText: '🔍 What is uptime?', id: '.search' } }, // ← can handle in your handler
+      { index: 5, quickReplyButton: { displayText: '✖ Close',       id: '.cls' } }
     ];
 
     await conn.sendMessage(chatId, {
@@ -85,14 +87,12 @@ const aliveCommand = async (conn, chatId, msg) => {
         externalAdReply: {
           showAdAttribution: true,
           title: `${CONFIG.BOT_NAME} ${CONFIG.VERSION}`,
-          body: 'Online • Stable • Join Channel',
+          body: 'Real Uptime • Stable • Join Channel',
           mediaType: 1,
           previewType: 'PHOTO',
-          ...(cachedThumbBuffer
-            ? { thumbnail: cachedThumbBuffer }
-            : { thumbnailUrl: CONFIG.THUMB_URL }),
+          ...(cachedThumb ? { thumbnail: cachedThumb } : { thumbnailUrl: CONFIG.THUMB_URL }),
           sourceUrl: CONFIG.CHANNEL_URL,
-          renderLargerThumbnail: true   // ← aims for large preview
+          renderLargerThumbnail: true
         }
       }
     }, { quoted: msg });
@@ -100,9 +100,9 @@ const aliveCommand = async (conn, chatId, msg) => {
   } catch (err) {
     console.error('[ALIVE]', new Date().toISOString(), err?.message || err);
 
-    // Ultra-fast fallback (no await delay)
+    // Fast fallback
     conn.sendMessage(chatId, {
-      text: `⚠️ *\( {CONFIG.BOT_NAME}* is alive!\nUptime: \` \){formatUptime(process.uptime())}\``
+      text: `⚠️ *${CONFIG.BOT_NAME}* is running!\nUptime: ${formatRealUptime(process.uptime())}`
     }, { quoted: msg }).catch(() => {});
   }
 };
