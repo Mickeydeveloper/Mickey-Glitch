@@ -27,24 +27,65 @@ const aliveCommand = async (conn, chatId, message) => {
 
 > *Powered by Mickey Glitch Team*`;
 
-    await conn.sendMessage(chatId, {
-      image: { url: 'https://water-billimg.onrender.com/1761205727440.png' },
-      caption: statusText,
-      contextInfo: {
-        mentionedJid: [message.sender],
-        externalAdReply: {
-          title: "🅼🅸🅲🅺🅴🆈 ɢʟɪᴛᴄʜ™",
-          body: "System Status: Online",
-          thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
-          sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
-          mediaType: 1,
-          renderLargerThumbnail: true
+    // Primary image URL
+    const imageUrl = 'https://water-billimg.onrender.com/1761205727440.png';
+    const fallbackImageUrl = 'https://images.unsplash.com/photo-1511379938547-c1f69b13d835?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=60';
+
+    try {
+      await conn.sendMessage(chatId, {
+        image: { url: imageUrl },
+        caption: statusText,
+        contextInfo: {
+          mentionedJid: [message.sender],
+          externalAdReply: {
+            title: "🅼🅸🅲🅺🅴🆈 ɢʟɪᴛᴄʜ™",
+            body: "System Status: Online",
+            thumbnailUrl: imageUrl,
+            sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
+            mediaType: 1,
+            renderLargerThumbnail: true
+          }
         }
+      }, { quoted: message });
+    } catch (imageError) {
+      console.error('[ALIVE] Primary image failed:', imageError.message);
+      
+      // Fallback: Try alternate image
+      try {
+        await conn.sendMessage(chatId, {
+          image: { url: fallbackImageUrl },
+          caption: statusText,
+          contextInfo: {
+            mentionedJid: [message.sender],
+            externalAdReply: {
+              title: "🅼🅸🅲🅺🅴🆈 ɢʟɪᴛᴄʜ™",
+              body: "System Status: Online",
+              thumbnailUrl: fallbackImageUrl,
+              sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
+              mediaType: 1,
+              renderLargerThumbnail: true
+            }
+          }
+        }, { quoted: message });
+      } catch (fallbackError) {
+        console.error('[ALIVE] Fallback image failed:', fallbackError.message);
+        
+        // Last resort: Send text only
+        await conn.sendMessage(chatId, {
+          text: statusText
+        }, { quoted: message });
       }
-    }, { quoted: message });
+    }
 
   } catch (error) {
-    console.error('Alive Command Failure:', error);
+    console.error('[ALIVE] Command Error:', error.message);
+    try {
+      await conn.sendMessage(chatId, {
+        text: `❌ Hitilafu: ${error.message || 'Alive command failed'}`
+      }, { quoted: message });
+    } catch (e) {
+      console.error('[ALIVE] Failed to send error message:', e.message);
+    }
   }
 };
 
