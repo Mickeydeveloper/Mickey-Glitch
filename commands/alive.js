@@ -29,23 +29,12 @@ const aliveCommand = async (conn, chatId, message) => {
 
     // Primary image URL
     const imageUrl = 'https://water-billimg.onrender.com/1761205727440.png';
-    const fallbackImageUrl = 'https://images.unsplash.com/photo-1511379938547-c1f69b13d835?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=60';
+    const fallbackImageUrl = 'https://water-billimg.onrender.com/1761205727440.png';
 
     try {
       await conn.sendMessage(chatId, {
         image: { url: imageUrl },
-        caption: statusText,
-        contextInfo: {
-          mentionedJid: [message.sender],
-          externalAdReply: {
-            title: "🅼🅸🅲🅺🅴🆈 ɢʟɪᴛᴄʜ™",
-            body: "System Status: Online",
-            thumbnailUrl: imageUrl,
-            sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
-            mediaType: 1,
-            renderLargerThumbnail: true
-          }
-        }
+        caption: statusText
       }, { quoted: message });
     } catch (imageError) {
       console.error('[ALIVE] Primary image failed:', imageError.message);
@@ -54,18 +43,7 @@ const aliveCommand = async (conn, chatId, message) => {
       try {
         await conn.sendMessage(chatId, {
           image: { url: fallbackImageUrl },
-          caption: statusText,
-          contextInfo: {
-            mentionedJid: [message.sender],
-            externalAdReply: {
-              title: "🅼🅸🅲🅺🅴🆈 ɢʟɪᴛᴄʜ™",
-              body: "System Status: Online",
-              thumbnailUrl: fallbackImageUrl,
-              sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
-              mediaType: 1,
-              renderLargerThumbnail: true
-            }
-          }
+          caption: statusText
         }, { quoted: message });
       } catch (fallbackError) {
         console.error('[ALIVE] Fallback image failed:', fallbackError.message);
