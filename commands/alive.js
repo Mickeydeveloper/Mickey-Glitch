@@ -4,19 +4,15 @@ const owners = require('../data/owner.json');
 // ────────────────────────────────────────────────
 const CONFIG = {
   BOT_NAME:    'Mickey Glitch',
-  VERSION:     '3.2.1',
+  VERSION:     '3.2.3',
   DEFAULT_OWNER: '255615944741',
   TIMEZONE:    'Africa/Nairobi',
-  IMAGE_URL:   'https://water-billimg.onrender.com/1761205727440.png',
+  THUMB_URL:   'https://water-billimg.onrender.com/1761205727440.png',   // ← good quality image recommended (at least 500×300+)
   CHANNEL_URL: 'https://whatsapp.com/channel/0029VaN1N7m7z4kcO3z8m43V',
   FOOTER:      '© Mickey Glitch Team'
 };
 
 // ────────────────────────────────────────────────
-/**
- * @param {number} seconds
- * @returns {string} "2d 14h 33m 9s" or similar
- */
 function formatUptime(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0s';
 
@@ -25,36 +21,34 @@ function formatUptime(seconds) {
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
 
-  return [
-    d ? `${d}d` : '',
-    h ? `${h}h` : '',
-    m ? `${m}m` : '',
-    `${s}s`
-  ].filter(Boolean).join(' ') || '0s';
+  return [d ? `\( {d}d` : '', h ? ` \){h}h` : '', m ? `\( {m}m` : '', ` \){s}s`]
+    .filter(Boolean)
+    .join(' ') || '0s';
 }
 
 /**
- * Alive / Status command – sends **one image only** + buttons
+ * Alive command – TEXT + large thumbnail preview in ad/forwarded style
+ * No main media attached, only the large externalAdReply thumbnail
  */
 async function aliveCommand(conn, chatId, msg) {
   try {
     const senderName = msg.pushName || 'User';
     const owner = Array.isArray(owners) && owners[0] ? owners[0] : CONFIG.DEFAULT_OWNER;
 
-    const now     = moment.tz(CONFIG.TIMEZONE);
-    const uptime  = formatUptime(process.uptime());
+    const now    = moment.tz(CONFIG.TIMEZONE);
+    const uptime = formatUptime(process.uptime());
 
-    const caption = [
+    const text = [
       `✦ *${CONFIG.BOT_NAME} STATUS* ✦`,
       '',
       `❖ Client   :  ${senderName}`,
-      `❖ Status   :  Online`,
+      `❖ Status   :  Online & Stable`,
       `❖ Uptime   :  ${uptime}`,
       `❖ Date     :  ${now.format('DD MMMM YYYY')}`,
       `❖ Time     :  ${now.format('HH:mm:ss')} EAT`,
       `❖ Owner    :  ${owner}`,
       '',
-      `Powered by ${CONFIG.BOT_NAME} ${CONFIG.VERSION}`
+      `→ ${CONFIG.BOT_NAME} ${CONFIG.VERSION} • Always Active`
     ].join('\n');
 
     const buttons = [
@@ -89,32 +83,32 @@ async function aliveCommand(conn, chatId, msg) {
     ];
 
     await conn.sendMessage(chatId, {
-      image: { url: CONFIG.IMAGE_URL },
-      caption,
+      text,
       footer: CONFIG.FOOTER,
       templateButtons: buttons,
 
-      // Important: we keep forwarding & ad attribution, but NO extra thumbnail/media
       contextInfo: {
         forwardingScore: 999,
         isForwarded: true,
         externalAdReply: {
+          showAdAttribution: true,           // makes it look sponsored/promoted
           title: `${CONFIG.BOT_NAME} ${CONFIG.VERSION}`,
-          body: 'Always Online • 100% Stability',
-          mediaType: 1,
+          body: 'System Online • 100% Stability • Join Channel',
+          mediaType: 1,                      // PHOTO
           previewType: 'PHOTO',
-          thumbnailUrl: CONFIG.IMAGE_URL,     // small preview only
+          thumbnailUrl: CONFIG.THUMB_URL,    // WhatsApp fetches & shows large when renderLargerThumbnail=true
           sourceUrl: CONFIG.CHANNEL_URL,
-          renderLargerThumbnail: false        // ← prevents second large image
+          renderLargerThumbnail: true        // ← KEY: enables LARGE preview thumbnail
         }
       }
     }, { quoted: msg });
 
   } catch (err) {
     console.error('[ALIVE ERROR]', new Date().toISOString(), err?.message || err);
-    // Optional fallback message
+
+    // Fallback
     await conn.sendMessage(chatId, {
-      text: '⚠️ Status check failed — but I\'m still alive!'
+      text: `⚠️ ${CONFIG.BOT_NAME} is alive!\nUptime: ${formatUptime(process.uptime())}`
     }, { quoted: msg }).catch(() => {});
   }
 }
