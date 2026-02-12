@@ -9,7 +9,7 @@ const aliveCommand = async (conn, chatId, msg) => {
         const hours = Math.floor(uptime / 3600);
         const minutes = Math.floor((uptime % 3600) / 60);
 
-        const statusText = `*MICKDADY GLITCH V3* 🚀
+        const statusText = `*MICKEY GLITCH V3* 🚀
         
 *User*: ${msg.pushName}
 *Status*: Active 🟢
