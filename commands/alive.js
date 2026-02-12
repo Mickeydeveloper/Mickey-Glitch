@@ -2,7 +2,7 @@ const moment = require('moment-timezone');
 const owners = require('../data/owner.json');
 
 /**
- * Mickey Glitch Alive Command - Clean Text Version
+ * Mickey Glitch Alive Command - Professional Ad Version
  */
 const aliveCommand = async (conn, chatId, message) => {
   try {
@@ -12,58 +12,39 @@ const aliveCommand = async (conn, chatId, message) => {
     const time = moment.tz('Africa/Nairobi').format('HH:mm:ss');
     const ownerNumber = (Array.isArray(owners) && owners[0]) ? owners[0] : '255615944741';
 
-    const statusText = `*───〔 ⚡ MICKEY GLITCH v3.1.0 〕───*
+    // Muonekano mpya bila mistari ya urembo
+    const statusText = `*MICKEY GLITCH v3.1.0*
 
-👤 *USER:* ${name}
-🚀 *STATUS:* All Systems Operational
-📟 *UPTIME:* ${uptime}
-📅 *DATE:* ${date}
-🕒 *TIME:* ${time} (EAT)
+*SISTEMU:* Iko Hewani
+*MTUMIAJI:* ${name}
+*MUDA:* ${uptime}
+*TAREHE:* ${date} | ${time}
+*MILIKI:* ${ownerNumber}
 
-*───〔 SYSTEM METRICS 〕───*
-📡 *Latency:* Stable
-🟢 *Connection:* Strong
-🛠️ *Owner:* ${ownerNumber}
+*Powered by Mickey Glitch Team*`;
 
-> *Powered by Mickey Glitch Team*`;
-
-    // Primary image URL
     const imageUrl = 'https://water-billimg.onrender.com/1761205727440.png';
-    const fallbackImageUrl = 'https://water-billimg.onrender.com/1761205727440.png';
 
-    try {
-      await conn.sendMessage(chatId, {
-        image: { url: imageUrl },
-        caption: statusText
-      }, { quoted: message });
-    } catch (imageError) {
-      console.error('[ALIVE] Primary image failed:', imageError.message);
-      
-      // Fallback: Try alternate image
-      try {
-        await conn.sendMessage(chatId, {
-          image: { url: fallbackImageUrl },
-          caption: statusText
-        }, { quoted: message });
-      } catch (fallbackError) {
-        console.error('[ALIVE] Fallback image failed:', fallbackError.message);
-        
-        // Last resort: Send text only
-        await conn.sendMessage(chatId, {
-          text: statusText
-        }, { quoted: message });
+    // Kutuma picha ikiwa na Message from Ad
+    await conn.sendMessage(chatId, {
+      image: { url: imageUrl },
+      caption: statusText,
+      contextInfo: {
+        externalAdReply: {
+          title: "MESSAGE FROM AD: MICKEY GLITCH",
+          body: "System Status: Online",
+          mediaType: 1,
+          thumbnailUrl: imageUrl,
+          sourceUrl: "https://whatsapp.com/channel/0029VaN1N7m7z4kcO3z8m43V", // Unaweza kuweka link yako
+          renderLargerThumbnail: false,
+          showAdAttribution: true // Hii ndiyo inayoleta alama ya "Ad"
+        }
       }
-    }
+    }, { quoted: message });
 
   } catch (error) {
     console.error('[ALIVE] Command Error:', error.message);
-    try {
-      await conn.sendMessage(chatId, {
-        text: `❌ Hitilafu: ${error.message || 'Alive command failed'}`
-      }, { quoted: message });
-    } catch (e) {
-      console.error('[ALIVE] Failed to send error message:', e.message);
-    }
+    await conn.sendMessage(chatId, { text: `❌ Hitilafu: ${error.message}` }, { quoted: message });
   }
 };
 
