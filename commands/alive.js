@@ -2,37 +2,39 @@ const moment = require('moment-timezone');
 
 const aliveCommand = async (conn, chatId, msg) => {
     try {
-        // 1. Fanya bot ionekane inaandika (Typing...)
+        // Show typing presence
         await conn.sendPresenceUpdate('composing', chatId);
-        
+
+        // ===== UPTIME =====
         const uptime = process.uptime();
         const hours = Math.floor(uptime / 3600);
         const minutes = Math.floor((uptime % 3600) / 60);
+        const seconds = Math.floor(uptime % 60);
 
-        const statusText = `*MICKEY GLITCH V3* 🚀
-        
-*User*: ${msg.pushName}
-*Status*: Active 🟢
-*Uptime*: ${hours}h ${minutes}m
-*Ping*: ${Date.now() - msg.messageTimestamp * 1000}ms
+        // ===== PING SAFE =====
+        let ping = 0;
+        if (msg.messageTimestamp) {
+            ping = Date.now() - (msg.messageTimestamp * 1000);
+        }
 
-_Mickey Glitch Bot sasa inatumia mfumo wa v3.2.0 wenye kasi zaidi. Andika .menu kuona amri zote._`;
+        // ===== TIME =====
+        const time = moment().tz('Africa/Dar_es_Salaam').format('HH:mm:ss');
 
-       const buttons = [
-                    { buttonId: `${prefix}owner`, buttonText: { displayText: 'OWNER 👑' }, type: 1 },
-                    { buttonId: 'https://whatsapp.com/channel/0029VbAvB6k9sBI7O0j74q2N', buttonText: { displayText: '📢 JOIN CHANNEL' }, type: 2 }, 
-                ];
+        // ===== STATUS TEXT (Improved UI) =====
+        const statusText = `
+╭━━〔 *MICKEY GLITCH V3* 🚀 〕━━⬣
+┃ 👤 User : ${msg.pushName || 'User'}
+┃ 🟢 Status : Online & Active
+┃ ⏰ Time : ${time}
+┃ ⚡ Ping : ${ping} ms
+┃ 🖥 Uptime : ${hours}h ${minutes}m ${seconds}s
+╰━━━━━━━━━━━━━━━━⬣
 
-                await socket.sendMessage(m.chat, {
-                    image: { url: 'https://o.uguu.se/jPorDbaz.jpg' },
-                    caption: menuText,
-                    footer: '© Gk-Phantom',
-                    buttons: buttons,
-                    headerType: 4
-                }, { quoted: m });
-                break;
-            }
-        // 2. Tuma ujumbe wenye Kadi kubwa (AdReply)
+💡 _System v3.2.0 Fast Performance_
+📌 Andika *.menu* kuona commands zote.
+`;
+
+        // ===== SEND MESSAGE WITH BIG PREVIEW CARD =====
         await conn.sendMessage(chatId, {
             text: statusText,
             contextInfo: {
@@ -44,18 +46,18 @@ _Mickey Glitch Bot sasa inatumia mfumo wa v3.2.0 wenye kasi zaidi. Andika .menu 
                     serverMessageId: 143
                 },
                 externalAdReply: {
-                    title: "ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴠ3 ᴏɴʟɪɴᴇ",
-                    body: "Click here to Join Support Channel",
+                    title: "MICKEY GLITCH V3 ONLINE",
+                    body: "Join Support Channel",
                     thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
                     sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
                     mediaType: 1,
-                    renderLargerThumbnail: true // Hii ndio siri ya muonekano mzuri
+                    renderLargerThumbnail: true
                 }
             }
         }, { quoted: msg });
 
-    } catch (e) {
-        console.log(e);
+    } catch (error) {
+        console.log('Alive Command Error:', error);
     }
 };
 
