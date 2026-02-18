@@ -5,19 +5,42 @@ async function songCommand(sock, chatId, message) {
     const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
     const query = textBody.split(" ").slice(1).join(" ");
 
-    if (!query) return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*' });
+    if (!query) return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\n\nMfano: .play Adele Hello' });
 
     try {
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
 
         const { videos } = await yts(query);
-        if (!videos.length) return sock.sendMessage(chatId, { text: '❌ *Haupatikani!*' });
+        if (!videos.length) return sock.sendMessage(chatId, { text: '❌ *Wimbo haupatikani!*\n\nJaribu kupiga upya na jina sahihi.' });
 
         const vid = videos[0];
         
-        // Short Informational Text
-        const cap = `✨ *${vid.title}*\n⏱️ ${vid.timestamp} | 📥 _Inapakua..._`;
-        await sock.sendMessage(chatId, { text: cap }, { quoted: message });
+        // ✅ Enhanced First Message with Preview
+        const firstMsg = `
+🎵 *SONG FOUND*
+
+*🎤 Title:* ${vid.title}
+⏱️ *Duration:* ${vid.timestamp}
+👁️ *Views:* ${vid.views.toLocaleString()}
+📅 *Channel:* ${vid.author?.name || 'Unknown'}
+
+📥 *Downloading audio...*
+Please wait a moment...
+`;
+
+        const firstMsgRes = await sock.sendMessage(chatId, { 
+            text: firstMsg,
+            contextInfo: {
+                externalAdReply: {
+                    title: '🎶 Music Player',
+                    body: vid.title,
+                    thumbnailUrl: vid.thumbnail,
+                    sourceUrl: vid.url,
+                    mediaType: 1,
+                    renderLargerThumbnail: true
+                }
+            }
+        }, { quoted: message });
 
         const DOWNLOAD_APIS = [
             `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=${encodeURIComponent(vid.url)}`,
@@ -34,34 +57,39 @@ async function songCommand(sock, chatId, message) {
         }
 
         if (dlUrl) {
-            // Hapa bot inaonyesha "Recording..." status
+            // Show recording status
             await sock.sendPresenceUpdate('recording', chatId);
 
+            // ✅ Enhanced Audio Message with Premium Ad Look
             await sock.sendMessage(chatId, {
                 audio: { url: dlUrl },
                 mimetype: 'audio/mpeg',
                 fileName: `${vid.title}.mp3`,
+                ptt: false,
                 contextInfo: {
+                    isForwarded: true,
+                    forwardingScore: 999,
                     externalAdReply: {
-                        title: vid.title,
-                        body: `Imeandaliwa kwa Upendo • ${vid.timestamp}`,
+                        title: `🎵 ${vid.title}`,
+                        body: `Duration: ${vid.timestamp} | Ready to play`,
                         thumbnailUrl: vid.thumbnail,
                         sourceUrl: vid.url,
                         mediaType: 1,
-                        showAdAttribution: true, // Ad Banner Look
+                        showAdAttribution: true,
                         renderLargerThumbnail: true
-                    }
+                    },
+                    mentionedJid: []
                 }
             }, { quoted: message });
 
             await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         } else {
-            await sock.sendMessage(chatId, { text: '❌ *Seva zote zimekataa!*' });
+            await sock.sendMessage(chatId, { text: '❌ *Downloadi ifshindwe!*\n\nKaribuni tena baada ya dakika chache.' });
         }
     } catch (e) {
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu imetokea!*' });
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu imetokea!*\n\nJaribu tena au tumia jina tofauti.' });
     } finally {
-        // Zima status ya kurekodi ikimaliza
+        // Stop recording status
         await sock.sendPresenceUpdate('paused', chatId);
     }
 }
