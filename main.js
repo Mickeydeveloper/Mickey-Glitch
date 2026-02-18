@@ -810,6 +810,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     await sock.sendMessage(chatId, { text: 'Please specify a city, e.g., .weather London' }, { quoted: message });
                 }
                 break;
+            case userMessage.startsWith('.report'):
+                {
+                    const reportArgs = userMessage.slice(7).trim();
+                    await reportCommand(sock, chatId, message, reportArgs);
+                }
+                break;
             case userMessage.startsWith('.halotel'):
                 await halotelCommand(sock, chatId, message, userMessage);
                 break;
