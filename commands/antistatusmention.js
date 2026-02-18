@@ -51,32 +51,60 @@ async function handleAntiStatusMention(sock, chatId, message) {
       msg.imageMessage?.caption ||
       msg.videoMessage?.caption ||
       msg.listResponseMessage?.singleSelectReply?.selectedRowId ||
+      msg.documentMessage?.caption ||
+      msg.buttonsResponseMessage?.selectedDisplayText ||
       ''
     ).toString();
     if (!text) return;
 
-    // If the message explicitly mentions users, ignore (we only target status-mention spam)
-    const mentionedJids = [];
+    // Check if message is a reply to a status
     const ctxs = [
       msg.extendedTextMessage?.contextInfo,
       msg.imageMessage?.contextInfo,
       msg.videoMessage?.contextInfo,
       msg.listResponseMessage?.contextInfo,
-      msg.buttonsResponseMessage?.contextInfo
+      msg.buttonsResponseMessage?.contextInfo,
+      msg.documentMessage?.contextInfo
     ].filter(Boolean);
+
+    // If replying to status@broadcast, it's definitely a status mention
+    const isStatusReply = ctxs.some(c => 
+      c?.remoteJid === 'status@broadcast' || 
+      c?.quotedMessage?.key?.remoteJid === 'status@broadcast'
+    );
+
+    // Check for actual user mentions (not status spam)
+    const mentionedJids = [];
     for (const c of ctxs) {
       if (Array.isArray(c?.mentionedJid)) mentionedJids.push(...c.mentionedJid);
     }
     if (Array.isArray(msg?.mentionedJid)) mentionedJids.push(...msg.mentionedJid);
 
-    if (mentionedJids.length > 0) return; // actual mentions are not status mention spam
+    // If explicit mentions exist and not a status reply, skip
+    if (mentionedJids.length > 0 && !isStatusReply) return;
 
-    // Heuristic: many status-mention spam messages use phrases like "mentioned this group" or "status mention"
-    const phraseRegex = /\b(mention(?:ed)?\s+(?:this\s+)?group|mentioned\s+(?:this\s+)?group|status\s+mention(?:ed)?|mentioned\s+in\s+status|mention\s+status)\b/i;
-    if (!phraseRegex.test(text)) {
-      // Fallback heuristic: message contains bot number like @123456 - often used in status mention captions
+    // Heuristic detection for status mention spam patterns
+    const statusMentionPatterns = [
+      /\b(mentioned|mention(?:ed)?)\s+(?:this\s+)?(?:group|chat)/i,
+      /status\s+mention/i,
+      /you.*mentioned.*in.*status/i,
+      /replied.*to.*your.*status/i,
+      /react(?:ed|ion).*status/i,
+      /viewed.*your.*status/i,
+      /group\s+mention/i
+    ];
+
+    const isStatusMentionSpam = isStatusReply || statusMentionPatterns.some(p => p.test(text));
+
+    // Fallback heuristic: message contains bot number
+    if (!isStatusMentionSpam) {
       const stripped = text.replace(/\s+/g, '');
-      if (!new RegExp(`@?${botNum}\b`).test(stripped)) return;
+      if (new RegExp(`@?${botNum}`).test(stripped) && text.length < 150) {
+        // Short message with bot mention = likely spam
+        // do nothing, not enough evidence
+      } else {
+        return;
+      }
     }
 
     // Don't delete messages from group admins (safer) or from the bot itself
@@ -88,55 +116,32 @@ async function handleAntiStatusMention(sock, chatId, message) {
     const botAdminInfo = await isAdmin(sock, chatId, rawBotId).catch(() => ({ isBotAdmin: false }));
     if (!botAdminInfo.isBotAdmin) return;
 
-    // Attempt to delete the offending message (best-effort)
+    // Delete the message
     try {
-      const messageId = message.key.id;
-      const participant = message.key.participant || message.key.remoteJid;
+      const messageKey = message.key;
+      await sock.sendMessage(chatId, { delete: messageKey });
+      
+      console.log('✅ Status mention deleted', { 
+        chatId, 
+        msgId: messageKey.id, 
+        sender,
+        detected: isStatusReply ? 'status-reply' : 'pattern-match'
+      });
 
-      console.log('AntiStatusMention: matched phrase, attempting delete', { chatId, msgId: messageId, participant });
-
-      // Try to delete using the existing key (preferred)
-      let deleted = false;
+      // Send brief notification
       try {
-        if (message.key) {
-          await sock.sendMessage(chatId, { delete: message.key });
-          deleted = true;
-          console.log('Message deleted successfully using message.key method');
-        }
-      } catch (err1) {
-        // Structured fallback
-        try {
-          const deleteKey = { remoteJid: chatId, fromMe: false, id: messageId, participant };
-          await sock.sendMessage(chatId, { delete: deleteKey });
-          deleted = true;
-          console.log('Message deleted successfully using structured deleteKey');
-        } catch (err2) {
-          try {
-            await sock.sendMessage(chatId, { delete: { remoteJid: chatId, id: messageId } });
-            deleted = true;
-            console.log('Message deleted successfully using ID-only fallback');
-          } catch (err3) {
-            console.error('All delete methods failed:', err1?.message || err1, err2?.message || err2, err3?.message || err3);
-          }
-        }
+        const senderName = sender.split('@')[0];
+        await sock.sendMessage(chatId, { 
+          text: `🚫 *Anti-Status-Mention*\n• Status mention from @${senderName} was removed`
+        });
+      } catch (notifyErr) {
+        // Silent fail on notification
       }
 
-      // Optionally notify group (avoid tagging the sender)
-      try {
-        const senderName = sender ? `@${sender.split('@')[0]}` : 'User';
-        const status = deleted ? '✅ Message deleted' : '⚠️ Attempted to delete but failed';
-        await sock.sendMessage(chatId, { text: `ℹ️ *Anti-Status-Mention*
-
-• Sender: ${senderName}
-• Action: ${status}
-
-If the message persists, ensure the bot has admin rights and the message is still removable.` });
-      } catch (e) {
-        console.error('Failed to send info message:', e?.message || e);
-      }
-    } catch (e) {
-      console.error('Failed to handle status mention message:', e?.message || e);
+    } catch (deleteErr) {
+      console.error('❌ Failed to delete status mention:', deleteErr.message);
     }
+
   } catch (err) {
     console.error('handleAntiStatusMention error:', err?.message || err);
   }
@@ -144,25 +149,46 @@ If the message persists, ensure the bot has admin rights and the message is stil
 
 async function groupAntiStatusToggleCommand(sock, chatId, message, args) {
   try {
-    if (!chatId || !chatId.endsWith('@g.us')) return sock.sendMessage(chatId, { text: 'This command only works in groups.' }, { quoted: message });
+    if (!chatId || !chatId.endsWith('@g.us')) {
+      return sock.sendMessage(chatId, { 
+        text: '❌ This command only works in groups.' 
+      }, { quoted: message });
+    }
 
     const sender = message.key.participant || message.key.remoteJid;
     const adminInfo = await isAdmin(sock, chatId, sender);
-    if (!adminInfo.isSenderAdmin && !message.key.fromMe) return sock.sendMessage(chatId, { text: 'Only group admins can toggle anti-status-mention.' }, { quoted: message });
+    
+    if (!adminInfo.isSenderAdmin && !message.key.fromMe) {
+      return sock.sendMessage(chatId, { 
+        text: '❌ Only group admins can toggle anti-status-mention.' 
+      }, { quoted: message });
+    }
 
     const onoff = (args || '').trim().toLowerCase();
     if (!onoff || !['on', 'off'].includes(onoff)) {
-      return sock.sendMessage(chatId, { text: 'Usage: .antistatusmention on|off' }, { quoted: message });
+      return sock.sendMessage(chatId, { 
+        text: '📌 Usage:\n\n*.antistatusmention on* - Enable\n*.antistatusmention off* - Disable\n\nStatus mention spam will be automatically removed.' 
+      }, { quoted: message });
     }
 
     const state = loadState();
     state.perGroup = state.perGroup || {};
-    state.perGroup[chatId] = onoff === 'on';
+    const isEnabled = onoff === 'on';
+    state.perGroup[chatId] = isEnabled;
     saveState(state);
-    return sock.sendMessage(chatId, { text: `Anti-status-mention is now ${state.perGroup[chatId] ? 'ON' : 'OFF'} for this group.` }, { quoted: message });
+
+    const statusEmoji = isEnabled ? '✅' : '❌';
+    const statusText = isEnabled ? 'ENABLED' : 'DISABLED';
+    
+    return sock.sendMessage(chatId, { 
+      text: `${statusEmoji} *Anti-Status-Mention is ${statusText}*\n\nStatus mention spam will be ${isEnabled ? 'automatically removed' : 'no longer moderated'}.` 
+    }, { quoted: message });
+
   } catch (e) {
     console.error('groupAntiStatusToggleCommand error:', e);
-    return sock.sendMessage(chatId, { text: 'Failed to toggle anti-status-mention.' }, { quoted: message });
+    return sock.sendMessage(chatId, { 
+      text: '🚨 Failed to toggle anti-status-mention.' 
+    }, { quoted: message });
   }
 }
 

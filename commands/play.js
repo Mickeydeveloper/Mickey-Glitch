@@ -15,29 +15,15 @@ async function songCommand(sock, chatId, message) {
 
         const vid = videos[0];
         
-        // ✅ Enhanced First Message with Preview - LARGER TEXT FOR VISIBILITY
-        const firstMsg = `
-╔══════════════════════════════════════╗
-║   🎵 *SONG FOUND* 🎵                 ║
-╚══════════════════════════════════════╝
+        // ✅ Enhanced First Message with Preview - COMPACT & CLEAN
+        const firstMsg = `🎵 *SONG FOUND*
 
-*🎤 TITLE:*
-${vid.title}
+*Title:* ${vid.title}
+*Duration:* ${vid.timestamp}
+*Views:* ${vid.views.toLocaleString()}
+*Channel:* ${vid.author?.name || 'Unknown'}
 
-*⏱️  DURATION:*
-${vid.timestamp}
-
-*👁️  VIEWS:*
-${vid.views.toLocaleString()}
-
-*📅 CHANNEL:*
-${vid.author?.name || 'Unknown'}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   📥 *DOWNLOADING AUDIO...*
-   Please wait a moment...
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`;
+⏳ _Downloading audio..._`;
 
         const firstMsgRes = await sock.sendMessage(chatId, { 
             text: firstMsg,
@@ -86,16 +72,9 @@ ${vid.author?.name || 'Unknown'}
 
             // ✅ Send ad/info as SEPARATE message (Android compatible)
             try {
-                const adMsg = `
-
-*🎤 Title:* ${vid.title}
-*⏱️  Duration:* ${vid.timestamp}
-*📊 Quality:* MP3 (128 kbps)
-
-
-   ✅ *Ready to play now!*
-
-`;
+                const adMsg = `✅ *Audio Ready to Play*
+🎵 ${vid.title}
+⏱️ ${vid.timestamp} | 128 kbps MP3`;
 
                 await sock.sendMessage(chatId, {
                     text: adMsg,
