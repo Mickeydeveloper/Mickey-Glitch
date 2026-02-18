@@ -228,7 +228,10 @@ async function handleMessageRevocation(sock, revocationMessage) {
 
         const time = new Date().toLocaleString('en-US', {
             timeZone: 'Africa/Dar_es_Salaam',
-            
+            hour12: true,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
         });
 
         // Enhanced report text

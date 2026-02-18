@@ -36,6 +36,7 @@ const readline = require("readline")
 // ────────────────[ SUPPRESS VERBOSE LOGS ]───────────────────
 // Intercept console.log to filter out noisy debug messages
 const originalLog = console.log
+const originalError = console.error
 let logBuffer = []
 const BUFFER_SIZE = 5
 const THROTTLE_MS = 2000
@@ -63,6 +64,21 @@ console.log = function(...args) {
     
     // Call original log
     originalLog.apply(console, arguments)
+}
+
+console.error = function(...args) {
+    const message = args.join(' ')
+    
+    // Suppress noisy decryption errors
+    if (message.includes('Bad MAC') ||
+        message.includes('decrypt') ||
+        message.includes('Session error') ||
+        message.includes('rate-overlimit')) {
+        return
+    }
+    
+    // Call original error
+    originalError.apply(console, arguments)
 }
 
 // ────────────────[ CONFIG ]───────────────────
@@ -319,6 +335,16 @@ async function startXeonBotInc() {
 
                 await handleMessages(XeonBotInc, chatUpdate, true)
             } catch (err) {
+                // Silently ignore decryption errors (Bad MAC, etc) - these are expected during session transitions
+                if (err.message?.includes('Bad MAC') || err.message?.includes('decrypt')) {
+                    return
+                }
+                
+                // Rate limit errors - silence these too
+                if (err.message?.includes('rate-overlimit') || err.data === 429) {
+                    return
+                }
+                
                 console.log(chalk.bgRed.black('  ⚠️  MSG ERROR  ⚠️  '), chalk.red(err.message))
             }
         })
@@ -330,6 +356,18 @@ async function startXeonBotInc() {
             } catch (err) {
                 console.log(chalk.bgRed.black('  ⚠️  CALL ERROR  ⚠️  '), chalk.red(err.message))
             }
+        })
+
+        // ──── Suppress noisy decryption errors ────
+        XeonBotInc.ev.on('error', (err) => {
+            // Silently ignore common non-critical session errors
+            if (err.message?.includes('Bad MAC') || 
+                err.message?.includes('decryption failed') ||
+                err.message?.includes('rate-overlimit') ||
+                err.message?.includes('Session error')) {
+                return
+            }
+            console.log(chalk.bgRed.black('  ⚠️  SOCKET ERROR  ⚠️  '), chalk.red(err.message))
         })
 
         // ──── Connection ────

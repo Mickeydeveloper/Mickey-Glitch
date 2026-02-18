@@ -15,17 +15,28 @@ async function songCommand(sock, chatId, message) {
 
         const vid = videos[0];
         
-        // ✅ Enhanced First Message with Preview
+        // ✅ Enhanced First Message with Preview - LARGER TEXT FOR VISIBILITY
         const firstMsg = `
-🎵 *SONG FOUND*
+╔══════════════════════════════════════╗
+║   🎵 *SONG FOUND* 🎵                 ║
+╚══════════════════════════════════════╝
 
-*🎤 Title:* ${vid.title}
-⏱️ *Duration:* ${vid.timestamp}
-👁️ *Views:* ${vid.views.toLocaleString()}
-📅 *Channel:* ${vid.author?.name || 'Unknown'}
+*🎤 TITLE:*
+${vid.title}
 
-📥 *Downloading audio...*
-Please wait a moment...
+*⏱️  DURATION:*
+${vid.timestamp}
+
+*👁️  VIEWS:*
+${vid.views.toLocaleString()}
+
+*📅 CHANNEL:*
+${vid.author?.name || 'Unknown'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   📥 *DOWNLOADING AUDIO...*
+   Please wait a moment...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 
         const firstMsgRes = await sock.sendMessage(chatId, { 
@@ -60,27 +71,49 @@ Please wait a moment...
             // Show recording status
             await sock.sendPresenceUpdate('recording', chatId);
 
-            // ✅ Enhanced Audio Message with Premium Ad Look
-            await sock.sendMessage(chatId, {
-                audio: { url: dlUrl },
-                mimetype: 'audio/mpeg',
-                fileName: `${vid.title}.mp3`,
-                ptt: false,
-                contextInfo: {
-                    isForwarded: true,
-                    forwardingScore: 999,
-                    externalAdReply: {
-                        title: `🎵 ${vid.title}`,
-                        body: `Duration: ${vid.timestamp} | Ready to play`,
-                        thumbnailUrl: vid.thumbnail,
-                        sourceUrl: vid.url,
-                        mediaType: 1,
-                        showAdAttribution: true,
-                        renderLargerThumbnail: true
-                    },
-                    mentionedJid: []
-                }
-            }, { quoted: message });
+            // ✅ Send CLEAN audio first (Android compatible - no contextInfo)
+            try {
+                await sock.sendMessage(chatId, {
+                    audio: { url: dlUrl },
+                    mimetype: 'audio/mpeg',
+                    fileName: `${vid.title}.mp3`,
+                    ptt: false
+                }, { quoted: message });
+            } catch (err) {
+                console.log('Audio send error:', err.message);
+                await sock.sendMessage(chatId, { text: '⚠️ *Audio send failed on this device.*\n\nTry again or download manually.' });
+            }
+
+            // ✅ Send ad/info as SEPARATE message (Android compatible)
+            try {
+                const adMsg = `
+
+*🎤 Title:* ${vid.title}
+*⏱️  Duration:* ${vid.timestamp}
+*📊 Quality:* MP3 (128 kbps)
+
+
+   ✅ *Ready to play now!*
+
+`;
+
+                await sock.sendMessage(chatId, {
+                    text: adMsg,
+                    contextInfo: {
+                        externalAdReply: {
+                            title: `🎵 ${vid.title}`,
+                            body: `Duration: ${vid.timestamp} | Ready to play`,
+                            thumbnailUrl: vid.thumbnail,
+                            sourceUrl: vid.url,
+                            mediaType: 1,
+                            showAdAttribution: true,
+                            renderLargerThumbnail: true
+                        }
+                    }
+                }, { quoted: message });
+            } catch (err) {
+                console.log('Ad info send error:', err.message);
+            }
 
             await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         } else {
