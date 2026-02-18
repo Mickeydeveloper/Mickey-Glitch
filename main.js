@@ -70,6 +70,7 @@ const tagCommand = require('./commands/tag');
 const tagNotAdminCommand = require('./commands/tagnotadmin');
 const hideTagCommand = require('./commands/hidetag');
 const weatherCommand = require('./commands/weather');
+const reportCommand = require('./commands/report'); 
 const halotelCommand = require('./commands/halotel');
 const kickCommand = require('./commands/kick');
 // quote command removed
