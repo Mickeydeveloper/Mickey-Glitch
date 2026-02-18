@@ -98,7 +98,7 @@ async function warnCommand(sock, chatId, senderId, mentionedJids, message) {
                 `👤 *Warned User:* @${userToWarn.split('@')[0]}\n` +
                 `⚠️ *Warning Count:* ${warnings[chatId][userToWarn]}/3\n` +
                 `👑 *Warned By:* @${senderId.split('@')[0]}\n\n` +
-                `📅 *Date:* ${new Date().toLocaleString()}`;
+                `📅 *Date:* ${new Date().toLocaleString('en-US', { timeZone: 'Africa/Dar_es_Salaam', hour12: true, month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
 
             await sock.sendMessage(chatId, { 
                 text: warningMessage,

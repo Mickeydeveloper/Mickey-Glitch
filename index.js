@@ -33,6 +33,38 @@ const NodeCache = require("node-cache")
 const pino = require("pino")
 const readline = require("readline")
 
+// ────────────────[ SUPPRESS VERBOSE LOGS ]───────────────────
+// Intercept console.log to filter out noisy debug messages
+const originalLog = console.log
+let logBuffer = []
+const BUFFER_SIZE = 5
+const THROTTLE_MS = 2000
+
+console.log = function(...args) {
+    const message = args.join(' ')
+    
+    // Filter out noisy session logs
+    if (message.includes('Closing session') || 
+        message.includes('SessionEntry') ||
+        message.includes('chainKey') ||
+        message.includes('currentRatchet') ||
+        message.includes('registrationId') ||
+        message.includes('ephemeralKeyPair') ||
+        message.includes('lastRemoteEphemeralKey') ||
+        message.includes('indexInfo') ||
+        message.includes('pendingPreKey') ||
+        message.includes('baseKey') ||
+        message.includes('privKey') ||
+        message.includes('pubKey') ||
+        message.includes('rootKey')) {
+        // Silently discard these logs
+        return
+    }
+    
+    // Call original log
+    originalLog.apply(console, arguments)
+}
+
 // ────────────────[ CONFIG ]───────────────────
 global.botname = "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™"
 global.themeemoji = "•"
@@ -53,18 +85,36 @@ const store = require('./lib/lightweight_store')
 store.readFromFile()
 const settings = require('./settings')
 
-// Reduced write frequency for better performance
-setInterval(() => store.writeToFile(), settings.storeWriteInterval || 30000)
+// ✅ Optimized storage: write store less frequently (60s instead of 30s)
+setInterval(() => store.writeToFile(), settings.storeWriteInterval || 60000)
 
-// Memory watchdog - optimized for better performance
-setInterval(() => { if (global.gc) global.gc() }, 120000) // Check every 2 min instead of 1
+// ✅ Aggressive garbage collection - every 45 seconds for low-RAM environments
 setInterval(() => {
-    const used = process.memoryUsage().rss / 1024 / 1024
-    if (used > 500) { // Increased threshold for stability
-        console.log(chalk.bgRed.white('  ⚠️  MEMORY ALERT  ⚠️  '), chalk.red('RAM > 500MB → Restarting...'))
+    try {
+        if (global.gc) {
+            global.gc()
+        }
+    } catch (e) {}
+}, 45000)
+
+// ✅ Aggressive memory management - restart at 300MB instead of 500MB
+setInterval(() => {
+    const memUsage = process.memoryUsage()
+    const rssUsed = memUsage.rss / 1024 / 1024
+    const heapUsed = memUsage.heapUsed / 1024 / 1024
+    
+    if (rssUsed > 300) {
+        console.log(chalk.bgRed.white('  ⚠️  MEMORY CRITICAL  ⚠️  '), chalk.red(`RAM: ${rssUsed.toFixed(0)}MB → Auto-restart`))
         process.exit(1)
+    } else if (rssUsed > 250) {
+        // Warn before critical
+        console.log(chalk.bgYellow.black('  ⚠️  MEMORY WARNING  ⚠️  '), chalk.yellow(`RAM: ${rssUsed.toFixed(0)}MB - Cleaning up`))
+        // Force cleanup
+        try {
+            store.writeToFile()
+        } catch (e) {}
     }
-}, 60000) // Check every 1 min instead of every 30s
+}, 30000) // Check every 30 seconds
 
 // ────────────────[ CLEANUP SYSTEM ]───────────────────
 const TMP_FOLDERS = [
@@ -96,7 +146,7 @@ function cleanTempFolders() {
 
     TMP_FOLDERS.forEach(folder => {
         if (!fs.existsSync(folder)) {
-            fs.mkdirSync(folder, { recursive: true })
+            try { fs.mkdirSync(folder, { recursive: true }) } catch (e) {}
             return
         }
 
@@ -109,30 +159,74 @@ function cleanTempFolders() {
                 try {
                     const stats = fs.statSync(filePath)
                     totalSizeBytes += stats.size
+                    // ✅ Force delete even if locked
                     fs.unlinkSync(filePath)
                 } catch (e) {
-                    // silent fail on locked files etc.
+                    // Try force delete on Windows
+                    try {
+                        fs.rmSync(filePath, { force: true })
+                    } catch (err) {}
                 }
             })
 
-            // Remove subfolders if any + recreate clean folder
-            deleteFolderRecursive(folder)
-            fs.mkdirSync(folder, { recursive: true })
+            // Recreate clean folder
+            try {
+                deleteFolderRecursive(folder)
+                fs.mkdirSync(folder, { recursive: true })
+            } catch (e) {}
         } catch (err) {
-            console.log(chalk.yellow(`[cleanup] Error processing ${folder} → ${err.message}`))
+            // Silent cleanup errors
         }
     })
 
     return { cleanedCount, totalSizeBytes }
 }
 
+// ✅ NEW: Clean old Baileys store files
+function cleanOldBaileysFiles() {
+    const sessionDir = path.join(process.cwd(), 'session')
+    if (!fs.existsSync(sessionDir)) return
+    
+    try {
+        const files = fs.readdirSync(sessionDir)
+        const now = Date.now()
+        const ONE_DAY = 24 * 60 * 60 * 1000
+        let cleaned = 0
+        
+        files.forEach(file => {
+            // Skip essential files
+            if (file === 'creds.json' || file === 'pre-key-1.json' || file === '.gitignore') return
+            
+            const filePath = path.join(sessionDir, file)
+            try {
+                const stat = fs.statSync(filePath)
+                // Delete files older than 1 day
+                if (now - stat.mtimeMs > ONE_DAY) {
+                    fs.unlinkSync(filePath)
+                    cleaned++
+                }
+            } catch (e) {}
+        })
+        
+        if (cleaned > 0) console.log(chalk.cyan(`[BAILEYS] Cleaned ${cleaned} old session files`))
+    } catch (e) {}
+}
+
 async function notifyCleanup(sock, result) {
     if (!sock || !OWNER_JID) return
 
     const sizeMB = (result.totalSizeBytes / (1024 * 1024)).toFixed(2)
+    const timeStr = new Date().toLocaleString('en-US', {
+        timeZone: 'Africa/Dar_es_Salaam',
+        hour12: true,
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    })
     const message = 
 `🧹 *AUTO CLEANUP COMPLETED*
-📅 ${new Date().toLocaleString('en-GB')} (EAT)
+📅 ${timeStr} (EAT)
 🗑 Removed files: ${result.cleanedCount}
 💾 Freed ≈ ${sizeMB} MB`
 
@@ -146,21 +240,26 @@ async function notifyCleanup(sock, result) {
 
 // ────────────────[ SCHEDULED CLEANUPS ]───────────────────
 
-// Every 6 hours (reduced frequency for performance)
+// ✅ Every 3 hours for aggressive storage cleanup
 setInterval(async () => {
-    console.log(chalk.cyan('[CLEANUP] Starting scheduled cleanup...'))
+    console.log(chalk.cyan('[CLEANUP] Starting aggressive cleanup...'))
     const result = cleanTempFolders()
-    if (result.cleanedCount > 0) console.log(chalk.green(`[CLEANUP] Removed ${result.cleanedCount} files (~${(result.totalSizeBytes / 1024 / 1024).toFixed(2)} MB)`))
+    if (result.cleanedCount > 0) console.log(chalk.green(`[CLEANUP] Freed ${(result.totalSizeBytes / 1024 / 1024).toFixed(2)}MB`))
+    // Also cleanup old baileys store files
+    try {
+        cleanOldBaileysFiles()
+    } catch (e) {}
     if (global.sock && result.cleanedCount > 0) await notifyCleanup(global.sock, result)
-}, 6 * 60 * 60 * 1000) // 6 hours instead of 4
+}, 3 * 60 * 60 * 1000) // 3 hours for more aggressive cleanup
 
-// Initial cleanup after connect (delayed to avoid startup slowdown)
+// Initial cleanup after connect
 setTimeout(async () => {
     if (!global.sock) return
-    console.log(chalk.cyan('[STARTUP] Initial cleanup...'))
+    console.log(chalk.cyan('[STARTUP] Running initial cleanup...'))
     const result = cleanTempFolders()
-    if (result.cleanedCount > 0) console.log(chalk.green(`[CLEANUP] Removed ${result.cleanedCount} files (~${(result.totalSizeBytes / 1024 / 1024).toFixed(2)} MB)`))
-}, 20000) // Increased delay to 20s for faster startup
+    try { cleanOldBaileysFiles() } catch (e) {}
+    if (result.cleanedCount > 0) console.log(chalk.green(`[CLEANUP] Freed ${(result.totalSizeBytes / 1024 / 1024).toFixed(2)}MB`))
+}, 15000)
 
 // ────────────────[ MAIN ]───────────────────
 async function startXeonBotInc() {
@@ -170,11 +269,16 @@ async function startXeonBotInc() {
         
         const { version } = await fetchLatestBaileysVersion()
         const { state, saveCreds } = await useMultiFileAuthState(`./session`)
-        const msgRetryCounterCache = new NodeCache()
+        // ✅ Optimized cache with low memory footprint
+        const msgRetryCounterCache = new NodeCache({ 
+            stdTTL: 600,  // Expire cache entries after 10 minutes
+            checkperiod: 60,  // Check for expired entries every 60 seconds
+            useClones: false  // Don't clone objects to save RAM
+        })
 
         const XeonBotInc = makeWASocket({
             version,
-            logger: pino({ level: 'silent' }),
+            logger: pino({ level: 'fatal' }),
             printQRInTerminal: !pairingCode,
             browser: ["Ubuntu", "Chrome", "20.0.04"],
             auth: {
@@ -187,7 +291,13 @@ async function startXeonBotInc() {
                 let msg = await store.loadMessage(jid, key.id)
                 return msg?.message || undefined
             },
-            msgRetryCounterCache
+            msgRetryCounterCache,
+            // ✅ RAM & Storage optimizations
+            syncFullHistory: false,
+            retryRequestDelayMs: 100,
+            maxMsgsInMemory: 50,  // Limit in-memory messages
+            fetchMessagesOnWaWebMessage: false,  // Don't auto-fetch old messages
+            shouldIgnoreJid: (jid) => jid.includes('@broadcast') || jid.includes('@newsletter')  // Ignore broadcast/newsletters
         })
 
         // Make socket globally accessible for cleanup notifications
@@ -276,8 +386,9 @@ async function startXeonBotInc() {
             }
         })
 
-        // ──── Fake forwarded messages ────
+        // ✅ Optimized fake forwarded messages (reduced memory overhead)
         const originalSendMessage = XeonBotInc.sendMessage.bind(XeonBotInc)
+        let lastDelayTime = 0
 
         XeonBotInc.sendMessage = async (jid, content, options = {}) => {
             const originalContext = options.contextInfo || {}
@@ -296,10 +407,15 @@ async function startXeonBotInc() {
                 return originalSendMessage(jid, content, options)
             }
 
-            // Minimal delay for faster response
-            if (Math.random() > 0.7) await delay(200)
+            // ✅ Occasional smart delay to avoid detection while saving CPU
+            const now = Date.now()
+            if (Math.random() > 0.8 && now - lastDelayTime > 5000) {
+                await delay(100)
+                lastDelayTime = now
+            }
+
+            // ✅ Minimal context to reduce payload size
             const fakeForwardContext = {
-                ...originalContext,
                 isForwarded: true,
                 forwardingScore: 999,
                 forwardedNewsletterMessageInfo: {
@@ -309,11 +425,16 @@ async function startXeonBotInc() {
                 }
             }
 
-            if (originalContext.quotedMessage) fakeForwardContext.quotedMessage = originalContext.quotedMessage
-            if (originalContext.mentionedJid) fakeForwardContext.mentionedJid = originalContext.mentionedJid
+            // Only preserve essential quoted message
+            if (originalContext?.quotedMessage) {
+                fakeForwardContext.quotedMessage = originalContext.quotedMessage
+            }
+            if (originalContext?.mentionedJid) {
+                fakeForwardContext.mentionedJid = originalContext.mentionedJid
+            }
 
             options.contextInfo = fakeForwardContext
-
+            
             return originalSendMessage(jid, content, options)
         }
 

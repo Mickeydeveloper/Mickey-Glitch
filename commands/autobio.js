@@ -53,7 +53,15 @@ async function autoBioCommand(sock, chatId, message, args) {
 function buildAutoBio() {
   const ownerNum = (settings.ownerNumber || '').replace(/[^0-9]/g, '');
   const ownerDisplay = ownerNum ? `Owner: +${ownerNum}` : 'Owner';
-  const now = new Date().toLocaleString();
+  const now = new Date().toLocaleString('en-US', {
+    timeZone: 'Africa/Dar_es_Salaam',
+    hour12: true,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
   return `✨ Powered by Mickey Bot\n⏰ ${now}\n💯 ${ownerDisplay}`;
 }
 

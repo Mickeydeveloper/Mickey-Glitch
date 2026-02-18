@@ -63,7 +63,14 @@ function formatUpdateInfo(res) {
 
     const updateType = res.mode === 'git' ? 'GIT' : 'ZIP';
     message += `📦 *Update Type:* ${updateType}\n`;
-    message += `📅 *Time:* ${new Date().toLocaleString()}\n\n`;
+    const timeStr = new Date().toLocaleString('en-US', {
+        timeZone: 'Africa/Dar_es_Salaam',
+        hour12: true,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    message += `📅 *Time:* ${timeStr}\n\n`;
 
     if (res.mode === 'git') {
         const allFiles = res.files ? res.files.split('\n').map(f => f.trim()).filter(Boolean) : [];

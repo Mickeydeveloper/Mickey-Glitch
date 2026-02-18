@@ -18,8 +18,8 @@ const aliveCommand = async (conn, chatId, msg) => {
             ping = Date.now() - (msg.messageTimestamp * 1000);
         }
 
-        // ===== TIME & DATE =====
-        const time = moment().tz('Africa/Dar_es_Salaam').format('HH:mm:ss');
+        // ===== TIME & DATE (TANZANIA - 12 HOUR FORMAT) =====
+        const time = moment().tz('Africa/Dar_es_Salaam').format('hh:mm:ss A');
         const date = moment().tz('Africa/Dar_es_Salaam').format('DD/MM/YYYY');
 
         // ===== MEMORY USAGE =====
