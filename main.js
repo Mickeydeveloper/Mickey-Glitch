@@ -1309,8 +1309,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         if (userMessage.startsWith('.')) {
-            // After command is processed successfully
-            await addCommandReaction(sock, message);
+            // React only if command executed successfully
+            await addCommandReaction(sock, message, commandExecuted !== false);
             // Only show quick-action suggestions when a command was actually executed
             if (commandExecuted !== false) {
                 try {
