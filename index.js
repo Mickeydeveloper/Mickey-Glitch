@@ -590,7 +590,7 @@ async function startXeonBotInc() {
                     const code = await XeonBotInc.requestPairingCode(number, customPairCode)
 
                     console.log('')
-                    console.log(chalk.bgCyan.black('  🔐  CUSTOM PAIRING CODE  🔐  '))
+                    console.log(chalk.bgCyan.black('  🔐PAIRING CODE MICKDADY 🔐  '))
                     console.log(chalk.cyan.bold('  ' + customPairCode))
                     console.log(chalk.yellow('→ Fungua WhatsApp kwenye simu yako'))
                     console.log(chalk.yellow('→ Nenda: Menu → Linked Devices → Link a device'))
