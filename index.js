@@ -95,7 +95,22 @@ console.log = function(...args) {
 }
 
 console.error = function(...args) {
-    const message = args.join(' ')
+    // Convert Error objects to readable strings
+    const formattedArgs = args.map(arg => {
+        if (arg instanceof Error) {
+            return arg.message || String(arg)
+        }
+        if (typeof arg === 'object' && arg !== null) {
+            try {
+                return JSON.stringify(arg)
+            } catch {
+                return String(arg)
+            }
+        }
+        return String(arg)
+    })
+    
+    const message = formattedArgs.join(' ')
     
     // Suppress noisy decryption errors and session logs
     const errorPatterns = [
@@ -115,8 +130,8 @@ console.error = function(...args) {
         }
     }
     
-    // Call original error
-    originalError.apply(console, arguments)
+    // Call original error with formatted arguments
+    originalError.apply(console, formattedArgs)
 }
 
 // ────────────────[ CONFIG ]───────────────────
