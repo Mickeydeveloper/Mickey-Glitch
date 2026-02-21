@@ -121,13 +121,17 @@ async function facebookCommand(sock, chatId, message) {
 
     } catch (error) {
         console.error('FB Command Error:', error.message);
-        console.error('FB Response:', error.response?.data);
         const errorMsg = error.response?.status === 429 
             ? '⏱️ API imechelewa. Jaribu tena baadaye.'
             : error.message?.includes('timeout')
             ? '⏱️ Muda umekwisha. Jaribu tena.'
             : '❌ Hitilafu: ' + error.message;
-        await sock.sendMessage(chatId, { text: errorMsg });
+        await sock.sendMessage(chatId, { text: errorMsg }, { quoted: message }).catch(() => {});
+    } finally {
+        // 🚀 Force garbage collection after command
+        if (global.gc) {
+            setImmediate(() => global.gc());
+        }
     }
 }
 

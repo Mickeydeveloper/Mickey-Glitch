@@ -179,6 +179,11 @@ async function tiktokCommand(sock, chatId, message) {
         console.error('[TIKTOK] Error:', err?.message || err);
         await sock.sendMessage(chatId, { text: '❌ Failed to download TikTok video: ' + (err?.message || 'Unknown error') }, { quoted: message });
         try { await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }); } catch (e) { /* ignore */ }
+    } finally {
+        // 🚀 Force garbage collection after command
+        if (global.gc) {
+            setImmediate(() => global.gc());
+        }
     }
 }
 

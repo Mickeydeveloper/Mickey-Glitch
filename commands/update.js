@@ -182,6 +182,34 @@ async function restartProcess(sock, chatId, message) {
     // Give the message time to send
     await new Promise(r => setTimeout(r, 1000));
     
+    // Validate critical files exist before restarting
+    const criticalFiles = ['index.js', 'main.js', 'package.json'];
+    const missingFiles = criticalFiles.filter(f => !fs.existsSync(path.join(process.cwd(), f)));
+    if (missingFiles.length > 0) {
+        console.error('❌ CRITICAL: Missing files after update:', missingFiles);
+        try {
+            await sock.sendMessage(chatId, { text: `❌ CRITICAL: Missing files after update: ${missingFiles.join(', ')}\n\nManual restart required.` }, { quoted: message });
+        } catch {}
+        return;
+    }
+
+    // Validate node_modules existence
+    if (!fs.existsSync(path.join(process.cwd(), 'node_modules'))) {
+        console.error('❌ CRITICAL: node_modules missing after update');
+        try {
+            await sock.sendMessage(chatId, { text: '❌ CRITICAL: node_modules missing. Running emergency npm install...' }, { quoted: message });
+        } catch {}
+        try {
+            await run('npm install --no-audit --no-fund --prefer-offline --legacy-peer-deps');
+        } catch (err) {
+            console.error('❌ Emergency npm install failed:', err.message);
+            try {
+                await sock.sendMessage(chatId, { text: `❌ Emergency npm install failed:\n${err.message.slice(0, 150)}\n\nManual restart required.` }, { quoted: message });
+            } catch {}
+            return;
+        }
+    }
+    
     try {
         // Try PM2 first
         await run('pm2 restart all').catch(() => {});
@@ -207,6 +235,7 @@ async function restartProcess(sock, chatId, message) {
     // Most platforms (Heroku, Netlify, Railway, Replit, etc) auto-restart on exit
     setTimeout(() => {
         console.log('🔄 Initiating bot restart...');
+        console.log('📝 Update restart initiated at:', new Date().toISOString());
         // Exit with code 0 (success) - platform will auto-restart
         process.exit(0);
     }, 1500);
@@ -230,27 +259,40 @@ async function updateCommand(sock, chatId, message, zipOverride) {
             const summary = alreadyUpToDate ? `✅ Already up to date: ${newRev}` : `✅ Updated to ${newRev}`;
             console.log('[update] summary:', summary);
             
-            // Install dependencies - skip if npm version mismatch to avoid conflicts
+            // Install dependencies - critical for update success
             try {
                 const nodeVersion = (await run('node --version')).trim();
                 const npmVersion = (await run('npm --version')).trim();
                 console.log(`[update] Node: ${nodeVersion}, NPM: ${npmVersion}`);
                 
-                // Clean npm cache and package-lock to avoid conflicts
+                // Clean npm cache to avoid conflicts
                 try {
                     await run('npm cache clean --force').catch(() => {});
-                    // Remove lock files to force clean install
-                    if (fs.existsSync(path.join(process.cwd(), 'package-lock.json'))) {
-                        fs.unlinkSync(path.join(process.cwd(), 'package-lock.json'));
-                    }
-                } catch (e) {}
+                } catch (e) { console.log('[update] npm cache clean failed:', e.message); }
                 
-                // Install with safety flags to prevent conflicts
-                await run('npm install --no-audit --no-fund --prefer-offline --legacy-peer-deps').catch(err => {
-                    console.log('[update] npm install attempt skipped:', err.message);
-                });
+                // Remove lock file to force clean install
+                try {
+                    const lockFile = path.join(process.cwd(), 'package-lock.json');
+                    if (fs.existsSync(lockFile)) {
+                        fs.unlinkSync(lockFile);
+                        console.log('[update] Removed package-lock.json for clean install');
+                    }
+                } catch (e) { console.log('[update] Failed to remove lock file:', e.message); }
+                
+                // Install with safety flags - this MUST succeed
+                console.log('[update] Starting npm install...');
+                await run('npm install --no-audit --no-fund --prefer-offline --legacy-peer-deps');
+                
+                // Verify installation
+                const nodeModules = path.join(process.cwd(), 'node_modules');
+                if (!fs.existsSync(nodeModules)) {
+                    throw new Error('npm install completed but node_modules directory is missing');
+                }
+                console.log('[update] npm install completed successfully');
             } catch (err) {
-                console.log('[update] npm check skipped:', err.message);
+                console.error('[update] npm install FAILED:', err.message);
+                await sock.sendMessage(chatId, { text: `❌ npm install failed:\n${err.message}\n\nUpdate aborted.` }, { quoted: message });
+                throw err;
             }
             
             await sock.sendMessage(chatId, { text: `${summary}\n\nRestarting bot...` }, { quoted: message });
