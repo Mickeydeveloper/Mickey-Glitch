@@ -4,8 +4,10 @@ const isAdmin = require('../lib/isAdmin');
 
 function loadState() {
   try {
-    const raw = fs.readFileSync(path.join(__dirname, '..', 'data', 'antistatusmention.json'), 'utf8');
-    const state = JSON.parse(raw);
+    const p = path.join(__dirname, '..', 'data', 'antistatusmention.json')
+    if (!fs.existsSync(p)) return { perGroup: {} }
+    const raw = fs.readFileSync(p, 'utf8');
+    const state = JSON.parse(raw || '{}');
     if (!state.perGroup) state.perGroup = {};
     return state;
   } catch (e) {
@@ -17,7 +19,9 @@ function saveState(state) {
   try {
     const dataDir = path.join(__dirname, '..', 'data');
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-    fs.writeFileSync(path.join(dataDir, 'antistatusmention.json'), JSON.stringify(state, null, 2));
+    // Debounced write to avoid many small disk writes
+    const { writeJsonDebounced } = require('../lib/safeWrite')
+    writeJsonDebounced(path.join(dataDir, 'antistatusmention.json'), state, 1500)
   } catch (e) {
     console.error('Failed to save antistatusmention state:', e?.message || e);
   }

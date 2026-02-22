@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { writeJsonDebounced } = require('../lib/safeWrite')
 
 const ANTICALL_PATH = './data/anticall.json';
 
@@ -16,7 +17,7 @@ function readState() {
 function writeState(enabled) {
     try {
         if (!fs.existsSync('./data')) fs.mkdirSync('./data', { recursive: true });
-        fs.writeFileSync(ANTICALL_PATH, JSON.stringify({ enabled: !!enabled }, null, 2));
+        writeJsonDebounced(ANTICALL_PATH, { enabled: !!enabled }, 1000)
     } catch {}
 }
 
