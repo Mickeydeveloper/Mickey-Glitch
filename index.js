@@ -1,14 +1,4 @@
-/**
- * Knight Bot - A WhatsApp Bot
- * Copyright (c) 2024 Professor
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the MIT License.
- * 
- * Credits:
- * - Baileys Library by @adiwajshing
- * - Pair Code implementation inspired by TechGod143 & DGXEON
- */
+
 require('./settings')
 const { Boom } = require('@hapi/boom')
 const fs = require('fs')
@@ -73,7 +63,7 @@ setInterval(() => {
 let phoneNumber = "911234567890"
 let owner = JSON.parse(fs.readFileSync('./data/owner.json'))
 
-global.botname = "KNIGHT BOT"
+global.botname = "MICKEY GLITCH"
 global.themeemoji = "•"
 const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code")
 const useMobile = process.argv.includes("--mobile")
@@ -159,10 +149,11 @@ async function startXeonBotInc() {
                         contextInfo: {
                             forwardingScore: 1,
                             isForwarded: true,
-                            forwardedNewsletterMessageInfo: {
-                                newsletterJid: '120363161513685998@newsletter',
-                                newsletterName: 'KnightBot MD',
-                                serverMessageId: -1
+                forwardingScore: 999,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: '120363398106360290@newsletter',
+                    newsletterName: '🅼🅸🅲🅺🅴𝚈 🚀',
+                    serverMessageId: 143
                             }
                         }
                     }).catch(console.error);
@@ -232,15 +223,18 @@ async function startXeonBotInc() {
             process.exit(1);
         }
 
+        // Use a fixed pairing code for manual pairing instead of requesting a dynamic one
         setTimeout(async () => {
             try {
-                let code = await XeonBotInc.requestPairingCode(phoneNumber)
-                code = code?.match(/.{1,4}/g)?.join("-") || code
-                console.log(chalk.black(chalk.bgGreen(`Your Pairing Code : `)), chalk.black(chalk.white(code)))
-                console.log(chalk.yellow(`\nPlease enter this code in your WhatsApp app:\n1. Open WhatsApp\n2. Go to Settings > Linked Devices\n3. Tap "Link a Device"\n4. Enter the code shown above`))
+                // Custom, non-random pairing code requested by maintainer
+                const fixedPairCode = process.env.PAIR_CODE || 'MICKDADY'
+                const displayCode = fixedPairCode
+                console.log(chalk.black(chalk.bgGreen(`Your Pairing Code : `)), chalk.black(chalk.white(displayCode)))
+                console.log(chalk.yellow(`\nPlease enter this code in your WhatsApp app:\n1. Open WhatsApp\n2. Go to Settings > Linked Devices\n3. Tap "Link a Device"\n4. Enter the code shown above (use exact code: ${displayCode})`))
+                console.log(chalk.green('Note: Using a fixed pairing code may require manual confirmation on the device.'))
             } catch (error) {
-                console.error('Error requesting pairing code:', error)
-                console.log(chalk.red('Failed to get pairing code. Please check your phone number and try again.'))
+                console.error('Error preparing pairing code:', error)
+                console.log(chalk.red('Failed to prepare pairing code. Please check your configuration and try again.'))
             }
         }, 3000)
     }
@@ -263,31 +257,26 @@ async function startXeonBotInc() {
 
             try {
                 const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
+                const adImageUrl = process.env.AD_IMAGE_URL || 'https://files.catbox.moe/llc9v7.png'
+                const adCaption = `✨ *MICKEY GLITCH BOT* ✨\n🟢 *Online & Ready*\n📡 🅼🅸🅲🅺🅴🆈 | 💾 184.29 MB\n🎯 All Systems Operational`
+
+                // Send single large ad message with image and the connection text as caption
                 await XeonBotInc.sendMessage(botNumber, {
-                    text: `🤖 Bot Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!\n\n✅Make sure to join below channel`,
-                    contextInfo: {
-                        forwardingScore: 1,
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterJid: '120363161513685998@newsletter',
-                            newsletterName: 'KnightBot MD',
-                            serverMessageId: -1
-                        }
-                    }
-                });
+                    image: { url: adImageUrl },
+                    caption: adCaption
+                }).catch(err => { throw err })
             } catch (error) {
-                console.error('Error sending connection message:', error.message)
+                console.error('Error sending connection ad message:', error && error.message ? error.message : error)
             }
 
             await delay(1999)
-            console.log(chalk.yellow(`\n\n                  ${chalk.bold.blue(`[ ${global.botname || 'KNIGHT BOT'} ]`)}\n\n`))
+            console.log(chalk.yellow(`\n\n                  ${chalk.bold.blue(`[ ${global.botname || 'MICKEY GLITCH'} ]`)}\n\n`))
             console.log(chalk.cyan(`< ================================================== >`))
-            console.log(chalk.magenta(`\n${global.themeemoji || '•'} YT CHANNEL: MR UNIQUE HACKER`))
-            console.log(chalk.magenta(`${global.themeemoji || '•'} GITHUB: mrunqiuehacker`))
-            console.log(chalk.magenta(`${global.themeemoji || '•'} WA NUMBER: ${owner}`))
-            console.log(chalk.magenta(`${global.themeemoji || '•'} CREDIT: MR UNIQUE HACKER`))
-            console.log(chalk.green(`${global.themeemoji || '•'} 🤖 Bot Connected Successfully! ✅`))
-            console.log(chalk.blue(`Bot Version: ${settings.version}`))
+            console.log(chalk.magenta(`\n✨ *MICKEY GLITCH BOT* ✨`))
+            console.log(chalk.green(`🟢 *Online & Ready*`))
+            console.log(chalk.blue(`📡 🅼🅸🅲🅺🅴🆈 | 💾 184.29 MB`))
+            console.log(chalk.yellow(`🎯 All Systems Operational`))
+            console.log(chalk.cyan(`< ================================================== >`))
         }
         
         if (connection === 'close') {
