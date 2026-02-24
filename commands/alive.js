@@ -28,7 +28,7 @@ const aliveCommand = async (conn, chatId, msg) => {
             cpu: os.cpus()[0]?.model.replace(/\(R\)|\(TM\)|Core|Processor|CPU/g, '').trim() || 'System',
         };
 
-        const imageUrl = 'https://files.catbox.moe/llc9v7.png';
+        const imageUrl = 'https://water-billimg.onrender.com/1761205727440.png';
 
         // Custom Appearance (Minimalist & Professional)
         const caption = `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ-Ｖ３*
