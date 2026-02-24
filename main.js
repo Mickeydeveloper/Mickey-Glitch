@@ -1378,12 +1378,9 @@ async function handleGroupParticipantUpdate(sock, update) {
     }
 }
 
-// Instead, export the handlers along with handleMessages
+// Export all handlers
 module.exports = {
     handleMessages,
-    handleGroupParticipantUpdate,
-    handleStatus: async (sock, status) => {
-        await handleStatusUpdate(sock, status);
-        await handleStatusForward(sock, status);
-    }
+    handleStatusUpdate,
+    handleGroupParticipantUpdate
 };
