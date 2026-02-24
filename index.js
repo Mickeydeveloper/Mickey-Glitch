@@ -83,7 +83,7 @@ async function startMickeyBot() {
             
             const botNum = jidNormalizedUser(conn.user.id);
             await conn.sendMessage(botNum, {
-                text: `✨ MICKEY GLITCH STARTED ✨\n\n🟢 Status: Online\n🚀 Features: Active\n📸 Auto Status: Enabled`
+                text: `✨ *MICKEY GLITCH BOT* ✨\n\n🟢 Status: Online\n🚀 Mode: Ultra Lightweight\n💾 RAM: 172.21 MB\n🎯 All Systems Operational\n\nConnect now — message "start"`
             });
         }
         if (connection === 'close') {
