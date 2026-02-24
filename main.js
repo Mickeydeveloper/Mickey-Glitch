@@ -144,21 +144,52 @@ const channelInfo = {
 // Runtime: attach a lightweight `signature` to every command module for tracking
 try {
     const commandsDir = path.join(__dirname, 'commands');
-    const cmdFiles = fs.existsSync(commandsDir) ? fs.readdirSync(commandsDir).filter(f => f.endsWith('.js')) : [];
-    cmdFiles.forEach(file => {
+    // Recursively collect .js files
+    function walkDir(dir) {
+        let results = [];
+        const list = fs.readdirSync(dir);
+        list.forEach(function(file) {
+            const fp = path.join(dir, file);
+            const stat = fs.statSync(fp);
+            if (stat && stat.isDirectory()) results = results.concat(walkDir(fp));
+            else if (file.endsWith('.js')) results.push(fp);
+        });
+        return results;
+    }
+
+    const cmdFiles = fs.existsSync(commandsDir) ? walkDir(commandsDir) : [];
+    // command registry for dynamic dispatch
+    const commandRegistry = {};
+
+    cmdFiles.forEach(absPath => {
         try {
-            const rel = './commands/' + file;
+            const rel = './' + path.relative(__dirname, absPath).replace(/\\/g, '/');
+            const wasLoaded = Boolean(require.cache[require.resolve(rel)]);
             const mod = require(rel);
+            const file = path.basename(absPath);
             const sig = { signed: true, by: 'Mickey-Glitch', file };
             if (typeof mod === 'function') {
                 if (!mod.signature) mod.signature = sig;
             } else if (mod && typeof mod === 'object') {
                 if (!mod.signature) mod.signature = sig;
             }
+
+            // register by basename (without ext) and by cleaned name
+            const base = path.basename(file, '.js');
+            const cleaned = base.replace(/[-_]/g, '').toLowerCase();
+            commandRegistry[base.toLowerCase()] = mod;
+            if (cleaned !== base.toLowerCase()) commandRegistry[cleaned] = mod;
+
+            if (!wasLoaded) {
+                console.log(`Registered command (auto): ${base}`);
+            }
         } catch (e) {
-            // ignore individual require errors
+            console.error('Command load error:', e.message);
         }
     });
+
+    // expose registry for runtime use (used below for fallback dispatch)
+    global.__commandRegistry = commandRegistry;
 } catch (e) {
     console.error('Failed to sign commands:', e.message);
 }
@@ -291,6 +322,35 @@ async function handleMessages(sock, messageUpdate) {
         if (commandExecuted) {
             await addCommandReaction(sock, message);
             await showTypingAfterCommand(sock, chatId);
+        } else {
+            // Fallback: try dynamic registry dispatch for commands not in switch-case
+            try {
+                const registry = global.__commandRegistry || {};
+                const cmdToken = userMessage.split(' ')[0].slice(1).toLowerCase();
+                const cleaned = cmdToken.replace(/[-_]/g, '');
+                let cmdModule = registry[cmdToken] || registry[cleaned];
+
+                if (cmdModule) {
+                    // If module exports a function, call it. If it exports an object with a known method, try common keys.
+                    if (typeof cmdModule === 'function') {
+                        await cmdModule(sock, chatId, message, ...args);
+                        commandExecuted = true;
+                    } else if (cmdModule && typeof cmdModule === 'object') {
+                        const fn = cmdModule.execute || cmdModule.run || cmdModule.default || cmdModule;
+                        if (typeof fn === 'function') {
+                            await fn(sock, chatId, message, ...args);
+                            commandExecuted = true;
+                        }
+                    }
+
+                    if (commandExecuted) {
+                        await addCommandReaction(sock, message);
+                        await showTypingAfterCommand(sock, chatId);
+                    }
+                }
+            } catch (e) {
+                console.error('Fallback dispatch error:', e.message);
+            }
         }
     } catch (error) {
         console.error('❌ Error:', error.message);
