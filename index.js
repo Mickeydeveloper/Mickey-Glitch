@@ -5,14 +5,15 @@ const {
     DisconnectReason,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    jidNormalizedUser,
-    delay
+    jidNormalizedUser
 } = require("@whiskeysockets/baileys");
-const fs = require('fs');
 const pino = require("pino");
 const chalk = require('chalk');
 const readline = require("readline");
 const { rmSync, existsSync } = require('fs');
+
+// HAKIKISHA HII PATH NI SAHIHI
+const { handleMessages } = require('./main'); 
 
 const sessionPath = `./session`;
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -26,102 +27,87 @@ async function startMickeyBot() {
         version,
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
-        browser: ["Ubuntu", "Chrome", "20.0.04"], // Required for custom pairing
+        browser: ["Ubuntu", "Chrome", "20.0.04"], 
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
         },
-        markOnlineOnConnect: true,
+        // Maboresho ya spidi ya command
+        generateHighQualityLinkPreview: true,
+        shouldSyncHistoryMessage: () => false,
+        getMessage: async (key) => { return { noCondition: true } }
     });
 
-    // --- 1. CUSTOM PAIRING CODE LOGIC (MICKDADY) ---
+    // --- PAIRING CODE LOGIC ---
     if (!conn.authState.creds.registered) {
         console.clear();
-        console.log(chalk.cyan.bold("╭─────────────────────────────────────╮"));
-        console.log(chalk.cyan.bold("│      MICKEY GLITCH V3 PAIRING       │"));
-        console.log(chalk.cyan.bold("╰─────────────────────────────────────╯\n"));
+        console.log(chalk.bold.cyan("╔════════════════════════════════════╗"));
+        console.log(chalk.bold.cyan("║     MICKEY GLITCH CUSTOM PAIR      ║"));
+        console.log(chalk.bold.cyan("╚════════════════════════════════════╝\n"));
 
-        let num = await question(chalk.yellow("Enter WhatsApp Number (e.g. 255712345678): "));
+        let num = await question(chalk.yellow("Ingiza namba (Mfano: 255615944741): "));
         num = num.replace(/[^0-9]/g, '');
 
-        if (!num) {
-            console.log(chalk.red("❌ Phone number is required."));
-            process.exit(0);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        try {
+            const code = await conn.requestPairingCode(num, "MICKDADY");
+            console.log(chalk.black.bgGreen(` CODE YAKO: `), chalk.bold.white(code));
+        } catch (err) {
+            console.log(chalk.red("❌ Error kwenye kuomba code."));
         }
-
-        setTimeout(async () => {
-            try {
-                // Official pairing with custom 8-char code
-                let code = await conn.requestPairingCode(num, "MICKDADY");
-                console.log(chalk.black.bgGreen(` YOUR PAIRING CODE: `), chalk.bold.white(code));
-            } catch (err) {
-                console.log(chalk.red("❌ Pairing failed. Check if number is correct."));
-            }
-        }, 3000);
     }
 
     conn.ev.on('creds.update', saveCreds);
 
-    // --- 2. CONNECTION & AUTO-FOLLOW & BANNER ---
+    // --- CONNECTION HANDLER ---
     conn.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
-        const channelJid = '120363398106360290@newsletter';
-        const adImageUrl = 'https://files.catbox.moe/llc9v7.png';
-
         if (connection === 'open') {
-            console.log(chalk.green.bold('\n✅ MICKEY GLITCH CONNECTED SUCCESSFULLY'));
+            console.log(chalk.green.bold('\n[ SYSTEM ] Bot Imeunganishwa Kikamilifu!'));
             
-            const botNum = conn.user.id.split(':')[0] + '@s.whatsapp.net';
-
-            // Send BIG BANNER (Gallery-safe: image is metadata, not a file)
+            const botNum = jidNormalizedUser(conn.user.id);
             await conn.sendMessage(botNum, {
-                text: `✨ *MICKEY GLITCH V3 ACTIVE* ✨\n\n🟢 *Status:* Online\n🎯 *Channel:* Auto-Followed\n\n_System fully operational._`,
+                text: `✨ *MICKEY GLITCH V3 ACTIVE* ✨`,
                 contextInfo: {
-                    isForwarded: true,
-                    forwardingScore: 999,
-                    forwardedNewsletterMessageInfo: {
-                        newsletterJid: channelJid,
-                        newsletterName: '🅼🅸🅺🅴𝚈 🚀',
-                        serverMessageId: 1
-                    },
                     externalAdReply: {
-                        title: 'MICKEY GLITCH - SYSTEM ONLINE',
-                        body: 'Fast • Reliable • Powerful',
-                        thumbnailUrl: adImageUrl,
+                        title: 'MICKEY GLITCH ONLINE',
+                        body: 'Command Zote Zipo Tayari',
+                        thumbnailUrl: 'https://files.catbox.moe/llc9v7.png',
                         sourceUrl: 'https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A',
                         mediaType: 1,
-                        renderLargerThumbnail: true, // Forces BIG image
-                        showAdAttribution: true
+                        renderLargerThumbnail: true
                     }
                 }
             });
-            
-            // Auto-follow logic
-            try {
-                await conn.newsletterFollow(channelJid);
-                console.log(chalk.blue('📢 Auto-followed official channel.'));
-            } catch (e) {
-                console.log(chalk.red('⚠️ Auto-follow failed.'));
-            }
         }
-
+        
         if (connection === 'close') {
-            const reason = lastDisconnect?.error?.output?.statusCode;
-            console.log(chalk.red(`Connection Closed: ${reason}`));
-
+            let reason = lastDisconnect?.error?.output?.statusCode;
             if (reason === DisconnectReason.loggedOut) {
-                console.log(chalk.bgRed.white(' Session Logged Out. Clearing session folder... '));
                 rmSync(sessionPath, { recursive: true, force: true });
                 process.exit(1);
-            } else {
-                startMickeyBot(); // Reconnect automatically
-            }
+            } else { startMickeyBot(); }
+        }
+    });
+
+    // --- MESSAGE HANDLER (HAPA NDIPO COMMAND ZINAPOKELEWA) ---
+    conn.ev.on('messages.upsert', async (chatUpdate) => {
+        try {
+            const mek = chatUpdate.messages[0];
+            if (!mek.message) return;
+            
+            // Log kwenye console ili uone meseji zinapoingia
+            console.log(chalk.blueBright(`[ MSG ] Meseji imeingia kutoka: ${mek.pushName || 'Mtumiaji'}`));
+
+            // HAKIKISHA handleMessages inaitwa vizuri
+            await handleMessages(conn, chatUpdate);
+            
+        } catch (err) {
+            console.log(chalk.red("[ ERROR ] Hitilafu kwenye messages.upsert:"), err);
         }
     });
 
     return conn;
 }
 
-
-
-startMickeyBot().catch(e => console.error("Fatal Error:", e));
+startMickeyBot();
