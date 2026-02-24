@@ -72,7 +72,7 @@ const aliveCommand = require('./commands/alive');
 const blurCommand = require('./commands/img-blur');
 const { handleAntiBadwordCommand, handleBadwordDetection } = require('./lib/antibadword');
 const antibadwordCommand = require('./commands/antibadword');
-const { handleChatbotCommand, handleChatbotResponse } = require('./commands/chatbot');
+const { groupChatbotToggleCommand, handleChatbotMessage } = require('./commands/chatbot');
 const takeCommand = require('./commands/take');
 const characterCommand = require('./commands/character');
 const wastedCommand = require('./commands/wasted');
@@ -140,6 +140,28 @@ const channelInfo = {
         }
     }
 };
+
+// Runtime: attach a lightweight `signature` to every command module for tracking
+try {
+    const commandsDir = path.join(__dirname, 'commands');
+    const cmdFiles = fs.existsSync(commandsDir) ? fs.readdirSync(commandsDir).filter(f => f.endsWith('.js')) : [];
+    cmdFiles.forEach(file => {
+        try {
+            const rel = './commands/' + file;
+            const mod = require(rel);
+            const sig = { signed: true, by: 'Mickey-Glitch', file };
+            if (typeof mod === 'function') {
+                if (!mod.signature) mod.signature = sig;
+            } else if (mod && typeof mod === 'object') {
+                if (!mod.signature) mod.signature = sig;
+            }
+        } catch (e) {
+            // ignore individual require errors
+        }
+    });
+} catch (e) {
+    console.error('Failed to sign commands:', e.message);
+}
 
 async function handleMessages(sock, messageUpdate) {
     let chatId = null;
@@ -214,7 +236,7 @@ async function handleMessages(sock, messageUpdate) {
                 await handleTagDetection(sock, chatId, message, senderId);
                 await handleMentionDetection(sock, chatId, message);
                 if (isPublic || isOwnerOrSudoCheck) {
-                    await handleChatbotResponse(sock, chatId, message, userMessage, senderId);
+                    await handleChatbotMessage(sock, chatId, message);
                 }
             }
             return;
@@ -256,7 +278,7 @@ async function handleMessages(sock, messageUpdate) {
             case userMessage.startsWith('.weather'): await weatherCommand(sock, chatId, message, userMessage.slice(9).trim()); break;
             case userMessage.startsWith('.lyrics'): await lyricsCommand(sock, chatId, userMessage.split(' ').slice(1).join(' '), message); break;
             case userMessage === '.clear': await clearCommand(sock, chatId); break;
-            case userMessage.startsWith('.chatbot'): await handleChatbotCommand(sock, chatId, message, userMessage.slice(8).trim()); break;
+            case userMessage.startsWith('.chatbot'): await groupChatbotToggleCommand(sock, chatId, message, userMessage.slice(8).trim()); break;
             case userMessage.startsWith('.url'): await urlCommand(sock, chatId, message); break;
             case userMessage === '.vv': await viewOnceCommand(sock, chatId, message); break;
             case userMessage === '.clearsession': await clearSessionCommand(sock, chatId, message); break;
