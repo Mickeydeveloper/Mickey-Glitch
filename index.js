@@ -83,17 +83,35 @@ async function startBot(reconnectAttempts = 0) {
                 try {
                     const me = jidNormalizedUser(sock.user?.id);
                     if (me) {
-                        await sock.sendMessage(me, {
-                            image: { url: 'https://files.catbox.moe/llc9v7.png' },
-                            caption: `✨ *MICKEY GLITCH BOT* – FAST & RELIABLE ✨
+                        const imageUrl = 'https://files.catbox.moe/llc9v7.png';
+                        const caption = `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ-Ｖ3*
 
-🟢 Online 24/7
-⚡ Super fast replies
-💼 WhatsApp Business ready
-🚀 Stable & lightweight
+┌─〔 *BOT STATUS* 〕──
+┃ 🟢 *Status:* \`Online\`
+┃ 🚀 *Speed:* \`Super fast replies\`
+┃ 🔧 *Stable:* \`Lightweight & reliable\`
+└───────────────
+
 💬 Send *start* to begin
 
-Let's grow your business! 🔥`
+Let's grow your business! 🔥\n_Powered by Mickey Glitch_`;
+
+                        await sock.sendMessage(me, {
+                            image: { url: imageUrl },
+                            caption,
+                            contextInfo: {
+                                forwardingScore: 999,
+                                isForwarded: true,
+                                externalAdReply: {
+                                    title: 'MICKEY GLITCH V3: ONLINE',
+                                    body: 'Fast & Reliable | 24/7',
+                                    thumbnailUrl: imageUrl,
+                                    sourceUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
+                                    mediaType: 1,
+                                    renderLargerThumbnail: true,
+                                    showAdAttribution: true
+                                }
+                            }
                         });
                     }
                 } catch (err) {
@@ -120,12 +138,27 @@ Let's grow your business! 🔥`
             }
 
             // Request pairing code at correct timing
-            if ((connection === 'connecting' || qr) && phoneNumber && !pairingRequested && !state.creds.registered) {
+            if ((connection === 'connecting' || qr) && !pairingRequested && !state.creds.registered) {
                 pairingRequested = true;
                 await new Promise(r => setTimeout(r, 4000)); // safety delay for slow hosts
 
                 try {
-                    console.log(chalk.cyan("Requesting pairing code..."));
+                    // Prompt for phone number now if not provided yet
+                    if (!phoneNumber) {
+                        console.log(chalk.yellow.bold("\nNEW SESSION - PAIRING REQUIRED"));
+                        phoneNumber = await question(chalk.yellow("Enter phone number (e.g. 255715123456): "));
+                        phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
+
+                        if (phoneNumber.length < 9) {
+                            console.log(chalk.red("Number too short. Restart bot and try again."));
+                            process.exit(1);
+                        }
+                        if (!phoneNumber.startsWith('255')) phoneNumber = '255' + phoneNumber;
+
+                        console.log(chalk.cyan("Number received. Requesting pairing code..."));
+                    } else {
+                        console.log(chalk.cyan("Requesting pairing code..."));
+                    }
 
                     // Try custom suffix "MICKDADY" (works in some forks/custom versions)
                     // If your Baileys version does NOT support second arg → remove ", 'MICKDADY'"
