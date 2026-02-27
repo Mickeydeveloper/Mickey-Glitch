@@ -113,7 +113,7 @@ async function startBot(reconnectAttempts = 0) {
         // send ad notice to bot's own JID (me) using alive.js style
         try {
           if (botJid) {
-            const adCaption = `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™*\n\n┌─〔 *FEATURES* 〕──\n┃ 🟢 Online 24/7\n┃ ⚡ Fast replies\n┃ 💼 WhatsApp Business ready\n┃ 🚀 Stable & secure\n└────────────\n\nSend *start* or *help* to begin.\n📱 Bot: +${botNum}\n_Powered by Mickey Glitch_`;
+            const adCaption = `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™*\n\n┌─〔 *FEATURES* 〕──\n┃ 🟢 Online 24/7\n┃ ⚡ Fast replies\n┃ 🚀 Stable & secure\n└────────────\n\nSend *start* or *help* to begin.\n📱 Bot: +${botNum}\n_Powered by Mickey Glitch_`;
             const adImageUrl = 'https://files.catbox.moe/llc9v7.png';
             console.log(chalk.cyan('📤 Sending welcome ad...'));
             await sock.sendMessage(botJid, {
