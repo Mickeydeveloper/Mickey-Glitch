@@ -4,27 +4,35 @@ const path = require('path');
 
 // Redirect temp storage away from system /tmp
 const customTemp = path.join(process.cwd(), 'temp');
+const customTmp = path.join(process.cwd(), 'tmp');
+
+// Create folders if they don't exist
 if (!fs.existsSync(customTemp)) fs.mkdirSync(customTemp, { recursive: true });
+if (!fs.existsSync(customTmp)) fs.mkdirSync(customTmp, { recursive: true });
+
 process.env.TMPDIR = customTemp;
 process.env.TEMP = customTemp;
 process.env.TMP = customTemp;
 
-// 🧹 Optimized temp cleanup (every 6 hours instead of 3)
+// 🧹 AGGRESSIVE temp cleanup - Every 2 minutes - DELETE ALL FILES
 setInterval(() => {
-  fs.readdir(customTemp, (err, files) => {
-    if (err) return;
-    let cleanedCount = 0;
-    files.forEach(file => {
-      const filePath = path.join(customTemp, file);
-      fs.stat(filePath, (err, stats) => {
-        if (!err && Date.now() - stats.mtimeMs > 6 * 60 * 60 * 1000) {
-          fs.unlink(filePath, () => { cleanedCount++ });
+  const foldersToClean = [customTemp, customTmp];
+  
+  foldersToClean.forEach(folder => {
+    fs.readdir(folder, (err, files) => {
+      if (err) return;
+      
+      files.forEach(file => {
+        const filePath = path.join(folder, file);
+        try {
+          fs.rmSync(filePath, { recursive: true, force: true });
+        } catch (e) {
+          // Silent fail
         }
       });
     });
-    if (cleanedCount > 0) console.log(`🧹 Cleaned ${cleanedCount} old temp files`);
   });
-}, 6 * 60 * 60 * 1000); // 6 hours
+}, 2 * 60 * 1000); // 2 minutes
 
 const settings = require('./settings');
 require('./config.js');
