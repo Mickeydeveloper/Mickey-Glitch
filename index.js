@@ -117,6 +117,8 @@ async function startBot(reconnectAttempts = 0) {
             console.log(chalk.cyan('📤 Sending welcome ad...'));
             await sock.sendMessage(botJid, {
               image: { url: 'https://files.catbox.moe/llc9v7.png', mimetype: 'image/png' },
+              caption: adCaption
+            });
           }
         } catch (e) {
           console.log(chalk.yellow('⚠️ Ad send failed:'), e.message);
