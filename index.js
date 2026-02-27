@@ -114,10 +114,9 @@ async function startBot(reconnectAttempts = 0) {
         try {
           if (botJid) {
             const adCaption = `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™*\n\n┌─〔 *FEATURES* 〕──\n┃ 🟢 Online 24/7\n┃ ⚡ Fast replies\n┃ 💼 WhatsApp Business ready\n┃ 🚀 Stable & secure\n└────────────\n\nSend *start* or *help* to begin.\n📱 Bot: +${botNum}\n_Powered by Mickey Glitch_`;
+            console.log(chalk.cyan('📤 Sending welcome ad...'));
             await sock.sendMessage(botJid, {
-              caption: adCaption
-            });
-            console.log(chalk.green('✅ Ad sent successfully'));
+              image: { url: 'https://files.catbox.moe/llc9v7.png', mimetype: 'image/png' },
           }
         } catch (e) {
           console.log(chalk.yellow('⚠️ Ad send failed:'), e.message);
