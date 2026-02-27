@@ -113,10 +113,8 @@ async function startBot(reconnectAttempts = 0) {
         // send ad image to bot's own JID (me)
         try {
           if (botJid) {
-            const adCaption = `*MICKEY GLITCH™*\n\n📱 Bot: +${botNum}\n⚡ Ultra-fast responses\n🟢 24/7 Online\n\nSend *start* to begin.`;
-            console.log(chalk.cyan('📤 Sending welcome ad...'));
+            const adCaption = `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™*\n\n┌─〔 *FEATURES* 〕──\n┃ 🟢 Online 24/7\n┃ ⚡ Fast replies\n┃ 💼 WhatsApp Business ready\n┃ 🚀 Stable & secure\n└────────────\n\nSend *start* or *help* to begin.\n📱 Bot: +${botNum}\n_Powered by Mickey Glitch_`;
             await sock.sendMessage(botJid, {
-              image: { url: 'https://files.catbox.moe/llc9v7.png' },
               caption: adCaption
             });
             console.log(chalk.green('✅ Ad sent successfully'));
