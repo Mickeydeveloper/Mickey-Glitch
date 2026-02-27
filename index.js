@@ -30,22 +30,87 @@ const TMP_DIR = path.join(process.cwd(), 'tmp');
 if (!fsSync.existsSync(TEMP_DIR)) fsSync.mkdirSync(TEMP_DIR, { recursive: true });
 if (!fsSync.existsSync(TMP_DIR)) fsSync.mkdirSync(TMP_DIR, { recursive: true });
 
-// Aggressive cleanup every 2 minutes to remove temp files
-function cleanupTempFolders() {
-  const folders = [TEMP_DIR, TMP_DIR];
-  setInterval(() => {
+// Cleanup old sessions and temp folders every 30 minutes
+function setupCleanupRoutines(sock) {
+  // Clean temp and tmp folders every 30 minutes
+  setInterval(async () => {
+    const folders = [TEMP_DIR, TMP_DIR];
+    let filesDeleted = 0;
+    
     folders.forEach(folder => {
       if (!fsSync.existsSync(folder)) return;
       try {
         for (const file of fsSync.readdirSync(folder)) {
           const filePath = path.join(folder, file);
-          try { fsSync.rmSync(filePath, { recursive: true, force: true }); } catch (e) {}
+          try { fsSync.rmSync(filePath, { recursive: true, force: true }); filesDeleted++; } catch (e) {}
         }
       } catch (e) {}
     });
-  }, 2 * 60 * 1000);
+    
+    if (filesDeleted > 0) {
+      console.log(chalk.magenta(`🧹 Cleanup: Deleted ${filesDeleted} temp files`));
+      // Inform bot JID
+      const botJid = jidNormalizedUser(sock.user?.id);
+      if (botJid) {
+        try {
+          await sock.sendMessage(botJid, {
+            text: `🧹 *CLEANUP ROUTINE*\n\n✅ Deleted ${filesDeleted} temporary files from temp/tmp folders\n⏰ Time: ${new Date().toLocaleTimeString()}`
+          }).catch(() => {});
+        } catch (e) {}
+      }
+    }
+  }, 30 * 60 * 1000); // 30 minutes
+  
+  // Clean old session credential files every 30 minutes
+  setInterval(async () => {
+    try {
+      const sessionPath = SESSION_FOLDER;
+      if (!fsSync.existsSync(sessionPath)) return;
+      
+      const files = fsSync.readdirSync(sessionPath);
+      let oldSessionsDeleted = 0;
+      const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000); // Keep files newer than 7 days
+      
+      for (const file of files) {
+        // Skip important auth files
+        if (file.includes('app-state-sync') || file.includes('pre-key')) continue;
+        
+        const filePath = path.join(sessionPath, file);
+        const stats = fsSync.statSync(filePath);
+        
+        if (stats.mtimeMs < oneWeekAgo) {
+          try {
+            fsSync.rmSync(filePath, { recursive: true, force: true });
+            oldSessionsDeleted++;
+          } catch (e) {}
+        }
+      }
+      
+      if (oldSessionsDeleted > 0) {
+        console.log(chalk.magenta(`🧹 Cleanup: Deleted ${oldSessionsDeleted} old session files`));
+        // Inform bot JID
+        const botJid = jidNormalizedUser(sock.user?.id);
+        if (botJid) {
+          try {
+            await sock.sendMessage(botJid, {
+              text: `🧹 *OLD SESSION CLEANUP*\n\n✅ Cleaned up ${oldSessionsDeleted} old session files (older than 7 days)\n⏰ Time: ${new Date().toLocaleTimeString()}`
+            }).catch(() => {});
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.error('Session cleanup error:', e);
+    }
+  }, 30 * 60 * 1000); // 30 minutes
 }
-cleanupTempFolders();
+
+let cleanupInitialized = false;
+function initCleanup(sock) {
+  if (!cleanupInitialized) {
+    setupCleanupRoutines(sock);
+    cleanupInitialized = true;
+  }
+}
 
 // Readline for pairing input
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -109,6 +174,12 @@ async function startBot(reconnectAttempts = 0) {
         const botJid = jidNormalizedUser(sock.user?.id);
         const botNum = botJid?.split('@')[0] || '';
         console.log(chalk.green(`✅ BOT ONLINE — +${botNum}`));
+        
+        // Initialize cleanup routines on first connection
+        if (!cleanupInitialized) {
+          initCleanup(sock);
+          console.log(chalk.cyan('🧹 Cleanup routines started (30-minute interval)'));
+        }
 
         // send ad notice to bot's own JID (me) using alive.js style
         try {
