@@ -1,5 +1,5 @@
 /**
- * MICKEY GLITCH BOT - MAIN INDEX (FIXED PAIRING)
+ * MICKEY GLITCH BOT - MAIN INDEX (AUTO-CLEANUP + AD)
  */
 
 require('./settings');
@@ -19,14 +19,12 @@ const readline = require('readline');
 const fsSync = require('fs');
 const path = require('path');
 
-// Mengineyo kutoka main.js
 const { handleMessages, handleStatusUpdate } = require('./main');
 
 const SESSION_FOLDER = './session';
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 const TMP_DIR = path.join(process.cwd(), 'tmp');
 
-// Hakikisha folder zipo
 if (!fsSync.existsSync(TEMP_DIR)) fsSync.mkdirSync(TEMP_DIR, { recursive: true });
 if (!fsSync.existsSync(TMP_DIR)) fsSync.mkdirSync(TMP_DIR, { recursive: true });
 
@@ -39,103 +37,82 @@ async function startBot(reconnectAttempts = 0) {
   try {
     console.clear();
     const { version } = await fetchLatestBaileysVersion();
-    console.log(chalk.cyan(`ＭＩＣＫＥＹ-ＧＬＩＴＣＨ v3.0.0 | WhatsApp v${version.join('.')}`));
+    console.log(chalk.cyan(`ＭＩＣＫＥＹ-ＧＬＩＴＣＨ v3.0 | WA v${version.join('.')}`));
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_FOLDER);
 
     const sock = makeWASocket({
       version,
       logger: pino({ level: 'silent' }),
-      printQRInTerminal: false, // Tunatumia Pairing Code
-      browser: ["Ubuntu", "Chrome", "20.0.04"], 
+      printQRInTerminal: false,
+      browser: ["ubuntu", "Chrome", "20.0"], 
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
       },
       markOnlineOnConnect: true,
       syncFullHistory: false,
-      generateHighQualityLinkPreview: true
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // --- CONNECTION HANDLER & PAIRING LOGIC ---
     sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
+      const { connection, lastDisconnect } = update;
 
       if (connection === 'connecting') {
-        console.log(chalk.blue('⏳ Inatafuta muunganisho...'));
+        console.log(chalk.blue('⏳ Inatafuta muunganisho... (Connecting...)'));
       }
 
-      // HAPA NDIPO PAIRING INAFANYIKA
+      // --- PAIRING LOGIC ---
       if (!sock.authState.creds.registered && !global.pairingStarted) {
         global.pairingStarted = true;
-        
-        console.log(chalk.yellow('\n🔐 NEW SESSION DETECTED - PAIRING REQUIRED\n'));
-        let rawPhone = await question(chalk.cyan('📱 Ingiza Namba (Mfano: 255715xxxxxx): '));
+        console.log(chalk.yellow('\n🔐 KUUNGANISHA BOT (SESSION LOGIN)'));
+        let rawPhone = await question(chalk.cyan('📱 Namba (Num) [Ex: 2557xxxxxxxx]: '));
         let phone = rawPhone.trim().replace(/[^0-9]/g, '');
+        if (!phone.startsWith('255')) phone = phone.startsWith('0') ? '255' + phone.slice(1) : '255' + phone;
 
-        // Validating and Formatting Number
-        if (phone.length < 9) {
-          console.log(chalk.red('\n❌ Namba haitoshi! Tafadhali anza upya.\n'));
-          process.exit(1);
-        }
-        if (!phone.startsWith('255')) {
-          if (phone.startsWith('0')) phone = '255' + phone.slice(1);
-          else phone = '255' + phone;
-        }
-
-        console.log(chalk.green(`✅ Inatuma ombi la Pairing kwenda: +${phone}`));
-        console.log(chalk.cyan('⏳ Tafadhali subiri sekunde 6 ili kodi itengenezwe...\n'));
-        
+        console.log(chalk.cyan('⏳ Subiri sekunde 6... (Wait 6s...)'));
         await new Promise(r => setTimeout(r, 6000));
 
         try {
           const code = await sock.requestPairingCode(phone);
-          const formattedCode = code?.match(/.{1,4}/g)?.join(' - ') || code;
-          
-          console.log(chalk.black.bgGreen('╔════════════════════════════════╗'));
-          console.log(chalk.black.bgGreen('║   🔑 YOUR PAIRING CODE 🔑       ║'));
-          console.log(chalk.black.bgGreen('╠════════════════════════════════╣'));
-          console.log(chalk.black.bgGreen(`║          ${formattedCode}           ║`));
-          console.log(chalk.black.bgGreen('╚════════════════════════════════╝\n'));
-          
-          console.log(chalk.yellow('📱 HATUA ZA KUFUATA:'));
-          console.log(chalk.white('1. Fungua WhatsApp kwenye simu yako.'));
-          console.log(chalk.white('2. Gusa Vidoti vitatu (Settings) → Linked Devices.'));
-          console.log(chalk.white('3. Gusa "Link a Device" kisha chagua "Link with phone number instead".'));
-          console.log(chalk.white(`4. Ingiza kodi: ${formattedCode}\n`));
+          const fCode = code?.match(/.{1,4}/g)?.join(' - ') || code;
+          console.log(chalk.black.bgGreen(`\n🔑 KODI (CODE): ${fCode}\n`));
+          console.log(chalk.white('Ingiza kodi hiyo kwenye WhatsApp yako (Enter code in WA)'));
         } catch (e) {
-          console.log(chalk.red('❌ Ombi la kodi limeshindwa:'), e.message);
+          console.log(chalk.red('❌ Failed:'), e.message);
           global.pairingStarted = false;
         }
       }
 
+      // --- CONNECTION OPEN ---
       if (connection === 'open') {
         global.pairingStarted = false;
         const botJid = jidNormalizedUser(sock.user?.id);
-        const botNum = botJid?.split('@')[0] || '';
-        console.log(chalk.green.bold(`\n✅ MICKEY GLITCH IS ONLINE!\n📱 Number: +${botNum}`));
+        console.log(chalk.green.bold(`\n✅ IPO HEWANI! (ONLINE!) +${botJid.split('@')[0]}`));
 
-        // Welcome Message (Ad)
-        try {
-          const adCaption = `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™*\n\n┌─〔 *STATUS* 〕──\n┃ 🟢 Online: Active\n┃ ⚡ Version: 3.0.0\n┃ 🚀 Mode: Stable\n└────────────\n\n_System fully operational._`;
-          await sock.sendMessage(botJid, {
-            text: adCaption,
-            contextInfo: {
-              externalAdReply: {
-                title: 'SYSTEM CONNECTED',
-                body: 'Mickey Glitch is now active',
-                thumbnailUrl: 'https://files.catbox.moe/llc9v7.png',
-                mediaType: 1,
-                renderLargerThumbnail: true
+        // 📤 Welcome Ad Message
+        setTimeout(async () => {
+          try {
+            await sock.sendMessage(botJid, {
+              text: `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™*\n\n🟢 *Status:* Active (Ipo Hewani)\n🚀 *Mode:* Stable (Imetulia)\n\n_System fully operational._`,
+              contextInfo: {
+                externalAdReply: {
+                  title: 'ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™',
+                  body: 'Ultimate WhatsApp Bot',
+                  thumbnailUrl: 'https://files.catbox.moe/llc9v7.png',
+                  sourceUrl: 'https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A',
+                  mediaType: 1,
+                  renderLargerThumbnail: true,
+                  showAdAttribution: true
+                }
               }
-            }
-          });
-        } catch (e) {}
+            });
+          } catch (e) {}
+        }, 3000);
 
         if (!cleanupInitialized) {
-          setupCleanupRoutines(sock);
+          setupCleanupRoutines(sock, botJid);
           cleanupInitialized = true;
         }
       }
@@ -144,56 +121,56 @@ async function startBot(reconnectAttempts = 0) {
         global.pairingStarted = false;
         const code = lastDisconnect?.error?.output?.statusCode;
         if (code === DisconnectReason.loggedOut) {
-          console.log(chalk.red('📵 Logged out - cleaning session'));
           fsSync.rmSync(SESSION_FOLDER, { recursive: true, force: true });
           process.exit(1);
         }
-        const delay = Math.min(5000 * (reconnectAttempts + 1), 30000);
-        setTimeout(() => startBot(reconnectAttempts + 1), delay);
+        setTimeout(() => startBot(reconnectAttempts + 1), 5000);
       }
     });
 
-    // --- MESSAGE & STATUS LISTENER ---
     sock.ev.on('messages.upsert', async (m) => {
       try {
         const msg = m.messages[0];
         if (!msg?.message) return;
-
-        // Auto Status View & Like
         if (msg.key.remoteJid === 'status@broadcast') {
-          if (typeof handleStatusUpdate === 'function') {
-            await handleStatusUpdate(sock, m);
-          }
+          if (typeof handleStatusUpdate === 'function') await handleStatusUpdate(sock, m);
           return;
         }
-
-        // Handle Chat Messages
-        if (typeof handleMessages === 'function') {
-          await handleMessages(sock, m);
-        }
-      } catch (e) {
-        console.error(chalk.red('[UPSERT ERROR]'), e.message);
-      }
+        if (typeof handleMessages === 'function') await handleMessages(sock, m);
+      } catch (e) {}
     });
 
   } catch (err) {
-    console.log(chalk.red('[CRITICAL ERROR]'), err.message);
     setTimeout(() => startBot(), 5000);
   }
 }
 
-// Cleanup Routine
-function setupCleanupRoutines(sock) {
-  setInterval(() => {
+// 🧹 Cleanup Routine with WA Message
+function setupCleanupRoutines(sock, botJid) {
+  setInterval(async () => {
+    let filesDeleted = 0;
     [TEMP_DIR, TMP_DIR].forEach(dir => {
       if (fsSync.existsSync(dir)) {
         fsSync.readdirSync(dir).forEach(file => {
-          try { fsSync.unlinkSync(path.join(dir, file)); } catch (e) {}
+          try {
+            fsSync.unlinkSync(path.join(dir, file));
+            filesDeleted++;
+          } catch (e) {}
         });
       }
     });
-    console.log(chalk.magenta('🧹 Temp files cleaned.'));
-  }, 30 * 60 * 1000);
+
+    console.log(chalk.magenta('🧹 Usafi umefanyika. (Cleanup done.)'));
+    
+    // Tuma ujumbe wa usafi (Send Refresh Msg)
+    try {
+      if (filesDeleted > 0) {
+        await sock.sendMessage(botJid, { 
+          text: `🧹 *REFRESH OCCURRED*\n\n✅ Folders *temp* & *tmp* cleared!\n🗑️ Files deleted: ${filesDeleted}\n⏰ Time: ${new Date().toLocaleTimeString()}`
+        });
+      }
+    } catch (e) {}
+  }, 30 * 60 * 1000); // 30 mins
 }
 
 startBot();
