@@ -146,7 +146,7 @@ const { pinCommand, verifyPinCommand, checkPinVerification } = require('./comman
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const phoneCommand = require('./commands/phone');
-const { handleVoiceCommand, voiceConfigCommand } = require('./commands/voice');
+const { handleVoiceCommand, voiceConfigCommand, voiceStatusCommand } = require('./commands/voice');
 // sora command removed
 
 // Global settings
@@ -881,6 +881,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     const args = userMessage.split(' ').slice(1).join(' ');
                     await voiceConfigCommand(sock, chatId, message, args);
                 }
+                break;
+            case userMessage === '.voicestatus':
+                await voiceStatusCommand(sock, chatId, message);
                 break;
            
             // .answer command removed

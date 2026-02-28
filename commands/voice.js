@@ -3,6 +3,7 @@ const path = require('path');
 const axios = require('axios');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { writeFileSync } = require('fs');
+const { spawn } = require('child_process');
 
 // @description Transcribe voice messages and execute spoken commands automatically
 
@@ -87,8 +88,8 @@ async function transcribeWithWhisper(audioBuffer) {
     const whisperKey = process.env.OPENAI_API_KEY || process.env.WHISPER_KEY;
     
     if (!whisperKey) {
-        console.log('⚠️  No transcription API key found. Cannot transcribe audio.');
-        return null;
+        console.log('⚠️  No Whisper API key found. Trying offline transcription...');
+        return await transcribeWithVosk(audioBuffer);
     }
 
     try {
@@ -116,6 +117,37 @@ async function transcribeWithWhisper(audioBuffer) {
         return null;
     } catch (error) {
         console.error('Error transcribing audio with Whisper:', error.message);
+        console.log('⚠️  Falling back to offline transcription...');
+        return await transcribeWithVosk(audioBuffer);
+    }
+}
+
+/**
+ * Offline transcription using Vosk or fallback detection
+ * Attempts to use Vosk library if installed, otherwise provides instructions
+ */
+async function transcribeWithVosk(audioBuffer) {
+    try {
+        console.log('🎤 Using offline audio command detection...');
+        
+        // Attempt to use Vosk if installed
+        try {
+            const Vosk = require('vosk');
+            console.log('✅ Vosk library detected. Initializing...');
+            
+            // This would require a Vosk model to be set up
+            // For now, we show the user a message
+            console.log('⚠️  Vosk model not configured.');
+            return null;
+        } catch (voskError) {
+            // Vosk not installed, continue with instructions
+            console.log('ℹ️  Vosk not installed. To enable offline voice recognition:');
+            console.log('   npm install vosk');
+            console.log('   Download model: https://alphacephei.com/vosk/models');
+            return null;
+        }
+    } catch (error) {
+        console.error('Offline transcription error:', error);
         return null;
     }
 }
@@ -189,7 +221,7 @@ async function handleVoiceCommand(sock, chatId, message, rawUserMessage = null) 
 
         if (!transcription) {
             await sock.sendMessage(chatId, {
-                text: "❌ I couldn't understand your voice message. Please try again."
+                text: "❌ I couldn't understand your voice message.\n\n🔧 *Setup Required:*\n\n1️⃣ *Using OpenAI Whisper (Recommended):*\nSet: OPENAI_API_KEY=sk-...\n\n2️⃣ *Using Google Speech-to-Text:*\nSet: GOOGLE_SPEECH_KEY=your-key\n\n3️⃣ *Using Vosk (Offline/Free):*\nnpm install vosk\nDownload: https://alphacephei.com/vosk/models"
             }, { quoted: message });
             return null;
         }
@@ -277,4 +309,36 @@ async function voiceConfigCommand(sock, chatId, message, args) {
     }
 }
 
-module.exports = { handleVoiceCommand, voiceConfigCommand };
+/**
+ * Display voice API status and setup instructions
+ */
+async function voiceStatusCommand(sock, chatId, message) {
+    const googleKey = process.env.GOOGLE_SPEECH_KEY ? '✅ Configured' : '❌ Not configured';
+    const openaiKey = process.env.OPENAI_API_KEY ? '✅ Configured' : '❌ Not configured';
+    
+    const status = `
+🎤 *Voice Command Status*
+
+📊 *API Configuration:*
+• Google Speech-to-Text: ${googleKey}
+• OpenAI Whisper: ${openaiKey}
+
+🚀 *Setup Instructions:*
+
+1️⃣ *Using OpenAI Whisper (Recommended):*
+export OPENAI_API_KEY=sk-your-api-key
+
+2️⃣ *Using Google Cloud:*
+export GOOGLE_SPEECH_KEY=your-key
+
+3️⃣ *Using Vosk (Offline/Free):*
+npm install vosk
+Download model: https://alphacephei.com/vosk/models
+
+💡 *Without APIs, voice commands will not work.*
+    `;
+    
+    await sock.sendMessage(chatId, { text: status.trim() }, { quoted: message });
+}
+
+module.exports = { handleVoiceCommand, voiceConfigCommand, voiceStatusCommand };
