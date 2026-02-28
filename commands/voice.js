@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { writeFileSync } = require('fs');
 
 // @description Transcribe voice messages and execute spoken commands automatically
@@ -148,41 +149,49 @@ function extractCommand(text) {
  */
 async function handleVoiceCommand(sock, chatId, message, rawUserMessage = null) {
     try {
-        // Extract audio data
-        let audioData = null;
-        let mediaUrl = null;
-
-        // PTT (Push-to-Talk) message
-        if (message.message?.pttMessage) {
-            mediaUrl = await sock.downloadMediaMessage(message);
-            audioData = mediaUrl;
-        }
-        // Regular audio message
-        else if (message.message?.audioMessage) {
-            mediaUrl = await sock.downloadMediaMessage(message);
-            audioData = mediaUrl;
-        }
-
-        if (!audioData) {
-            await sock.sendMessage(chatId, {
-                text: '❌ Could not extract audio data. Please try again.'
-            }, { quoted: message });
-            return;
+        // Check if message has audio or PTT
+        if (!message.message?.pttMessage && !message.message?.audioMessage) {
+            return null;
         }
 
         // Show typing indicator
         await sock.sendPresenceUpdate('composing', chatId);
 
+        // Download audio buffer using the proper method
+        console.log('🎤 Downloading voice message...');
+        let audioBuffer;
+        
+        try {
+            audioBuffer = await downloadMediaMessage(
+                message,
+                'buffer',
+                {},
+                { logger: undefined, reuploadRequest: sock.updateMediaMessage }
+            );
+        } catch (downloadError) {
+            console.error('Error downloading audio:', downloadError);
+            await sock.sendMessage(chatId, {
+                text: '❌ Could not extract audio data. Please try again.'
+            }, { quoted: message });
+            return null;
+        }
+
+        if (!audioBuffer || !Buffer.isBuffer(audioBuffer)) {
+            await sock.sendMessage(chatId, {
+                text: '❌ Could not extract audio data. Please try again.'
+            }, { quoted: message });
+            return null;
+        }
+
         // Transcribe audio
         console.log('🎤 Transcribing voice message...');
-        const audioBuffer = Buffer.isBuffer(audioData) ? audioData : audioData;
         const transcription = await transcribeAudio(audioBuffer);
 
         if (!transcription) {
             await sock.sendMessage(chatId, {
                 text: "❌ I couldn't understand your voice message. Please try again."
             }, { quoted: message });
-            return;
+            return null;
         }
 
         console.log(`🎤 Transcribed: "${transcription}"`);
@@ -194,7 +203,7 @@ async function handleVoiceCommand(sock, chatId, message, rawUserMessage = null) 
             await sock.sendMessage(chatId, {
                 text: '❌ Command not recognized. Please say a valid command.'
             }, { quoted: message });
-            return;
+            return null;
         }
 
         console.log(`🎤 Voice command extracted: "${voiceCommand}"`);
