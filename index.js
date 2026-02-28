@@ -95,12 +95,12 @@ async function startBot(reconnectAttempts = 0) {
         setTimeout(async () => {
           try {
             await sock.sendMessage(botJid, {
-              text: `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™*\n\n🟢 *Status:* Active (Ipo Hewani)\n🚀 *Mode:* Stable (Imetulia)\n\n_System fully operational._`,
+              text: `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™*\n\n🟢 *Status:* Active \n🚀 *Mode:* Stable \n\n_System fully operational._`,
               contextInfo: {
                 externalAdReply: {
                   title: 'ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™',
                   body: 'Ultimate WhatsApp Bot',
-                  thumbnailUrl: 'https://files.catbox.moe/llc9v7.png',
+                  thumbnailUrl: 'https://files.catbox.moe/p3yzfk.jpg',
                   sourceUrl: 'https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A',
                   mediaType: 1,
                   renderLargerThumbnail: true,
