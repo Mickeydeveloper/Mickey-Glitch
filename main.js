@@ -65,6 +65,7 @@ const warningsCommand = require('./commands/warnings');
 const ttsCommand = require('./commands/tts');
 // tictactoe command removed
 const { incrementMessageCount, topMembers } = require('./commands/topmembers');
+const { logGhostActivity, ghostCommand } = require('./commands/ghost');
 const ownerCommand = require('./commands/owner');
 const deleteCommand = require('./commands/delete');
 const { handleAntilinkCommand, handleLinkDetection } = require('./commands/antilink');
@@ -364,7 +365,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
               return;
           } */
 
-        if (!message.key.fromMe) incrementMessageCount(chatId, senderId);
+        if (!message.key.fromMe) {
+            incrementMessageCount(chatId, senderId);
+            logGhostActivity(chatId, message);
+        }
 
         // Check for bad words and antilink FIRST, before ANY other processing
         // Always run moderation in groups, regardless of mode
@@ -844,6 +848,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
             // .move command removed
             case userMessage === '.topmembers':
                 topMembers(sock, chatId, isGroup);
+                break;
+            case userMessage === '.ghost':
+                await ghostCommand(sock, chatId, isGroup);
                 break;
            
             // .answer command removed
