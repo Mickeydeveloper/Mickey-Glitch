@@ -146,6 +146,7 @@ const { pinCommand, verifyPinCommand, checkPinVerification } = require('./comman
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const phoneCommand = require('./commands/phone');
+const { handleVoiceCommand, voiceConfigCommand } = require('./commands/voice');
 // sora command removed
 
 // Global settings
@@ -314,14 +315,37 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
         }
 
-            let userMessage = (
-                message.message?.conversation?.trim() ||
-                message.message?.extendedTextMessage?.text?.trim() ||
-                message.message?.imageMessage?.caption?.trim() ||
-                message.message?.videoMessage?.caption?.trim() ||
-                message.message?.buttonsResponseMessage?.selectedButtonId?.trim() ||
-                ''
-            ).toLowerCase().replace(/\.\s+/g, '.').trim();
+            // Voice message detection (PTT or audio message)
+            if (message.message?.pttMessage || message.message?.audioMessage) {
+                try {
+                    const voiceCommand = await handleVoiceCommand(sock, chatId, message);
+                    if (voiceCommand) {
+                        // Use the extracted voice command and process as normal
+                        var userMessage = voiceCommand;
+                        console.log(`🎤 Processing voice command: ${userMessage}`);
+                        // Continue to command processing (fall through)
+                    } else {
+                        // Voice processing failed, return early
+                        return;
+                    }
+                } catch (voiceError) {
+                    console.error('Voice command error:', voiceError);
+                    await sock.sendMessage(chatId, {
+                        text: "❌ I couldn't understand your voice message. Please try again."
+                    }, { quoted: message });
+                    return;
+                }
+            } else {
+                // Normal text message
+                var userMessage = (
+                    message.message?.conversation?.trim() ||
+                    message.message?.extendedTextMessage?.text?.trim() ||
+                    message.message?.imageMessage?.caption?.trim() ||
+                    message.message?.videoMessage?.caption?.trim() ||
+                    message.message?.buttonsResponseMessage?.selectedButtonId?.trim() ||
+                    ''
+                ).toLowerCase().replace(/\.\s+/g, '.').trim();
+            }
 
         // Preserve raw message for commands like .tag that need original casing
         const rawText = message.message?.conversation?.trim() ||
@@ -851,6 +875,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ghost':
                 await ghostCommand(sock, chatId, isGroup);
+                break;
+            case userMessage.startsWith('.voiceconfig'):
+                {
+                    const args = userMessage.split(' ').slice(1).join(' ');
+                    await voiceConfigCommand(sock, chatId, message, args);
+                }
                 break;
            
             // .answer command removed
