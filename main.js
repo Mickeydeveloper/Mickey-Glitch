@@ -1068,6 +1068,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage === '.pp':
                 await setProfilePicture(sock, chatId, message);
                 break;
+            case userMessage === '.getpp':
+                await getProfilePicture(sock, chatId, message);
+                break;
             case userMessage.startsWith('.setgdesc'):
                 {
                     const text = rawText.slice(9).trim();
