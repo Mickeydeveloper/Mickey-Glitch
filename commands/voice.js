@@ -127,25 +127,51 @@ async function transcribeWithWhisper(audioBuffer) {
  * Attempts to use Vosk library if installed, otherwise provides instructions
  */
 async function transcribeWithVosk(audioBuffer) {
+    /*
+     * Attempt to perform offline speech-to-text using Vosk.
+     * Requirements:
+     *   npm install vosk
+     *   Download and unpack a model, then set VOSK_MODEL_PATH env or place it
+     *   under ./models/<model-folder>.
+     */
     try {
-        console.log('🎤 Using offline audio command detection...');
-        
-        // Attempt to use Vosk if installed
+        let Vosk;
         try {
-            const Vosk = require('vosk');
-            console.log('✅ Vosk library detected. Initializing...');
-            
-            // This would require a Vosk model to be set up
-            // For now, we show the user a message
-            console.log('⚠️  Vosk model not configured.');
-            return null;
-        } catch (voskError) {
-            // Vosk not installed, continue with instructions
-            console.log('ℹ️  Vosk not installed. To enable offline voice recognition:');
+            Vosk = require('vosk');
+        } catch (e) {
+            console.log('ℹ️  Vosk library not installed. To enable offline voice recognition run:');
             console.log('   npm install vosk');
-            console.log('   Download model: https://alphacephei.com/vosk/models');
             return null;
         }
+
+        const modelPath = process.env.VOSK_MODEL_PATH || path.join(process.cwd(), 'models', 'vosk-model-small-en-us-0.15');
+        if (!fs.existsSync(modelPath)) {
+            console.log(`⚠️  Vosk model not found at ${modelPath}`);
+            console.log('   Download a model from https://alphacephei.com/vosk/models and set VOSK_MODEL_PATH to its folder');
+            return null;
+        }
+
+        // convert input buffer to 16k WAV using ffmpeg
+        const tmpFile = path.join(process.cwd(), 'tmp', `voice_${Date.now()}.wav`);
+        await fs.promises.mkdir(path.dirname(tmpFile), { recursive: true });
+        await new Promise((resolve, reject) => {
+            const ff = spawn('ffmpeg', ['-i', 'pipe:0', '-ar', '16000', '-ac', '1', '-f', 'wav', tmpFile]);
+            ff.stdin.write(audioBuffer);
+            ff.stdin.end();
+            ff.on('error', reject);
+            ff.on('exit', code => code === 0 ? resolve() : reject(new Error('ffmpeg failed ' + code)));
+        });
+
+        const wavBuffer = await fs.promises.readFile(tmpFile);
+        try { await fs.promises.unlink(tmpFile); } catch {};
+
+        const model = new Vosk.Model(modelPath);
+        const rec = new Vosk.Recognizer({model: model, sampleRate: 16000});
+        rec.acceptWaveform(wavBuffer);
+        const result = rec.finalResult();
+        const text = (JSON.parse(result).text || '').trim();
+        if (text) return text;
+        return null;
     } catch (error) {
         console.error('Offline transcription error:', error);
         return null;
