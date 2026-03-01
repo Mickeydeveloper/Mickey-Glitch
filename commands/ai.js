@@ -66,4 +66,27 @@ async function aiCommand(sock, chatId, message) {
   }
 }
 
-module.exports = aiCommand; 
+
+/**
+ * Voice-specific wrapper that accepts plain text extracted from a voice
+ * message.  Main handler is reused, so we just build a fake message object.
+ *
+ * @param {import('@whiskeysockets/baileys').AnyWASocket} sock
+ * @param {string} chatId
+ * @param {string} senderId  // not used currently, kept for compatibility
+ * @param {string} voiceText text already converted from speech
+ * @param {object} message   // original message object (used for quoting)
+ */
+async function aiVoiceCommand(sock, chatId, senderId, voiceText, message) {
+  // build a minimal message object to trick aiCommand into working
+  const fake = {
+    message: { conversation: `.ai ${voiceText}` },
+    key: message.key
+  };
+  return aiCommand(sock, chatId, fake);
+}
+
+module.exports = {
+  aiCommand,
+  aiVoiceCommand
+}; 
