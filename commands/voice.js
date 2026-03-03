@@ -1,37 +1,62 @@
-// aiVoiceModule.js
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
-const { gTTS } = require('gtts'); // npm install gtts
+const gTTS = require('gtts'); // npm install gtts
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 
+const VOICE_CONFIG_PATH = './data/voiceConfig.json';
+
 // ======================
-// Function to get AI Response via public GPT API URL
+// Helper functions for Config (On/Off)
 // ======================
-async function getAIResponse(promptText) {
+function readVoiceConfig() {
     try {
-        const encodedPrompt = encodeURIComponent(promptText);
-        const url = `https://gpt-3-5.apis-bj-devs.workers.dev/?prompt=${encodedPrompt}`;
-        const res = await axios.get(url, { timeout: 30000 });
-        // assume API returns JSON with "response" field
-        if (res.data?.response) {
-            return res.data.response.trim();
+        if (!fs.existsSync(VOICE_CONFIG_PATH)) {
+            return { aiVoiceActive: true, showTranscription: true };
         }
-        return res.data?.choices?.[0]?.text?.trim() || "Sorry, I couldn't get a response.";
-    } catch (error) {
-        console.error('Error fetching GPT API response:', error.message);
-        return "Sorry, I couldn't process your request.";
+        const raw = fs.readFileSync(VOICE_CONFIG_PATH, 'utf8');
+        return JSON.parse(raw || '{}');
+    } catch {
+        return { aiVoiceActive: true, showTranscription: true };
+    }
+}
+
+function writeVoiceConfig(newConfig) {
+    try {
+        if (!fs.existsSync('./data')) fs.mkdirSync('./data', { recursive: true });
+        const current = readVoiceConfig();
+        const payload = { ...current, ...newConfig };
+        fs.writeFileSync(VOICE_CONFIG_PATH, JSON.stringify(payload, null, 2));
+    } catch (e) {
+        console.error('Save config error:', e);
     }
 }
 
 // ======================
-// Function to convert text → speech using gTTS
+// AI Response Logic
 // ======================
+async function getAIResponse(promptText) {
+    try {
+        const url = `https://gpt-3-5.apis-bj-devs.workers.dev/?prompt=${encodeURIComponent(promptText)}`;
+        const res = await axios.get(url, { timeout: 15000 });
+        
+        // Handling multiple API response formats
+        if (res.data?.response) return res.data.response.trim();
+        if (res.data?.choices?.[0]?.text) return res.data.choices[0].text.trim();
+        
+        return "Samahani (Sorry), sikuweza kupata jibu kwa sasa.";
+    } catch (error) {
+        console.error('AI API Error:', error.message);
+        return "Error: Connection lost.";
+    }
+}
+
 async function textToSpeech(text, outputFile) {
     return new Promise((resolve, reject) => {
         try {
-            const gtts = new gTTS(text, 'en');
-            gtts.save(outputFile, function(err) {
+            const gtts = new gTTS(text, 'sw'); // Changed to 'sw' for Swahili support
+            gtts.save(outputFile, (err) => {
                 if (err) return reject(err);
                 resolve(outputFile);
             });
@@ -42,133 +67,58 @@ async function textToSpeech(text, outputFile) {
 }
 
 // ======================
-// Handle incoming text message and respond with audio
-// sock = Baileys socket, chatId = jid, text = user message
+// Main Handlers
 // ======================
 async function handleTextMessage(sock, chatId, text) {
-    // Get AI response
-    const aiReply = await getAIResponse(text);
-    console.log('AI Response:', aiReply);
+    const cfg = readVoiceConfig();
+    
+    // Ikiwa AI Voice imezimwa, usifanye lolote (If off, do nothing)
+    if (!cfg.aiVoiceActive) return;
 
-    // Convert AI response to audio
-    const audioPath = path.join(__dirname, `aiReply_${Date.now()}.mp3`);
-    await textToSpeech(aiReply, audioPath);
-
-    // Send audio back to WhatsApp
-    await sock.sendMessage(chatId, {
-        audio: fs.readFileSync(audioPath),
-        mimetype: 'audio/mpeg'
-    });
-
-    // Cleanup
-    try { fs.unlinkSync(audioPath); } catch {}
-}
-
-// ======================
-// Voice command / configuration helpers
-// ======================
-
-const isOwner = require('../lib/isOwner');
-
-const VOICE_CONFIG_PATH = './data/voiceConfig.json';
-
-function readVoiceConfig() {
+    const audioPath = path.join(__dirname, `temp_${Date.now()}.mp3`);
+    
     try {
-        if (!fs.existsSync(VOICE_CONFIG_PATH)) return { showTranscription: true };
-        const raw = fs.readFileSync(VOICE_CONFIG_PATH, 'utf8');
-        const data = JSON.parse(raw || '{}');
-        return { showTranscription: !!data.showTranscription };
-    } catch {
-        return { showTranscription: true };
-    }
-}
+        const aiReply = await getAIResponse(text);
+        await textToSpeech(aiReply, audioPath);
 
-function writeVoiceConfig(config) {
-    try {
-        if (!fs.existsSync('./data')) fs.mkdirSync('./data', { recursive: true });
-        const current = readVoiceConfig();
-        const payload = {
-            showTranscription: typeof config.showTranscription === 'boolean' ? config.showTranscription : current.showTranscription
-        };
-        fs.writeFileSync(VOICE_CONFIG_PATH, JSON.stringify(payload, null, 2));
-    } catch {}
-}
-
-/**
- * handleVoiceCommand - called when a PTT/audio message is detected
- * This implementation currently does not perform any real transcription; it
- * simply downloads the media and returns `null` so that voice messages are
- * ignored.  You can extend this function to call a speech-to-text API (e.g.
- * OpenAI Whisper) and return the resulting string if you want voice-to-text
- * commands.
- */
-async function handleVoiceCommand(sock, chatId, message) {
-    try {
-        // ensure we only process audio messages
-        if (!message.message?.pttMessage && !message.message?.audioMessage) return null;
-
-        // download media so the message is buffered locally
-        await downloadMediaMessage(message, 'buffer');
-
-        // Placeholder transcription logic.  Right now we don't have a
-        // speech‑to‑text integration, so we just send a notice if the
-        // configuration asks for it.  This keeps the command from crashing
-        // and gives the owner a hook to implement a real STT service later.
-        const cfg = readVoiceConfig();
-        if (cfg.showTranscription) {
-            await sock.sendMessage(chatId, {
-                text: '🔊 Voice message received (transcription not available yet).'
-            }, { quoted: message });
-        }
-
-        // Returning null tells the caller to abort further command handling.
-        return null;
+        await sock.sendMessage(chatId, {
+            audio: await fsPromises.readFile(audioPath),
+            mimetype: 'audio/mpeg',
+            ptt: true // Sends as a voice note (PTT)
+        });
     } catch (e) {
-        console.error('Error during voice processing:', e);
-        return null;
+        console.error('HandleText Error:', e);
+    } finally {
+        if (fs.existsSync(audioPath)) await fsPromises.unlink(audioPath);
     }
 }
 
 async function voiceConfigCommand(sock, chatId, message, args) {
-    const senderId = message.key.participant || message.key.remoteJid;
-    // only owner or sudo may change config
-    if (!message.key.fromMe && !await isOwner(senderId, sock, chatId)) {
-        await sock.sendMessage(chatId, { text: 'Only bot owner can use this command!' }, { quoted: message });
-        return;
-    }
-
+    // Note: requires 'isOwner' check in your main router
     const argStr = (args || '').trim().toLowerCase();
-    if (!argStr || !['on', 'off', 'status'].includes(argStr)) {
-        await sock.sendMessage(chatId, {
-            text: '*VOICECONFIG (Owner only)*\n\n.voiceconfig on - Show voice message transcriptions\n.voiceconfig off - Hide transcription\n.voiceconfig status - View current setting'
-        }, { quoted: message });
-        return;
+    
+    if (argStr === 'on') {
+        writeVoiceConfig({ aiVoiceActive: true });
+        return sock.sendMessage(chatId, { text: "✅ AI Voice Mode: *ENABLED*" });
+    } else if (argStr === 'off') {
+        writeVoiceConfig({ aiVoiceActive: false });
+        return sock.sendMessage(chatId, { text: "❌ AI Voice Mode: *DISABLED*" });
+    } else if (argStr === 'status') {
+        const cfg = readVoiceConfig();
+        return sock.sendMessage(chatId, { 
+            text: `*System Status*\n- AI Voice: ${cfg.aiVoiceActive ? 'ON' : 'OFF'}\n- Transcription: ${cfg.showTranscription ? 'ON' : 'OFF'}` 
+        });
+    } else {
+        return sock.sendMessage(chatId, { 
+            text: "Tumia (Use):\n.voiceconfig on\n.voiceconfig off\n.voiceconfig status" 
+        });
     }
-
-    if (argStr === 'status') {
-        const state = readVoiceConfig();
-        await sock.sendMessage(chatId, { text: `Voice transcription display is currently *${state.showTranscription ? 'ON' : 'OFF'}*` }, { quoted: message });
-        return;
-    }
-
-    const enable = argStr === 'on';
-    writeVoiceConfig({ showTranscription: enable });
-    await sock.sendMessage(chatId, { text: `Voice transcription display has been *${enable ? 'ENABLED' : 'DISABLED'}*` }, { quoted: message });
 }
 
-async function voiceStatusCommand(sock, chatId, message) {
-    const state = readVoiceConfig();
-    await sock.sendMessage(chatId, { text: `Voice configuration:\nshowTranscription: *${state.showTranscription ? 'ON' : 'OFF'}*` }, { quoted: message });
-}
-
-// ======================
-// Export functions
-// ======================
 module.exports = {
     getAIResponse,
     textToSpeech,
     handleTextMessage,
-    handleVoiceCommand,
     voiceConfigCommand,
-    voiceStatusCommand
+    readVoiceConfig
 };
