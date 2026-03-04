@@ -1,5 +1,5 @@
 /**
- * MICKEY GLITCH BOT - MAIN INDEX (AUTO-CLEANUP + AD)
+ * MICKEY GLITCH BOT - STABLE FAST VERSION
  */
 
 require('./settings');
@@ -15,162 +15,137 @@ const {
 
 const pino = require('pino');
 const chalk = require('chalk');
-const readline = require('readline');
-const fsSync = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 const { handleMessages, handleStatusUpdate } = require('./main');
 
 const SESSION_FOLDER = './session';
-const TEMP_DIR = path.join(process.cwd(), 'temp');
-const TMP_DIR = path.join(process.cwd(), 'tmp');
+const TEMP_DIR = './temp';
+const TMP_DIR = './tmp';
 
-if (!fsSync.existsSync(TEMP_DIR)) fsSync.mkdirSync(TEMP_DIR, { recursive: true });
-if (!fsSync.existsSync(TMP_DIR)) fsSync.mkdirSync(TMP_DIR, { recursive: true });
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
+if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const question = (text) => new Promise((resolve) => rl.question(text, resolve));
+let sock;
+let reconnecting = false;
 
-let cleanupInitialized = false;
+async function startBot() {
+  if (reconnecting) return;
+  reconnecting = true;
 
-async function startBot(reconnectAttempts = 0) {
   try {
     console.clear();
+
     const { version } = await fetchLatestBaileysVersion();
-    console.log(chalk.cyan(`ＭＩＣＫＥＹ-ＧＬＩＴＣＨ v3.0 | WA v${version.join('.')}`));
+    console.log(chalk.cyan(`ＭＩＣＫＥＹ-ＧＬＩＴＣＨ | WA v${version.join('.')}`));
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_FOLDER);
 
-    const sock = makeWASocket({
+    sock = makeWASocket({
       version,
-      logger: pino({ level: 'silent' }),
+      logger: pino({ level: "fatal" }), // reduce memory usage
       printQRInTerminal: false,
-      browser: ["ubuntu", "Chrome", "20.0"], 
+      browser: ["Ubuntu", "Chrome", "120.0"],
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
+        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
       },
       markOnlineOnConnect: true,
       syncFullHistory: false,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 0,
+      keepAliveIntervalMs: 15000
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    sock.ev.removeAllListeners(); // prevent duplicate listeners
 
-    sock.ev.on('connection.update', async (update) => {
+    sock.ev.on("creds.update", saveCreds);
+
+    sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect } = update;
 
-      if (connection === 'connecting') {
-        console.log(chalk.blue('⏳ Inatafuta muunganisho... (Connecting...)'));
+      if (connection === "connecting") {
+        console.log(chalk.yellow("🔄 Connecting to WhatsApp..."));
       }
 
-      // --- PAIRING LOGIC ---
-      if (!sock.authState.creds.registered && !global.pairingStarted) {
-        global.pairingStarted = true;
-        console.log(chalk.yellow('\n🔐 KUUNGANISHA BOT (SESSION LOGIN)'));
-        let rawPhone = await question(chalk.cyan('📱 Namba (Num) [Ex: 2557xxxxxxxx]: '));
-        let phone = rawPhone.trim().replace(/[^0-9]/g, '');
-        if (!phone.startsWith('255')) phone = phone.startsWith('0') ? '255' + phone.slice(1) : '255' + phone;
+      if (connection === "open") {
+        reconnecting = false;
+        const botNumber = jidNormalizedUser(sock.user.id);
+        console.log(chalk.green(`✅ CONNECTED: ${botNumber.split("@")[0]}`));
 
-        console.log(chalk.cyan('⏳ Subiri sekunde 6... (Wait 6s...)'));
-        await new Promise(r => setTimeout(r, 6000));
+        // Simple lightweight startup message
+        await sock.sendMessage(botNumber, {
+          text: "🟢 *MICKEY GLITCH ONLINE*\nFast • Stable • Active"
+        });
 
-        try {
-          const code = await sock.requestPairingCode(phone);
-          const fCode = code?.match(/.{1,4}/g)?.join(' - ') || code;
-          console.log(chalk.black.bgGreen(`\n🔑 KODI (CODE): ${fCode}\n`));
-          console.log(chalk.white('Ingiza kodi hiyo kwenye WhatsApp yako (Enter code in WA)'));
-        } catch (e) {
-          console.log(chalk.red('❌ Failed:'), e.message);
-          global.pairingStarted = false;
-        }
+        startCleanup(sock, botNumber);
       }
 
-      // --- CONNECTION OPEN ---
-      if (connection === 'open') {
-        global.pairingStarted = false;
-        const botJid = jidNormalizedUser(sock.user?.id);
-        console.log(chalk.green.bold(`\n✅ IPO HEWANI! (ONLINE!) +${botJid.split('@')[0]}`));
+      if (connection === "close") {
+        reconnecting = false;
 
-        // 📤 Welcome Ad Message
-        setTimeout(async () => {
-          try {
-            await sock.sendMessage(botJid, {
-              text: `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™*\n\n🟢 *Status:* Active \n🚀 *Mode:* Stable \n\n_System fully operational._`,
-              contextInfo: {
-                externalAdReply: {
-                  title: 'ＭＩＣＫＥＹ-ＧＬＩＴＣＨ™',
-                  body: 'Ultimate WhatsApp Bot',
-                  thumbnailUrl: 'https://files.catbox.moe/p3yzfk.jpg',
-                  sourceUrl: 'https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A',
-                  mediaType: 1,
-                  renderLargerThumbnail: true,
-                  showAdAttribution: true
-                }
-              }
-            });
-          } catch (e) {}
-        }, 3000);
+        const reason = lastDisconnect?.error?.output?.statusCode;
 
-        if (!cleanupInitialized) {
-          setupCleanupRoutines(sock, botJid);
-          cleanupInitialized = true;
+        if (reason === DisconnectReason.loggedOut) {
+          console.log(chalk.red("❌ Logged Out. Delete session."));
+          fs.rmSync(SESSION_FOLDER, { recursive: true, force: true });
+          process.exit(0);
         }
-      }
 
-      if (connection === 'close') {
-        global.pairingStarted = false;
-        const code = lastDisconnect?.error?.output?.statusCode;
-        if (code === DisconnectReason.loggedOut) {
-          fsSync.rmSync(SESSION_FOLDER, { recursive: true, force: true });
-          process.exit(1);
-        }
-        setTimeout(() => startBot(reconnectAttempts + 1), 5000);
+        console.log(chalk.red("⚠️ Connection Lost. Reconnecting..."));
+        setTimeout(() => startBot(), 4000);
       }
     });
 
-    sock.ev.on('messages.upsert', async (m) => {
+    // FAST MESSAGE HANDLER
+    sock.ev.on("messages.upsert", async (m) => {
+      if (m.type !== "notify") return;
+
       try {
         const msg = m.messages[0];
-        if (!msg?.message) return;
-        if (msg.key.remoteJid === 'status@broadcast') {
-          if (typeof handleStatusUpdate === 'function') await handleStatusUpdate(sock, m);
-          return;
+        if (!msg.message) return;
+        if (msg.key.fromMe) return;
+
+        if (msg.key.remoteJid === "status@broadcast") {
+          if (handleStatusUpdate) return handleStatusUpdate(sock, m);
         }
-        if (typeof handleMessages === 'function') await handleMessages(sock, m);
-      } catch (e) {}
+
+        if (handleMessages) {
+          await handleMessages(sock, m);
+        }
+      } catch (err) {
+        console.log("Message Error:", err.message);
+      }
     });
 
   } catch (err) {
+    reconnecting = false;
+    console.log("Startup Error:", err.message);
     setTimeout(() => startBot(), 5000);
   }
 }
 
-// 🧹 Cleanup Routine with WA Message
-function setupCleanupRoutines(sock, botJid) {
-  setInterval(async () => {
-    let filesDeleted = 0;
+function startCleanup(sock, botJid) {
+  setInterval(() => {
+    let deleted = 0;
+
     [TEMP_DIR, TMP_DIR].forEach(dir => {
-      if (fsSync.existsSync(dir)) {
-        fsSync.readdirSync(dir).forEach(file => {
-          try {
-            fsSync.unlinkSync(path.join(dir, file));
-            filesDeleted++;
-          } catch (e) {}
-        });
-      }
+      if (!fs.existsSync(dir)) return;
+
+      fs.readdirSync(dir).forEach(file => {
+        try {
+          fs.unlinkSync(path.join(dir, file));
+          deleted++;
+        } catch {}
+      });
     });
 
-    console.log(chalk.magenta('🧹 Usafi umefanyika. (Cleanup done.)'));
-    
-    // Tuma ujumbe wa usafi (Send Refresh Msg)
-    try {
-      if (filesDeleted > 0) {
-        await sock.sendMessage(botJid, { 
-          text: `🧹 *REFRESH OCCURRED*\n\n✅ Folders *temp* & *tmp* cleared!\n🗑️ Files deleted: ${filesDeleted}\n⏰ Time: ${new Date().toLocaleTimeString()}`
-        });
-      }
-    } catch (e) {}
-  }, 30 * 60 * 1000); // 30 mins
+    if (deleted > 0) {
+      console.log(`🧹 Cleanup: ${deleted} files removed`);
+    }
+
+  }, 20 * 60 * 1000); // every 20 mins
 }
 
 startBot();
