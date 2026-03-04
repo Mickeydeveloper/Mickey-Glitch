@@ -1,151 +1,232 @@
 /**
- * MICKEY GLITCH BOT - STABLE FAST VERSION
+ * PROFESSIONAL WHATSAPP BOT SYSTEM
+ * Enterprise Connection Edition
  */
 
-require('./settings');
+require('./settings')
 
 const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  jidNormalizedUser,
-  makeCacheableSignalKeyStore
-} = require('@whiskeysockets/baileys');
+  makeCacheableSignalKeyStore,
+  jidNormalizedUser
+} = require('@whiskeysockets/baileys')
 
-const pino = require('pino');
-const chalk = require('chalk');
-const fs = require('fs');
-const path = require('path');
+const pino = require('pino')
+const chalk = require('chalk')
+const fs = require('fs')
+const path = require('path')
+const readline = require('readline')
 
-const { handleMessages, handleStatusUpdate } = require('./main');
+const { handleMessages, handleStatusUpdate } = require('./main')
 
-const SESSION_FOLDER = './session';
-const TEMP_DIR = './temp';
-const TMP_DIR = './tmp';
+const SESSION_FOLDER = './session'
+const TEMP_DIR = './temp'
+const TMP_DIR = './tmp'
 
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
-if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true })
+if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true })
 
-let sock;
-let reconnecting = false;
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+})
+
+const question = (text) => new Promise((resolve) => rl.question(text, resolve))
+
+let cleanupStarted = false
+let reconnecting = false
 
 async function startBot() {
-  if (reconnecting) return;
-  reconnecting = true;
-
   try {
-    console.clear();
+    console.clear()
+    console.log(chalk.cyan.bold('🚀 Starting Official WhatsApp Bot System...'))
 
-    const { version } = await fetchLatestBaileysVersion();
-    console.log(chalk.cyan(`ＭＩＣＫＥＹ-ＧＬＩＴＣＨ | WA v${version.join('.')}`));
+    const { version } = await fetchLatestBaileysVersion()
+    const { state, saveCreds } = await useMultiFileAuthState(SESSION_FOLDER)
 
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_FOLDER);
-
-    sock = makeWASocket({
+    const sock = makeWASocket({
       version,
-      logger: pino({ level: "fatal" }), // reduce memory usage
+      logger: pino({ level: 'silent' }),
       printQRInTerminal: false,
-      browser: ["Ubuntu", "Chrome", "120.0"],
+      browser: ["Ubuntu", "Chrome", "120.0.0"],
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
+        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
       },
-      markOnlineOnConnect: true,
-      syncFullHistory: false,
+      markOnlineOnConnect: false,
+      syncFullHistory: true,
+      retryRequestDelayMs: 300,
+      maxMsgRetryCount: 5,
       connectTimeoutMs: 60000,
-      defaultQueryTimeoutMs: 0,
-      keepAliveIntervalMs: 15000
-    });
+      keepAliveIntervalMs: 10000
+    })
 
-    sock.ev.removeAllListeners(); // prevent duplicate listeners
+    sock.ev.on('creds.update', saveCreds)
 
-    sock.ev.on("creds.update", saveCreds);
-
-    sock.ev.on("connection.update", async (update) => {
-      const { connection, lastDisconnect } = update;
-
-      if (connection === "connecting") {
-        console.log(chalk.yellow("🔄 Connecting to WhatsApp..."));
+    // 🔐 PAIRING SYSTEM
+    if (!state.creds.registered) {
+      console.log(chalk.yellow('\n🔐 Device Not Linked'))
+      let phone = await question('📱 Enter Phone Number (2557xxxxxxx): ')
+      phone = phone.replace(/[^0-9]/g, '')
+      if (!phone.startsWith('255')) {
+        phone = phone.startsWith('0')
+          ? '255' + phone.slice(1)
+          : '255' + phone
       }
 
-      if (connection === "open") {
-        reconnecting = false;
-        const botNumber = jidNormalizedUser(sock.user.id);
-        console.log(chalk.green(`✅ CONNECTED: ${botNumber.split("@")[0]}`));
+      await new Promise(r => setTimeout(r, 4000))
 
-        // Simple lightweight startup message
-        await sock.sendMessage(botNumber, {
-          text: "🟢 *MICKEY GLITCH ONLINE*\nFast • Stable • Active"
-        });
+      const code = await sock.requestPairingCode(phone)
+      const formatted = code?.match(/.{1,4}/g)?.join(' - ') || code
 
-        startCleanup(sock, botNumber);
+      console.log(chalk.green(`\n🔑 Pairing Code: ${formatted}\n`))
+    }
+
+    // 🔄 CONNECTION HANDLER
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect } = update
+
+      if (connection === 'connecting') {
+        console.log(chalk.blue('⏳ Establishing Secure Connection...'))
       }
 
-      if (connection === "close") {
-        reconnecting = false;
+      if (connection === 'open') {
+        reconnecting = false
 
-        const reason = lastDisconnect?.error?.output?.statusCode;
+        const botJid = jidNormalizedUser(sock.user.id)
+        const botNumber = botJid.split('@')[0]
 
-        if (reason === DisconnectReason.loggedOut) {
-          console.log(chalk.red("❌ Logged Out. Delete session."));
-          fs.rmSync(SESSION_FOLDER, { recursive: true, force: true });
-          process.exit(0);
+        console.log(chalk.green.bold(`✅ Connected Successfully: ${botNumber}`))
+
+        // 🔥 PROFESSIONAL COMPANY WELCOME MESSAGE
+        setTimeout(async () => {
+          try {
+            await sock.sendMessage(botJid, {
+              text:
+`━━━━━━━━━━━━━━━━━━
+🏢 *OFFICIAL WHATSAPP BOT SYSTEM*
+━━━━━━━━━━━━━━━━━━
+
+🟢 Status      : Online
+🔐 Encryption  : End-to-End Secured
+⚡ Performance : Optimized & Stable
+🌍 Environment : Production Mode
+📡 Connection  : Successfully Established
+
+_This automation service is operating normally._`,
+
+              contextInfo: {
+                externalAdReply: {
+                  title: "OFFICIAL WHATSAPP AUTOMATION",
+                  body: "Enterprise Messaging Infrastructure",
+                  thumbnailUrl: "https://files.catbox.moe/p3yzfk.jpg",
+                  sourceUrl: "https://whatsapp.com/",
+                  mediaType: 1,
+                  renderLargerThumbnail: true,
+                  showAdAttribution: false
+                }
+              }
+            })
+          } catch (e) {
+            console.log("Ad Message Error:", e.message)
+          }
+        }, 4000)
+
+        if (!cleanupStarted) {
+          setupCleanup(sock, botJid)
+          cleanupStarted = true
+        }
+      }
+
+      if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode
+        const errorMessage = lastDisconnect?.error?.message || ''
+
+        console.log(chalk.red('❌ Connection Closed'))
+
+        // 🔥 AUTO FIX BAD MAC
+        if (
+          errorMessage.includes('Bad MAC') ||
+          errorMessage.includes('decrypt') ||
+          errorMessage.includes('Failed to decrypt')
+        ) {
+          console.log(chalk.red('⚠ Corrupted Session Detected. Resetting...'))
+          try {
+            fs.rmSync(SESSION_FOLDER, { recursive: true, force: true })
+          } catch {}
+          return startBot()
         }
 
-        console.log(chalk.red("⚠️ Connection Lost. Reconnecting..."));
-        setTimeout(() => startBot(), 4000);
+        if (statusCode === DisconnectReason.loggedOut) {
+          console.log(chalk.red('🚪 Logged Out. Clearing Session...'))
+          fs.rmSync(SESSION_FOLDER, { recursive: true, force: true })
+          process.exit(1)
+        }
+
+        if (!reconnecting) {
+          reconnecting = true
+          console.log(chalk.yellow('🔄 Reconnecting in 5 seconds...'))
+          setTimeout(() => startBot(), 5000)
+        }
       }
-    });
+    })
 
-    // FAST MESSAGE HANDLER
-    sock.ev.on("messages.upsert", async (m) => {
-      if (m.type !== "notify") return;
-
+    // 📩 MESSAGE HANDLER
+    sock.ev.on('messages.upsert', async (m) => {
       try {
-        const msg = m.messages[0];
-        if (!msg.message) return;
-        if (msg.key.fromMe) return;
+        const msg = m.messages[0]
+        if (!msg?.message) return
 
-        if (msg.key.remoteJid === "status@broadcast") {
-          if (handleStatusUpdate) return handleStatusUpdate(sock, m);
+        if (msg.key.remoteJid === 'status@broadcast') {
+          if (typeof handleStatusUpdate === 'function')
+            await handleStatusUpdate(sock, m)
+          return
         }
 
-        if (handleMessages) {
-          await handleMessages(sock, m);
-        }
+        if (typeof handleMessages === 'function')
+          await handleMessages(sock, m)
+
       } catch (err) {
-        console.log("Message Error:", err.message);
+        console.log('Message Error:', err.message)
       }
-    });
+    })
 
   } catch (err) {
-    reconnecting = false;
-    console.log("Startup Error:", err.message);
-    setTimeout(() => startBot(), 5000);
+    console.log(chalk.red('Fatal System Error:'), err.message)
+    setTimeout(() => startBot(), 5000)
   }
 }
 
-function startCleanup(sock, botJid) {
-  setInterval(() => {
-    let deleted = 0;
+// 🧹 CLEANUP SYSTEM
+function setupCleanup(sock, botJid) {
+  setInterval(async () => {
+    let deleted = 0
 
-    [TEMP_DIR, TMP_DIR].forEach(dir => {
-      if (!fs.existsSync(dir)) return;
+    ;[TEMP_DIR, TMP_DIR].forEach(dir => {
+      if (fs.existsSync(dir)) {
+        fs.readdirSync(dir).forEach(file => {
+          try {
+            fs.unlinkSync(path.join(dir, file))
+            deleted++
+          } catch {}
+        })
+      }
+    })
 
-      fs.readdirSync(dir).forEach(file => {
-        try {
-          fs.unlinkSync(path.join(dir, file));
-          deleted++;
-        } catch {}
-      });
-    });
+    console.log('🧹 Maintenance Completed')
 
     if (deleted > 0) {
-      console.log(`🧹 Cleanup: ${deleted} files removed`);
+      try {
+        await sock.sendMessage(botJid, {
+          text: `🧹 System Maintenance Completed\nTemporary files cleared: ${deleted}`
+        })
+      } catch {}
     }
 
-  }, 20 * 60 * 1000); // every 20 mins
+  }, 30 * 60 * 1000)
 }
 
-startBot();
+startBot()
