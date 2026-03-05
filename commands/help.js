@@ -77,7 +77,7 @@ ${commandsList}╰━━━━━━━━━━━━━━━━━━┈⊷
                     body: `Active Commands: ${count}`,
                     mediaType: 1,
                     renderLargerThumbnail: true,
-                    thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
+                    thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
                     sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
                 }
             }

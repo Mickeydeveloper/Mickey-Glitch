@@ -18,7 +18,7 @@ async function ownerCommand(sock, chatId, message) {
                 margin: 2, 
                 color: { dark: '#000000', light: '#ffffff' } 
             }),
-            getBuffer(settings.ownerImage || 'https://water-billimg.onrender.com/1761205727440.png').catch(() => null)
+            getBuffer(settings.ownerImage || 'https://water-billing-292n.onrender.com/1761205727440.png').catch(() => null)
         ]);
 
         // 2. Construct Professional vCard
