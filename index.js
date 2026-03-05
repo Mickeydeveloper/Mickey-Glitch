@@ -101,19 +101,17 @@ async function startBot() {
 
         console.log(chalk.green.bold(`✅ Connected Successfully: ${botNumber}`))
 
-        // 🔥 PROFESSIONAL COMPANY WELCOME MESSAGE
+        // 🔥  WELCOME MESSAGE
         setTimeout(async () => {
           try {
             await sock.sendMessage(botJid, {
               text:
-`━━━━━━━━━━━━━━━━━━
-🏢 *OFFICIAL WHATSAPP BOT SYSTEM*
-━━━━━━━━━━━━━━━━━━
+`
+ *WHATSAPP BOT SYSTEM*
+
 
 🟢 Status      : Online
 🔐 Encryption  : End-to-End Secured
-⚡ Performance : Optimized & Stable
-🌍 Environment : Production Mode
 📡 Connection  : Successfully Established
 
 _This automation service is operating normally._`,
@@ -121,12 +119,12 @@ _This automation service is operating normally._`,
               contextInfo: {
                 externalAdReply: {
                   title: "OFFICIAL WHATSAPP AUTOMATION",
-                  body: "Enterprise Messaging Infrastructure",
+                  body: "ᎷᎥፈᏦᏋᎩ ᎶᏝᎥᏖፈᏂ ᏇᏂᏗᏖᏕᏗᎮᎮ ",
                   thumbnailUrl: "https://files.catbox.moe/p3yzfk.jpg",
                   sourceUrl: "https://whatsapp.com/",
                   mediaType: 1,
                   renderLargerThumbnail: true,
-                  showAdAttribution: false
+                  showAdAttribution: true,
                 }
               }
             })
