@@ -30,7 +30,7 @@ const aliveCommand = async (conn, chatId, msg) => {
         const ram = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1);
         const cpu = os.cpus()[0]?.model.split('@')[0].trim() || 'Generic';
 
-        const imageUrl = 'https://water-billimg.onrender.com/1761205727440.png';
+        const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
 
         const caption = `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ-Ｖ３*
 
