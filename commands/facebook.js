@@ -5,7 +5,7 @@ const axios = require('axios');
  */
 async function tryHansaAPI(url) {
     try {
-        const apiUrl = `https://api.srihub.store/download/facebook?url=${encodeURIComponent(url)}&apikey=dew_DVTcyMksTDO8ZGxBvLAG0y9P8sIj6uRJXHHwWSW5`;
+        const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/fbdl?url=${encodeURIComponent(url)}`;
         const res = await axios.get(apiUrl, { timeout: 25000 });
         const data = res.data;
         

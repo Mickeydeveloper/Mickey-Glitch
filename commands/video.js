@@ -48,7 +48,7 @@ async function getOkatsuVideoByUrl(youtubeUrl) {
 }
 
 async function getHansaVideoByUrl(youtubeUrl) {
-    const apiUrl = `https://api.srihub.store/download/ytmp4?url=${encodeURIComponent(youtubeUrl)}&apikey=dew_DVTcyMksTDO8ZGxBvLAG0y9P8sIj6uRJXHHwWSW5`;
+    const apiUrl = `https://apis-starlights-team.koyeb.app/starlight/youtube-mp4?url=${encodeURIComponent(youtubeUrl)}&format=360p`;
     const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
     // shape: { success, result: { title, thumbnail, download_url, quality } }
     if (res?.data?.success && res?.data?.result?.download_url) {

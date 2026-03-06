@@ -124,7 +124,7 @@ const instagramCommand = require('./commands/instagram');
 const facebookCommand = require('./commands/facebook');
 const playCommand = require('./commands/play');
 const tiktokCommand = require('./commands/tiktok');
-const { aiCommand, aiVoiceCommand } = require('./commands/ai');
+const { aiCommand } = require('./commands/ai');
 const { handleChatbotMessage, groupChatbotToggleCommand } = require('./commands/chatbot');
 const urlCommand = require('./commands/url');
 const { handleTranslateCommand } = require('./commands/translate');
@@ -134,7 +134,6 @@ const videoCommand = require('./commands/video');
 const sudoCommand = require('./commands/sudo');
 // pies command removed
 const stickercropCommand = require('./commands/stickercrop');
-const mickeyCommand = require('./commands/mickey');
 const miscCommand = require('./commands/misc');
 const animeCommand = require('./commands/anime');
 const updateCommand = require('./commands/update');
@@ -144,8 +143,6 @@ const { anticallCommand, readState: readAnticallState } = require('./commands/an
 const { pinCommand, verifyPinCommand, checkPinVerification } = require('./commands/pin');
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
-const phoneCommand = require('./commands/phone');
-const { handleVoiceCommand, voiceConfigCommand, voiceStatusCommand } = require('./commands/voice');
 // sora command removed
 
 // Global settings
@@ -314,20 +311,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
         }
 
-            // Voice message detection (PTT or audio message)
-            if (message.message?.pttMessage || message.message?.audioMessage) {
-                try {
-                    const voiceCommand = await handleVoiceCommand(sock, chatId, message);
-                    if (voiceCommand) {
-                        // Use the extracted voice command and process as normal
-                        var userMessage = voiceCommand;
-                        console.log(`🎤 Processing voice command: ${userMessage}`);
-                        // Continue to command processing (fall through)
-                    } else {
-                        // Voice processing failed, return early
-                        return;
-                    }
-                } catch (voiceError) {
+            // Voice message detection removed
                     console.error('Voice command error:', voiceError);
                     await sock.sendMessage(chatId, {
                         text: "❌ I couldn't understand your voice message. Please try again."
@@ -863,10 +847,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage.startsWith('.halotel'):
                 await halotelCommand(sock, chatId, message, userMessage);
                 break;
-            case userMessage.startsWith('.phone'):
-                const phoneQuery = userMessage.slice(6).trim();
-                await phoneCommand(sock, chatId, message, phoneQuery);
-                break;
            
             // .move command removed
             case userMessage === '.topmembers':
@@ -874,15 +854,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ghost':
                 await ghostCommand(sock, chatId, isGroup);
-                break;
-            case userMessage.startsWith('.voiceconfig'):
-                {
-                    const args = userMessage.split(' ').slice(1).join(' ');
-                    await voiceConfigCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage === '.voicestatus':
-                await voiceStatusCommand(sock, chatId, message);
                 break;
            
             // .answer command removed
@@ -1153,13 +1124,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.gpt') || userMessage.startsWith('.gemini'):
                 await aiCommand(sock, chatId, message);
-                break;
-            case userMessage.startsWith('.aivoice') || userMessage.startsWith('.vai') || userMessage.startsWith('.voicex') || userMessage.startsWith('.voiceai'):
-                const voiceText = userMessage.replace(/^\.(aivoice|vai|voicex|voiceai)\s*/i, '');
-                await aiVoiceCommand(sock, chatId, senderId, voiceText, message);
-                break;
-            case userMessage.startsWith('.mickey'):
-                await mickeyCommand(sock, chatId, message);
                 break;
             case userMessage.startsWith('.translate') || userMessage.startsWith('.trt'):
                 const commandLength = userMessage.startsWith('.translate') ? 10 : 4;
