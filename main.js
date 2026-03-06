@@ -311,24 +311,15 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
         }
 
-            // Voice message detection removed
-                    console.error('Voice command error:', voiceError);
-                    await sock.sendMessage(chatId, {
-                        text: "❌ I couldn't understand your voice message. Please try again."
-                    }, { quoted: message });
-                    return;
-                }
-            } else {
-                // Normal text message
-                var userMessage = (
-                    message.message?.conversation?.trim() ||
-                    message.message?.extendedTextMessage?.text?.trim() ||
-                    message.message?.imageMessage?.caption?.trim() ||
-                    message.message?.videoMessage?.caption?.trim() ||
-                    message.message?.buttonsResponseMessage?.selectedButtonId?.trim() ||
-                    ''
-                ).toLowerCase().replace(/\.\s+/g, '.').trim();
-            }
+        // Normal text message
+        var userMessage = (
+            message.message?.conversation?.trim() ||
+            message.message?.extendedTextMessage?.text?.trim() ||
+            message.message?.imageMessage?.caption?.trim() ||
+            message.message?.videoMessage?.caption?.trim() ||
+            message.message?.buttonsResponseMessage?.selectedButtonId?.trim() ||
+            ''
+        ).toLowerCase().replace(/\.\s+/g, '.').trim();
 
         // Preserve raw message for commands like .tag that need original casing
         const rawText = message.message?.conversation?.trim() ||
