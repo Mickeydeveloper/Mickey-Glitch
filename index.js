@@ -21,6 +21,7 @@ const path = require('path')
 const readline = require('readline')
 
 const { handleMessages, handleStatusUpdate } = require('./main')
+const logger = require('./lib/silentLogger')
 
 const SESSION_FOLDER = './session'
 const TEMP_DIR = './temp'
@@ -49,7 +50,7 @@ async function startBot() {
 
     const sock = makeWASocket({
       version,
-      logger: pino({ level: 'silent' }),
+      logger, // custom logger with noise filtering and colors
       printQRInTerminal: false,
       browser: ["Ubuntu", "Chrome", "120.0.0"],
       auth: {
