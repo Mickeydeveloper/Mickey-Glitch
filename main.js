@@ -318,7 +318,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
                         userMessage = selectedId.toLowerCase();
                     } catch (e) {
-                        console.error(`Error handling command list ${selectedId}:`, e);
+                        console.error(chalk.red(`Error handling command list ${selectedId}:`), chalk.red.bold(e));
                         return;
                     }
                 }
@@ -344,7 +344,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // Only log command usage
         if (userMessage.startsWith('.')) {
-            console.log(`📝 Command used in ${isGroup ? 'group' : 'private'}: ${userMessage}`);
+            const logColor = isGroup ? chalk.cyan : chalk.magenta;
+            console.log(logColor(`📝 Command used in ${isGroup ? 'group' : 'private'}: ${userMessage}`));
         }
         // Read bot mode once; don't early-return so moderation can still run in private mode
         let isPublic = true;
@@ -460,7 +461,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                                 }
                             }
                         } catch (e) {
-                            console.error('Error resolving category command reply:', e);
+                            console.error(chalk.red('Error resolving category command reply:'), chalk.red.bold(e));
                         }
                     }
 
@@ -602,7 +603,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
             } catch (pinError) {
                 // If PIN check fails, allow command to proceed (don't block on PIN errors)
-                console.error('PIN verification error:', pinError);
+                console.error(chalk.red('PIN verification error:'), chalk.red.bold(pinError));
             }
         }
 
@@ -733,7 +734,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 try {
                     data = JSON.parse(fs.readFileSync('./data/messageCount.json'));
                 } catch (error) {
-                    console.error('Error reading access mode:', error);
+                    console.error(chalk.red('Error reading access mode:'), chalk.red.bold(error));
                     await sock.sendMessage(chatId, { text: 'Failed to read bot mode status' });
                     return;
                 }
@@ -764,7 +765,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
                     await sock.sendMessage(chatId, { text: `Bot is now in *${action}* mode` });
                 } catch (error) {
-                    console.error('Error updating access mode:', error);
+                    console.error(chalk.red('Error updating access mode:'), chalk.red.bold(error));
                     await sock.sendMessage(chatId, { text: 'Failed to update bot access mode' });
                 }
                 break;
@@ -1367,12 +1368,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     // Previously this suggested 'Menu / Help / Owner' buttons after most commands, but it's intentionally turned off now.
                 } catch (e) {
                     // Ignore errors from suggestion buttons to avoid breaking command flow
-                    console.error('Suggestion buttons error:', e && e.message ? e.message : e);
+                    console.error(chalk.red('Suggestion buttons error:'), chalk.red.bold(e && e.message ? e.message : e));
                 }
             }
         }
     } catch (error) {
-        console.error('❌ Error in message handler:', error.message);
+        console.error(chalk.red('❌ Error in message handler:'), chalk.red.bold(error.message));
         // Try to extract chatId safely from messageUpdate if available
         let safeChatId = null;
         try { safeChatId = messageUpdate?.messages?.[0]?.key?.remoteJid || null; } catch (e) { safeChatId = null; }
