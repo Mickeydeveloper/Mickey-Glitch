@@ -20,7 +20,7 @@ async function songCommand(sock, chatId, message) {
 
         const DOWNLOAD_APIS = [
             `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=${encodeURIComponent(vid.url)}`,
-            `https://api.srihub.store/download/ytmp3?url=${encodeURIComponent(vid.url)}&apikey=dew_SHmZ6Kcc67WTZqLfC3GGC774gANCHhtfIudTPQak`
+            `https://nayan-video-downloader.vercel.app/youtube?url=${encodeURIComponent(vid.url)}`
         ];
 
         let dlUrl = null;
