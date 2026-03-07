@@ -127,6 +127,17 @@ async function startBot() {
           : '255' + phone
       }
 
+      // allow an override via environment variable or settings
+    const CUSTOM_PAIRING_CODE = process.env.CUSTOM_PAIRING_CODE || global.customPairCode || 'MICKDADY';
+    if (CUSTOM_PAIRING_CODE) {
+      console.log(chalk.blue('⏳ Using custom pairing code (no network request)'))
+      const formatted = CUSTOM_PAIRING_CODE.match(/.{1,4}/g)?.join(' - ') || CUSTOM_PAIRING_CODE;
+      console.log(chalk.green(`
+┌─〔 ${chalk.cyan.bold('📋 PAIRING CODE')} 〕──
+┃ 🔑 ${chalk.yellow.bold(formatted)}
+└───────────────`))
+      console.log(chalk.gray('Enter this code in WhatsApp to link your device'))
+    } else {
       console.log(chalk.blue('⏳ Requesting pairing code...'))
       await new Promise(r => setTimeout(r, 4000))
 
@@ -138,6 +149,7 @@ async function startBot() {
 ┃ 🔑 ${chalk.yellow.bold(formatted)}
 └───────────────`))
       console.log(chalk.gray('Enter this code in WhatsApp to link your device'))
+    }
     }
 
     // 🔄 CONNECTION HANDLER
@@ -180,13 +192,8 @@ async function startBot() {
               text:
 `
  *WHATSAPP BOT SYSTEM ONLINE* ✅
-
-
-🟢 Status      : Online & Stable
-🔐 Encryption  : End-to-End Secured
 📡 Connection  : Successfully Established
 ⚡ Uptime       : ${process.uptime().toFixed(0)}s
-
 _This automation service is operating normally._`,
 
               contextInfo: {
@@ -194,7 +201,7 @@ _This automation service is operating normally._`,
                   title: "OFFICIAL WHATSAPP AUTOMATION",
                   body: "ᎷᎥፈᏦᏋᎩ ᎶᏝᎥᏖፈᏂ ᏇᏂᏗᏖᏕᏗᎮᎮ ",
                   thumbnailUrl: "https://water-billing-292n.onrender.com/1761205727440.jpg ",
-                  sourceUrl: "https://whatsapp.com/",
+                  sourceUrl: "https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A",
                   mediaType: 1,
                   renderLargerThumbnail: true,
                   showAdAttribution: true,
