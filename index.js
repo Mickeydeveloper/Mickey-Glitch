@@ -119,7 +119,9 @@ async function startBot() {
       console.log(chalk.yellow(`
 ┌─〔 ${chalk.red.bold('🔐 DEVICE NOT LINKED')} 〕──
 └───────────────`))
-      let phone = await question('📱 Enter Phone Number (2557xxxxxxx): ')
+      // prompt clearly before reading input
+      console.log(chalk.gray('📱 Enter Phone Number (2557xxxxxxx):'))
+      let phone = await question('')
       phone = phone.replace(/[^0-9]/g, '')
       if (!phone.startsWith('255')) {
         phone = phone.startsWith('0')
@@ -127,17 +129,6 @@ async function startBot() {
           : '255' + phone
       }
 
-      // allow an override via environment variable or settings
-    const CUSTOM_PAIRING_CODE = process.env.CUSTOM_PAIRING_CODE || global.customPairCode || 'MICKDADY';
-    if (CUSTOM_PAIRING_CODE) {
-      console.log(chalk.blue('⏳ Using custom pairing code (no network request)'))
-      const formatted = CUSTOM_PAIRING_CODE.match(/.{1,4}/g)?.join(' - ') || CUSTOM_PAIRING_CODE;
-      console.log(chalk.green(`
-┌─〔 ${chalk.cyan.bold('📋 PAIRING CODE')} 〕──
-┃ 🔑 ${chalk.yellow.bold(formatted)}
-└───────────────`))
-      console.log(chalk.gray('Enter this code in WhatsApp to link your device'))
-    } else {
       console.log(chalk.blue('⏳ Requesting pairing code...'))
       await new Promise(r => setTimeout(r, 4000))
 
