@@ -141,7 +141,6 @@ async function startBot() {
 └───────────────`))
       console.log(chalk.gray('Enter this code in WhatsApp to link your device'))
     }
-    }
 
     // 🔄 CONNECTION HANDLER
     sock.ev.on('connection.update', async (update) => {
