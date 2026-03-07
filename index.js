@@ -39,11 +39,45 @@ const question = (text) => new Promise((resolve) => rl.question(text, resolve))
 
 let cleanupStarted = false
 let reconnecting = false
+let connectionAttempts = 0
+let lastConnectionTime = Date.now()
+let heartbeatInterval = null
+let isConnected = false
+
+// 🚀 HEARTBEAT SYSTEM - Keep connection alive
+function startHeartbeat(sock) {
+  if (heartbeatInterval) clearInterval(heartbeatInterval)
+  
+  heartbeatInterval = setInterval(async () => {
+    try {
+      if (isConnected && sock.user) {
+        // Send a lightweight presence update to keep connection alive
+        await sock.sendPresenceUpdate('available')
+        console.log(chalk.gray('💓 Heartbeat sent'))
+      }
+    } catch (error) {
+      console.log(chalk.red('❌ Heartbeat failed:'), error.message)
+    }
+  }, 30000) // Every 30 seconds
+}
+
+// 🛡️ IMPROVED RECONNECTION LOGIC
+function getReconnectDelay(attempts) {
+  const baseDelay = 5000 // 5 seconds
+  const maxDelay = 300000 // 5 minutes
+  const delay = Math.min(baseDelay * Math.pow(2, attempts), maxDelay)
+  return delay + Math.random() * 2000 // Add jitter
+}
+let connectionAttempts = 0
+let lastConnectionTime = Date.now()
+let heartbeatInterval = null
+let isConnected = false
 
 async function startBot() {
   try {
     console.clear()
     console.log(chalk.cyan.bold('🚀 Starting Official WhatsApp Bot System...'))
+    console.log(chalk.yellow(`🔄 Connection Attempt: ${++connectionAttempts}`))
 
     const { version } = await fetchLatestBaileysVersion()
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_FOLDER)
@@ -52,17 +86,23 @@ async function startBot() {
       version,
       logger, // custom logger with noise filtering and colors
       printQRInTerminal: false,
-      browser: ["Ubuntu", "Chrome", "120.0.0"],
+      browser: ["Mickey-Glitch", "Chrome", "120.0.0"],
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
       },
-      markOnlineOnConnect: false,
-      syncFullHistory: true,
-      retryRequestDelayMs: 300,
-      maxMsgRetryCount: 5,
-      connectTimeoutMs: 60000,
-      keepAliveIntervalMs: 10000
+      markOnlineOnConnect: true,
+      syncFullHistory: false, // Faster startup
+      retryRequestDelayMs: 200,
+      maxMsgRetryCount: 10,
+      connectTimeoutMs: 30000,
+      keepAliveIntervalMs: 20000,
+      qrTimeout: 60000,
+      defaultQueryTimeoutMs: 30000,
+      // Improved connection stability
+      getMessage: async (key) => {
+        return { conversation: 'Loading...' }
+      }
     })
 
     sock.ev.on('creds.update', saveCreds)
@@ -88,32 +128,46 @@ async function startBot() {
 
     // 🔄 CONNECTION HANDLER
     sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect } = update
+      const { connection, lastDisconnect, qr } = update
+
+      if (qr) {
+        console.log(chalk.yellow('📱 Scan this QR code to connect:'))
+        // QR code will be displayed by Baileys
+      }
 
       if (connection === 'connecting') {
         console.log(chalk.blue('⏳ Establishing Secure Connection...'))
+        isConnected = false
       }
 
       if (connection === 'open') {
         reconnecting = false
+        connectionAttempts = 0
+        lastConnectionTime = Date.now()
+        isConnected = true
 
         const botJid = jidNormalizedUser(sock.user.id)
         const botNumber = botJid.split('@')[0]
 
         console.log(chalk.green.bold(`✅ Connected Successfully: ${botNumber}`))
+        console.log(chalk.green(`⏰ Connected at: ${new Date().toLocaleString()}`))
 
-        // 🔥  WELCOME MESSAGE
+        // Start heartbeat
+        startHeartbeat(sock)
+
+        // 🔥 WELCOME MESSAGE
         setTimeout(async () => {
           try {
             await sock.sendMessage(botJid, {
               text:
 `
- *WHATSAPP BOT SYSTEM*
+ *WHATSAPP BOT SYSTEM ONLINE* ✅
 
 
-🟢 Status      : Online
+🟢 Status      : Online & Stable
 🔐 Encryption  : End-to-End Secured
 📡 Connection  : Successfully Established
+⚡ Uptime       : ${process.uptime().toFixed(0)}s
 
 _This automation service is operating normally._`,
 
@@ -132,7 +186,7 @@ _This automation service is operating normally._`,
           } catch (e) {
             console.log("Ad Message Error:", e.message)
           }
-        }, 4000)
+        }, 3000)
 
         if (!cleanupStarted) {
           setupCleanup(sock, botJid)
@@ -141,10 +195,16 @@ _This automation service is operating normally._`,
       }
 
       if (connection === 'close') {
+        isConnected = false
+        if (heartbeatInterval) clearInterval(heartbeatInterval)
+
         const statusCode = lastDisconnect?.error?.output?.statusCode
         const errorMessage = lastDisconnect?.error?.message || ''
+        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
 
         console.log(chalk.red('❌ Connection Closed'))
+        console.log(chalk.red(`📊 Status Code: ${statusCode}`))
+        console.log(chalk.red(`💬 Error: ${errorMessage}`))
 
         // 🔥 AUTO FIX BAD MAC
         if (
@@ -165,10 +225,16 @@ _This automation service is operating normally._`,
           process.exit(1)
         }
 
-        if (!reconnecting) {
+        // Improved reconnection with exponential backoff
+        if (shouldReconnect && !reconnecting) {
           reconnecting = true
-          console.log(chalk.yellow('🔄 Reconnecting in 5 seconds...'))
-          setTimeout(() => startBot(), 5000)
+          const delay = getReconnectDelay(connectionAttempts)
+          console.log(chalk.yellow(`🔄 Reconnecting in ${(delay/1000).toFixed(1)} seconds... (Attempt ${connectionAttempts + 1})`))
+          
+          setTimeout(() => {
+            reconnecting = false
+            startBot()
+          }, delay)
         }
       }
     })
@@ -195,7 +261,19 @@ _This automation service is operating normally._`,
 
   } catch (err) {
     console.log(chalk.red('Fatal System Error:'), err.message)
-    setTimeout(() => startBot(), 5000)
+    console.log(chalk.red('Stack Trace:'), err.stack)
+    
+    // Don't exit on errors, try to reconnect
+    if (!reconnecting) {
+      reconnecting = true
+      const delay = getReconnectDelay(connectionAttempts)
+      console.log(chalk.yellow(`🔄 Restarting bot in ${(delay/1000).toFixed(1)} seconds due to error...`))
+      
+      setTimeout(() => {
+        reconnecting = false
+        startBot()
+      }, delay)
+    }
   }
 }
 

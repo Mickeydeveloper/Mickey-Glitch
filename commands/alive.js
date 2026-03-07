@@ -41,11 +41,14 @@ const aliveCommand = async (conn, chatId, msg) => {
 └───────────────
 
 ┌─〔 *SYSTEM STATUS* 〕──
-┃ 🚀 *Ping:* \`${ping}ms\`
+┃ 🚀 *Ping:* \`${ping}ms\` ${ping < 100 ? '⚡' : ping < 500 ? '🟢' : '🟡'}
 ┃ ⏳ *Uptime:* \`${formatUptime(process.uptime())}\`
 ┃ 🧠 *RAM:* \`${ram}MB / ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(0)}GB\`
+┃ 💾 *Free RAM:* \`${(os.freemem() / 1024 / 1024 / 1024).toFixed(1)}GB\`
 ┃ 🔧 *CPU:* \`${cpu}\`
-┃ 🟢 *Status:* \`Active\`
+┃ 🖥️ *Platform:* \`${os.platform()}\`
+┃ 🟢 *Status:* \`Active & Stable\`
+┃ 📊 *Node.js:* \`${process.version}\`
 └───────────────
 
 _Powered by Mickey Glitch_`;
@@ -62,8 +65,8 @@ _Powered by Mickey Glitch_`;
                     serverMessageId: 1
                 },
                 externalAdReply: {
-                    title: 'ＭＩＣＫＥＹ Ｖ３ ＡＬＩＶＥ',
-                    body: `Speed: ${ping}ms | Status: Stable`,
+                    title: '𝐌𝐈𝐂𝐊𝐄𝐘 𝐕𝟑 𝐀𝐋𝐈𝐕𝐄',
+                    body: `⚡ Speed: ${ping}ms | 🟢 Status: Stable | ⏳ Uptime: ${formatUptime(process.uptime())}`,
                     thumbnailUrl: imageUrl,
                     sourceUrl: 'https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A',
                     mediaType: 1,
@@ -75,6 +78,15 @@ _Powered by Mickey Glitch_`;
 
     } catch (e) {
         console.error('❌ Alive Err:', e);
+        
+        // Fallback message if something goes wrong
+        try {
+            await conn.sendMessage(chatId, {
+                text: `🟢 *BOT IS ALIVE*\n\n⚡ Response Time: ${performance.now().toFixed(0)}ms\n⏳ Uptime: ${formatUptime(process.uptime())}\n\n_Powered by Mickey Glitch_`
+            }, { quoted: msg });
+        } catch (fallbackErr) {
+            console.error('❌ Fallback Alive Err:', fallbackErr);
+        }
     }
 };
 

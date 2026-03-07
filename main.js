@@ -14,7 +14,13 @@ process.env.TMPDIR = customTemp;
 process.env.TEMP = customTemp;
 process.env.TMP = customTemp;
 
-// 🧹 AGGRESSIVE temp cleanup - Every 2 minutes - DELETE ALL FILES
+// Global performance cache
+const performanceCache = {
+    lastCleanup: Date.now(),
+    messageCount: 0
+};
+
+// 🧹 OPTIMIZED temp cleanup - Every 5 minutes instead of 2
 setInterval(() => {
   const foldersToClean = [customTemp, customTmp];
   
@@ -32,7 +38,9 @@ setInterval(() => {
       });
     });
   });
-}, 2 * 60 * 1000); // 2 minutes
+  
+  performanceCache.lastCleanup = Date.now();
+}, 5 * 60 * 1000); // 5 minutes
 
 const settings = require('./settings');
 require('./config.js');
@@ -151,6 +159,14 @@ global.author = settings.author;
 global.channelLink = "https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610";
 global.ytch = "MICKEY";
 
+// Utility functions
+function formatTime(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return `${h}h ${m}m ${s}s`;
+}
+
 
 
 async function handleMessages(sock, messageUpdate, printLog) {
@@ -161,18 +177,16 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const message = messages[0];
         if (!message?.message) return;
 
-        // Handle autoread functionality
-        await handleAutoread(sock, message);
-
-        // Determine chat context early
+        // Fast path: Determine chat context early
         const chatIdEarly = message.key.remoteJid;
         const isGroupEarly = chatIdEarly && chatIdEarly.toString().endsWith('@g.us');
 
-        // Autoreply feature removed — no action taken here.
+        // Handle autoread functionality (non-blocking)
+        handleAutoread(sock, message).catch(err => console.log('Autoread error:', err.message));
 
-        // Store message for antidelete feature
+        // Store message for antidelete feature (non-blocking)
         if (message.message) {
-            storeMessage(sock, message);
+            storeMessage(sock, message).catch(err => console.log('Store message error:', err.message));
         }
 
         // Handle message revocation
@@ -638,6 +652,33 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ping':
                 await pingCommand(sock, chatId, message);
+                break;
+            case userMessage === '.status' || userMessage === '.connection':
+                {
+                    const uptime = formatTime(process.uptime());
+                    const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
+                    const totalRam = (os.totalmem() / 1024 / 1024 / 1024).toFixed(1);
+                    const freeRam = (os.freemem() / 1024 / 1024 / 1024).toFixed(1);
+                    const cpuUsage = os.loadavg()[0].toFixed(2);
+                    
+                    const statusMsg = `╭─❖ 「 *𝐂𝐎𝐍𝐍𝐄𝐂𝐓𝐈𝐎𝐍 𝐒𝐓𝐀𝐓𝐔𝐒* 」❖
+│
+├─ ◈ *𝐒𝐘𝐒𝐓𝐄𝐌 𝐈𝐍𝐅𝐎*
+│ ◇ ⏳ *Uptime:* \`${uptime}\`
+│ ◇ 🧠 *RAM:* \`${ram}MB / ${totalRam}GB\`
+│ ◇ 💾 *Free RAM:* \`${freeRam}GB\`
+│ ◇ 🔧 *CPU Load:* \`${cpuUsage}%\`
+│ ◇ 🖥️ *Platform:* \`${os.platform()}\`
+│
+├─ ◈ *𝐂𝐎𝐍𝐍𝐄𝐂𝐓𝐈𝐎𝐍*
+│ ◇ 🟢 *Status:* \`Active & Stable\`
+│ ◇ 📡 *WebSocket:* \`Connected\`
+│ ◇ ⚡ *Response:* \`Fast\`
+│
+╰─❖ 「 *𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇* 」❖`;
+                    
+                    await sock.sendMessage(chatId, { text: statusMsg }, { quoted: message });
+                }
                 break;
             case userMessage.startsWith('.pin'):
                 {
