@@ -6,133 +6,133 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 // ────────────────────────────────────────────────
-// CONFIGURATION
+// CONFIGURATION (Global)
 // ────────────────────────────────────────────────
-const PRICE_PER_GB = 1000; 
-const MIN_GB = 10;
-const SELLER_NUMBER = '255615944741';
-const SELLER_JID = `${SELLER_NUMBER}@s.whatsapp.net`;
-const SELLER_NAME = 'MICKDADI HAMZA SALIM';
+const CONFIG = {
+    PRICE_PER_GB: 1000,
+    MIN_GB: 10,
+    SELLER_NUMBER: '255615944741',
+    SELLER_NAME: 'MICKDADI HAMZA SALIM',
+    BANNER: 'https://files.catbox.moe/ljabyq.png',
+    AUDIO: 'https://files.catbox.moe/t80fnj.mp3',
+    FOOTER: 'Mickey Glitch Technology © 2026'
+};
 
-const AD_BANNER_2 = 'https://files.catbox.moe/ljabyq.png';
-const CONFIRMATION_AUDIO = 'https://files.catbox.moe/t80fnj.mp3';
+const SELLER_JID = `${CONFIG.SELLER_NUMBER}@s.whatsapp.net`;
 
 // ────────────────────────────────────────────────
-// YOUR CUSTOM FFMPEG FORMULA
+// STABLE FFMPEG UTILITY
 // ────────────────────────────────────────────────
-function ffmpeg(buffer, args = [], ext = '', ext2 = '') {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const tempDir = path.join(__dirname, '../temp'); // Adjusted for your root
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-      
-      let tmp = path.join(tempDir, Date.now() + '.' + ext);
-      let out = tmp + '.' + ext2;
-      await fs.promises.writeFile(tmp, buffer);
-      
-      spawn('ffmpeg', ['-y', '-i', tmp, ...args, out])
-        .on('error', reject)
-        .on('close', async (code) => {
-          try {
-            await fs.promises.unlink(tmp);
-            if (code !== 0) return reject(code);
-            let data = await fs.promises.readFile(out);
-            await fs.promises.unlink(out);
-            resolve(data);
-          } catch (e) { reject(e); }
-        });
-    } catch (e) { reject(e); }
-  });
+async function toPTT(buffer, ext) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const tempDir = path.join(__dirname, '../temp');
+            if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+            const tmp = path.join(tempDir, `${Date.now()}.${ext}`);
+            const out = `${tmp}.opus`;
+
+            await fs.promises.writeFile(tmp, buffer);
+
+            const ff = spawn('ffmpeg', [
+                '-y', '-i', tmp,
+                '-vn', '-c:a', 'libopus', '-b:a', '128k',
+                '-vbr', 'on', '-compression_level', '10',
+                out
+            ]);
+
+            ff.on('error', reject);
+            ff.on('close', async (code) => {
+                try {
+                    await fs.promises.unlink(tmp);
+                    if (code !== 0) return reject(new Error(`FFmpeg exited with code ${code}`));
+                    const data = await fs.promises.readFile(out);
+                    await fs.promises.unlink(out);
+                    resolve(data);
+                } catch (e) { reject(e); }
+            });
+        } catch (e) { reject(e); }
+    });
 }
 
-function toPTT(buffer, ext) {
-  return ffmpeg(buffer, [
-    '-vn',
-    '-c:a', 'libopus',
-    '-b:a', '128k',
-    '-vbr', 'on',
-    '-compression_level', '10'
-  ], ext, 'opus');
-}
-
 // ────────────────────────────────────────────────
-// MAIN COMMAND
+// MAIN COMMAND FLOW
 // ────────────────────────────────────────────────
-function formatNumber(n) {
-    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+function formatTSh(n) {
+    return new Intl.NumberFormat('en-US').format(n);
 }
 
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
+        // 1. Private Chat Enforcement
         if (chatId.endsWith('@g.us')) {
             return await sock.sendMessage(chatId, {
-                text: '👋 *Hello!* Please message me privately to buy bundles securely.'
+                text: '👋 *Hello!* Kwa usalama zaidi, tafadhali nitumie ujumbe huu DM (Please message me privately).'
             }, { quoted: message });
         }
 
         const text = (userMessage || message.message?.conversation || message.message?.extendedTextMessage?.text || '').trim();
         const args = text.split(/\s+/).slice(1);
 
-        if (args.length === 0) {
-            const menu = `🚀 *HALOTEL DATA SHOP*
-
-*Rate:* TSh ${formatNumber(PRICE_PER_GB)} per 1GB
-*Minimum:* ${MIN_GB} GB
-
-*Format:* .halotel <GB> <Number>
-*Example:* .halotel 20 255612130873`;
+        // 2. Main Menu / Help
+        if (args.length < 2) {
+            const menu = `🚀 *HALOTEL DATA SHOP* 🇹🇿\n\n` +
+                `*Rate:* TSh ${formatTSh(CONFIG.PRICE_PER_GB)} / 1GB\n` +
+                `*Min Order:* ${CONFIG.MIN_GB} GB\n\n` +
+                `💡 *How to Order:*\n` +
+                `\`.halotel <GB> <Number>\`\n\n` +
+                `✅ *Example:* \`.halotel 20 255612130873\`\n\n` +
+                `_Fast & Secure automated delivery_`;
 
             return await sock.sendMessage(chatId, { text: menu }, { quoted: message });
         }
 
-        // --- GB & PHONE DETECTION ---
-        let cleanArgs = args.map(a => a.replace(/[^0-9.]/g, ''));
-        let gbAmount = parseFloat(cleanArgs.find(a => parseFloat(a) >= MIN_GB));
-        let phoneNumber = cleanArgs.find(a => a.length >= 9 && a.length <= 13);
+        // 3. Smart Detection
+        let gbAmount = parseFloat(args[0]);
+        let phoneNumber = args[1].replace(/[^0-9]/g, '');
 
-        if (!gbAmount || isNaN(gbAmount)) {
-            return await sock.sendMessage(chatId, { text: `❌ Kindly order at least *${MIN_GB} GB*.` });
+        if (!gbAmount || gbAmount < CONFIG.MIN_GB) {
+            return await sock.sendMessage(chatId, { text: `⚠️ *Error:* Minimum order is *${CONFIG.MIN_GB} GB*.` });
         }
-        if (!phoneNumber) {
-            return await sock.sendMessage(chatId, { text: `❌ Please provide a valid *recipient number*.` });
+        if (phoneNumber.length < 9) {
+            return await sock.sendMessage(chatId, { text: `⚠️ *Error:* Please provide a valid Halotel number.` });
         }
 
-        const totalCost = gbAmount * PRICE_PER_GB;
-        const orderRef = `HTL-${Math.floor(1000 + Math.random() * 9000)}`;
+        const totalCost = gbAmount * CONFIG.PRICE_PER_GB;
+        const orderRef = `HTL-${Math.random().toString(36).toUpperCase().substring(2, 7)}`;
 
-        const orderInfo = `✨ *ORDER SECURED*
+        // 4. International-Style Order Layout
+        const orderInfo = `✨ *INVOICE SECURED* ✨\n` +
+            `━━━━━━━━━━━━━━━━━━\n` +
+            `📦 *Product:* Halotel Data Bundle\n` +
+            `📊 *Volume:* ${gbAmount} GB\n` +
+            `💵 *Total:* TSh ${formatTSh(totalCost)}\n` +
+            `📱 *Target:* ${phoneNumber}\n` +
+            `🆔 *Ref ID:* #${orderRef}\n` +
+            `━━━━━━━━━━━━━━━━━━\n\n` +
+            `*PAYMENT INSTRUCTIONS:*\n` +
+            `Lipa kiasi cha *TSh ${formatTSh(totalCost)}* kwenda:\n` +
+            `👤 *Name:* ${CONFIG.SELLER_NAME}\n` +
+            `📞 *Number:* ${CONFIG.SELLER_NUMBER}\n\n` +
+            `_Click the button below to confirm payment:_`;
 
-📦 *Bundle:* ${gbAmount} GB
-💰 *Rate:* TSh ${formatNumber(PRICE_PER_GB)} / 1GB
-💵 *Total Cost:* TSh ${formatNumber(totalCost)}
-📱 *Recipient:* ${phoneNumber}
-🆔 *Ref:* ${orderRef}
-
-━━━━━━━━━━━━━━━━━━
-*Payment to:*
-Name: ${SELLER_NAME}
-Number: ${SELLER_NUMBER}
-
-_Pay then click confirm below:_`;
-
-        const buttons = [
-            {
-                urlButton: {
-                    displayText: '💳 Confirm Payment',
-                    url: `https://wa.me/${SELLER_NUMBER}?text=Paid+${orderRef}+for+${gbAmount}GB+to+${phoneNumber}`
-                }
+        const buttons = [{
+            urlButton: {
+                displayText: '💳 Confirm Payment',
+                url: `https://wa.me/${CONFIG.SELLER_NUMBER}?text=Nime lipa+${orderRef}+kiasi cha+${totalCost}+kwa+${gbAmount}GB+kwenda+${phoneNumber}`
             }
-        ];
+        }];
 
-        let banner = null;
-        try { banner = await getBuffer(AD_BANNER_2); } catch (e) {}
+        // Get Banner Buffer safely
+        let banner;
+        try { banner = await getBuffer(CONFIG.BANNER); } catch (e) { banner = null; }
 
-        // Send Buttons
-        await sendButtons(sock, chatId, orderInfo, 'Mickey Glitch Technology', buttons, message, {
+        // 5. Send Professional Button Message
+        await sendButtons(sock, chatId, orderInfo, CONFIG.FOOTER, buttons, message, {
             contextInfo: {
                 externalAdReply: {
-                    title: `TSh ${formatNumber(totalCost)} | ${gbAmount} GB`,
-                    body: `Order Reference: ${orderRef}`,
+                    title: `ORDER: ${gbAmount}GB | #${orderRef}`,
+                    body: `Total: TSh ${formatTSh(totalCost)}`,
                     thumbnail: banner,
                     mediaType: 1,
                     renderLargerThumbnail: true
@@ -140,33 +140,33 @@ _Pay then click confirm below:_`;
             }
         });
 
-        // --- AUDIO PROCESSING WITH YOUR FORMULA ---
-        setTimeout(async () => {
+        // 6. Handle Confirmation Audio (Async background)
+        setImmediate(async () => {
             try {
-                const response = await axios.get(CONFIRMATION_AUDIO, { responseType: 'arraybuffer' });
-                const rawBuffer = Buffer.from(response.data);
-
-                // Using your toPTT formula directly here
-                const opusBuffer = await toPTT(rawBuffer, 'mp3');
-
+                const response = await axios.get(CONFIG.AUDIO, { responseType: 'arraybuffer' });
+                const opusBuffer = await toPTT(Buffer.from(response.data), 'mp3');
                 await sock.sendMessage(chatId, {
                     audio: opusBuffer,
                     mimetype: 'audio/ogg; codecs=opus',
                     ptt: true 
                 }, { quoted: message });
-
             } catch (e) {
-                console.error('[Audio Error]', e.message);
+                console.error('Audio Error:', e.message);
             }
-        }, 1500);
+        });
 
-        // Notify Seller
+        // 7. Seller Notification
         await sock.sendMessage(SELLER_JID, {
-            text: `🔔 *New Order:* ${orderRef}\n📦 ${gbAmount}GB\n💰 Total: TSh ${formatNumber(totalCost)}\n📱 To: ${phoneNumber}`
+            text: `🔔 *NEW ORDER DETECTED*\n\n` +
+                `🆔 *Ref:* ${orderRef}\n` +
+                `📦 *Bundle:* ${gbAmount}GB\n` +
+                `💰 *Value:* TSh ${formatTSh(totalCost)}\n` +
+                `📱 *Target:* ${phoneNumber}`
         });
 
     } catch (error) {
-        await sock.sendMessage(chatId, { text: '🔄 Just a moment, let\'s try that again!' });
+        console.error('Main Error:', error);
+        await sock.sendMessage(chatId, { text: '❌ System error. Please try again or contact support.' });
     }
 }
 
