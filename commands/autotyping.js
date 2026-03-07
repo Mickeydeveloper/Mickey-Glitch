@@ -87,6 +87,8 @@ function isAutotypingEnabled() {
 // Function to handle autotyping for regular messages
 async function handleAutotypingForMessage(sock, chatId, userMessage) {
     if (isAutotypingEnabled()) {
+        // Guard against disconnected socket
+        if (!sock || typeof sock.sendPresenceUpdate !== 'function') return false;
         try {
             // First subscribe to presence updates for this chat
             await sock.presenceSubscribe(chatId);
@@ -111,7 +113,10 @@ async function handleAutotypingForMessage(sock, chatId, userMessage) {
             
             return true; // Indicates typing was shown
         } catch (error) {
-            console.error('❌ Error sending typing indicator:', error);
+            // ignore connection-closed errors, they happen during reconnection
+            if (!/connection\s*closed/i.test(error.message || '')) {
+                console.error('❌ Error sending typing indicator:', error);
+            }
             return false; // Indicates typing failed
         }
     }
@@ -121,6 +126,7 @@ async function handleAutotypingForMessage(sock, chatId, userMessage) {
 // Function to handle autotyping for commands - BEFORE command execution (not used anymore)
 async function handleAutotypingForCommand(sock, chatId) {
     if (isAutotypingEnabled()) {
+        if (!sock || typeof sock.sendPresenceUpdate !== 'function') return false;
         try {
             // First subscribe to presence updates for this chat
             await sock.presenceSubscribe(chatId);
@@ -145,7 +151,9 @@ async function handleAutotypingForCommand(sock, chatId) {
             
             return true; // Indicates typing was shown
         } catch (error) {
-            console.error('❌ Error sending command typing indicator:', error);
+            if (!/connection\s*closed/i.test(error.message || '')) {
+                console.error('❌ Error sending command typing indicator:', error);
+            }
             return false; // Indicates typing failed
         }
     }
@@ -155,6 +163,7 @@ async function handleAutotypingForCommand(sock, chatId) {
 // Function to show typing status AFTER command execution
 async function showTypingAfterCommand(sock, chatId) {
     if (isAutotypingEnabled()) {
+        if (!sock || typeof sock.sendPresenceUpdate !== 'function') return false;
         try {
             // This function runs after the command has been executed and response sent
             // So we just need to show a brief typing indicator
@@ -173,7 +182,9 @@ async function showTypingAfterCommand(sock, chatId) {
             
             return true;
         } catch (error) {
-            console.error('❌ Error sending post-command typing indicator:', error);
+            if (!/connection\s*closed/i.test(error.message || '')) {
+                console.error('❌ Error sending post-command typing indicator:', error);
+            }
             return false;
         }
     }

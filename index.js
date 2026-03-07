@@ -44,6 +44,7 @@ let lastConnectionTime = Date.now()
 let heartbeatInterval = null
 let isConnected = false
 let lastHeartbeatLog = Date.now()
+let pairingInProgress = false
 
 // 🚀 HEARTBEAT SYSTEM - Keep connection alive
 function startHeartbeat(sock) {
@@ -116,10 +117,11 @@ async function startBot() {
 
     // 🔐 PAIRING SYSTEM
     if (!state.creds.registered) {
+      pairingInProgress = true
       console.log(chalk.yellow(`
 ┌─〔 ${chalk.red.bold('🔐 DEVICE NOT LINKED')} 〕──
 └───────────────`))
-      // prompt clearly before reading input
+      
       console.log(chalk.gray('📱 Enter Phone Number (2557xxxxxxx):'))
       let phone = await question('')
       phone = phone.replace(/[^0-9]/g, '')
@@ -129,17 +131,63 @@ async function startBot() {
           : '255' + phone
       }
 
-      console.log(chalk.blue('⏳ Requesting pairing code...'))
-      await new Promise(r => setTimeout(r, 4000))
+      console.log(chalk.blue('⏳ Generating pairing code...'))
+      
+      try {
+        const code = await sock.requestPairingCode(phone)
+        const formatted = code?.match(/.{1,4}/g)?.join(' - ') || code
 
-      const code = await sock.requestPairingCode(phone)
-      const formatted = code?.match(/.{1,4}/g)?.join(' - ') || code
-
-      console.log(chalk.green(`
+        console.log(chalk.green(`
 ┌─〔 ${chalk.cyan.bold('📋 PAIRING CODE')} 〕──
 ┃ 🔑 ${chalk.yellow.bold(formatted)}
 └───────────────`))
-      console.log(chalk.gray('Enter this code in WhatsApp to link your device'))
+        console.log(chalk.gray('✅ Code is ready. Link your WhatsApp device:'))
+        console.log(chalk.gray('   WhatsApp > Settings > Linked Devices > Link Device'))
+        console.log(chalk.gray('   Then scan or enter this code on your phone.'))
+        console.log(chalk.magenta('⏳ Waiting for device link... (this may take a few seconds)'))
+        console.log('')
+
+        // Listen for successful pairing
+        let pairingSuccessful = false
+        const pairingListener = () => {
+          pairingSuccessful = true
+          pairingInProgress = false
+        }
+
+        // Listen for credential updates which indicate successful pairing
+        sock.ev.on('creds.update', pairingListener)
+
+        // Wait for pairing with extended timeout
+        await new Promise(resolve => {
+          const checkInterval = setInterval(() => {
+            if (pairingSuccessful || !pairingInProgress) {
+              clearInterval(checkInterval)
+              sock.ev.off('creds.update', pairingListener)
+              resolve()
+            }
+          }, 500)
+
+          // Hard timeout after 5 minutes
+          setTimeout(() => {
+            clearInterval(checkInterval)
+            sock.ev.off('creds.update', pairingListener)
+            resolve()
+          }, 300000)
+        })
+
+        if (pairingSuccessful) {
+          console.log(chalk.green('✅ Device linked successfully! Bot is now connecting...'))
+        }
+      } catch (pairingError) {
+        pairingInProgress = false
+        console.log(chalk.red('❌ Pairing error:'), chalk.red.bold(pairingError.message))
+        console.log(chalk.yellow('💡 Tip: Make sure you entered the phone number correctly'))
+        console.log(chalk.yellow('💡 Retrying in 5 seconds...'))
+        await new Promise(r => setTimeout(r, 5000))
+        return startBot()
+      }
+    } else {
+      console.log(chalk.green('✅ Device already linked. Connecting...'))
     }
 
     // 🔄 CONNECTION HANDLER
@@ -212,6 +260,12 @@ _This automation service is operating normally._`,
       if (connection === 'close') {
         isConnected = false
         if (heartbeatInterval) clearInterval(heartbeatInterval)
+
+        // Skip reconnection logic if pairing is in progress
+        if (pairingInProgress) {
+          console.log(chalk.yellow('⚠️  Connection dropped during pairing. Waiting for reconnection...'))
+          return
+        }
 
         const statusCode = lastDisconnect?.error?.output?.statusCode
         const errorMessage = lastDisconnect?.error?.message || ''
