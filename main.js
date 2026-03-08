@@ -21,27 +21,32 @@ const performanceCache = {
     messageCount: 0
 };
 
-// 🧹 OPTIMIZED temp cleanup - Every 5 minutes instead of 2
+// 🧹 OPTIMIZED temp cleanup - Every 30 minutes (reduced I/O stress)
 setInterval(() => {
   const foldersToClean = [customTemp, customTmp];
   
   foldersToClean.forEach(folder => {
-    fs.readdir(folder, (err, files) => {
-      if (err) return;
-      
-      files.forEach(file => {
-        const filePath = path.join(folder, file);
-        try {
-          fs.rmSync(filePath, { recursive: true, force: true });
-        } catch (e) {
-          // Silent fail
+    try {
+      if (fs.existsSync(folder)) {
+        const files = fs.readdirSync(folder);
+        // Only clean if folder has >200 files
+        if (files.length > 200) {
+          files.forEach(file => {
+            try {
+              fs.rmSync(path.join(folder, file), { recursive: true, force: true });
+            } catch (e) {
+              // Silent fail
+            }
+          });
         }
-      });
-    });
+      }
+    } catch (e) {
+      // Silent fail
+    }
   });
   
   performanceCache.lastCleanup = Date.now();
-}, 5 * 60 * 1000); // 5 minutes
+}, 30 * 60 * 1000); // 30 minutes (optimized from 5 min)
 
 const settings = require('./settings');
 require('./config.js');
@@ -206,8 +211,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
         if (message.message?.buttonsResponseMessage) {
             const buttonId = message.message.buttonsResponseMessage.selectedButtonId;
             const chatId = message.key.remoteJid;
-            
-            console.log(`🔘 Button pressed: ${buttonId}`);
             
             // Predefined button handlers
             const buttonHandlers = {

@@ -13,27 +13,25 @@ if (!fs.existsSync(TEMP_MEDIA_DIR)) {
     fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
 }
 
-// Function to get folder size in MB
+// Function to get folder size in MB (optimized)
 const getFolderSizeInMB = (folderPath) => {
     try {
-        const files = fs.readdirSync(folderPath);
+        const files = fs.readdirSync(folderPath, { withFileTypes: true });
         let totalSize = 0;
 
         for (const file of files) {
-            const filePath = path.join(folderPath, file);
-            if (fs.statSync(filePath).isFile()) {
-                totalSize += fs.statSync(filePath).size;
+            if (file.isFile()) {
+                totalSize += fs.statSync(path.join(folderPath, file.name)).size;
             }
         }
 
         return totalSize / (1024 * 1024); // Convert bytes to MB
     } catch (err) {
-        console.error('Error getting folder size:', err);
         return 0;
     }
 };
 
-// Function to clean temp folder if size exceeds 10MB
+// Function to clean temp folder if size exceeds 200MB
 const cleanTempFolderIfLarge = () => {
     try {
         const sizeMB = getFolderSizeInMB(TEMP_MEDIA_DIR);
@@ -41,17 +39,18 @@ const cleanTempFolderIfLarge = () => {
         if (sizeMB > 200) {
             const files = fs.readdirSync(TEMP_MEDIA_DIR);
             for (const file of files) {
-                const filePath = path.join(TEMP_MEDIA_DIR, file);
-                fs.unlinkSync(filePath);
+                try {
+                    fs.unlinkSync(path.join(TEMP_MEDIA_DIR, file));
+                } catch {}
             }
         }
     } catch (err) {
-        console.error('Temp cleanup error:', err);
+        // Silent fail
     }
 };
 
-// Start periodic cleanup check every 1 minute
-setInterval(cleanTempFolderIfLarge, 60 * 1000);
+// Start periodic cleanup check every 10 minutes (optimized from 1 min)
+setInterval(cleanTempFolderIfLarge, 10 * 60 * 1000);
 
 // Load config
 function loadAntideleteConfig() {

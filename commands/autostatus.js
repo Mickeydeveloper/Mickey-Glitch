@@ -36,7 +36,6 @@ async function saveConfig(updates) {
     try {
         await fs.mkdir(path.dirname(CONFIG_FILE), { recursive: true });
         await fs.writeFile(CONFIG_FILE, JSON.stringify(configCache, null, 2), 'utf8');
-        console.log('[AutoStatus] Config saved');
     } catch (err) {
         console.error('[AutoStatus] Save failed:', err.message);
     }
@@ -58,7 +57,6 @@ async function autoView(sock, statusKey) {
 
     try {
         await sock.readMessages([statusKey]);
-        console.log(`[AutoStatus] Viewed status → ${statusKey.id}`);
     } catch (err) {
         console.error(`[AutoView] Failed:`, err.message);
     }
@@ -84,8 +82,6 @@ async function autoLike(sock, statusKey) {
         }, {
             statusJidList: [participantJid]   // Critical: without this, reaction often fails silently on status
         });
-
-        console.log(`[AutoStatus] Reacted with ${emoji} to status → ${statusKey.id}`);
     } catch (err) {
         console.error(`[AutoLike] Failed:`, err.message || err);
     }
@@ -109,7 +105,6 @@ async function handleStatusUpdate(sock, ev) {
 
     // Deduplication (prevent spam)
     if (processedStatusIds.has(statusKey.id)) {
-        console.log(`[AutoStatus] Already processed → ${statusKey.id}`);
         return;
     }
     processedStatusIds.add(statusKey.id);
@@ -120,8 +115,6 @@ async function handleStatusUpdate(sock, ev) {
         processedStatusIds.clear();
         recent.forEach(id => processedStatusIds.add(id));
     }
-
-    console.log(`[AutoStatus] New status detected → ${statusKey.id} from ${statusKey.participant || 'unknown'}`);
 
     // Auto View
     if (cfg.viewEnabled) {

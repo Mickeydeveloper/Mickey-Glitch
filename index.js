@@ -46,7 +46,7 @@ let isConnected = false
 let lastHeartbeatLog = Date.now()
 let pairingInProgress = false
 
-// 🚀 HEARTBEAT SYSTEM - Keep connection alive
+// 🚀 HEARTBEAT SYSTEM - Keep connection alive (optimized for 24/7)
 function startHeartbeat(sock) {
   if (heartbeatInterval) clearInterval(heartbeatInterval)
   
@@ -55,17 +55,17 @@ function startHeartbeat(sock) {
       if (isConnected && sock.user) {
         // Send a lightweight presence update to keep connection alive
         await sock.sendPresenceUpdate('available')
-        // Only log heartbeat every 10 minutes to reduce noise
+        // Only log heartbeat every 20 minutes to reduce noise
         const now = Date.now()
-        if (now - lastHeartbeatLog > 600000) {
-          console.log(chalk.gray('💓 Connection heartbeat active'))
+        if (now - lastHeartbeatLog > 1200000) {
+          console.log(chalk.gray('💓 Heartbeat'))
           lastHeartbeatLog = now
         }
       }
     } catch (error) {
-      console.log(chalk.red('❌ Heartbeat failed:'), error.message)
+      // Silent fail for heartbeat - connection errors handled elsewhere
     }
-  }, 30000) // Every 30 seconds
+  }, 90000) // Every 90 seconds (optimized from 30s)
 }
 
 // 🛡️ IMPROVED RECONNECTION LOGIC
@@ -358,33 +358,38 @@ _This automation service is operating normally._`,
   }
 }
 
-// 🧹 CLEANUP SYSTEM
+// 🧹 CLEANUP SYSTEM - Optimized for 24/7 running
 function setupCleanup(sock, botJid) {
   setInterval(async () => {
     let deleted = 0
 
     ;[TEMP_DIR, TMP_DIR].forEach(dir => {
       if (fs.existsSync(dir)) {
-        fs.readdirSync(dir).forEach(file => {
-          try {
-            fs.unlinkSync(path.join(dir, file))
-            deleted++
-          } catch {}
-        })
+        try {
+          const files = fs.readdirSync(dir)
+          // Only clean if more than 100 files to reduce I/O
+          if (files.length > 100) {
+            files.forEach(file => {
+              try {
+                fs.unlinkSync(path.join(dir, file))
+                deleted++
+              } catch {}
+            })
+          }
+        } catch {}
       }
     })
 
-    console.log('🧹 Maintenance Completed')
-
-    if (deleted > 0) {
+    // Only notify on significant cleanup
+    if (deleted > 50) {
       try {
         await sock.sendMessage(botJid, {
-          text: `🧹 System Maintenance Completed\nTemporary files cleared: ${deleted}`
+          text: `🧹 Cleared ${deleted} temp files`
         })
       } catch {}
     }
 
-  }, 30 * 60 * 1000)
+  }, 2 * 60 * 60 * 1000) // Every 2 hours (increased from 30 min)
 }
 
 startBot()

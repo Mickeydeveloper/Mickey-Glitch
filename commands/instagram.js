@@ -8,13 +8,15 @@ const { igdl } = require("ruhend-scraper");
 // Store processed message IDs to prevent duplicates
 const processedMessages = new Set();
 
-// Auto-cleanup: remove old entries every 10 minutes
+// Auto-cleanup: remove old entries every 30 minutes when cache is large
 setInterval(() => {
-    if (processedMessages.size > 1000) {
+    if (processedMessages.size > 2000) {
+        // Keep only newest 1000 entries
+        const entries = Array.from(processedMessages);
         processedMessages.clear();
-        console.log('[Instagram] Cleared message cache');
+        entries.slice(-1000).forEach(entry => processedMessages.add(entry));
     }
-}, 10 * 60 * 1000);
+}, 30 * 60 * 1000); // 30 minutes
 
 /**
  * Extract unique media URLs

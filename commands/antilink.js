@@ -78,12 +78,6 @@ async function handleLinkDetection(sock, chatId, message, userMessage, senderId)
     const antilinkSetting = getAntilinkSetting(chatId);
     if (antilinkSetting === 'off') return;
 
-    console.log(`Antilink Setting for ${chatId}: ${antilinkSetting}`);
-    console.log(`Checking message for links: ${userMessage}`);
-    
-    // Log the full message object to diagnose message structure
-    console.log("Full message object: ", JSON.stringify(message, null, 2));
-
     let shouldDelete = false;
 
     const linkPatterns = {
@@ -100,9 +94,7 @@ async function handleLinkDetection(sock, chatId, message, userMessage, senderId)
 
     // Detect WhatsApp Group links
     if (antilinkSetting === 'whatsappGroup') {
-        console.log('WhatsApp group link protection is enabled.');
         if (linkPatterns.whatsappGroup.test(userMessage)) {
-            console.log('Detected a WhatsApp group link!');
             shouldDelete = true;
         }
     } else if (antilinkSetting === 'whatsappChannel' && linkPatterns.whatsappChannel.test(userMessage)) {
@@ -114,24 +106,19 @@ async function handleLinkDetection(sock, chatId, message, userMessage, senderId)
     }
 
     if (shouldDelete) {
-        const quotedMessageId = message.key.id; // Get the message ID to delete
-        const quotedParticipant = message.key.participant || senderId; // Get the participant ID
-
-        console.log(`Attempting to delete message with id: ${quotedMessageId} from participant: ${quotedParticipant}`);
+        const quotedMessageId = message.key.id;
+        const quotedParticipant = message.key.participant || senderId;
 
         try {
             await sock.sendMessage(chatId, {
                 delete: { remoteJid: chatId, fromMe: false, id: quotedMessageId, participant: quotedParticipant },
             });
-            console.log(`Message with ID ${quotedMessageId} deleted successfully.`);
         } catch (error) {
-            console.error('Failed to delete message:', error);
+            console.error('Antilink delete failed:', error.message);
         }
 
         const mentionedJidList = [senderId];
         await sock.sendMessage(chatId, { text: `Warning! @${senderId.split('@')[0]}, posting links is not allowed.`, mentions: mentionedJidList });
-    } else {
-        console.log('No link detected or protection not enabled for this type of link.');
     }
 }
 

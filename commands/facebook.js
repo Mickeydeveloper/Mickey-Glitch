@@ -9,8 +9,6 @@ async function tryHansaAPI(url) {
         const res = await axios.get(apiUrl, { timeout: 25000 });
         const data = res.data;
         
-        console.log('[FB Hansa API Response]', JSON.stringify(data, null, 2));
-        
         if (!data.success || !data.result) {
             throw new Error('Hansa: No result in response');
         }
@@ -58,8 +56,6 @@ async function facebookCommand(sock, chatId, message) {
             const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/fbdl?url=${encodeURIComponent(url)}`;
             const res = await axios.get(apiUrl, { timeout: 25000 });
             const data = res.data;
-            
-            console.log('[FB ASWIN API Response]', JSON.stringify(data, null, 2));
 
             if (!data.status || !data.data) {
                 throw new Error('ASWIN: No status or data in response');
@@ -79,7 +75,6 @@ async function facebookCommand(sock, chatId, message) {
             
             // Fallback to Hansa API
             try {
-                console.log('[FB] Trying Hansa API fallback...');
                 videoData = await tryHansaAPI(url);
             } catch (hansaError) {
                 console.error('[FB Hansa Error]', hansaError.message);
