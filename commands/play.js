@@ -24,7 +24,7 @@ async function songCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { text: '📥 *Downloading audio...*' }, { quoted: message });
 
         const DOWNLOAD_APIS = [
-            `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=${encodeURIComponent(vid.url)}`,
+            `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(vid.url)}`,
             `https://nayan-video-downloader.vercel.app/youtube?url=${encodeURIComponent(vid.url)}`
         ];
 
@@ -32,7 +32,37 @@ async function songCommand(sock, chatId, message) {
         for (const api of DOWNLOAD_APIS) {
             try {
                 const res = await axios.get(api, { timeout: 35000 });
-                dlUrl = res.data.data?.url || res.data.result?.download_url || res.data.url;
+                
+                // Try different response formats for each API
+                if (api.includes('api-aswin-sparky.koyeb.app')) {
+                    // First API format
+                    dlUrl = res.data.data?.url || res.data.result?.download_url || res.data.url;
+                } else if (api.includes('nayan-video-downloader.vercel.app')) {
+                    // Second API format - parse formats array for best audio quality
+                    if (res.data?.data?.formats && Array.isArray(res.data.data.formats)) {
+                        // Filter for audio formats only
+                        const audioFormats = res.data.data.formats.filter(format => format.type === 'audio');
+                        if (audioFormats.length > 0) {
+                            // Sort by bitrate descending to get highest quality
+                            audioFormats.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+                            // Pick the highest quality audio format
+                            dlUrl = audioFormats[0].url;
+                        }
+                    }
+                    // Fallback to old paths if formats not found
+                    if (!dlUrl) {
+                        dlUrl = res.data.url || 
+                               res.data.download_url || 
+                               res.data.audio || 
+                               res.data.result?.url || 
+                               res.data.result?.download_url || 
+                               res.data.result?.audio ||
+                               res.data.data?.url ||
+                               res.data.data?.download_url ||
+                               res.data.data?.audio;
+                    }
+                }
+                
                 if (dlUrl) break;
             } catch { continue; }
         }
