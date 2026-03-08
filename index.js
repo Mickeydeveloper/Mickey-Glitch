@@ -23,6 +23,17 @@ const readline = require('readline')
 const { handleMessages, handleStatusUpdate } = require('./main')
 const logger = require('./lib/silentLogger')
 
+// Global error handlers to prevent crashes from hanging promises
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+  // Don't exit, just log
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error)
+  // Don't exit, just log
+})
+
 const SESSION_FOLDER = './session'
 const TEMP_DIR = './temp'
 const TMP_DIR = './tmp'
@@ -283,16 +294,23 @@ _Mickey Glitch v3_`,
 ┃ 💬 Error: \`${errorMessage.substring(0, 40)}\`
 └───────────────`))
 
-        // 🔥 AUTO FIX BAD MAC
+        // 🔥 AUTO FIX SESSION ISSUES
         if (
           errorMessage.includes('Bad MAC') ||
           errorMessage.includes('decrypt') ||
-          errorMessage.includes('Failed to decrypt')
+          errorMessage.includes('Failed to decrypt') ||
+          errorMessage.includes('SessionEntry') ||
+          errorMessage.includes('Closing session') ||
+          errorMessage.includes('session') ||
+          statusCode === 408 || // Request timeout
+          statusCode === 500 || // Internal server error
+          statusCode === 503    // Service unavailable
         ) {
           console.log(chalk.red.bold(`
 ┌─〔 SESSION RECOVERY 〕──
-┃ ⚠️  Status: Corrupted Session
-┃ 🔧 Action: Resetting...
+┃ ⚠️  Status: Session Issue Detected
+┃ 📝 Error: ${errorMessage.substring(0, 30)}...
+┃ 🔧 Action: Resetting Session...
 └───────────────`))
           try {
             fs.rmSync(SESSION_FOLDER, { recursive: true, force: true })

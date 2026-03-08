@@ -165,6 +165,8 @@ global.author = settings.author;
 global.channelLink = "https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610";
 global.ytch = "MICKEY";
 
+const { safeSendMessage } = require('./lib/myfunc');
+
 // Utility functions
 function formatTime(seconds) {
     const h = Math.floor(seconds / 3600);
@@ -181,6 +183,17 @@ async function handleMessages(sock, messageUpdate, printLog) {
         if (!sock || !sock.user || typeof sock.sendMessage !== 'function') {
             return;
         }
+
+        // Wrap sendMessage with timeout to prevent hanging during session close
+        const originalSendMessage = sock.sendMessage;
+        sock.sendMessage = async (chatId, message, options = {}) => {
+            try {
+                return await safeSendMessage(sock, chatId, message, options, 30000);
+            } catch (error) {
+                console.error('SendMessage failed:', error.message);
+                throw error;
+            }
+        };
 
         const { messages, type } = messageUpdate;
         if (type !== 'notify') return;
