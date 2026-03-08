@@ -33,12 +33,12 @@ async function songCommand(sock, chatId, message) {
             try {
                 const res = await axios.get(api, { timeout: 35000 });
                 
-                // Try different response formats for each API
-                if (api.includes('api-aswin-sparky.koyeb.app')) {
-                    // First API format
-                    dlUrl = res.data.data?.url || res.data.result?.download_url || res.data.url;
-                } else if (api.includes('nayan-video-downloader.vercel.app')) {
-                    // Second API format - parse formats array for best audio quality
+                if (api.includes('/alldown')) {
+                    // /alldown endpoint - try direct audio URL
+                    dlUrl = res.data?.audio || res.data?.download_url || res.data?.url || 
+                           res.data?.data?.audio || res.data?.data?.download_url || res.data?.data?.url;
+                } else if (api.includes('/youtube')) {
+                    // /youtube endpoint - parse formats array for best audio quality
                     if (res.data?.data?.formats && Array.isArray(res.data.data.formats)) {
                         // Filter for audio formats only
                         const audioFormats = res.data.data.formats.filter(format => format.type === 'audio');
@@ -49,22 +49,23 @@ async function songCommand(sock, chatId, message) {
                             dlUrl = audioFormats[0].url;
                         }
                     }
-                    // Fallback to old paths if formats not found
+                    // Fallback to other paths
                     if (!dlUrl) {
-                        dlUrl = res.data.url || 
-                               res.data.download_url || 
-                               res.data.audio || 
-                               res.data.result?.url || 
-                               res.data.result?.download_url || 
-                               res.data.result?.audio ||
-                               res.data.data?.url ||
-                               res.data.data?.download_url ||
-                               res.data.data?.audio;
+                        dlUrl = res.data?.url || res.data?.download_url || res.data?.audio ||
+                               res.data?.result?.url || res.data?.result?.download_url || res.data?.result?.audio ||
+                               res.data?.data?.url || res.data?.data?.download_url || res.data?.data?.audio;
                     }
+                } else {
+                    // Fallback for other APIs
+                    dlUrl = res.data?.data?.url || res.data?.result?.download_url || res.data?.url ||
+                           res.data?.download_url || res.data?.audio;
                 }
                 
                 if (dlUrl) break;
-            } catch { continue; }
+            } catch (error) {
+                console.log(`API ${api} failed:`, error.message.slice(0, 50));
+                continue;
+            }
         }
 
         if (dlUrl) {
