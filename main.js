@@ -57,11 +57,20 @@ const fetch = require('node-fetch');
 const ytdl = require('ytdl-core');
 const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
+const os = require('os');
 const { isSudo } = require('./lib/index');
 const isOwnerOrSudo = require('./lib/isOwner');
 const { autotypingCommand, isAutotypingEnabled, handleAutotypingForMessage, handleAutotypingForCommand, showTypingAfterCommand } = require('./commands/autotyping');
 const { autoreadCommand, isAutoreadEnabled, handleAutoread } = require('./commands/autoread');
 const { autoBioCommand } = require('./commands/autobio');
+
+// Utility function to format uptime
+function formatTime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${hours}h ${minutes}m ${secs}s`;
+}
 
 // Command imports
 const tagAllCommand = require('./commands/tagall');
@@ -103,6 +112,14 @@ const { lyricsCommand } = require('./commands/lyrics');
 // truth command removed
 const { clearCommand } = require('./commands/clear');
 const pingCommand = require('./commands/ping');
+const unbanCommand = require('./commands/unban');
+const settingsCommand = require('./commands/settings');
+const pinCommand = require('./commands/pin');
+const verifyPinCommand = require('./commands/pin'); // assuming same file
+const { checkPinVerification } = require('./commands/pin');
+const anticallCommand = require('./commands/anticall');
+const { readState: readPmBlockerState } = require('./commands/pmblocker');
+const { handleChatbotMessage } = require('./commands/chatbot');
 const aliveCommand = require('./commands/alive');
 const blurCommand = require('./commands/img-blur');
 // Welcome command removed. Previously: ./commands/welcome

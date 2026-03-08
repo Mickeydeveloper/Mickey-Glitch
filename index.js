@@ -54,14 +54,14 @@ const settings = require('./settings')
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000)
 
 // Memory watchdog
-setInterval(() => { if (global.gc) global.gc() }, 60000)
+setInterval(() => { if (global.gc) global.gc() }, 30000)
 setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024
-    if (used > 450) {
-        console.log(chalk.bgRed.white('  ⚠️  MEMORY ALERT  ⚠️  '), chalk.red('RAM > 450MB → Restarting...'))
+    if (used > 600) {
+        console.log(chalk.bgRed.white('  ⚠️  MEMORY ALERT  ⚠️  '), chalk.red('RAM > 600MB → Restarting...'))
         process.exit(1)
     }
-}, 30000)
+}, 15000)
 
 // ────────────────[ PAIRING ]───────────────────
 const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code")
