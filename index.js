@@ -1,426 +1,284 @@
-/**
- * PROFESSIONAL WHATSAPP BOT SYSTEM
- * Enterprise Connection Edition
- */
-
+require('dotenv').config()
 require('./settings')
+const { Boom } = require('@hapi/boom')
+const fs = require('fs')
+const chalk = require('chalk')
+const FileType = require('file-type')
+const path = require('path')
+const axios = require('axios')
+const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require('./main')
+const { handleAnticall } = require('./commands/anticall')
+const PhoneNumber = require('awesome-phonenumber')
+const { imageToWebp, videoToWebp, writeExifImg, writeExifVid } = require('./lib/exif')
+const { smsg, isUrl, generateMessageTag, getBuffer, getSizeMedia, fetch, sleep, reSize } = require('./lib/myfunc')
 
 const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore,
-  jidNormalizedUser
-} = require('@whiskeysockets/baileys')
+    default: makeWASocket,
+    useMultiFileAuthState,
+    DisconnectReason,
+    fetchLatestBaileysVersion,
+    generateForwardMessageContent,
+    prepareWAMessageMedia,
+    generateWAMessageFromContent,
+    generateMessageID,
+    downloadContentFromMessage,
+    jidDecode,
+    proto,
+    jidNormalizedUser,
+    makeCacheableSignalKeyStore,
+    delay
+} = require("@whiskeysockets/baileys")
 
-const pino = require('pino')
-const chalk = require('chalk')
-const fs = require('fs')
-const path = require('path')
-const readline = require('readline')
+const NodeCache = require("node-cache")
+const pino = require("pino")
+const readline = require("readline")
 
-const { handleMessages, handleStatusUpdate } = require('./main')
-const logger = require('./lib/silentLogger')
+// ────────────────[ CONFIG ]───────────────────
+global.botname = "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™"
+global.themeemoji = "•"
+const phoneNumber = "255615858685"
 
-// Global error handlers to prevent crashes from hanging promises
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
-  // Don't exit, just log
-})
+const channelRD = {
+    id: '120363398106360290@newsletter',
+    name: '🅼🅸🅲🅺🅴🆈'
+}
 
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error)
-  // Don't exit, just log
-})
+// Fake serverMessageId ili ionekane realistic
+const fakeServerMsgId = () => Math.floor(Math.random() * 10000) + 100
 
-const SESSION_FOLDER = './session'
-const TEMP_DIR = './temp'
-const TMP_DIR = './tmp'
+// ────────────────[ STORE & SETTINGS ]───────────────────
+const store = require('./lib/lightweight_store')
+store.readFromFile()
+const settings = require('./settings')
 
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true })
-if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true })
+setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000)
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-})
+// Memory watchdog
+setInterval(() => { if (global.gc) global.gc() }, 60000)
+setInterval(() => {
+    const used = process.memoryUsage().rss / 1024 / 1024
+    if (used > 450) {
+        console.log(chalk.bgRed.white('  ⚠️  MEMORY ALERT  ⚠️  '), chalk.red('RAM > 450MB → Restarting...'))
+        process.exit(1)
+    }
+}, 30000)
 
-const question = (text) => new Promise((resolve) => rl.question(text, resolve))
+// ────────────────[ PAIRING ]───────────────────
+const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code")
+const rl = process.stdin.isTTY ? readline.createInterface({ input: process.stdin, output: process.stdout }) : null
 
-let cleanupStarted = false
-let reconnecting = false
-let connectionAttempts = 0
-let lastConnectionTime = Date.now()
-let heartbeatInterval = null
-let isConnected = false
-let lastHeartbeatLog = Date.now()
-let pairingInProgress = false
+const question = (text) => {
+    if (rl) return new Promise(resolve => rl.question(text, resolve))
+    return Promise.resolve(settings.ownerNumber || phoneNumber)
+}
 
-// 🚀 HEARTBEAT SYSTEM - Keep connection alive (optimized for 24/7)
-function startHeartbeat(sock) {
-  if (heartbeatInterval) clearInterval(heartbeatInterval)
-  
-  heartbeatInterval = setInterval(async () => {
+// ────────────────[ MAIN ]───────────────────
+async function startXeonBotInc() {
     try {
-      if (isConnected && sock.user) {
-        // Send a lightweight presence update to keep connection alive
-        await sock.sendPresenceUpdate('available')
-        // Only log heartbeat every 20 minutes to reduce noise
-        const now = Date.now()
-        if (now - lastHeartbeatLog > 1200000) {
-          console.log(chalk.gray('💓 Heartbeat'))
-          lastHeartbeatLog = now
-        }
-      }
-    } catch (error) {
-      // Silent fail for heartbeat - connection errors handled elsewhere
-    }
-  }, 90000) // Every 90 seconds (optimized from 30s)
-}
+        const { version } = await fetchLatestBaileysVersion()
+        const { state, saveCreds } = await useMultiFileAuthState(`./session`)
+        const msgRetryCounterCache = new NodeCache()
 
-// 🛡️ IMPROVED RECONNECTION LOGIC
-function getReconnectDelay(attempts) {
-  const baseDelay = 5000 // 5 seconds
-  const maxDelay = 300000 // 5 minutes
-  const delay = Math.min(baseDelay * Math.pow(2, attempts), maxDelay)
-  return delay + Math.random() * 2000 // Add jitter
-}
-
-async function startBot() {
-  try {
-    console.clear()
-    console.log(chalk.cyan.bold(`
-╔═══❖ 「 ${chalk.yellow.bold('𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇')} 」 ❖═══╗
-║  🚀 ${chalk.green.bold('WhatsApp Bot System')}
-║  ${chalk.gray('Enterprise Connection Edition')}
-╚══════════════════════════════╝`))
-    console.log(chalk.yellow(`🔄 Connection Attempt: ${++connectionAttempts}`))
-    console.log(chalk.gray('⏳ Initializing...'))
-
-    const { version } = await fetchLatestBaileysVersion()
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_FOLDER)
-
-    const sock = makeWASocket({
-      version,
-      logger, // custom logger with noise filtering and colors
-      printQRInTerminal: false,
-      browser: ["Mickey-Glitch", "Chrome", "120.0.0"],
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
-      },
-      markOnlineOnConnect: true,
-      syncFullHistory: false, // Faster startup
-      retryRequestDelayMs: 200,
-      maxMsgRetryCount: 10,
-      connectTimeoutMs: 30000,
-      keepAliveIntervalMs: 20000,
-      qrTimeout: 60000,
-      defaultQueryTimeoutMs: 30000,
-      // Improved connection stability
-      getMessage: async (key) => {
-        return { conversation: 'Loading...' }
-      }
-    })
-
-    sock.ev.on('creds.update', saveCreds)
-
-    // 🔐 PAIRING SYSTEM
-    if (!state.creds.registered) {
-      pairingInProgress = true
-      console.log(chalk.yellow(`
-┌─〔 ${chalk.red.bold('🔐 DEVICE NOT LINKED')} 〕──
-└───────────────`))
-      
-      console.log(chalk.gray('📱 Enter Phone Number (2557xxxxxxx):'))
-      let phone = await question('')
-      phone = phone.replace(/[^0-9]/g, '')
-      if (!phone.startsWith('255')) {
-        phone = phone.startsWith('0')
-          ? '255' + phone.slice(1)
-          : '255' + phone
-      }
-
-      console.log(chalk.blue('⏳ Generating pairing code...'))
-      
-      try {
-        const code = await sock.requestPairingCode(phone)
-        const formatted = code?.match(/.{1,4}/g)?.join(' - ') || code
-
-        console.log(chalk.green(`
-┌─〔 ${chalk.cyan.bold('📋 PAIRING CODE')} 〕──
-┃ 🔑 ${chalk.yellow.bold(formatted)}
-└───────────────`))
-        console.log(chalk.gray('✅ Code is ready. Link your WhatsApp device:'))
-        console.log(chalk.gray('   WhatsApp > Settings > Linked Devices > Link Device'))
-        console.log(chalk.gray('   Then scan or enter this code on your phone.'))
-        console.log(chalk.magenta('⏳ Waiting for device link... (this may take a few seconds)'))
-        console.log('')
-
-        // Listen for successful pairing
-        let pairingSuccessful = false
-        const pairingListener = () => {
-          pairingSuccessful = true
-          pairingInProgress = false
-        }
-
-        // Listen for credential updates which indicate successful pairing
-        sock.ev.on('creds.update', pairingListener)
-
-        // Wait for pairing with extended timeout
-        await new Promise(resolve => {
-          const checkInterval = setInterval(() => {
-            if (pairingSuccessful || !pairingInProgress) {
-              clearInterval(checkInterval)
-              sock.ev.off('creds.update', pairingListener)
-              resolve()
-            }
-          }, 500)
-
-          // Hard timeout after 5 minutes
-          setTimeout(() => {
-            clearInterval(checkInterval)
-            sock.ev.off('creds.update', pairingListener)
-            resolve()
-          }, 300000)
+        const XeonBotInc = makeWASocket({
+            version,
+            logger: pino({ level: 'silent' }),
+            printQRInTerminal: !pairingCode,
+            browser: ["Ubuntu", "Chrome", "20.0.04"],
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+            },
+            markOnlineOnConnect: true,
+            getMessage: async (key) => {
+                let jid = jidNormalizedUser(key.remoteJid)
+                let msg = await store.loadMessage(jid, key.id)
+                return msg?.message || undefined
+            },
+            msgRetryCounterCache
         })
 
-        if (pairingSuccessful) {
-          console.log(chalk.green('✅ Device linked successfully! Bot is now connecting...'))
-        }
-      } catch (pairingError) {
-        pairingInProgress = false
-        console.log(chalk.red('❌ Pairing error:'), chalk.red.bold(pairingError.message))
-        console.log(chalk.yellow('💡 Tip: Make sure you entered the phone number correctly'))
-        console.log(chalk.yellow('💡 Retrying in 5 seconds...'))
-        await new Promise(r => setTimeout(r, 5000))
-        return startBot()
-      }
-    } else {
-      console.log(chalk.green('✅ Device already linked. Connecting...'))
-    }
+        XeonBotInc.ev.on('creds.update', saveCreds)
+        store.bind(XeonBotInc.ev)
 
-    // 🔄 CONNECTION HANDLER
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update
+        // ──── Messages ────
+        XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
+            try {
+                const mek = chatUpdate.messages?.[0]
+                if (!mek?.message) return
 
-      if (qr) {
-        console.log(chalk.yellow('📱 Scan this QR code to connect:'))
-        // QR code will be displayed by Baileys
-      }
-
-      if (connection === 'connecting') {
-        console.log(chalk.blue('⏳ Establishing Secure Connection...'))
-        isConnected = false
-      }
-
-      if (connection === 'open') {
-        reconnecting = false
-        connectionAttempts = 0
-        lastConnectionTime = Date.now()
-        isConnected = true
-
-        const botJid = jidNormalizedUser(sock.user.id)
-        const botNumber = botJid.split('@')[0]
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Africa/Dar_es_Salaam' })
-
-        console.log(chalk.green(`
-┌─〔 *CONNECTION ESTABLISHED* 〕──
-┃ 🟢 *Bot:* \`${botNumber}\`
-┃ 🕒 *Time:* \`${timestamp}\`
-┃ ⏱️ *Attempt:* \`${connectionAttempts}\`
-┃ 💚 *Status:* \`Online & Active\`
-└───────────────`))
-
-        // Start heartbeat
-        startHeartbeat(sock)
-
-        // 🔥 WELCOME MESSAGE
-        setTimeout(async () => {
-          try {
-            await sock.sendMessage(botJid, {
-              text:
-`┌─〔 *SYSTEM ONLINE* 〕──
-┃ 🟢 Status: Online
-┃ 📱 Bot: \`${botNumber}\`
-┃ ⏳ Uptime: \`${Math.floor(process.uptime())}s\`
-┃ 🕒 Time: \`${timestamp}\`
-└───────────────
-
-_Mickey Glitch v3_`,
-
-              contextInfo: {
-                externalAdReply: {
-                  title: "MICKEY GLITCH - BOT SYSTEM",
-                  body: "🟢 Status: Online & Ready",
-                  thumbnailUrl: "https://water-billing-292n.onrender.com/1761205727440.jpg ",
-                  sourceUrl: "https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A",
-                  mediaType: 1,
-                  renderLargerThumbnail: true,
-                  showAdAttribution: true,
+                if (mek.key?.remoteJid === 'status@broadcast') {
+                    await handleStatus(XeonBotInc, chatUpdate)
+                    return
                 }
-              }
-            })
-          } catch (e) {
-            // Silent
-          }
-        }, 3000)
 
-        if (!cleanupStarted) {
-          setupCleanup(sock, botJid)
-          cleanupStarted = true
-        }
-      }
-
-      if (connection === 'close') {
-        isConnected = false
-        if (heartbeatInterval) clearInterval(heartbeatInterval)
-
-        // Skip reconnection logic if pairing is in progress
-        if (pairingInProgress) {
-          console.log(chalk.yellow('⚠️  Waiting for device link...'))
-          return
-        }
-
-        const statusCode = lastDisconnect?.error?.output?.statusCode
-        const errorMessage = lastDisconnect?.error?.message || 'Unknown error'
-        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
-
-        console.log(chalk.red(`
-┌─〔 CONNECTION LOST 〕──
-┃ 🔴 Status: Disconnected
-┃ 📊 Code: \`${statusCode}\`
-┃ 💬 Error: \`${errorMessage.substring(0, 40)}\`
-└───────────────`))
-
-        // 🔥 AUTO FIX SESSION ISSUES
-        if (
-          errorMessage.includes('Bad MAC') ||
-          errorMessage.includes('decrypt') ||
-          errorMessage.includes('Failed to decrypt') ||
-          errorMessage.includes('SessionEntry') ||
-          errorMessage.includes('Closing session') ||
-          errorMessage.includes('session') ||
-          statusCode === 408 || // Request timeout
-          statusCode === 500 || // Internal server error
-          statusCode === 503    // Service unavailable
-        ) {
-          console.log(chalk.red.bold(`
-┌─〔 SESSION RECOVERY 〕──
-┃ ⚠️  Status: Session Issue Detected
-┃ 📝 Error: ${errorMessage.substring(0, 30)}...
-┃ 🔧 Action: Resetting Session...
-└───────────────`))
-          try {
-            fs.rmSync(SESSION_FOLDER, { recursive: true, force: true })
-          } catch {}
-          return startBot()
-        }
-
-        if (statusCode === DisconnectReason.loggedOut) {
-          console.log(chalk.red.bold(`
-┌─〔 SESSION EXPIRED 〕──
-┃ 🚪 Status: Logged Out
-┃ 📝 Action: Rescan QR Code
-└───────────────`))
-          fs.rmSync(SESSION_FOLDER, { recursive: true, force: true })
-          process.exit(1)
-        }
-
-        // Improved reconnection with exponential backoff
-        if (shouldReconnect && !reconnecting) {
-          reconnecting = true
-          const delay = getReconnectDelay(connectionAttempts)
-          console.log(chalk.yellow(`
-┌─〔 RECONNECTING 〕──
-┃ ⏱️ Wait: \`${(delay/1000).toFixed(1)}s\`
-┃ 🔢 Attempt: \`${connectionAttempts + 1}\`
-└───────────────`))
-
-          setTimeout(() => {
-            reconnecting = false
-            startBot()
-          }, delay)
-        }
-      }
-    })
-
-    // 📩 MESSAGE HANDLER
-    sock.ev.on('messages.upsert', async (m) => {
-      try {
-        const msg = m.messages[0]
-        if (!msg?.message) return
-
-        if (msg.key.remoteJid === 'status@broadcast') {
-          if (typeof handleStatusUpdate === 'function')
-            await handleStatusUpdate(sock, m)
-          return
-        }
-
-        if (typeof handleMessages === 'function')
-          await handleMessages(sock, m)
-
-      } catch (err) {
-        console.log(chalk.red('Message Error:'), chalk.red.bold(err.message))
-      }
-    })
-
-  } catch (err) {
-    console.log(chalk.red(`
-┌─〔 ${chalk.red.bold('💥 FATAL ERROR')} 〕──
-┃ 📝 ${chalk.red(err.message)}
-└───────────────`))
-
-    // Don't exit on errors, try to reconnect
-    if (!reconnecting) {
-      reconnecting = true
-      const delay = getReconnectDelay(connectionAttempts)
-      console.log(chalk.yellow(`
-┌─〔 ${chalk.yellow.bold('🔄 RECOVERY MODE')} 〕──
-┃ ⏱️ ${chalk.cyan(`${(delay/1000).toFixed(1)}s`)}
-└───────────────`))
-
-      setTimeout(() => {
-        reconnecting = false
-        startBot()
-      }, delay)
-    }
-  }
-}
-
-// 🧹 CLEANUP SYSTEM - Optimized for 24/7 running
-function setupCleanup(sock, botJid) {
-  setInterval(async () => {
-    let deleted = 0
-
-    ;[TEMP_DIR, TMP_DIR].forEach(dir => {
-      if (fs.existsSync(dir)) {
-        try {
-          const files = fs.readdirSync(dir)
-          // Only clean if more than 100 files to reduce I/O
-          if (files.length > 100) {
-            files.forEach(file => {
-              try {
-                fs.unlinkSync(path.join(dir, file))
-                deleted++
-              } catch {}
-            })
-          }
-        } catch {}
-      }
-    })
-
-    // Only notify on significant cleanup
-    if (deleted > 50) {
-      try {
-        await sock.sendMessage(botJid, {
-          text: `🧹 Cleared ${deleted} temp files`
+                await handleMessages(XeonBotInc, chatUpdate, true)
+            } catch (err) {
+                console.log(chalk.bgRed.black('  ⚠️  MSG ERROR  ⚠️  '), chalk.red(err.message))
+            }
         })
-      } catch {}
-    }
 
-  }, 2 * 60 * 60 * 1000) // Every 2 hours (increased from 30 min)
+        // ──── Calls ────
+        XeonBotInc.ev.on('call', async (call) => {
+            try {
+                await handleAnticall(XeonBotInc, { call })
+            } catch (err) {
+                console.log(chalk.bgRed.black('  ⚠️  CALL ERROR  ⚠️  '), chalk.red(err.message))
+            }
+        })
+
+        // ──── Connection ────
+        XeonBotInc.ev.on('connection.update', async (s) => {
+            const { connection, lastDisconnect } = s
+
+            if (connection === 'open') {
+                console.log(chalk.bgGreen.black('  ✨  CONNECTED  ✨  '), chalk.green('Bot Online & Ready!'))
+
+                const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
+
+                // Welcome message (with fake forward)
+                const proCaption = `✨ *MICKEY GLITCH BOT* ✨
+🟢 *Online & Ready*
+📡 ${channelRD.name} | 💾 ${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB
+🎯 All Systems Operational`.trim()
+
+                await XeonBotInc.sendMessage(botJid, {
+                    text: proCaption,
+                    contextInfo: {
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterJid: channelRD.id,
+                            newsletterName: channelRD.name,
+                            serverMessageId: fakeServerMsgId()
+                        },
+                        externalAdReply: {
+                            title: `ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴠ3.1.0`,
+                            body: `Hosted by Mickey Glitch`,
+                            thumbnailUrl: 'https://files.catbox.moe/jwdiuc.jpg',
+                            sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
+                            mediaType: 1,
+                            renderLargerThumbnail: true
+                        }
+                    }
+                })
+
+                // Auto-follow channel
+                try {
+                    await XeonBotInc.newsletterFollow(channelRD.id)
+                    console.log(chalk.bgBlue.black('  📢  CHANNEL  📢  '), chalk.blue(`Auto-following: ${channelRD.name}`))
+                } catch (err) {
+                    console.log(chalk.bgYellow.black('  ⚠️  FOLLOW ERROR  ⚠️  '), chalk.yellow(err.message))
+                }
+
+                console.log(chalk.bgGreen.black('  ✅  STARTUP  ✅  '), chalk.green('Bot fully operational'))
+                console.log('')
+            }
+
+            if (connection === 'close') {
+                const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut
+                if (shouldReconnect) {
+                    console.log(chalk.bgYellow.black('  🔄  RECONNECT  🔄  '), chalk.yellow('Attempting to reconnect...'))
+                    startXeonBotInc()
+                }
+            }
+        })
+
+        // ──── sendMessage wrapper ── ALL bot messages appear forwarded from channel ────
+        const originalSendMessage = XeonBotInc.sendMessage.bind(XeonBotInc)
+
+        XeonBotInc.sendMessage = async (jid, content, options = {}) => {
+            const originalContext = options.contextInfo || {}
+
+            const skipFakeForward = 
+                jid?.includes('@newsletter') ||
+                jid === 'status@broadcast' ||
+                content?.poll ||
+                content?.buttonsMessage ||
+                content?.templateMessage ||
+                content?.listMessage ||
+                options?.forward ||
+                originalContext?.forwardedNewsletterMessageInfo
+
+            if (skipFakeForward) {
+                return originalSendMessage(jid, content, options)
+            }
+
+            // Delay kidogo ili ionekane natural
+            const randomDelay = 400 + Math.floor(Math.random() * 1100)  // 400ms - 1500ms
+            await delay(randomDelay)
+
+            const fakeForwardContext = {
+                ...originalContext,
+                isForwarded: true,
+                forwardingScore: 999,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: channelRD.id,
+                    newsletterName: channelRD.name,
+                    serverMessageId: fakeServerMsgId()
+                }
+            }
+
+            if (originalContext.quotedMessage) {
+                fakeForwardContext.quotedMessage = originalContext.quotedMessage
+            }
+            if (originalContext.mentionedJid) {
+                fakeForwardContext.mentionedJid = originalContext.mentionedJid
+            }
+
+            options.contextInfo = fakeForwardContext
+
+            return originalSendMessage(jid, content, options)
+        }
+
+        // ──── Pairing code logic (CUSTOM: MICKDADY) ────
+        if (pairingCode && !XeonBotInc.authState.creds.registered) {
+            console.log(chalk.bgMagenta.white('  ⏳  PAIRING REQUIRED  ⏳  '))
+            console.log(chalk.magenta('Tumia code maalum ili ku-pair bot'))
+
+            let number = (global.phoneNumber || await question(chalk.bgBlack(chalk.greenBright(`Weka namba ya simu (bila + au 0 mwanzo): `))))
+                .replace(/[^0-9]/g, '')
+
+            if (!number.startsWith('255')) {
+                number = '255' + number
+            }
+
+            setTimeout(async () => {
+                try {
+                    // Custom pairing code - lazima iwe alphanumeric characters 8 tu
+                    const customPairCode = "MICKDADY"
+
+                    console.log(chalk.yellow('→ Inajaribu ku-pair na code: ') + chalk.cyan.bold(customPairCode))
+
+                    const code = await XeonBotInc.requestPairingCode(number, customPairCode)
+
+                    console.log('')
+                    console.log(chalk.bgCyan.black('  🔐  CUSTOM PAIRING CODE  🔐  '))
+                    console.log(chalk.cyan.bold('  ' + customPairCode))
+                    console.log(chalk.yellow('→ Fungua WhatsApp kwenye simu yako'))
+                    console.log(chalk.yellow('→ Nenda: Menu → Linked Devices → Link a device'))
+                    console.log(chalk.yellow('→ Chagua "Link with phone number"'))
+                    console.log(chalk.yellow('→ Weka namba yako halafu weka code hii: ') + chalk.green.bold(customPairCode))
+                    console.log(chalk.gray('→ Thibitisha na subiri bot i-connect'))
+                    console.log('')
+                } catch (err) {
+                    console.log(chalk.bgRed.black('  ❌  ERROR  ❌  '))
+                    console.log(chalk.red(err.message || 'Tatizo la ku-pair'))
+                    console.log(chalk.yellow('Vidokezo:'))
+                    console.log(chalk.gray('1. Hakikisha namba ni sahihi (mfano: 255615858685)'))
+                    console.log(chalk.gray('2. Code "MICKDADY" lazima iwe 8 characters tu'))
+                    console.log(chalk.gray('3. Jaribu tena baada ya sekunde chache au badilisha code'))
+                    console.log('')
+                }
+            }, 3000)
+        }
+
+        return XeonBotInc
+
+    } catch (error) {
+        console.log(chalk.bgRed.white('  ❌  STARTUP ERROR  ❌  '), chalk.red(error.message))
+        console.log(chalk.yellow('Inajaribu tena baada ya sekunde 8...'))
+        await delay(8000)
+        startXeonBotInc()
+    }
 }
 
-startBot()
+startXeonBotInc()
