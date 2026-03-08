@@ -82,6 +82,7 @@ const { demoteCommand } = require('./commands/demote');
 const muteCommand = require('./commands/mute');
 const unmuteCommand = require('./commands/unmute');
 const stickerCommand = require('./commands/sticker');
+const pingCommand = require('./commands/ping'); // ensure pingCommand is imported
 const isAdmin = require('./lib/isAdmin');
 const warnCommand = require('./commands/warn');
 const warningsCommand = require('./commands/warnings');
@@ -185,17 +186,29 @@ async function handleMessages(sock, messageUpdate, printLog) {
             return;
         }
 
-        // Wrap sendMessage with timeout to prevent hanging during session close
-        const originalSendMessage = sock.sendMessage;
-        sock.originalSendMessage = originalSendMessage;
-        sock.sendMessage = async (chatId, message, options = {}) => {
-            try {
-                return await safeSendMessage(sock, chatId, message, options, 30000);
-            } catch (error) {
-                console.error('SendMessage failed:', error.message);
-                throw error;
+        // Only wrap sendMessage once per socket instance. Re-wrapping on every
+        // message previously caused recursion by stomping on the property that
+        // `index.js` uses to hold the raw library sendMessage method.  Keep that
+        // value untouched so our timeout helper can call straight through.
+        if (!sock._timeoutWrapped) {
+            sock._timeoutWrapped = true;
+            // record whatever sendMessage implementation exists beneath the timeout
+            // wrapper; this could be the index.js fake-forward/delay wrapper or the
+            // raw library method.  We intentionally **do not** touch
+            // sock.originalSendMessage here, that name is used elsewhere in the
+            // codebase and should remain pointing at the library base.
+            if (typeof sock.sendMessage === 'function') {
+                sock._timeoutBase = sock.sendMessage.bind(sock);
             }
-        };
+            sock.sendMessage = async (chatId, message, options = {}) => {
+                try {
+                    return await safeSendMessage(sock, chatId, message, options, 30000);
+                } catch (error) {
+                    console.error('SendMessage failed:', error.message);
+                    throw error;
+                }
+            };
+        }
 
         const { messages, type } = messageUpdate;
         if (type !== 'notify') return;
