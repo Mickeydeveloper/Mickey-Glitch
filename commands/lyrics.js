@@ -1,43 +1,37 @@
-const fetch = require('node-fetch');
+const axios = require('axios');
+const yts = require('yt-search');
 
-async function lyricsCommand(sock, chatId, songTitle, message) {
-    if (!songTitle) {
-        await sock.sendMessage(chatId, { 
-            text: '🔍 Please enter the song name to get the lyrics! Usage: *lyrics <song name>*'
-        },{ quoted: message });
-        return;
-    }
+async function lyricsCommand(sock, chatId, message) {
+    const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
+    const query = textBody.split(" ").slice(1).join(" ");
+
+    if (!query) return sock.sendMessage(chatId, { text: '✏️ Andika jina la wimbo.\nMfano: .lyrics Adele Hello' }, { quoted: message });
 
     try {
-        // Use lyricsapi.fly.dev and return only the raw lyrics text
-        const apiUrl = `https://lyricsapi.fly.dev/api/lyrics?q=${encodeURIComponent(songTitle)}`;
-        const res = await fetch(apiUrl);
-        
-        if (!res.ok) {
-            const errText = await res.text();
-            throw errText;
+        await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+
+        // Optional: You can search YouTube to get exact video for metadata
+        const { videos } = await yts(query);
+        if (!videos.length) return sock.sendMessage(chatId, { text: '❌ Wimbo haupatikani!' });
+
+        const vid = videos[0];
+
+        // Call lyrics API
+        const res = await axios.get(`https://api-aswin-sparky.koyeb.app/api/lyrics?title=${encodeURIComponent(vid.title)}`, { timeout: 15000 });
+        const lyrics = res.data?.lyrics;
+
+        if (!lyrics) return sock.sendMessage(chatId, { text: '❌ Lyrics hazipatikani!' });
+
+        // Send lyrics in manageable chunks
+        const chunkSize = 4000;
+        for (let i = 0; i < lyrics.length; i += chunkSize) {
+            await sock.sendMessage(chatId, { text: lyrics.slice(i, i + chunkSize) }, { quoted: message });
         }
-        
-        const data = await res.json();
 
-        const lyrics = data && data.result && data.result.lyrics ? data.result.lyrics : null;
-        if (!lyrics) {
-            await sock.sendMessage(chatId, {
-                text: `❌ Sorry, I couldn't find any lyrics for "${songTitle}".`
-            },{ quoted: message });
-            return;
-        }
-
-        const maxChars = 4096;
-        const output = lyrics.length > maxChars ? lyrics.slice(0, maxChars - 3) + '...' : lyrics;
-
-        await sock.sendMessage(chatId, { text: output }, { quoted: message });
-    } catch (error) {
-        console.error('Error in lyrics command:', error);
-        await sock.sendMessage(chatId, { 
-            text: `❌ An error occurred while fetching the lyrics for "${songTitle}".`
-        },{ quoted: message });
+    } catch (err) {
+        console.log("LYRICS ERROR:", err.message.slice(0,50));
+        await sock.sendMessage(chatId, { text: '🚨 Hitilafu imetokea kwenye lyrics!' });
     }
 }
 
-module.exports = { lyricsCommand };
+module.exports = lyricsCommand;
