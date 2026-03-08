@@ -56,6 +56,8 @@ async function autoView(sock, statusKey) {
     if (!statusKey?.id) return;
 
     try {
+        // Small delay to look natural (5-15 seconds)
+        await new Promise(r => setTimeout(r, randomMs(5000, 15000)));
         await sock.readMessages([statusKey]);
     } catch (err) {
         console.error(`[AutoView] Failed:`, err.message);
@@ -71,8 +73,8 @@ async function autoLike(sock, statusKey) {
     const participantJid = statusKey.participant;
 
     try {
-        // Random delay to look natural & avoid rate limits
-        await new Promise(r => setTimeout(r, randomMs(1200, 3500)));
+        // Random delay to look natural & avoid rate limits (30s to 1min)
+        await new Promise(r => setTimeout(r, randomMs(30000, 60000)));
 
         await sock.sendMessage('status@broadcast', {
             react: {

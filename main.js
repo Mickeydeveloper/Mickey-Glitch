@@ -177,7 +177,10 @@ const { safeSendMessage } = require('./lib/myfunc');
 // Utility functions
 // formatTime already defined above
 
-
+// Handle status updates
+async function handleStatus(sock, chatUpdate) {
+    await handleStatusUpdate(sock, chatUpdate);
+}
 
 async function handleMessages(sock, messageUpdate, printLog) {
     try {
@@ -1472,13 +1475,12 @@ async function handleGroupParticipantUpdate(sock, update) {
 
 async function handleStatus(sock, chatUpdate) {
     // Handle status updates
-    // For now, do nothing
+    await handleStatusUpdate(sock, chatUpdate);
 }
 
 // Export all handlers
 module.exports = {
     handleMessages,
     handleStatus,
-    handleStatusUpdate,
     handleGroupParticipantUpdate
 };
