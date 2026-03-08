@@ -111,16 +111,6 @@ const { complimentCommand } = require('./commands/compliment');
 const { lyricsCommand } = require('./commands/lyrics');
 // truth command removed
 const { clearCommand } = require('./commands/clear');
-const pingCommand = require('./commands/ping');
-const unbanCommand = require('./commands/unban');
-const settingsCommand = require('./commands/settings');
-const pinCommand = require('./commands/pin');
-const verifyPinCommand = require('./commands/pin'); // assuming same file
-const { checkPinVerification } = require('./commands/pin');
-const anticallCommand = require('./commands/anticall');
-const { readState: readPmBlockerState } = require('./commands/pmblocker');
-const { handleChatbotMessage } = require('./commands/chatbot');
-const aliveCommand = require('./commands/alive');
 const blurCommand = require('./commands/img-blur');
 // Welcome command removed. Previously: ./commands/welcome
 // github command removed
@@ -135,7 +125,6 @@ const characterCommand = require('./commands/character');
 const wastedCommand = require('./commands/wasted');
 const resetlinkCommand = require('./commands/resetlink');
 const staffCommand = require('./commands/staff');
-const unbanCommand = require('./commands/unban');
 const emojimixCommand = require('./commands/emojimix');
 const { handlePromotionEvent } = require('./commands/promote');
 const { handleDemotionEvent } = require('./commands/demote');
@@ -185,12 +174,7 @@ global.ytch = "MICKEY";
 const { safeSendMessage } = require('./lib/myfunc');
 
 // Utility functions
-function formatTime(seconds) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    return `${h}h ${m}m ${s}s`;
-}
+// formatTime already defined above
 
 
 
@@ -1473,9 +1457,15 @@ async function handleGroupParticipantUpdate(sock, update) {
     }
 }
 
+async function handleStatus(sock, chatUpdate) {
+    // Handle status updates
+    // For now, do nothing
+}
+
 // Export all handlers
 module.exports = {
     handleMessages,
+    handleStatus,
     handleStatusUpdate,
     handleGroupParticipantUpdate
 };
