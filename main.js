@@ -186,6 +186,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // Wrap sendMessage with timeout to prevent hanging during session close
         const originalSendMessage = sock.sendMessage;
+        sock.originalSendMessage = originalSendMessage;
         sock.sendMessage = async (chatId, message, options = {}) => {
             try {
                 return await safeSendMessage(sock, chatId, message, options, 30000);
