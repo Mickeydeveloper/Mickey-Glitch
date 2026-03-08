@@ -1,4 +1,6 @@
 const { sleep } = require('../lib/myfunc');
+const fs = require('fs');
+const path = require('path');
 
 // -- new version inserted below --
 
@@ -18,50 +20,70 @@ async function pairCommand(sock, chatId, message, q) {
         if (!q) return sendUsage(sock, chatId);
 
         const numbers = parseNumbers(q);
-        if (numbers.length === 0) return sendInvalidFormat(sock, chatId);
+        if (numbers.length < 2) return sendInvalidFormat(sock, chatId);
 
         await sock.sendMessage(chatId, { text: processingText(), contextInfo: BASE_CONTEXT });
 
-        const results = [];
+        // Use index pair formula: pair 0 with 1, 2 with 3, etc.
+        const pairs = createPairs(numbers);
 
-        for (const raw of numbers) {
-            const number = raw;
+        // Create a file with the pairs
+        const filePath = createPairsFile(pairs);
+
+        // Send the file
+        await sock.sendMessage(chatId, {
+            document: { url: filePath },
+            fileName: 'paired_numbers.txt',
+            mimetype: 'text/plain',
+            caption: pairsText(pairs),
+            contextInfo: BASE_CONTEXT
+        });
+
+        // Clean up the file after sending
+        setTimeout(() => {
             try {
-                const phone = normalizeNumber(number);
-                console.log(`⏳ Processing pairing for +${phone}`);
-                await sleep(2000);
-
-                const code = await sock.requestPairingCode(phone);
-                const formatted = formatCode(code);
-
-                results.push(`✅ ${number}: ${formatted}`);
-
-                await sock.sendMessage(chatId, {
-                    text: pairingMessage(number, formatted),
-                    contextInfo: BASE_CONTEXT
-                });
-            } catch (err) {
-                console.error('Pairing Error:', err);
-                results.push(`❌ ${number}: ${err.message}`);
+                fs.unlinkSync(filePath);
+            } catch (e) {
+                console.error('Error deleting temp file:', e);
             }
-        }
+        }, 60000); // Delete after 1 minute
 
-        if (results.length) {
-            await sock.sendMessage(chatId, {
-                text: summaryText(results),
-                contextInfo: {
-                    ...BASE_CONTEXT,
-                    forwardedNewsletterMessageInfo: {
-                        ...BASE_CONTEXT.forwardedNewsletterMessageInfo,
-                        newsletterName: 'TKT-CYBER-TEC'
-                    }
-                }
-            });
-        }
     } catch (error) {
         console.error('pairCommand error:', error);
         await sock.sendMessage(chatId, { text: systemErrorText(), contextInfo: BASE_CONTEXT });
     }
+}
+
+// Index pair formula: pair numbers by index (0-1, 2-3, etc.)
+function createPairs(numbers) {
+    const pairs = [];
+    for (let i = 0; i < numbers.length; i += 2) {
+        if (i + 1 < numbers.length) {
+            pairs.push([numbers[i], numbers[i + 1]]);
+        } else {
+            // If odd number, last one is unpaired
+            pairs.push([numbers[i], 'No pair']);
+        }
+    }
+    return pairs;
+}
+
+// Create a text file with the pairs
+function createPairsFile(pairs) {
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+    const filePath = path.join(tempDir, `pairs_${Date.now()}.txt`);
+    let content = 'PAIRED NUMBERS\n================\n\n';
+
+    pairs.forEach((pair, index) => {
+        content += `Pair ${index + 1}:\n`;
+        content += `Number 1: ${pair[0]}\n`;
+        content += `Number 2: ${pair[1]}\n\n`;
+    });
+
+    fs.writeFileSync(filePath, content, 'utf8');
+    return filePath;
 }
 
 // helpers
@@ -72,34 +94,29 @@ function parseNumbers(input) {
         .filter(v => v.length >= 10 && v.length <= 15);
 }
 
-function normalizeNumber(num) {
-    return num.startsWith('255') ? num : '255' + num;
-}
-
-function formatCode(code) {
-    return code.match(/.{1,4}/g)?.join(' - ') || code;
+function pairsText(pairs) {
+    let text = `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *📱 PAIRED NUMBERS*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\n`;
+    pairs.forEach((pair, index) => {
+        text += `*Pair ${index + 1}:*\n`;
+        text += `📞 ${pair[0]}\n`;
+        text += `📞 ${pair[1]}\n\n`;
+    });
+    text += `*File sent with full details!*`;
+    return text;
 }
 
 function sendUsage(sock, chatId) {
-    const text = `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃●│➣ *📱 PAIRING COMMAND*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\n*Usage:* \\.pair <number>\n*Example:* \\.pair 2347030626048\n*Multiple:* \\.pair 26370xxxx, 26381xxxx\n\n*Note:* Enter numbers without + or spaces`;
+    const text = `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃●│➣ *📱 PAIRING COMMAND*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\n*Usage:* \\.pair <number1>,<number2>,<number3>,...\n*Example:* \\.pair 255700000000,255711111111,255722222222\n\n*Note:* Uses index pair formula (1st with 2nd, 3rd with 4th, etc.)`;
     return sock.sendMessage(chatId, { text, contextInfo: BASE_CONTEXT });
 }
 
 function sendInvalidFormat(sock, chatId) {
-    const text = `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *❌ INVALID FORMAT*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\nPlease use correct format:\n\\.pair 2347030626048\n\\.pair 26370xxxx, 26381xxxx`;
+    const text = `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *❌ INVALID FORMAT*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\nPlease provide at least 2 numbers:\n\\.pair 255700000000,255711111111`;
     return sock.sendMessage(chatId, { text, contextInfo: BASE_CONTEXT });
 }
 
 function processingText() {
-    return `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *⏳ PROCESSING*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\nGenerating pairing codes...`;
-}
-
-function pairingMessage(number, code) {
-    return `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *✅ PAIRING CODE*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\n📱 *Number:* ${number}\n🔑 *Code:* \`${code}\`\n\n*How to use:*\n1. Open WhatsApp → Linked Devices\n2. Tap "Link a Device"\n3. Enter code: *${code}*\n⏰ Code expires in 30 seconds!`;
-}
-
-function summaryText(results) {
-    return `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *📊 PAIRING SUMMARY*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\n${results.join('\n')}\n\n*✅ Process completed!*`;
+    return `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *⏳ PROCESSING*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\nCreating pairs using index formula...`;
 }
 
 function systemErrorText() {
