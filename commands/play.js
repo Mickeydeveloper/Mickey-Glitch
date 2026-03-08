@@ -2,6 +2,11 @@ const axios = require('axios');
 const yts = require('yt-search');
 
 async function songCommand(sock, chatId, message) {
+    // Guard: Check if socket is ready
+    if (!sock || typeof sock.sendMessage !== 'function') {
+        return;
+    }
+
     const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
     const query = textBody.split(" ").slice(1).join(" ");
 
@@ -33,8 +38,12 @@ async function songCommand(sock, chatId, message) {
         }
 
         if (dlUrl) {
-            // Show recording status
-            await sock.sendPresenceUpdate('recording', chatId);
+            // Show recording status (safe)
+            try {
+                await sock.sendPresenceUpdate('recording', chatId);
+            } catch (e) {
+                // Silent
+            }
 
             // Send combined info text and audio
             try {
@@ -62,7 +71,7 @@ async function songCommand(sock, chatId, message) {
 
                 await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
             } catch (err) {
-                console.log('Audio send error:', err.message);
+                console.log('Audio error:', err.message.slice(0, 50));
                 await sock.sendMessage(chatId, { text: '⚠️ *Audio send failed on this device.*\n\nTry again or download manually.' });
             }
         } else {
@@ -71,8 +80,12 @@ async function songCommand(sock, chatId, message) {
     } catch (e) {
         await sock.sendMessage(chatId, { text: '🚨 *Hitilafu imetokea!*\n\nJaribu tena au tumia jina tofauti.' });
     } finally {
-        // Stop recording status
-        await sock.sendPresenceUpdate('paused', chatId);
+        // Stop recording status (safe)
+        try {
+            await sock.sendPresenceUpdate('paused', chatId);
+        } catch (e) {
+            // Silent
+        }
     }
 }
 

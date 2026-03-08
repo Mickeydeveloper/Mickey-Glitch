@@ -212,12 +212,14 @@ async function startBot() {
 
         const botJid = jidNormalizedUser(sock.user.id)
         const botNumber = botJid.split('@')[0]
+        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Africa/Dar_es_Salaam' })
 
         console.log(chalk.green(`
-┌─〔 ${chalk.green.bold('✅ CONNECTION ESTABLISHED')} 〕──
-┃ 📱 ${chalk.cyan.bold(botNumber)}
-┃ ⏰ ${chalk.gray(new Date().toLocaleString())}
-┃ 💓 ${chalk.yellow('Heartbeat Active')}
+┌─〔 *CONNECTION ESTABLISHED* 〕──
+┃ 🟢 *Bot:* \`${botNumber}\`
+┃ 🕒 *Time:* \`${timestamp}\`
+┃ ⏱️ *Attempt:* \`${connectionAttempts}\`
+┃ 💚 *Status:* \`Online & Active\`
 └───────────────`))
 
         // Start heartbeat
@@ -228,16 +230,19 @@ async function startBot() {
           try {
             await sock.sendMessage(botJid, {
               text:
-`
- *WHATSAPP BOT SYSTEM ONLINE* ✅
-📡 Connection  : Successfully Established
-⚡ Uptime       : ${process.uptime().toFixed(0)}s
-_This automation service is operating normally._`,
+`┌─〔 *SYSTEM ONLINE* 〕──
+┃ 🟢 Status: Online
+┃ 📱 Bot: \`${botNumber}\`
+┃ ⏳ Uptime: \`${Math.floor(process.uptime())}s\`
+┃ 🕒 Time: \`${timestamp}\`
+└───────────────
+
+_Mickey Glitch v3_`,
 
               contextInfo: {
                 externalAdReply: {
-                  title: "OFFICIAL WHATSAPP AUTOMATION",
-                  body: "ᎷᎥፈᏦᏋᎩ ᎶᏝᎥᏖፈᏂ ᏇᏂᏗᏖᏕᏗᎮᎮ ",
+                  title: "MICKEY GLITCH - BOT SYSTEM",
+                  body: "🟢 Status: Online & Ready",
                   thumbnailUrl: "https://water-billing-292n.onrender.com/1761205727440.jpg ",
                   sourceUrl: "https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A",
                   mediaType: 1,
@@ -247,7 +252,7 @@ _This automation service is operating normally._`,
               }
             })
           } catch (e) {
-            console.log("Ad Message Error:", e.message)
+            // Silent
           }
         }, 3000)
 
@@ -263,18 +268,19 @@ _This automation service is operating normally._`,
 
         // Skip reconnection logic if pairing is in progress
         if (pairingInProgress) {
-          console.log(chalk.yellow('⚠️  Connection dropped during pairing. Waiting for reconnection...'))
+          console.log(chalk.yellow('⚠️  Waiting for device link...'))
           return
         }
 
         const statusCode = lastDisconnect?.error?.output?.statusCode
-        const errorMessage = lastDisconnect?.error?.message || ''
+        const errorMessage = lastDisconnect?.error?.message || 'Unknown error'
         const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
 
         console.log(chalk.red(`
-┌─〔 ${chalk.red.bold('❌ CONNECTION LOST')} 〕──
-┃ 📊 ${chalk.yellow(`Code: ${statusCode}`)}
-┃ 💬 ${chalk.gray(errorMessage.substring(0, 50) + (errorMessage.length > 50 ? '...' : ''))}
+┌─〔 CONNECTION LOST 〕──
+┃ 🔴 Status: Disconnected
+┃ 📊 Code: \`${statusCode}\`
+┃ 💬 Error: \`${errorMessage.substring(0, 40)}\`
 └───────────────`))
 
         // 🔥 AUTO FIX BAD MAC
@@ -283,7 +289,11 @@ _This automation service is operating normally._`,
           errorMessage.includes('decrypt') ||
           errorMessage.includes('Failed to decrypt')
         ) {
-          console.log(chalk.red('⚠ Corrupted Session Detected. Resetting...'))
+          console.log(chalk.red.bold(`
+┌─〔 SESSION RECOVERY 〕──
+┃ ⚠️  Status: Corrupted Session
+┃ 🔧 Action: Resetting...
+└───────────────`))
           try {
             fs.rmSync(SESSION_FOLDER, { recursive: true, force: true })
           } catch {}
@@ -291,8 +301,11 @@ _This automation service is operating normally._`,
         }
 
         if (statusCode === DisconnectReason.loggedOut) {
-          console.log(chalk.red.bold('🚪 SESSION EXPIRED - LOGGED OUT'))
-          console.log(chalk.yellow('Please scan QR code again'))
+          console.log(chalk.red.bold(`
+┌─〔 SESSION EXPIRED 〕──
+┃ 🚪 Status: Logged Out
+┃ 📝 Action: Rescan QR Code
+└───────────────`))
           fs.rmSync(SESSION_FOLDER, { recursive: true, force: true })
           process.exit(1)
         }
@@ -302,9 +315,9 @@ _This automation service is operating normally._`,
           reconnecting = true
           const delay = getReconnectDelay(connectionAttempts)
           console.log(chalk.yellow(`
-┌─〔 ${chalk.yellow.bold('🔄 RECONNECTING')} 〕──
-┃ ⏱️ ${chalk.cyan(`${(delay/1000).toFixed(1)}s`)}
-┃ 🔢 ${chalk.gray(`Attempt ${connectionAttempts + 1}`)}
+┌─〔 RECONNECTING 〕──
+┃ ⏱️ Wait: \`${(delay/1000).toFixed(1)}s\`
+┃ 🔢 Attempt: \`${connectionAttempts + 1}\`
 └───────────────`))
 
           setTimeout(() => {

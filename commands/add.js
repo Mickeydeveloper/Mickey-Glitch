@@ -7,6 +7,11 @@ const isAdmin = require('../lib/isAdmin');
  */
 async function addCommand(sock, chatId, senderId, text, message) {
     try {
+        // Guard: Check if socket is ready
+        if (!sock || typeof sock.sendMessage !== 'function') {
+            return;
+        }
+
         const isGroup = chatId.endsWith('@g.us');
         if (!isGroup) {
             await sock.sendMessage(chatId, { text: '❌ This command can only be used in groups.' }, { quoted: message });
@@ -51,8 +56,12 @@ async function addCommand(sock, chatId, senderId, text, message) {
         // Construct the JID (WhatsApp ID format)
         const memberId = `${finalNumber}@s.whatsapp.net`;
 
-        // Show typing indicator
-        await sock.sendPresenceUpdate('composing', chatId);
+        // Show typing indicator (safe)
+        try {
+            await sock.sendPresenceUpdate('composing', chatId);
+        } catch (e) {
+            // Silent
+        }
 
         try {
             // Add the member to the group

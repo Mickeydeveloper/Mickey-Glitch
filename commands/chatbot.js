@@ -93,7 +93,7 @@ async function callAI(userPrompt) {
 
 async function handleChatbotMessage(sock, chatId, message) {
   try {
-    if (!chatId || message.key?.fromMe) return;
+    if (!chatId || message.key?.fromMe || !sock || typeof sock.sendMessage !== 'function') return;
 
     const state = loadState();
     const isGroup = chatId.endsWith('@g.us');
@@ -103,7 +103,12 @@ async function handleChatbotMessage(sock, chatId, message) {
     const userText = extractMessageText(message);
     if (!userText) return;
 
-    await sock.sendPresenceUpdate('composing', chatId);
+    // Safe typing (ignore errors)
+    try {
+        await sock.sendPresenceUpdate('composing', chatId);
+    } catch (e) {
+        // Silent
+    }
 
     const reply = await callAI(userText);
     let cleanReply = reply || "Samahani, siwezi kujibu kwa sasa.";

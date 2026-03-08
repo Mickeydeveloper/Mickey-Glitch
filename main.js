@@ -177,6 +177,11 @@ function formatTime(seconds) {
 
 async function handleMessages(sock, messageUpdate, printLog) {
     try {
+        // Guard: Check if socket is connected before processing
+        if (!sock || !sock.user || typeof sock.sendMessage !== 'function') {
+            return;
+        }
+
         const { messages, type } = messageUpdate;
         if (type !== 'notify') return;
 
@@ -188,11 +193,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const isGroupEarly = chatIdEarly && chatIdEarly.toString().endsWith('@g.us');
 
         // Handle autoread functionality (non-blocking)
-        handleAutoread(sock, message).catch(err => console.log('Autoread error:', err.message));
+        handleAutoread(sock, message).catch(() => {});
 
         // Store message for antidelete feature (non-blocking)
         if (message.message) {
-            storeMessage(sock, message).catch(err => console.log('Store message error:', err.message));
+            storeMessage(sock, message).catch(() => {});
         }
 
         // Handle message revocation
@@ -1377,14 +1382,19 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
         }
     } catch (error) {
-        console.error(chalk.red('❌ Error in message handler:'), chalk.red.bold(error.message));
-        // Try to extract chatId safely from messageUpdate if available
-        let safeChatId = null;
-        try { safeChatId = messageUpdate?.messages?.[0]?.key?.remoteJid || null; } catch (e) { safeChatId = null; }
-        if (safeChatId) {
-            await sock.sendMessage(safeChatId, {
-                text: `❌ Failed to process command: ${String(error.message).slice(0, 300)}`
-            }).catch(console.error);
+        // Silence connection-related errors during reconnection
+        const isConnectionError = /closed|disconnect|connect|timeout|ECONNREFUSED|ETIMEDOUT/i.test(error.message || '');
+        if (!isConnectionError) {
+            console.error('⚠️ Command error:', (error?.message || error).slice(0, 100));
+            
+            // Try to extract chatId safely from messageUpdate if available
+            let safeChatId = null;
+            try { safeChatId = messageUpdate?.messages?.[0]?.key?.remoteJid || null; } catch (e) { safeChatId = null; }
+            if (safeChatId && typeof sock?.sendMessage === 'function') {
+                await sock.sendMessage(safeChatId, {
+                    text: `⚠️ Command failed, try again in a few seconds.`
+                }).catch(() => {});
+            }
         }
     }
 }

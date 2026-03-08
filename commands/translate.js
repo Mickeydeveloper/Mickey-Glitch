@@ -60,9 +60,18 @@ async function translateText(textToTranslate, lang) {
 
 async function handleTranslateCommand(sock, chatId, message, match) {
     try {
-        // Show typing indicator
-        await sock.presenceSubscribe(chatId);
-        await sock.sendPresenceUpdate('composing', chatId);
+        // Guard: Check if socket is ready
+        if (!sock || typeof sock.sendMessage !== 'function') {
+            return;
+        }
+
+        // Show typing indicator (safe)
+        try {
+            await sock.presenceSubscribe(chatId);
+            await sock.sendPresenceUpdate('composing', chatId);
+        } catch (e) {
+            // Silent
+        }
 
         let textToTranslate = '';
         let lang = '';

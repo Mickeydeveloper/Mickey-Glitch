@@ -7,6 +7,11 @@ const { callAI } = require('./chatbot');
  */
 async function aiCommand(sock, chatId, message) {
   try {
+    // Guard: Check if socket is ready
+    if (!sock || typeof sock.sendMessage !== 'function') {
+      return;
+    }
+
     // Extract text from message
     const textBody = message.message?.conversation || 
                      message.message?.extendedTextMessage?.text || '';
@@ -20,8 +25,12 @@ async function aiCommand(sock, chatId, message) {
       return;
     }
 
-    // Show typing
-    await sock.sendPresenceUpdate('composing', chatId);
+    // Show typing (with safety check)
+    try {
+      await sock.sendPresenceUpdate('composing', chatId);
+    } catch (e) {
+      // Silent - connection might be closing
+    }
 
     // Show thinking reaction
     await sock.sendMessage(chatId, { 

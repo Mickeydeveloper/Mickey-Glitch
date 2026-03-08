@@ -12,12 +12,21 @@ const formatUptime = (secs) => {
 };
 
 const aliveCommand = async (conn, chatId, msg) => {
+    // Check if socket is ready
+    if (!conn || typeof conn.sendMessage !== 'function') {
+        return;
+    }
+
     // Anza kupiga picha ya muda (Start timer for speed)
     const start = performance.now();
     
     try {
-        // Typing indicator fast
-        await conn.sendPresenceUpdate('composing', chatId);
+        // Typing indicator fast (safe)
+        try {
+            await conn.sendPresenceUpdate('composing', chatId);
+        } catch (e) {
+            // Silent
+        }
 
         const dateObj = new Date();
         const options = { timeZone: 'Africa/Dar_es_Salaam', hour12: true };
