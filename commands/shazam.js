@@ -61,21 +61,68 @@ async function shazamCommand(sock, chatId, message) {
         
         fs.writeFileSync(tempInput, mediaBuffer);
 
+        // Get media duration using ffprobe
+        let duration = 0;
+        let processingMessage = "✅ *Processing media for identification*";
+        
+        try {
+            const probeResult = await execAsync(`ffprobe -v quiet -print_format json -show_format "${tempInput}"`);
+            const probeData = JSON.parse(probeResult.stdout);
+            duration = parseFloat(probeData.format?.duration || 0);
+            console.log(`Media duration: ${duration} seconds`);
+        } catch (probeErr) {
+            console.log("Duration probe failed:", probeErr.message);
+            // Fallback: assume it's long enough
+            duration = 60;
+            processingMessage = `⚠️ *Duration detection failed* - Using 30s sample`;
+        }
+
+        // Determine optimal clip length for identification
+        let clipDuration = 30; // Default 30 seconds
+        let startTime = 0; // Start from beginning
+        
+        if (duration < 10) {
+            // If very short, use full duration
+            clipDuration = duration;
+            processingMessage = `📏 *Short audio detected* (${duration.toFixed(1)}s) - Using full length`;
+        } else if (duration > 120) {
+            // If very long, take middle section (30 seconds from 30s mark)
+            startTime = 30;
+            clipDuration = 30;
+            processingMessage = `⏰ *Long media detected* (${Math.floor(duration/60)}:${(duration%60).toFixed(0).padStart(2,'0')}) - Using 30s sample from middle`;
+        } else {
+            processingMessage = `✅ *Processing* ${clipDuration}s sample for identification`;
+        }
+
+        // Send processing status
+        await sock.sendMessage(chatId, { text: processingMessage }, { quoted: messageToQuote });
+
         // Convert to WAV format for better recognition (ACRCloud works best with WAV)
-        // Extract first 30 seconds for better performance
         try {
             if (quotedMsg.videoMessage) {
-                // Extract audio from video (first 30 seconds)
-                await execAsync(`ffmpeg -i "${tempInput}" -vn -acodec pcm_s16le -ar 44100 -ac 2 -t 30 "${tempAudio}" -y`);
+                // Extract audio from video
+                if (startTime > 0) {
+                    await execAsync(`ffmpeg -i "${tempInput}" -vn -acodec pcm_s16le -ar 44100 -ac 2 -ss ${startTime} -t ${clipDuration} "${tempAudio}" -y`);
+                } else {
+                    await execAsync(`ffmpeg -i "${tempInput}" -vn -acodec pcm_s16le -ar 44100 -ac 2 -t ${clipDuration} "${tempAudio}" -y`);
+                }
             } else {
-                // Convert audio to WAV (first 30 seconds)
-                await execAsync(`ffmpeg -i "${tempInput}" -acodec pcm_s16le -ar 44100 -ac 2 -t 30 "${tempAudio}" -y`);
+                // Convert audio to WAV
+                if (startTime > 0) {
+                    await execAsync(`ffmpeg -i "${tempInput}" -acodec pcm_s16le -ar 44100 -ac 2 -ss ${startTime} -t ${clipDuration} "${tempAudio}" -y`);
+                } else {
+                    await execAsync(`ffmpeg -i "${tempInput}" -acodec pcm_s16le -ar 44100 -ac 2 -t ${clipDuration} "${tempAudio}" -y`);
+                }
             }
         } catch (ffmpegErr) {
             console.log("FFMPEG ERROR:", ffmpegErr.message);
-            // Fallback: try with original file (limit to 30 seconds if possible)
+            // Fallback: try with original file
             try {
-                await execAsync(`ffmpeg -i "${tempInput}" -t 30 -c copy "${tempAudio.replace('.wav', '.mp3')}" -y`);
+                if (startTime > 0) {
+                    await execAsync(`ffmpeg -i "${tempInput}" -ss ${startTime} -t ${clipDuration} -c copy "${tempAudio.replace('.wav', '.mp3')}" -y`);
+                } else {
+                    await execAsync(`ffmpeg -i "${tempInput}" -t ${clipDuration} -c copy "${tempAudio.replace('.wav', '.mp3')}" -y`);
+                }
                 // Rename for consistency
                 fs.renameSync(tempAudio.replace('.wav', '.mp3'), tempAudio);
             } catch (fallbackErr) {
@@ -131,7 +178,14 @@ async function shazamCommand(sock, chatId, message) {
             const album = song.album?.name || 'Unknown Album';
             const score = song.score ? ` (${Math.round(song.score)}% match)` : '';
 
-            const response = `🎵 *Song Identified!*\n\n📌 Title: ${title}\n👤 Artist: ${artist}\n💿 Album: ${album}${score}`;
+            let sampleInfo = "";
+            if (duration > 120) {
+                sampleInfo = `\n⏱️ *Sample used:* 30s from middle of ${Math.floor(duration/60)}:${(duration%60).toFixed(0).padStart(2,'0')} video`;
+            } else if (clipDuration < duration) {
+                sampleInfo = `\n⏱️ *Sample used:* First ${clipDuration}s of ${Math.floor(duration/60)}:${(duration%60).toFixed(0).padStart(2,'0')} media`;
+            }
+
+            const response = `🎵 *Song Identified!*\n\n📌 Title: ${title}\n👤 Artist: ${artist}\n💿 Album: ${album}${score}${sampleInfo}`;
             await sock.sendMessage(chatId, { text: response }, { quoted: messageToQuote });
         } else {
             let errorMessage = '❌ *Could not identify the song.*';
