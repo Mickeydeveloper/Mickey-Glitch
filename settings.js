@@ -12,8 +12,8 @@ const settings = {
   giphyApiKey: 'qnl7ssQChTdPjsKta2Ax2LMaGXz303tq',
   acrcloud: {
     host: 'identify-eu-west-1.acrcloud.com',
-    access_key: 'c33c767d683f78bd17d4bd4991955d81',
-    access_secret: 'bvgaIAEtADBTbLwiPGYlxupWqkNGIjT7J9Ag2vIu'
+    access_key: '250b268b836bc2186fbf49c9a31f904d',
+    access_secret: '2nArZpgRhyRoFCZuYMnlhqixwuSjei4QE14vMhkg'
   },
   commandMode: "public",
   maxStoreMessages: 20, 
