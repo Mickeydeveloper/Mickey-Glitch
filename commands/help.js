@@ -252,7 +252,7 @@ const aliveCommand = async (conn, chatId, msg) => {
         const categorizedCommands = categorizeCommands(registeredCommands);
         const totalCommands = registeredCommands.length;
 
-        // 4. Build categorized command list with compact, modern design
+        // 4. Build categorized command list with vertical format and bold styling
         let commandsList = "";
         
         Object.entries(categorizedCommands).forEach(([categoryName, commands]) => {
@@ -260,67 +260,37 @@ const aliveCommand = async (conn, chatId, msg) => {
             const categoryEmoji = categoryName.split(' ')[0];
             const categoryText = categoryName.substring(categoryName.indexOf(' ') + 1);
             
-            // Modern category header
-            commandsList += `\n┌── ${categoryEmoji} *${categoryText}* ── ${commands.length} ──┐\n`;
+            // Modern category header with better styling
+            commandsList += `\n┌─ ${categoryEmoji} *${categoryText}* (${commands.length}) ─┐\n`;
             
-            // Create compact command grid (2-3 columns)
-            const maxCommandsPerRow = 2;
-            for (let i = 0; i < commands.length; i += maxCommandsPerRow) {
-                const rowCommands = commands.slice(i, i + maxCommandsPerRow);
-                let rowText = "│ ";
-                
-                rowCommands.forEach((cmd, idx) => {
-                    // Just show command name without description
-                    const cmdText = `${cmd}`;
-                    rowText += cmdText;
-                    
-                    // Add spacing for next command if not last in row
-                    if (idx < rowCommands.length - 1) {
-                        const padding = Math.max(0, 15 - cmdText.length);
-                        rowText += ' '.repeat(padding) + ' │ ';
-                    }
-                });
-                
-                // Fill remaining space if only one command in row
-                if (rowCommands.length === 1) {
-                    const currentLength = rowText.length - 3; // subtract "│ "
-                    const targetLength = 25; // Total width for 2 columns (reduced since no descriptions)
-                    if (currentLength < targetLength) {
-                        rowText += ' '.repeat(targetLength - currentLength) + ' │';
-                    } else {
-                        rowText += ' │';
-                    }
-                } else {
-                    rowText += ' │';
-                }
-                
-                commandsList += rowText + '\n';
-            }
+            // Display each command on a new line with bold formatting
+            commands.forEach((cmd) => {
+                commandsList += `┃ ◈ *${cmd}*\n`;
+            });
             
-            commandsList += `└${'─'.repeat(40)}┘\n`;
+            commandsList += `└${'─'.repeat(35)}┘\n`;
         });
 
-        // 5. Build compact, modern message layout
-        const finalMessage = `┌─ ${'═'.repeat(20)} *𝙼𝙸𝙲𝙺𝙴𝚈 𝙶𝙻𝙸𝚃𝙲𝙷* ${'═'.repeat(20)} ─┐
-│ 👑 Owner: Mickey${' '.repeat(25)} │
-│ 👤 User: ${senderName}${' '.repeat(27 - senderName.length)} │
-│ ⏲️ Uptime: ${uptimeString}${' '.repeat(25 - uptimeString.length)} │
-│ 🛡️ Mode: Public${' '.repeat(26)} │
-│ 🧩 Prefix: [ ${prefix} ]${' '.repeat(23)} │
-│ 🧠 RAM: ${usedRAM}GB / ${totalRAM}GB${' '.repeat(19 - (usedRAM.length + totalRAM.length))} │
-└${'─'.repeat(50)}┘
-
-┌─ ${'═'.repeat(18)} *COMMANDS* ${'═'.repeat(18)} ─┐
+        // 5. Build modern message layout with improved styling
+        const finalMessage = `╭─ ${'═'.repeat(16)} *𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒* ${'═'.repeat(16)} ─╮
+│
+├─ ◈ *𝐒𝐄𝐍𝐃𝐄𝐑 𝐈𝐍𝐅𝐎*
+│ ◇ 👤 *User:* \`${senderName}\`
+│ ⏲️ *Uptime:* \`${uptimeString}\`
+│ 🧠 *RAM:* \`${usedRAM}GB / ${totalRAM}GB\`
+│ 🛡️ *Mode:* \`Public\`
+│
+├─ ◈ *𝐀𝐕𝐀𝐈𝐋𝐀𝐁𝐋𝐄 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒*
+│
 ${commandsList}
-┌─ ${'═'.repeat(18)} *STATS* ${'═'.repeat(20)} ─┐
-│ 📊 Total: ${totalCommands} cmds │ ${Object.keys(categorizedCommands).length} categories │ ✅ Active │
-└${'─'.repeat(50)}┘
+├─ ◈ *𝐒𝐓𝐀𝐓𝐒*
+│ 📊 *Total:* \`${totalCommands}\` Commands
+│ 🏷️ *Categories:* \`${Object.keys(categorizedCommands).length}\`
+│ ✅ *Status:* \`Active & Stable\`
+│
+╰─ 🔥 *Powered by Mickey Glitch V3* 🔥`;
 
-┌─ ${'═'.repeat(16)} *USAGE* ${'═'.repeat(20)} ─┐
-│ 💡 Type any command for details${' '.repeat(12)} │
-└${'─'.repeat(50)}┘`;
-
-        // 6. Tuma kwa Muonekano wa Kadi with improved styling
+        // 6. Send the message with improved formatting
         await conn.sendMessage(chatId, {
             text: finalMessage,
             contextInfo: {
