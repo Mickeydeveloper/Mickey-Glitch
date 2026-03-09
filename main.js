@@ -83,6 +83,8 @@ const muteCommand = require('./commands/mute');
 const unmuteCommand = require('./commands/unmute');
 const stickerCommand = require('./commands/sticker');
 const pingCommand = require('./commands/ping'); // ensure pingCommand is imported
+const aliveCommand = require('./commands/alive'); // added missing import
+const unbanCommand = require('./commands/unban'); // added missing import
 const isAdmin = require('./lib/isAdmin');
 const warnCommand = require('./commands/warn');
 const warningsCommand = require('./commands/warnings');
@@ -1224,7 +1226,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             // .autoreply command removed
             case userMessage.startsWith('.heart'):
-                await handleHeart(sock, chatId, message);
+                {
+                    const parts = userMessage.trim().split(/\s+/);
+                    const args = ['heart', ...parts.slice(1)];
+                    await miscCommand(sock, chatId, message, args);
+                }
                 break;
             case userMessage.startsWith('.horny'):
                 {
@@ -1341,7 +1347,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
             // .pies command removed
             // .pies aliases removed
             case userMessage === '.hijab':
-                await piesAlias(sock, chatId, message, 'hijab');
+                {
+                    const parts = userMessage.trim().split(/\s+/);
+                    const args = ['hijab', ...parts.slice(1)];
+                    await miscCommand(sock, chatId, message, args);
+                }
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.update'):
