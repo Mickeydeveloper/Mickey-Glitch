@@ -221,6 +221,102 @@ const aliveCommand = async (conn, chatId, msg) => {
         const senderName = msg.pushName || 'User';
         const prefix = '.'; // Badilisha kama unatumia prefix tofauti
         
+        // Fallback descriptions for commands without comments
+        const fallbackDescriptions = {
+            '.ping': 'Check bot speed',
+            '.alive': 'Bot status check',
+            '.help': 'Show this menu',
+            '.menu': 'Command list',
+            '.play': 'Play music',
+            '.shazam': 'Identify songs',
+            '.sticker': 'Make stickers',
+            '.ban': 'Ban users',
+            '.kick': 'Remove members',
+            '.promote': 'Make admin',
+            '.demote': 'Remove admin',
+            '.tagall': 'Tag all members',
+            '.mute': 'Mute group',
+            '.unmute': 'Unmute group',
+            '.clear': 'Delete messages',
+            '.delete': 'Remove message',
+            '.weather': 'Weather info',
+            '.tts': 'Text to speech',
+            '.translate': 'Translate text',
+            '.ai': 'AI chat',
+            '.gpt': 'ChatGPT',
+            '.mode': 'Bot mode',
+            '.owner': 'Owner info',
+            '.status': 'System status',
+            '.settings': 'Bot settings',
+            '.report': 'Report issues',
+            '.compliment': 'Give compliments',
+            '.character': 'Random character',
+            '.wasted': 'Wasted effect',
+            '.blur': 'Blur image',
+            '.url': 'Upload to URL',
+            '.take': 'Edit stickers',
+            '.lyrics': 'Song lyrics',
+            '.facebook': 'FB downloader',
+            '.instagram': 'IG downloader',
+            '.tiktok': 'TT downloader',
+            '.video': 'Download video',
+            '.add': 'Add member',
+            '.unban': 'Unban user',
+            '.warnings': 'Check warnings',
+            '.warn': 'Warn user',
+            '.staff': 'Group admins',
+            '.resetlink': 'Reset group link',
+            '.topmembers': 'Active members',
+            '.ghost': 'Ghost members',
+            '.vv': 'View once media',
+            '.viewonce': 'View once media',
+            '.autostatus': 'Auto status',
+            '.statusforward': 'Status forward',
+            '.autotyping': 'Auto typing',
+            '.autoread': 'Auto read',
+            '.autobio': 'Auto bio',
+            '.pmblocker': 'PM blocker',
+            '.pin': 'PIN security',
+            '.sudo': 'Sudo users',
+            '.halotel': 'Halotel info',
+            '.emojimix': 'Mix emojis',
+            '.textmaker': 'Text effects',
+            '.metallic': 'Metallic text',
+            '.ice': 'Ice text',
+            '.snow': 'Snow text',
+            '.impressive': 'Impressive text',
+            '.matrix': 'Matrix text',
+            '.light': 'Light text',
+            '.neon': 'Neon text',
+            '.devil': 'Devil text',
+            '.purple': 'Purple text',
+            '.thunder': 'Thunder text',
+            '.leaves': 'Leaves text',
+            '.1917': '1917 effect',
+            '.arena': 'Arena text',
+            '.hacker': 'Hacker text',
+            '.sand': 'Sand text',
+            '.blackpink': 'Blackpink text',
+            '.glitch': 'Glitch text',
+            '.fire': 'Fire text',
+            '.antilink': 'Anti-link',
+            '.antitag': 'Anti-tag',
+            '.antibadword': 'Anti-badword',
+            '.antidelete': 'Anti-delete',
+            '.anticall': 'Anti-call',
+            '.antistatusmention': 'Anti-status mention',
+            '.mention': 'Mention settings',
+            '.gmention': 'Group mention',
+            '.setmention': 'Set mention',
+            '.chatbot': 'Group chatbot',
+            '.welcome': 'Welcome message',
+            '.goodbye': 'Goodbye message',
+            '.antiforeign': 'Anti-foreign',
+            '.antispam': 'Anti-spam',
+            '.antivirus': 'Anti-virus',
+            '.security': 'Security settings'
+        };
+        
         // 1. Piga hesabu ya RAM
         const totalRAM = (os.totalmem() / (1024 * 1024 * 1024)).toFixed(2);
         const freeRAM = (os.freemem() / (1024 * 1024 * 1024)).toFixed(2);
@@ -238,49 +334,94 @@ const aliveCommand = async (conn, chatId, msg) => {
         const categorizedCommands = categorizeCommands(registeredCommands);
         const totalCommands = registeredCommands.length;
 
-        // 4. Build categorized command list
+        // 4. Build categorized command list with compact, modern design
         let commandsList = "";
-        let categoryIndex = 1;
         
         Object.entries(categorizedCommands).forEach(([categoryName, commands]) => {
-            commandsList += `\n${categoryIndex}. ${categoryName} (${commands.length})\n`;
-            commands.forEach(cmd => {
-                // Get description from command file if available
-                let description = "No description available";
-                try {
-                    const cmdFile = path.join(__dirname, `../commands/${cmd.slice(1)}.js`);
-                    if (fs.existsSync(cmdFile)) {
-                        const content = fs.readFileSync(cmdFile, 'utf8');
-                        const descMatch = content.match(/\/\/\s*(.*)/);
-                        if (descMatch && descMatch[1].length < 50) {
-                            description = descMatch[1].trim();
+            // Extract emoji and text from category name
+            const categoryEmoji = categoryName.split(' ')[0];
+            const categoryText = categoryName.substring(categoryName.indexOf(' ') + 1);
+            
+            // Modern category header
+            commandsList += `\n┌── ${categoryEmoji} *${categoryText}* ── ${commands.length} ──┐\n`;
+            
+            // Create compact command grid (2-3 columns)
+            const maxCommandsPerRow = 2;
+            for (let i = 0; i < commands.length; i += maxCommandsPerRow) {
+                const rowCommands = commands.slice(i, i + maxCommandsPerRow);
+                let rowText = "│ ";
+                
+                rowCommands.forEach((cmd, idx) => {
+                    // Get short description (truncate to 20 chars)
+                    let description = fallbackDescriptions[cmd] || "No desc";
+                    try {
+                        const cmdFile = path.join(__dirname, `../commands/${cmd.slice(1)}.js`);
+                        if (fs.existsSync(cmdFile)) {
+                            const content = fs.readFileSync(cmdFile, 'utf8');
+                            const descMatch = content.match(/\/\/\s*(.*)/);
+                            if (descMatch && descMatch[1].length > 0) {
+                                description = descMatch[1].trim();
+                                // Truncate long descriptions
+                                if (description.length > 20) {
+                                    description = description.substring(0, 17) + "...";
+                                }
+                            }
                         }
+                    } catch (e) {
+                        // Keep fallback description
                     }
-                } catch (e) {
-                    // Keep default description
+                    
+                    // Format command with description
+                    const cmdText = `${cmd} (${description})`;
+                    rowText += cmdText;
+                    
+                    // Add spacing for next command if not last in row
+                    if (idx < rowCommands.length - 1) {
+                        const padding = Math.max(0, 18 - cmdText.length);
+                        rowText += ' '.repeat(padding) + ' │ ';
+                    }
+                });
+                
+                // Fill remaining space if only one command in row
+                if (rowCommands.length === 1) {
+                    const currentLength = rowText.length - 3; // subtract "│ "
+                    const targetLength = 35; // Total width for 2 columns
+                    if (currentLength < targetLength) {
+                        rowText += ' '.repeat(targetLength - currentLength) + ' │';
+                    } else {
+                        rowText += ' │';
+                    }
+                } else {
+                    rowText += ' │';
                 }
                 
-                commandsList += `   ├─ \`${cmd}\` - ${description}\n`;
-            });
-            commandsList += `   └─ ── ── ── ── ──\n`;
-            categoryIndex++;
+                commandsList += rowText + '\n';
+            }
+            
+            commandsList += `└${'─'.repeat(40)}┘\n`;
         });
 
-        // 5. Jenga Ujumbe (Muundo uliouomba)
-        const finalMessage = `╭━━━〔 *𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑* 〕━━━┈⊷
-┃ 👑 *Owner:* Mickey
-┃ 👤 *User:* ${senderName}
-┃ ⏲️ *Uptime:* ${uptimeString}
-┃ 🛡️ *Mode:* public
-┃ 🧩 *Prefix:* [ ${prefix} ]
-┃ 🧠 *RAM:* ${usedRAM}GB / ${totalRAM}GB
-╰━━━━━━━━━━━━━━━━━━┈⊷
+        // 5. Build compact, modern message layout
+        const finalMessage = `┌─ ${'═'.repeat(20)} *𝙼𝙸𝙲𝙺𝙴𝚈 𝙶𝙻𝙸𝚃𝙲𝙷* ${'═'.repeat(20)} ─┐
+│ 👑 Owner: Mickey${' '.repeat(25)} │
+│ 👤 User: ${senderName}${' '.repeat(27 - senderName.length)} │
+│ ⏲️ Uptime: ${uptimeString}${' '.repeat(25 - uptimeString.length)} │
+│ 🛡️ Mode: Public${' '.repeat(26)} │
+│ 🧩 Prefix: [ ${prefix} ]${' '.repeat(23)} │
+│ 🧠 RAM: ${usedRAM}GB / ${totalRAM}GB${' '.repeat(19 - (usedRAM.length + totalRAM.length))} │
+└${'─'.repeat(50)}┘
 
-╭━━━〔 *AVAILABLE COMMANDS* 〕━━━┈⊷
-${commandsList}╰━━━━━━━━━━━━━━━━━━┈⊷
-*Total Commands:* ${totalCommands} | *Categories:* ${Object.keys(categorizedCommands).length}`;
+┌─ ${'═'.repeat(18)} *COMMANDS* ${'═'.repeat(18)} ─┐
+${commandsList}
+┌─ ${'═'.repeat(18)} *STATS* ${'═'.repeat(20)} ─┐
+│ 📊 Total: ${totalCommands} cmds │ ${Object.keys(categorizedCommands).length} categories │ ✅ Active │
+└${'─'.repeat(50)}┘
 
-        // 6. Tuma kwa Muonekano wa Kadi
+┌─ ${'═'.repeat(16)} *USAGE* ${'═'.repeat(20)} ─┐
+│ 💡 Type any command for details${' '.repeat(12)} │
+└${'─'.repeat(50)}┘`;
+
+        // 6. Tuma kwa Muonekano wa Kadi with improved styling
         await conn.sendMessage(chatId, {
             text: finalMessage,
             contextInfo: {
@@ -292,8 +433,8 @@ ${commandsList}╰━━━━━━━━━━━━━━━━━━┈⊷
                     serverMessageId: 101
                 },
                 externalAdReply: {
-                    title: "ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ꜱʏꜱᴛᴇᴍ",
-                    body: `Active Commands: ${totalCommands}`,
+                    title: "🎯 𝙼𝙸𝙲𝙺𝙴𝚈 𝙶𝙻𝙸𝚃𝙲𝙷 🎯",
+                    body: `📊 ${totalCommands} Commands • ${Object.keys(categorizedCommands).length} Categories • ⚡ Active`,
                     mediaType: 1,
                     renderLargerThumbnail: true,
                     thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
