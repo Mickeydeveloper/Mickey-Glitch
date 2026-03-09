@@ -49,8 +49,14 @@ function extractMessageText(msg) {
  */
 async function callAI(userPrompt) {
   try {
+    // System prompt to make AI respond as Mickdady, a professional human
+    const systemPrompt = "You are Mickdady, a professional human assistant. Always respond as a human, not as an AI. Be helpful, polite, and professional. Your name is Mickdady.";
+
+    // Combine system prompt with user prompt
+    const fullPrompt = `${systemPrompt}\n\nUser: ${userPrompt}\n\nMickdady:`;
+
     // Primary API (Hansa SriHub Copilot)
-    const primaryUrl = `https://api.srihub.store/ai/copilot?prompt=${encodeURIComponent(userPrompt)}&apikey=dew_DVTcyMksTDO8ZGxBvLAG0y9P8sIj6uRJXHHwWSW5`;
+    const primaryUrl = `https://api.srihub.store/ai/copilot?prompt=${encodeURIComponent(fullPrompt)}&apikey=dew_DVTcyMksTDO8ZGxBvLAG0y9P8sIj6uRJXHHwWSW5`;
 
     const primaryResp = await fetch(primaryUrl, {
       method: 'GET',
@@ -68,7 +74,7 @@ async function callAI(userPrompt) {
 
     // Fallback API (yupra) if primary fails or returns nothing
     try {
-      const fallbackUrl = `https://api.yupra.my.id/api/ai/copilot?text=${encodeURIComponent(userPrompt)}`;
+      const fallbackUrl = `https://api.yupra.my.id/api/ai/copilot?text=${encodeURIComponent(fullPrompt)}`;
       const fallbackResp = await fetch(fallbackUrl, {
         method: 'GET',
         signal: AbortSignal.timeout(20000)
