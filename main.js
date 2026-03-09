@@ -146,7 +146,7 @@ const { setGroupDescription, setGroupName, setGroupPhoto } = require('./commands
 const instagramCommand = require('./commands/instagram');
 const facebookCommand = require('./commands/facebook');
 const playCommand = require('./commands/play');
-const songidCommand = require('./commands/songid');
+const shazamCommand = require('./commands/shazam');
 const tiktokCommand = require('./commands/tiktok');
 const { aiCommand } = require('./commands/ai');
 const { handleChatbotMessage, groupChatbotToggleCommand } = require('./commands/chatbot');
@@ -1191,8 +1191,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage.startsWith('.play') || userMessage.startsWith('.mp3') || userMessage.startsWith('.ytmp3') || userMessage.startsWith('.song'):
                 await playCommand(sock, chatId, message);
                 break;
-            case userMessage.startsWith('.songid'):
-                await songidCommand(sock, chatId, message);
+            case userMessage.startsWith('.shazam'):
+                await shazamCommand(sock, chatId, message);
                 break;
             case userMessage.startsWith('.video') || userMessage.startsWith('.ytmp4'):
                 await videoCommand(sock, chatId, message);
