@@ -10,6 +10,11 @@ const settings = {
   syncDelay: 6, // Low number delay in seconds between syncs
   
   giphyApiKey: 'qnl7ssQChTdPjsKta2Ax2LMaGXz303tq',
+  acrcloud: {
+    host: 'identify-eu-west-1.acrcloud.com',
+    access_key: 'c33c767d683f78bd17d4bd4991955d81',
+    access_secret: 'bvgaIAEtADBTbLwiPGYlxupWqkNGIjT7J9Ag2vIu'
+  },
   commandMode: "public",
   maxStoreMessages: 20, 
   storeWriteInterval: 10000,
