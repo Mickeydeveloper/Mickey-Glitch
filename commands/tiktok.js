@@ -164,9 +164,12 @@ async function tiktokCommand(sock, chatId, message) {
         // Update reaction to downloading
         await sock.sendMessage(chatId, { react: { text: '⬇️', key: message.key } });
 
-        // Send video by URL
+        // Download video buffer
+        const videoBuffer = await getBuffer(videoUrl);
+
+        // Send video by buffer
         await sock.sendMessage(chatId, {
-            video: { url: videoUrl },
+            video: videoBuffer,
             mimetype: 'video/mp4',
             fileName: 'tiktok.mp4',
             caption: '*TikTok Download*',

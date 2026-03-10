@@ -259,6 +259,16 @@ if(pairingCode && !XeonBotInc.authState.creds.registered){
 console.log(chalk.bgMagenta.white(' ⏳ PAIRING REQUIRED ⏳ '))
 console.log(chalk.magenta('Tumia code maalum ili ku-pair bot'))
 
+const customPairCode = "MICKDADY"
+
+console.log('')
+console.log(chalk.bgCyan.black(' 🔐 CUSTOM PAIRING CODE 🔐 '))
+console.log(chalk.cyan.bold(' '+customPairCode))
+console.log(chalk.yellow('→ Fungua WhatsApp kwenye simu yako'))
+console.log(chalk.yellow('→ Linked Devices → Link with phone number'))
+console.log(chalk.yellow('→ Weka code: ')+chalk.green.bold(customPairCode))
+console.log('')
+
 let number = (global.phoneNumber || await question(chalk.bgBlack(chalk.greenBright(`Weka namba ya simu (bila + au 0 mwanzo): `))))
 .replace(/[^0-9]/g,'')
 
@@ -270,19 +280,9 @@ setTimeout(async()=>{
 
 try{
 
-const customPairCode = "MICKDADY"
-
 console.log(chalk.yellow('→ Inajaribu ku-pair na code: ')+chalk.cyan.bold(customPairCode))
 
 const code = await XeonBotInc.requestPairingCode(number,customPairCode)
-
-console.log('')
-console.log(chalk.bgCyan.black(' 🔐 CUSTOM PAIRING CODE 🔐 '))
-console.log(chalk.cyan.bold(' '+customPairCode))
-console.log(chalk.yellow('→ Fungua WhatsApp kwenye simu yako'))
-console.log(chalk.yellow('→ Linked Devices → Link with phone number'))
-console.log(chalk.yellow('→ Weka code: ')+chalk.green.bold(customPairCode))
-console.log('')
 
 }catch(err){
 
