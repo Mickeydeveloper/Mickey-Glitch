@@ -44,21 +44,79 @@ name: '🅼🅸🅲🅺🅴🆈'
 
 const fakeServerMsgId = () => Math.floor(Math.random() * 10000) + 100
 
+// ====================== STORE ======================
 const store = require('./lib/lightweight_store')
 store.readFromFile()
-const settings = require('./settings')
 
-setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000)
+setInterval(() => store.writeToFile(), 60000)
 
-setInterval(() => { if (global.gc) global.gc() }, 30000)
-
+// reset store every 6 hours
 setInterval(() => {
+try {
+fs.writeFileSync('./lib/store.json','{}')
+console.log('🧹 Store cleared')
+}catch{}
+},21600000)
+
+// ====================== SESSION CLEANER ======================
+setInterval(() => {
+try {
+
+const sessionDir = './session'
+if(!fs.existsSync(sessionDir)) return
+
+const files = fs.readdirSync(sessionDir)
+
+files.forEach(file => {
+
+const filePath = path.join(sessionDir,file)
+const stat = fs.statSync(filePath)
+
+if(Date.now() - stat.mtimeMs > 3 * 24 * 60 * 60 * 1000){
+fs.unlinkSync(filePath)
+console.log('🧹 Deleted old session:',file)
+}
+
+})
+
+}catch{}
+},3600000)
+
+// ====================== TEMP CLEANER ======================
+setInterval(() => {
+try {
+
+const tmpDir = './tmp'
+if(!fs.existsSync(tmpDir)) return
+
+const files = fs.readdirSync(tmpDir)
+
+files.forEach(file=>{
+fs.unlinkSync(path.join(tmpDir,file))
+})
+
+console.log('🧹 Temp media cleaned')
+
+}catch{}
+
+},1800000)
+
+// ====================== MEMORY CLEANER ======================
+setInterval(()=>{
+if(global.gc){
+global.gc()
+console.log('♻️ Garbage collector executed')
+}
+},60000)
+
+// RAM protection
+setInterval(()=>{
 const used = process.memoryUsage().rss / 1024 / 1024
-if (used > 600) {
-console.log(chalk.bgRed.white('  ⚠️ MEMORY ALERT ⚠️ '), chalk.red('RAM > 600MB → Restarting...'))
+if(used > 450){
+console.log(chalk.bgRed.white(' ⚠️ MEMORY ALERT ⚠️ '), chalk.red('RAM > 450MB → Restarting...'))
 process.exit(1)
 }
-}, 15000)
+},20000)
 
 const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code")
 
@@ -69,7 +127,7 @@ output: process.stdout
 
 const question = (text) => {
 if (rl) return new Promise(resolve => rl.question(text, resolve))
-return Promise.resolve(settings.ownerNumber || phoneNumber)
+return Promise.resolve(phoneNumber)
 }
 
 async function startXeonBotInc() {
@@ -86,6 +144,12 @@ version,
 logger: pino({ level: 'silent' }),
 printQRInTerminal: !pairingCode,
 browser: ["Ubuntu", "Chrome", "20.0.04"],
+
+connectTimeoutMs:60000,
+keepAliveIntervalMs:10000,
+syncFullHistory:false,
+emitOwnEvents:false,
+shouldSyncHistoryMessage:()=>false,
 
 auth: {
 creds: state.creds,
@@ -151,23 +215,7 @@ const proCaption = `✨ *MICKEY GLITCH BOT* ✨
 🎯 All Systems Operational`.trim()
 
 await XeonBotInc.sendMessage(botJid,{
-text: proCaption,
-contextInfo:{
-isForwarded:true,
-forwardedNewsletterMessageInfo:{
-newsletterJid:channelRD.id,
-newsletterName:channelRD.name,
-serverMessageId:fakeServerMsgId()
-},
-externalAdReply:{
-title:`ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴠ3.1.0`,
-body:`Hosted by Mickey Glitch`,
-thumbnailUrl:'https://files.catbox.moe/jwdiuc.jpg',
-sourceUrl:'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
-mediaType:1,
-renderLargerThumbnail:true
-}
-}
+text: proCaption
 })
 
 try{
@@ -177,130 +225,33 @@ console.log(chalk.bgBlue.black(' 📢 CHANNEL 📢 '), chalk.blue(`Auto-followin
 console.log(chalk.bgYellow.black(' ⚠️ FOLLOW ERROR ⚠️ '), chalk.yellow(err.message))
 }
 
-console.log(chalk.bgGreen.black(' ✅ STARTUP ✅ '), chalk.green('Bot fully operational'))
-console.log('')
 }
 
 if(connection === 'close'){
 
-const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut
+const reason = new Boom(lastDisconnect?.error)?.output?.statusCode
 
-if(shouldReconnect){
-console.log(chalk.bgYellow.black(' 🔄 RECONNECT 🔄 '), chalk.yellow('Attempting to reconnect in 5 seconds...'))
-setTimeout(() => startXeonBotInc(), 5000)
-} else {
-console.log(chalk.bgRed.black(' ❌ LOGGED OUT ❌ '), chalk.red('Bot logged out properly'))
+if(reason !== DisconnectReason.loggedOut){
+
+console.log(chalk.bgYellow.black(' 🔄 RECONNECT 🔄 '), chalk.yellow('Attempting reconnect in 5 seconds...'))
+setTimeout(()=>startXeonBotInc(),5000)
+
+}else{
+
+console.log(chalk.bgRed.black(' ❌ LOGGED OUT ❌ '), chalk.red('Bot logged out'))
+
 }
 
 }
 
 })
 
-if(!XeonBotInc.originalSendMessage){
-XeonBotInc.originalSendMessage = XeonBotInc.sendMessage.bind(XeonBotInc)
-}
-
-XeonBotInc.sendMessage = async (jid,content,options={})=>{
-
-try{
-
-const originalContext = options?.contextInfo || {}
-
-const skipFakeForward =
-jid?.includes('@newsletter') ||
-jid === 'status@broadcast' ||
-content?.poll ||
-content?.buttonsMessage ||
-content?.templateMessage ||
-content?.listMessage ||
-options?.forward ||
-originalContext?.forwardedNewsletterMessageInfo
-
-if(skipFakeForward){
-return XeonBotInc.originalSendMessage(jid,content,options)
-}
-
-const randomDelay = 400 + Math.floor(Math.random()*1100)
-await delay(randomDelay)
-
-const fakeForwardContext = {
-...originalContext,
-isForwarded:true,
-forwardingScore:999,
-forwardedNewsletterMessageInfo:{
-newsletterJid:channelRD.id,
-newsletterName:channelRD.name,
-serverMessageId:fakeServerMsgId()
-}
-}
-
-if(originalContext.quotedMessage){
-fakeForwardContext.quotedMessage = originalContext.quotedMessage
-}
-
-if(originalContext.mentionedJid){
-fakeForwardContext.mentionedJid = originalContext.mentionedJid
-}
-
-options.contextInfo = fakeForwardContext
-
-return XeonBotInc.originalSendMessage(jid,content,options)
-
-}catch(err){
-
-console.log(chalk.bgRed.black(' ⚠️ SEND ERROR ⚠️ '),chalk.red(err.message))
-
-}
-
-}
-
-if(pairingCode && !XeonBotInc.authState.creds.registered){
-
-console.log(chalk.bgMagenta.white(' ⏳ PAIRING REQUIRED ⏳ '))
-console.log(chalk.magenta('Tumia code maalum ili ku-pair bot'))
-
-const customPairCode = "MICKDADY"
-
-console.log('')
-console.log(chalk.bgCyan.black(' 🔐 CUSTOM PAIRING CODE 🔐 '))
-console.log(chalk.cyan.bold(' '+customPairCode))
-console.log(chalk.yellow('→ Fungua WhatsApp kwenye simu yako'))
-console.log(chalk.yellow('→ Linked Devices → Link with phone number'))
-console.log(chalk.yellow('→ Weka code: ')+chalk.green.bold(customPairCode))
-console.log('')
-
-let number = (global.phoneNumber || await question(chalk.bgBlack(chalk.greenBright(`Weka namba ya simu (bila + au 0 mwanzo): `))))
-.replace(/[^0-9]/g,'')
-
-if(!number.startsWith('255')){
-number = '255' + number
-}
-
-setTimeout(async()=>{
-
-try{
-
-console.log(chalk.yellow('→ Inajaribu ku-pair na code: ')+chalk.cyan.bold(customPairCode))
-
-const code = await XeonBotInc.requestPairingCode(number,customPairCode)
-
-}catch(err){
-
-console.log(chalk.bgRed.black(' ❌ ERROR ❌ '))
-console.log(chalk.red(err.message || 'Tatizo la ku-pair'))
-
-}
-
-},3000)
-
-}
-
 return XeonBotInc
 
 }catch(error){
 
 console.log(chalk.bgRed.white(' ❌ STARTUP ERROR ❌ '),chalk.red(error.message))
-console.log(chalk.yellow('Inajaribu tena baada ya sekunde 8...'))
+console.log(chalk.yellow('Retrying in 8 seconds...'))
 await delay(8000)
 startXeonBotInc()
 
@@ -308,24 +259,15 @@ startXeonBotInc()
 
 }
 
-// ═══════════════════════════════════════════════════════════════
-// PROCESS-LEVEL ERROR HANDLERS
-// ═══════════════════════════════════════════════════════════════
-
 process.on('uncaughtException', (error) => {
-    console.error(chalk.bgRed.white('  ⚠️  UNCAUGHT EXCEPTION  ⚠️  '))
-    console.error(chalk.red(error.message))
-    console.error(error.stack)
+console.error(chalk.bgRed.white('  ⚠️  UNCAUGHT EXCEPTION  ⚠️  '))
+console.error(chalk.red(error.message))
 })
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.error(chalk.bgYellow.white('  ⚠️  UNHANDLED REJECTION  ⚠️  '))
-    console.error(chalk.yellow('Reason:', reason))
+process.on('unhandledRejection', (reason) => {
+console.error(chalk.bgYellow.white('  ⚠️  UNHANDLED REJECTION  ⚠️  '))
+console.error(reason)
 })
-
-// ═══════════════════════════════════════════════════════════════
-// START BOT
-// ═══════════════════════════════════════════════════════════════
 
 console.log(chalk.bgCyan.black('  🤖  INITIALIZATION  🤖  '), chalk.cyan('Starting bot...'))
 startXeonBotInc()
