@@ -8,47 +8,35 @@ function getRegisteredCommands() {
     try {
         const mainPath = path.join(__dirname, '../main.js');
         const mainContent = fs.readFileSync(mainPath, 'utf8');
-        
+
         // Commands that show "not available" messages - exclude from help
         const excludedCommands = new Set([
-            '.horny', '.circle', '.lgbt', '.lolice', '.tonikawa', '.namecard', 
-            '.oogway', '.tweet', '.ytcomment', '.comrade', '.gay', '.glass', 
+            '.horny', '.circle', '.lgbt', '.lolice', '.tonikawa', '.namecard',
+            '.oogway', '.tweet', '.ytcomment', '.comrade', '.gay', '.glass',
             '.jail', '.passed', '.triggered', '.heart', '.hijab',
-            '.animu', '.nom', '.poke', '.cry', '.kiss', '.pat', '.hug', 
+            '.animu', '.nom', '.poke', '.cry', '.kiss', '.pat', '.hug',
             '.wink', '.facepalm', '.face-palm', '.animuquote', '.quote', '.loli'
         ]);
-        
-        // Extract command cases from the switch statement
-        const commandRegex = /case\s+userMessage\.startsWith\('([^']+)'\)/g;
+
         const commands = new Set();
+
+        // Regex to match all case statements
+        const caseRegex = /case\s+([^\n:]+):/g;
         let match;
-        
-        while ((match = commandRegex.exec(mainContent)) !== null) {
-            const cmd = match[1];
-            // Skip if it's a variable or complex condition or excluded
-            if (!cmd.includes('$') && !cmd.includes('||') && !cmd.includes('&&') && !excludedCommands.has(cmd)) {
-                commands.add(cmd);
-            }
+
+        while ((match = caseRegex.exec(mainContent)) !== null) {
+            let caseLine = match[1];
+
+            // Split multiple conditions joined by || or &&
+            caseLine.split(/\|\||&&/).forEach(part => {
+                // Clean up quotes and whitespace
+                const cmdMatch = part.match(/['"`](.*?)['"`]/);
+                if (cmdMatch && !excludedCommands.has(cmdMatch[1])) {
+                    commands.add(cmdMatch[1].trim());
+                }
+            });
         }
-        
-        // Also extract exact matches
-        const exactRegex = /case\s+userMessage\s*===\s*'([^']+)'/g;
-        while ((match = exactRegex.exec(mainContent)) !== null) {
-            const cmd = match[1];
-            if (!excludedCommands.has(cmd)) {
-                commands.add(match[1]);
-            }
-        }
-        
-        // Extract complex conditions (like .play || .mp3 || .song)
-        const complexRegex = /case\s+userMessage\.startsWith\('([^']+)'\)\s*\|\|\s*userMessage\.startsWith\('([^']+)'\)/g;
-        while ((match = complexRegex.exec(mainContent)) !== null) {
-            const cmd1 = match[1];
-            const cmd2 = match[2];
-            if (!excludedCommands.has(cmd1)) commands.add(cmd1);
-            if (!excludedCommands.has(cmd2)) commands.add(cmd2);
-        }
-        
+
         return Array.from(commands).sort();
     } catch (error) {
         console.error('Error reading registered commands:', error);
@@ -70,7 +58,7 @@ function categorizeCommands(commands) {
         '📱 Social': [],
         '🎨 Creative': []
     };
-    
+
     const categoryMap = {
         // Media & Entertainment
         '.play': '🎵 Media & Entertainment',
@@ -97,7 +85,7 @@ function categorizeCommands(commands) {
         '.fb': '🎵 Media & Entertainment',
         '.instagram': '🎵 Media & Entertainment',
         '.igs': '🎵 Media & Entertainment',
-        
+
         // Group Management
         '.tagall': '👥 Group Management',
         '.tagnotadmin': '👥 Group Management',
@@ -121,7 +109,7 @@ function categorizeCommands(commands) {
         '.setgdesc': '👥 Group Management',
         '.setgname': '👥 Group Management',
         '.setgpp': '👥 Group Management',
-        
+
         // Utilities
         '.ping': '🔧 Utilities',
         '.alive': '🔧 Utilities',
@@ -145,7 +133,7 @@ function categorizeCommands(commands) {
         '.vv': '🔧 Utilities',
         '.viewonce': '🔧 Utilities',
         '.add': '🔧 Utilities',
-        
+
         // Fun & Games
         '.compliment': '🎮 Fun & Games',
         '.character': '🎮 Fun & Games',
@@ -154,7 +142,7 @@ function categorizeCommands(commands) {
         '.emix': '🎮 Fun & Games',
         '.blur': '🎮 Fun & Games',
         '.img-blur': '🎮 Fun & Games',
-        
+
         // AI & Chat
         '.gpt': '🤖 AI & Chat',
         '.gemini': '🤖 AI & Chat',
@@ -163,7 +151,7 @@ function categorizeCommands(commands) {
         '.tts': '🤖 AI & Chat',
         '.translate': '🤖 AI & Chat',
         '.trt': '🤖 AI & Chat',
-        
+
         // Settings & Admin
         '.mode': '⚙️ Settings & Admin',
         '.settings': '⚙️ Settings & Admin',
@@ -176,11 +164,11 @@ function categorizeCommands(commands) {
         '.pin': '⚙️ Settings & Admin',
         '.owner': '⚙️ Settings & Admin',
         '.sudo': '⚙️ Settings & Admin',
-        
+
         // Information
         '.weather': '📊 Information',
         '.halotel': '📊 Information',
-        
+
         // Security
         '.antilink': '🔒 Security',
         '.antitag': '🔒 Security',
@@ -192,7 +180,7 @@ function categorizeCommands(commands) {
         '.mention': '🔒 Security',
         '.gmention': '🔒 Security',
         '.setmention': '🔒 Security',
-        
+
         // Creative
         '.metallic': '🎨 Creative',
         '.ice': '🎨 Creative',
@@ -214,64 +202,57 @@ function categorizeCommands(commands) {
         '.fire': '🎨 Creative',
         '.textmaker': '🎨 Creative'
     };
-    
+
     commands.forEach(cmd => {
         const category = categoryMap[cmd] || '🔧 Utilities';
         categories[category].push(cmd);
     });
-    
+
     // Remove empty categories
     Object.keys(categories).forEach(key => {
         if (categories[key].length === 0) {
             delete categories[key];
         }
     });
-    
+
     return categories;
 }
 
 const aliveCommand = async (conn, chatId, msg) => {
     try {
         const senderName = msg.pushName || 'User';
-        const prefix = '.'; // Badilisha kama unatumia prefix tofauti
-        
-        // 1. Piga hesabu ya RAM
+        const prefix = '.';
+
+        // RAM
         const totalRAM = (os.totalmem() / (1024 * 1024 * 1024)).toFixed(2);
         const freeRAM = (os.freemem() / (1024 * 1024 * 1024)).toFixed(2);
         const usedRAM = (totalRAM - freeRAM).toFixed(2);
 
-        // 2. Pata Uptime
+        // Uptime
         const uptimeSeconds = process.uptime();
         const hours = Math.floor(uptimeSeconds / 3600);
         const minutes = Math.floor((uptimeSeconds % 3600) / 60);
         const seconds = Math.floor(uptimeSeconds % 60);
         const uptimeString = `${hours}h ${minutes}m ${seconds}s`;
 
-        // 3. Get registered commands dynamically
+        // Commands dynamically
         const registeredCommands = getRegisteredCommands();
         const categorizedCommands = categorizeCommands(registeredCommands);
         const totalCommands = registeredCommands.length;
 
-        // 4. Build categorized command list with vertical format and bold styling
+        // Build command list
         let commandsList = "";
-        
         Object.entries(categorizedCommands).forEach(([categoryName, commands]) => {
-            // Extract emoji and text from category name
             const categoryEmoji = categoryName.split(' ')[0];
             const categoryText = categoryName.substring(categoryName.indexOf(' ') + 1);
-            
-            // Modern category header with better styling
             commandsList += `\n┌─ ${categoryEmoji} *${categoryText}* (${commands.length}) ─┐\n`;
-            
-            // Display each command on a new line with bold formatting
-            commands.forEach((cmd) => {
+            commands.forEach(cmd => {
                 commandsList += `┃ ◈ *${cmd}*\n`;
             });
-            
             commandsList += `└${'─'.repeat(35)}┘\n`;
         });
 
-        // 5. Build modern message layout with improved styling
+        // Final message
         const finalMessage = `╭─ ${'═'.repeat(16)} *𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒* ${'═'.repeat(16)} ─╮
 │
 ├─ ◈ *𝐒𝐄𝐍𝐃𝐄𝐑 𝐈𝐍𝐅𝐎*
@@ -290,7 +271,7 @@ ${commandsList}
 │
 ╰─ 🔥 *Powered by Mickey Glitch V3* 🔥`;
 
-        // 6. Send the message with improved formatting
+        // Send message
         await conn.sendMessage(chatId, {
             text: finalMessage,
             contextInfo: {
@@ -318,7 +299,6 @@ ${commandsList}
     }
 };
 
-// Export functions for use by other modules
 aliveCommand.getRegisteredCommands = getRegisteredCommands;
 aliveCommand.getCategories = () => categorizeCommands(getRegisteredCommands());
 
