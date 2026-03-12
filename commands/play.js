@@ -30,24 +30,28 @@ async function songCommand(sock, chatId, message) {
 
         const vid = videos[0];
 
-        // API mpya yenye direct download
-        const api = `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=${encodeURIComponent(vid.url)}`;
+        // Kutumia API uliyotuma (Nayan Video Downloader)
+        const api = `https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(vid.url)}`;
 
-        // Direct download request
+        // Request data kutoka kwa API
         const res = await axios.get(api, { timeout: 20000 });
 
-        const dlUrl = res.data?.data?.download || res.data?.data?.url || res.data?.data?.audio;
-        if (!dlUrl) return sock.sendMessage(chatId, { text: '❌ *Download imeshindikana!*' });
+        // Kuchukua audio pekee (path: res.data.data.audio)
+        const dlUrl = res.data?.data?.audio;
 
-        // Status ya recording
+        if (!dlUrl) {
+            return sock.sendMessage(chatId, { text: '❌ *Audio haikupatikana kwenye API!*' });
+        }
+
+        // Status ya recording (voice note style)
         try { await sock.sendPresenceUpdate('recording', chatId); } catch {}
 
-        // Send audio as WhatsApp Ad style
+        // Kutuma audio kama file la mp3 (audio/mpeg)
         await sock.sendMessage(chatId, {
             audio: { url: dlUrl },
             mimetype: 'audio/mpeg',
             fileName: `${vid.title}.mp3`,
-            ptt: false,
+            ptt: false, // Weka true kama unataka iende kama Voice Note
             contextInfo: {
                 externalAdReply: {
                     title: vid.title,
@@ -63,8 +67,8 @@ async function songCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.log("PLAY ERROR:", err.message.slice(0,50));
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu imetokea!*' });
+        console.log("PLAY ERROR:", err.message.slice(0, 50));
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu imetokea wakati wa kudownload!*' });
     } finally {
         try { await sock.sendPresenceUpdate('paused', chatId); } catch {}
     }
