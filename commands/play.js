@@ -20,23 +20,24 @@ async function songCommand(sock, chatId, message) {
         const vid = videos[0];
         const api = `https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(vid.url)}`;
 
-        // 1. Pata link ya audio
+        // 1. Pata data kutoka API
         const res = await axios.get(api);
-        const dlUrl = res.data?.data?.audio;
+        
+        // TRICK: Tumia link ya VIDEO badala ya AUDIO kwasababu video link iko stable zaidi
+        const dlUrl = res.data?.data?.video || res.data?.data?.audio;
 
         if (!dlUrl) return sock.sendMessage(chatId, { text: '❌ *API Error!*' });
 
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // 2. DOWNLOAD KWA KUTUMIA HEADERS NA RESPONSE TYPE SAHIHI
+        // 2. Download kama Buffer
         const audioData = await axios({
             method: 'get',
             url: dlUrl,
-            responseType: 'arraybuffer', // Hii ni muhimu sana
+            responseType: 'arraybuffer',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': 'https://nayan-video-downloader.vercel.app/',
-                'Accept': '*/*'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                'Referer': 'https://nayan-video-downloader.vercel.app/'
             }
         });
 
@@ -44,11 +45,12 @@ async function songCommand(sock, chatId, message) {
 
         try { await sock.sendPresenceUpdate('recording', chatId); } catch {}
 
-        // 3. TUMA AUDIO KAMA FILE (Hii inaondoa kosa la "not available")
+        // 3. TUMA KAMA AUDIO (WhatsApp ita-extract sauti kutoka kwenye video buffer)
         await sock.sendMessage(chatId, {
-            audio: finalBuffer, // Tunatuma data halisi (buffer), siyo link
-            mimetype: 'audio/mpeg',
+            audio: finalBuffer, 
+            mimetype: 'audio/mp4', // Tumia mp4 hapa hata kama ni audio, inasaidia kuplay
             fileName: `${vid.title}.mp3`,
+            ptt: false,
             contextInfo: {
                 externalAdReply: {
                     title: vid.title,
@@ -56,7 +58,6 @@ async function songCommand(sock, chatId, message) {
                     thumbnailUrl: vid.thumbnail,
                     sourceUrl: vid.url,
                     mediaType: 1,
-                    showAdAttribution: true,
                     renderLargerThumbnail: true
                 }
             }
@@ -66,9 +67,7 @@ async function songCommand(sock, chatId, message) {
 
     } catch (err) {
         console.error("PLAY ERROR:", err.message);
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Labda file ni kubwa sana au server ina busy.' });
-    } finally {
-        try { await sock.sendPresenceUpdate('paused', chatId); } catch {}
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' });
     }
 }
 
