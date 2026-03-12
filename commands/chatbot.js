@@ -5,6 +5,7 @@ const isAdmin = require('../lib/isAdmin');
 
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 
+// --- Helpers ---
 function loadState() {
   try {
     if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false, memory: {} };
@@ -45,96 +46,60 @@ function extractMessageText(msg) {
 }
 
 /**
- * AI CALLER - Direct User Prompt Only
+ * AI CALLER (Advanced Persona Logic)
  */
-async function callAI(userPrompt) {
+async function callAI(userPrompt, history = []) {
   try {
-    // System prompt to make AI respond as Mickdady, a professional human
-    const systemPrompt = "You are Mickdady, a professional human assistant. Always respond as a human, not as an AI. Be helpful, polite, and professional. Your name is Mickdady.";
+    const systemPrompt = `You are Mickdady Hamza, a software developer from Tanzania. 
+- ALWAYS identify yourself as Mickdady Hamza when asked your name.
+- ALWAYS maintain that you are a human, never an AI.
+- Persona: Friendly, professional, witty, and helpful.
+- Language: Swahili (w/ abbreviations) or English. 
+- Instructions: Use common abbreviations (kama 'vp', 'sawa', 'bdo', 'uko') in Swahili to sound natural/human.`;
 
-    // Combine system prompt with user prompt
-    const fullPrompt = `${systemPrompt}\n\nUser: ${userPrompt}\n\nMickdady:`;
+    const historyText = history.map(m => `${m.role === 'user' ? 'User' : 'Mickdady'}: ${m.content}`).join('\n');
+    const fullPrompt = `${systemPrompt}\n\n[Chat History]\n${historyText}\n\nUser: ${userPrompt}\n\nMickdady (respond as human):`;
 
-    // Primary API (Hansa SriHub Copilot)
     const primaryUrl = `https://api.srihub.store/ai/copilot?prompt=${encodeURIComponent(fullPrompt)}&apikey=dew_DVTcyMksTDO8ZGxBvLAG0y9P8sIj6uRJXHHwWSW5`;
-
-    const primaryResp = await fetch(primaryUrl, {
-      method: 'GET',
-      signal: AbortSignal.timeout(20000)
-    });
-
+    
+    const primaryResp = await fetch(primaryUrl, { method: 'GET', signal: AbortSignal.timeout(20000) });
     if (primaryResp.ok) {
       const data = await primaryResp.json();
-      const reply = data.result?.reply || data.result || data.reply || data.response || (typeof data === 'string' ? data : null);
+      const reply = data.result?.reply || data.result || data.reply || data.response;
       if (reply) return String(reply).trim();
-      // if no reply, fall through to fallback
-    } else {
-      console.warn('Primary AI API responded with status', primaryResp.status);
     }
 
-    // Fallback API (yupra) if primary fails or returns nothing
-    try {
-      const fallbackUrl = `https://api.yupra.my.id/api/ai/copilot?text=${encodeURIComponent(fullPrompt)}`;
-      const fallbackResp = await fetch(fallbackUrl, {
-        method: 'GET',
-        signal: AbortSignal.timeout(20000)
-      });
-
-      if (!fallbackResp.ok) throw new Error(`Fallback API Error: ${fallbackResp.statusText}`);
-      const fdata = await fallbackResp.json();
-
-      // Try several common fields for reply
-      const freply = fdata.result?.reply || fdata.reply || fdata.response || fdata.result || (typeof fdata === 'string' ? fdata : null);
-      if (freply) return String(freply).trim();
-      throw new Error('Fallback returned empty response');
-    } catch (fbErr) {
-      console.error('Fallback AI call failed:', fbErr.message);
-      throw fbErr;
-    }
+    const fallbackUrl = `https://api.yupra.my.id/api/ai/copilot?text=${encodeURIComponent(fullPrompt)}`;
+    const fallbackResp = await fetch(fallbackUrl, { method: 'GET', signal: AbortSignal.timeout(20000) });
+    const fdata = await fallbackResp.json();
+    return String(fdata.result?.reply || fdata.reply || "Sawa, nipo apa.").trim();
   } catch (err) {
-    console.error('AI call failed:', err.message);
-    throw err;
+    return "Samahani, seva imegoma kidogo.";
   }
 }
 
 async function handleChatbotMessage(sock, chatId, message) {
   try {
-    if (!chatId || message.key?.fromMe || !sock || typeof sock.sendMessage !== 'function') return;
+    if (!chatId || message.key?.fromMe) return;
 
     const state = loadState();
     const isGroup = chatId.endsWith('@g.us');
-    const enabled = isGroup ? state.perGroup[chatId]?.enabled : state.private;
-    if (!enabled) return;
+    if (!(isGroup ? state.perGroup[chatId]?.enabled : state.private)) return;
 
     const userText = extractMessageText(message);
     if (!userText) return;
 
-    // Safe typing (ignore errors)
-    try {
-        await sock.sendPresenceUpdate('composing', chatId);
-    } catch (e) {
-        // Silent
-    }
+    await sock.sendPresenceUpdate('composing', chatId);
 
-    const reply = await callAI(userText);
-    let cleanReply = reply || "Samahani, siwezi kujibu kwa sasa.";
+    const history = state.memory[chatId] || [];
+    const reply = await callAI(userText, history);
 
-    await sock.sendMessage(chatId, { text: cleanReply }, { quoted: message });
+    await sock.sendMessage(chatId, { text: reply }, { quoted: message });
 
-    // Kumbukumbu (Memory) kwa ajili ya chatbot.json
-    state.memory[chatId] = state.memory[chatId] || [];
-    state.memory[chatId].push({ role: 'user', content: userText });
-    state.memory[chatId].push({ role: 'assistant', content: cleanReply });
-
-    if (state.memory[chatId].length > 10) {
-      state.memory[chatId] = state.memory[chatId].slice(-10);
-    }
-
+    state.memory[chatId] = [...history, { role: 'user', content: userText }, { role: 'assistant', content: reply }].slice(-10);
     saveState(state);
-
   } catch (err) {
     console.error('Chatbot error:', err);
-    await sock.sendMessage(chatId, { text: '⚠️ Seva ya AI haipatikani kwa sasa.' }, { quoted: message });
   }
 }
 
@@ -156,7 +121,6 @@ async function groupChatbotToggleCommand(sock, chatId, message, args = '') {
 
     const sender = message.key.participant || message.key.remoteJid;
     const { isSenderAdmin } = await isAdmin(sock, chatId, sender);
-
     if (!isSenderAdmin && !message.key.fromMe) return sock.sendMessage(chatId, { text: 'Admins pekee wanaweza.' });
 
     if (arg === 'on') state.perGroup[chatId] = { enabled: true };
