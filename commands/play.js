@@ -2,7 +2,6 @@ const axios = require('axios');
 const yts = require('yt-search');
 
 async function songCommand(sock, chatId, message) {
-
     if (!sock || typeof sock.sendMessage !== 'function') return;
 
     const textBody =
@@ -19,43 +18,53 @@ async function songCommand(sock, chatId, message) {
     }
 
     try {
-        await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+        // React: Inatafuta
+        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
         const { videos } = await yts(query);
         if (!videos || !videos.length) {
-            return sock.sendMessage(chatId, {
-                text: '❌ *Wimbo haupatikani!*'
-            });
+            return sock.sendMessage(chatId, { text: '❌ *Wimbo haupatikani!*' });
         }
 
         const vid = videos[0];
-
-        // Kutumia API uliyotuma (Nayan Video Downloader)
         const api = `https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(vid.url)}`;
 
-        // Request data kutoka kwa API
-        const res = await axios.get(api, { timeout: 20000 });
-
-        // Kuchukua audio pekee (path: res.data.data.audio)
+        // 1. Pata download link kutoka API
+        const res = await axios.get(api, { timeout: 15000 });
         const dlUrl = res.data?.data?.audio;
 
         if (!dlUrl) {
-            return sock.sendMessage(chatId, { text: '❌ *Audio haikupatikana kwenye API!*' });
+            return sock.sendMessage(chatId, { text: '❌ *Download link haikupatikana!*' });
         }
 
-        // Status ya recording (voice note style)
+        // React: Inadownload (Hapa ndipo tunatengeneza Buffer ili iplay)
+        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+
+        // 2. Download audio data kama Buffer
+        const response = await axios({
+            method: 'get',
+            url: dlUrl,
+            responseType: 'arraybuffer',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+            }
+        });
+
+        const audioBuffer = Buffer.from(response.data, 'binary');
+
+        // Status: Recording (Inaonyesha juu "recording audio...")
         try { await sock.sendPresenceUpdate('recording', chatId); } catch {}
 
-        // Kutuma audio kama file la mp3 (audio/mpeg)
+        // 3. Tuma audio Buffer kwa WhatsApp
         await sock.sendMessage(chatId, {
-            audio: { url: dlUrl },
+            audio: audioBuffer,
             mimetype: 'audio/mpeg',
             fileName: `${vid.title}.mp3`,
-            ptt: false, // Weka true kama unataka iende kama Voice Note
+            ptt: false, // Weka true kama unataka iende kama Voice Note (VN)
             contextInfo: {
                 externalAdReply: {
                     title: vid.title,
-                    body: `⏱️ ${vid.timestamp} • 👁️ ${vid.views?.toLocaleString() || 0} views`,
+                    body: `Mickey Infor Tech • ${vid.timestamp}`,
                     thumbnailUrl: vid.thumbnail,
                     sourceUrl: vid.url,
                     mediaType: 1,
@@ -64,11 +73,12 @@ async function songCommand(sock, chatId, message) {
             }
         }, { quoted: message });
 
+        // React: Imekamilika
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.log("PLAY ERROR:", err.message.slice(0, 50));
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu imetokea wakati wa kudownload!*' });
+        console.log("PLAY ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu imetokea!* Jaribu tena baadae.' });
     } finally {
         try { await sock.sendPresenceUpdate('paused', chatId); } catch {}
     }
