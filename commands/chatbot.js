@@ -1,12 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const { OpenAI } = require('openai'); // Tumia library ya OpenAI
+const { GoogleGenerativeAI } = require('@google/generative-ai'); // Tumia library ya Gemini
 const isAdmin = require('../lib/isAdmin');
 
-// Weka API Key yako hapa au kwenye mazingira yako (env)
-const openai = new OpenAI({
-  apiKey: 'KEY WEKA HAPA KWENYE PANNEL', 
-});
+// Weka API Key yako ya Gemini hapa au kwenye mazingira yako (env)
+const genAI = new GoogleGenerativeAI('GEMINI_KEY_HAPA');
 
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 
@@ -44,7 +42,7 @@ function extractMessageText(msg) {
 }
 
 /**
- * AI CALLER - Sasa inatumia OpenAI (GPT)
+ * AI CALLER - Sasa inatumia Gemini
  */
 async function callAI(userPrompt, history = []) {
   try {
@@ -55,21 +53,25 @@ async function callAI(userPrompt, history = []) {
     - Tumia Kiswahili cha mtaani/kifupi (mfano: 'vp', 'sawa', 'bdo', 'uko') pale inapofaa ili usikike kama kijana wa bongo.
     - Kuwa msaidizi, mwenye adabu, na jibu kwa ufupi lakini kwa ufasaha.`;
 
-    const messages = [
-      { role: "system", content: systemInstruction },
-      ...history.map(m => ({ role: m.role, content: m.content })),
-      { role: "user", content: userPrompt }
-    ];
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Model bora kwa kasi na gharama nafuu
-      messages: messages,
-      temperature: 0.7, // Inatoa jibu la kibinadamu zaidi
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      systemInstruction: systemInstruction
     });
 
-    return completion.choices[0].message.content.trim();
+    const chat = model.startChat({
+      history: history.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }]
+      })),
+      generationConfig: {
+        temperature: 0.7,
+      },
+    });
+
+    const result = await chat.sendMessage(userPrompt);
+    return result.response.text().trim();
   } catch (err) {
-    console.error("OpenAI Error:", err);
+    console.error("Gemini Error:", err);
     return "Samahani, seva imegoma kidogo. Mickdady Hamza hapa, vipi unaendeleaje?";
   }
 }
