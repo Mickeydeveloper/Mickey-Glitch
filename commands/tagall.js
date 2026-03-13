@@ -3,18 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const isAdmin = require('../lib/isAdmin'); 
 
-function stripEmoji(text) {
-    if (!text || typeof text !== 'string') return text;
-    return text.replace(/[\u{1F600}-\u{1F64F}|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}|\u{1F1E6}-\u{1F1FF}]/gu, '');
+// Kazi ya kusafisha majina (Ondoa emoji na alama zisizohitajika kwa sauti)
+function cleanName(name) {
+    if (!name) return "Mwanachama";
+    return name.replace(/[^\w\s]/gi, '').trim();
 }
 
 async function tagAllCommand(sock, chatId, senderId, message) {
     try {
-        // Tunaita isAdmin ku-check kama Bot ni Admin (lazima iwe admin ili ipate list ya members)
+        // Bot lazima iwe admin ili kupata majina ya washiriki
         const { isBotAdmin } = await isAdmin(sock, chatId, senderId);
 
         if (!isBotAdmin) {
-            await sock.sendMessage(chatId, { text: '⚠️ Plz, nifanye niwe *Admin* ili niweze ku-tag members wote.' }, { quoted: message });
+            await sock.sendMessage(chatId, { text: '⚠️ Nifanye niwe *Admin* ili niweze kusoma majina ya washiriki.' }, { quoted: message });
             return;
         }
 
@@ -24,57 +25,46 @@ async function tagAllCommand(sock, chatId, senderId, message) {
 
         if (!participants || participants.length === 0) return;
 
-        // 1. Andaa Text ya TagAll (Normal Message)
-        let messageText = `📢 *TAG ALL BY MICKEY GLITCH*\n\n`;
-        messageText += `👥 *Jumla:* ${participants.length}\n`;
-        messageText += `👤 *Aliyeita:* @${senderId.split('@')[0]}\n\n`;
+        // 1. Tengeneza list ya majina (Badala ya namba)
+        // Tunatumia 'notify' name ambayo ndio jina la mtumiaji wa WhatsApp
+        let namesList = participants.map(p => cleanName(p.notify || "Mwanachama")).join(", ");
 
-        participants.forEach(p => {
-            messageText += `◦ @${p.id.split('@')[0]}\n`;
-        });
-
-        messageText = stripEmoji(messageText);
-
-        // 2. Tengeneza Sauti (Voice Note) kwa gTTS
-        // Unaweza kubadili maneno ya kusemwa hapa
-        const audioText = `Habari wanakikundi, mnaitwa wote na @${senderId.split('@')[0]}. Tafadhali angalieni tangazo hili muhimu sasa hivi.`;
-        const fileName = `tagall_${Date.now()}.mp3`;
+        // 2. Script ya audio
+        const audioText = `Habari wanakikundi! Mnaitwa wote na @${senderId.split('@')[0]}. Washiriki wafuatao tafadhali sikilizeni: ${namesList}.`;
+        
+        const fileName = `tagvoice_${Date.now()}.mp3`;
         const filePath = path.join(__dirname, fileName);
         
-        const speech = new gtts(audioText, 'sw'); // Lugha ya Kiswahili
+        const speech = new gtts(audioText, 'sw'); // Swahili language
 
-        // Hifadhi audio kisha itume
+        // Hifadhi na Tuma
         speech.save(filePath, async function (err) {
             if (err) {
                 console.error("gTTS Error:", err);
                 return;
             }
 
-            // A) Tuma Text Tag kwanza
-            const sentText = await sock.sendMessage(chatId, {
-                text: messageText,
-                mentions: participants.map(p => p.id)
-            }, { quoted: message });
-
-            // B) Tuma Voice Note (Audio) yenye Mentions pia
+            // Tuma Voice Note (VN) pekee yenye Mentions za siri
+            // Hii itawapa notification watu wote bila kutuma text ya majina
             const sentAudio = await sock.sendMessage(chatId, {
                 audio: { url: filePath },
                 mimetype: 'audio/mp4',
-                ptt: true, // Inatokea kama Voice Note (VN)
-                mentions: participants.map(p => p.id)
+                ptt: true, // Inatokea kama Voice Note
+                mentions: participants.map(p => p.id) // Tag za siri
             }, { quoted: message });
 
-            // Futa file la audio baada ya kutuma ili kupunguza uchafu (cleanup)
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            // Futa file la audio baada ya kutumwa
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
 
-            // C) Kufuta ujumbe wa text baada ya sekunde 30 (Kama ulivyoelekeza)
-            if (sentText && sentText.key) {
+            // Kufuta Voice Note baada ya sekunde 30 (Kama ukihitaji)
+            if (sentAudio && sentAudio.key) {
                 setTimeout(async () => {
                     try {
-                        await sock.sendMessage(chatId, { delete: sentText.key });
-                        // Unaweza kufuta na audio pia ukipenda kwa kuongeza sentAudio.key hapa
+                        await sock.sendMessage(chatId, { delete: sentAudio.key });
                     } catch (err) {
-                        console.error('Auto-delete failed:', err.message);
+                        console.error('Delete failed:', err.message);
                     }
                 }, 30000);
             }
@@ -82,7 +72,7 @@ async function tagAllCommand(sock, chatId, senderId, message) {
 
     } catch (error) {
         console.error('Error in tagall command:', error);
-        await sock.sendMessage(chatId, { text: '❌ Imeshindwa kukamilisha TagAll.' });
+        await sock.sendMessage(chatId, { text: '❌ Imeshindwa kutengeneza audio ya tag.' });
     }
 }
 
