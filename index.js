@@ -224,13 +224,13 @@ async function startXeonBotInc(){
 // ====================== PROCESS HANDLERS ======================
 process.on('uncaughtException',(error)=>{
     if (!error.message?.includes('Bad MAC') && !error.message?.includes('verifyMAC')) {
-        originalConsoleError(chalk.white.bgRed(' ⚠️ EXCEPTION ⚠️ '), error.message)
+           originalConsoleError(chalk.bgRed.white(' ⚠️ EXCEPTION ⚠️ '), error.message)
     }
 })
 process.on('unhandledRejection',(reason)=>{
     const msg = reason?.message || reason?.toString() || ''
     if (!msg.includes('Bad MAC') && !msg.includes('verifyMAC')) {
-        originalConsoleError(chalk.white.bgYellow(' ⚠️ REJECTION ⚠️ '), reason)
+           originalConsoleError(chalk.bgYellow.white(' ⚠️ REJECTION ⚠️ '), reason)
     }
 })
 
