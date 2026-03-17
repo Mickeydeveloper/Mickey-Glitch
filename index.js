@@ -54,7 +54,7 @@ setInterval(()=>{
     }
 },20000)
 
-// ====================== CONSOLE INPUT ======================
+// ====================== CONSOLE INPUT FIX ======================
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text) => new Promise(resolve => rl.question(text, resolve))
 
@@ -68,7 +68,8 @@ async function startXeonBotInc(){
         const XeonBotInc = makeWASocket({
             version,
             logger: pino({ level: 'silent' }),
-            printQRInTerminal: true,
+            printQRInTerminal: false, // FIXED: Removed deprecated warning
+            mobile: false,
             browser: ["Ubuntu","Chrome","20.0.04"],
             auth:{
                 creds: state.creds,
@@ -90,6 +91,7 @@ async function startXeonBotInc(){
         if(!XeonBotInc.authState.creds.registered){
             console.log(chalk.bgMagenta.white(' ⏳ PAIRING REQUIRED ⏳ '))
 
+            // FIXED: Ensuring readline is open and ready
             let phoneNumber = await question(chalk.bgBlack(chalk.greenBright("Weka namba ya simu (mfano: 255615858685): ")))
             let number = phoneNumber.replace(/[^0-9]/g,'')
             if(!number.startsWith('255')) number='255'+number
@@ -98,9 +100,11 @@ async function startXeonBotInc(){
             console.log(chalk.yellow(`→ Inatuma ombi la ku-pair kwa: ${number}...\n`))
 
             try{
-                await XeonBotInc.requestPairingCode(number,customPairCode)
+                // Pairing delay to prevent connection issues
+                await delay(3000)
+                let code = await XeonBotInc.requestPairingCode(number, customPairCode)
                 console.log(chalk.bgCyan.black(' 🔐 CUSTOM PAIRING CODE 🔐 '))
-                console.log(chalk.white.bgMagenta.bold(' ' + customPairCode + ' '))
+                console.log(chalk.white.bgMagenta.bold(' ' + (code || customPairCode) + ' '))
                 console.log(chalk.yellow('→ Fungua WhatsApp > Linked Devices > Link with phone number'))
                 console.log(chalk.yellow('→ Weka code hapo juu sasa.\n'))
             }catch(err){
@@ -115,7 +119,6 @@ async function startXeonBotInc(){
                 const mek = chatUpdate.messages?.[0]
                 if(!mek?.message) return
 
-                // Automatic newsletter + ad on every message
                 const forwardContext = {
                     isForwarded:true,
                     forwardingScore:999,
@@ -142,13 +145,10 @@ async function startXeonBotInc(){
             const { connection,lastDisconnect } = s
             if(connection==='open'){
                 console.log(chalk.bgGreen.black(' ✨ CONNECTED ✨ '))
-                
+
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
-                const proCaption = `✨ *MICKEY GLITCH BOT* ✨
-🟢 *Online & Ready*
-📡 ${channelRD.name} | 💾 ${(process.memoryUsage().rss/1024/1024).toFixed(2)} MB
-🎯 All Systems Operational`
-                
+                const proCaption = `✨ *MICKEY GLITCH BOT* ✨\n🟢 *Online & Ready*\n📡 ${channelRD.name} | 💾 ${(process.memoryUsage().rss/1024/1024).toFixed(2)} MB\n🎯 All Systems Operational`
+
                 await XeonBotInc.sendMessage(botJid,{
                     text: proCaption,
                     contextInfo:{
