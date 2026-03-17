@@ -39,28 +39,35 @@ const aliveCommand = async (conn, chatId, msg) => {
         const ram = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1);
         const cpu = os.cpus()[0]?.model.split('@')[0].trim() || 'Generic';
 
+
         const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
 
-        const caption = `*ＭＩＣＫＥＹ-ＧＬＩＴＣＨ-Ｖ３*
+        const caption = `
+    ╔══════════════════════╗
+          *ＭＩＣＫＥＹ-ＧＬＩＴＣＨ-Ｖ３*  🚀
+    ╚══════════════════════╝
 
-┌─〔 *USER INFO* 〕──
-┃ 👤 *User:* \`${msg.pushName || 'User'}\`
-┃ 🕒 *Time:* \`${time}\`
-┃ 📅 *Date:* \`${date}\`
-└───────────────
+    ┏━━━〔 👤 *USER INFO* 〕━━━┓
+    ┃  • *User:* ${msg.pushName || 'User'}
+    ┃  • *Time:* ${time}
+    ┃  • *Date:* ${date}
+    ┗━━━━━━━━━━━━━━━━━━━━━━━┛
 
-┌─〔 *SYSTEM STATUS* 〕──
-┃ 🚀 *Ping:* \`${ping}ms\` ${ping < 100 ? '⚡' : ping < 500 ? '🟢' : '🟡'}
-┃ ⏳ *Uptime:* \`${formatUptime(process.uptime())}\`
-┃ 🧠 *RAM:* \`${ram}MB / ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(0)}GB\`
-┃ 💾 *Free RAM:* \`${(os.freemem() / 1024 / 1024 / 1024).toFixed(1)}GB\`
-┃ 🔧 *CPU:* \`${cpu}\`
-┃ 🖥️ *Platform:* \`${os.platform()}\`
-┃ 🟢 *Status:* \`Active & Stable\`
-┃ 📊 *Node.js:* \`${process.version}\`
-└───────────────
+    ┏━━━〔 🖥️ *SYSTEM STATUS* 〕━━━┓
+    ┃  🚀 *Ping:* ${ping}ms ${ping < 100 ? '⚡' : ping < 500 ? '🟢' : '🟡'}
+    ┃  ⏳ *Uptime:* ${formatUptime(process.uptime())}
+    ┃  🧠 *RAM:* ${ram}MB / ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(0)}GB
+    ┃  💾 *Free RAM:* ${(os.freemem() / 1024 / 1024 / 1024).toFixed(1)}GB
+    ┃  🔧 *CPU:* ${cpu}
+    ┃  🖥️ *Platform:* ${os.platform()}
+    ┃  🟢 *Status:* Active & Stable
+    ┃  📊 *Node.js:* ${process.version}
+    ┗━━━━━━━━━━━━━━━━━━━━━━━┛
 
-_Powered by Mickey Glitch_`;
+    ━━━━━━━━━━━━━━━━━━━━━━━
+    *Channel:* https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A
+    ━━━━━━━━━━━━━━━━━━━━━━━
+    _Powered by Mickey Glitch_`;
 
         // Tuma kwa haraka (Quick send)
         await conn.sendMessage(chatId, {
