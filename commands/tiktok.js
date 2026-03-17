@@ -128,65 +128,46 @@ async function getTiktokDownload(url) {
 async function tiktokCommand(sock, chatId, message) {
     try {
         const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
-        const query = text.split(' ').slice(1).join(' ').trim();
-
-        if (!query) {
-            await sock.sendMessage(chatId, { text: '⚠️ Usage: .tiktok <tiktok link>' }, { quoted: message });
-            return;
+        const url = text.split(' ').slice(1).join(' ').trim();
+        if (!url || !url.includes('tiktok.com')) {
+            return await sock.sendMessage(chatId, { text: '❌ Weka link ya TikTok. Mfano: .tiktok https://www.tiktok.com/@user/video/123' }, { quoted: message });
         }
-
-        // React to show we're processing
-        await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
-
-        // Validate URL
-        if (!query.startsWith('http://') && !query.startsWith('https://')) {
-            await sock.sendMessage(chatId, { text: 'Please provide a valid URL (starting with http(s)).' }, { quoted: message });
-            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-            return;
-        }
-
-        // Call API
-        const { url: videoUrl, meta } = await getTiktokDownload(query);
-
-        if (!videoUrl) {
-            throw new Error('No video URL returned from API');
-        }
-
-        // Try to get thumbnail for nicer preview
-        let thumbBuffer;
+        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
+        let videoUrl;
         try {
-            const potentialThumb = meta?.result?.thumbnail || meta?.result?.cover || meta?.data?.thumbnail || meta?.data?.cover;
-            if (potentialThumb) thumbBuffer = await getBuffer(potentialThumb);
-        } catch (e) {
-            thumbBuffer = null; // ignore
+            videoUrl = await getTiktokDownload(url);
+        } catch (err) {
+            return await sock.sendMessage(chatId, { text: '❌ API imeshindwa. Jaribu tena baadaye.' }, { quoted: message });
         }
-
-        // Update reaction to downloading
-        await sock.sendMessage(chatId, { react: { text: '⬇️', key: message.key } });
-
-        // Download video buffer
-        const videoBuffer = await getBuffer(videoUrl);
-
-        // Send video by buffer
-        await sock.sendMessage(chatId, {
-            video: videoBuffer,
-            mimetype: 'video/mp4',
-            fileName: 'tiktok.mp4',
-            caption: '*TikTok Download*',
-            jpegThumbnail: thumbBuffer
-        }, { quoted: message });
-
+        if (!videoUrl) {
+            return await sock.sendMessage(chatId, { text: '❌ Imeshindwa kupata video.' }, { quoted: message });
+        }
+        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+        // Stream video directly to WhatsApp
+        try {
+            await sock.sendMessage(chatId, {
+                video: { url: videoUrl },
+                mimetype: 'video/mp4',
+                caption: `✅ *TikTok Video Downloader*\n\n🔗 *Source:* ${url}`,
+                contextInfo: {
+                    externalAdReply: {
+                        title: 'TikTok Video',
+                        body: 'TikTok Downloader',
+                        thumbnailUrl: '',
+                        sourceUrl: url,
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
+            }, { quoted: message });
+        } catch (err) {
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Jaribu tena baadae.' });
+            return;
+        }
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-
     } catch (err) {
-        console.error('[TIKTOK] Error:', err?.message || err);
-        await sock.sendMessage(chatId, { text: '❌ Failed to download TikTok video: ' + (err?.message || 'Unknown error') }, { quoted: message });
-        try { await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }); } catch (e) { /* ignore */ }
-    } finally {
-        // 🚀 Force garbage collection after command
-        if (global.gc) {
-            setImmediate(() => global.gc());
-        }
+        console.error("TIKTOK ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' });
     }
 }
 

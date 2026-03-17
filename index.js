@@ -34,8 +34,8 @@ const channelRD = {
 const originalConsoleError = console.error
 console.error = function (...args) {
     const msg = args.join(' ')
-    if (msg.includes('Bad MAC') || msg.includes('verifyMAC') || msg.includes('Failed to decrypt message with any known session')) {
-        // Ficha kabisa - au unaweza ku-log silent: originalConsoleError(chalk.gray('[Bad MAC suppressed]'))
+    if (msg.includes('Bad MAC') || msg.includes('verifyMAC') || msg.includes('Failed to decrypt message with any known session') || msg.includes('Decrypted message with closed session') || msg.includes('session closed') || msg.includes('closed session')) {
+        // Ficha kabisa - au unaweza ku-log silent: originalConsoleError(chalk.gray('[Session noise suppressed]'))
         return
     }
     originalConsoleError.apply(console, args)
@@ -45,8 +45,8 @@ console.error = function (...args) {
 const store = require('./lib/lightweight_store')
 store.readFromFile()
 
-setInterval(() => store.writeToFile(), 10000)
-setInterval(() => { if (global.gc) global.gc() }, 30000)
+setInterval(() => store.writeToFile(), 30000)  // Increased to 30s to reduce I/O
+setInterval(() => { if (global.gc) global.gc() }, 60000)  // Increased to 60s to reduce CPU
 
 // ====================== TEMP & MEMORY & SESSION CLEANERS ======================
 const cleanTempFolder = (dir) => {
@@ -64,11 +64,11 @@ setInterval(() => {
 
 setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024
-    if (used > 450) {
-        console.log(chalk.bgRed.white(' ⚠️ MEMORY > 450MB → RESTARTING...'))
+    if (used > 600) {  // Increased threshold to 600MB
+        console.log(chalk.bgRed.white(' ⚠️ MEMORY > 600MB → RESTARTING...'))
         process.exit(1)
     }
-}, 20000)
+}, 60000)  // Increased check interval to 60s
 
 // ====================== CONSOLE INPUT ======================
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })

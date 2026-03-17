@@ -84,35 +84,39 @@ async function videoCommand(sock, chatId, message) {
         try {
             videoData = await getNayanVideo(videoUrl);
         } catch (e) {
-            console.log("Nayan failed, trying Hansa...");
             videoData = await getHansaVideo(videoUrl);
         }
 
         const finalTitle = videoData.title || videoTitle || 'Video';
 
-        // Tuma Video
-        await sock.sendMessage(chatId, {
-            video: { url: videoData.download },
-            mimetype: 'video/mp4',
-            fileName: `${finalTitle}.mp4`,
-            caption: `✅ *Mickey Infor Technology*\n\n🎬 *Title:* ${finalTitle}\n🔗 *Source:* ${videoUrl}`,
-            contextInfo: {
-                externalAdReply: {
-                    title: finalTitle,
-                    body: 'Mickey Glitch v3.1.0',
-                    thumbnailUrl: videoData.thumbnail || videoThumbnail,
-                    sourceUrl: videoUrl,
-                    mediaType: 2,
-                    renderLargerThumbnail: true
+        // Stream video directly to WhatsApp
+        try {
+            await sock.sendMessage(chatId, {
+                video: { url: videoData.download },
+                mimetype: 'video/mp4',
+                fileName: `${finalTitle}.mp4`,
+                caption: `✅ *Mickey Infor Technology*\n\n🎬 *Title:* ${finalTitle}\n🔗 *Source:* ${videoUrl}`,
+                contextInfo: {
+                    externalAdReply: {
+                        title: finalTitle,
+                        body: 'Video Downloader',
+                        thumbnailUrl: videoData.thumbnail || videoThumbnail,
+                        sourceUrl: videoUrl,
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
                 }
-            }
-        }, { quoted: message });
+            }, { quoted: message });
+        } catch (err) {
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Jaribu tena baadae.' });
+            return;
+        }
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
-    } catch (error) {
-        console.error('[VIDEO ERROR]:', error.message);
-        await sock.sendMessage(chatId, { text: '🚨 *Imeshindikana:* Video ni kubwa mno au API imekufa.' }, { quoted: message });
+    } catch (err) {
+        console.error("VIDEO ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' });
     }
 }
 

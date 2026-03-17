@@ -45,13 +45,9 @@ async function facebookCommand(sock, chatId, message) {
             return await sock.sendMessage(chatId, { text: '❌ Weka link ya Facebook. Mfano: .fb https://fb.watch/xyz' }, { quoted: message });
         }
 
-        // React kuonyesha bot inafanyia kazi link
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
 
-        
         let videoData;
-        
-        // Try ASWIN SPARKY API first
         try {
             const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/fbdl?url=${encodeURIComponent(url)}`;
             const res = await axios.get(apiUrl, { timeout: 25000 });
@@ -60,24 +56,19 @@ async function facebookCommand(sock, chatId, message) {
             if (!data.status || !data.data) {
                 throw new Error('ASWIN: No status or data in response');
             }
-            
             if (!data.data.high && !data.data.low) {
                 throw new Error('ASWIN: No video URLs found');
             }
-            
             videoData = {
                 videoUrl: data.data.high || data.data.low,
                 title: data.data.title || "Facebook Video",
                 thumbnail: data.data.thumbnail
             };
         } catch (aswinError) {
-            console.error('[FB ASWIN Error]', aswinError.message);
-            
             // Fallback to Hansa API
             try {
                 videoData = await tryHansaAPI(url);
             } catch (hansaError) {
-                console.error('[FB Hansa Error]', hansaError.message);
                 return await sock.sendMessage(chatId, { text: '❌ API zote zimeshindwa. Jaribu tena baadaye.' }, { quoted: message });
             }
         }
@@ -90,43 +81,35 @@ async function facebookCommand(sock, chatId, message) {
             return await sock.sendMessage(chatId, { text: '❌ Imeshindwa kupata link ya kupakua.' }, { quoted: message });
         }
 
-        // React kuonyesha ufunguaji wa file umeanza
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // Tuma video moja kwa moja
-        await sock.sendMessage(chatId, { 
-            video: { url: videoUrl }, 
-            mimetype: 'video/mp4', 
-            caption: `✅ *Facebook Video Downloader*\n\n*Title:* ${title}`,
-            fileName: `${title}.mp4`,
-            contextInfo: {
-                externalAdReply: {
-                    title: title,
-                    body: 'Mickey Glitch Facebook Downloader',
-                    thumbnailUrl: thumbnail,
-                    sourceUrl: url,
-                    mediaType: 2,
-                    renderLargerThumbnail: true
+        // Stream video directly to WhatsApp
+        try {
+            await sock.sendMessage(chatId, {
+                video: { url: videoUrl },
+                mimetype: 'video/mp4',
+                caption: `✅ *Facebook Video Downloader*\n\n*Title:* ${title}`,
+                contextInfo: {
+                    externalAdReply: {
+                        title,
+                        body: 'Facebook Downloader',
+                        thumbnailUrl: thumbnail,
+                        sourceUrl: url,
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
                 }
-            }
-        }, { quoted: message });
+            }, { quoted: message });
+        } catch (err) {
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Jaribu tena baadae.' });
+            return;
+        }
 
-        // React kuonyesha imekamilika
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
-    } catch (error) {
-        console.error('FB Command Error:', error.message);
-        const errorMsg = error.response?.status === 429 
-            ? '⏱️ API imechelewa. Jaribu tena baadaye.'
-            : error.message?.includes('timeout')
-            ? '⏱️ Muda umekwisha. Jaribu tena.'
-            : '❌ Hitilafu: ' + error.message;
-        await sock.sendMessage(chatId, { text: errorMsg }, { quoted: message }).catch(() => {});
-    } finally {
-        // 🚀 Force garbage collection after command
-        if (global.gc) {
-            setImmediate(() => global.gc());
-        }
+    } catch (err) {
+        console.error("FB ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' });
     }
 }
 
