@@ -54,7 +54,7 @@ setInterval(()=>{
     }
 },20000)
 
-// ====================== CONSOLE INPUT FIX ======================
+// ====================== CONSOLE INPUT ======================
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text) => new Promise(resolve => rl.question(text, resolve))
 
@@ -67,13 +67,14 @@ async function startXeonBotInc(){
 
         const XeonBotInc = makeWASocket({
             version,
-            logger: pino({ level: 'silent' }),
-            printQRInTerminal: false, // FIXED: Removed deprecated warning
+            // FIX: Nyamazisha logi zote za ndani zinazojaza console (Pino level fatal)
+            logger: pino({ level: 'silent' }), 
+            printQRInTerminal: false,
             mobile: false,
             browser: ["Ubuntu","Chrome","20.0.04"],
             auth:{
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({level:"fatal"}).child({level:"fatal"}))
+                keys: makeCacheableSignalKeyStore(state.keys, pino({level:"silent"})) 
             },
             markOnlineOnConnect:true,
             msgRetryCounterCache,
@@ -85,13 +86,14 @@ async function startXeonBotInc(){
         })
 
         XeonBotInc.ev.on('creds.update', saveCreds)
+        
+        // FIX: Usiprint store kama ina logi nyingi
         store.bind(XeonBotInc.ev)
 
         // ====================== CUSTOM PAIRING ======================
         if(!XeonBotInc.authState.creds.registered){
             console.log(chalk.bgMagenta.white(' ⏳ PAIRING REQUIRED ⏳ '))
 
-            // FIXED: Ensuring readline is open and ready
             let phoneNumber = await question(chalk.bgBlack(chalk.greenBright("Weka namba ya simu (mfano: 255615858685): ")))
             let number = phoneNumber.replace(/[^0-9]/g,'')
             if(!number.startsWith('255')) number='255'+number
@@ -100,16 +102,14 @@ async function startXeonBotInc(){
             console.log(chalk.yellow(`→ Inatuma ombi la ku-pair kwa: ${number}...\n`))
 
             try{
-                // Pairing delay to prevent connection issues
                 await delay(3000)
-                let code = await XeonBotInc.requestPairingCode(number, customPairCode)
+                let code = await XeonBotInc.requestPairingCode(number,customPairCode)
                 console.log(chalk.bgCyan.black(' 🔐 CUSTOM PAIRING CODE 🔐 '))
                 console.log(chalk.white.bgMagenta.bold(' ' + (code || customPairCode) + ' '))
                 console.log(chalk.yellow('→ Fungua WhatsApp > Linked Devices > Link with phone number'))
                 console.log(chalk.yellow('→ Weka code hapo juu sasa.\n'))
             }catch(err){
                 console.log(chalk.red('\n❌ Pair Error: '+err.message))
-                console.log(chalk.yellow('Jaribu kufuta folder la session kisha anza upya.'))
             }
         }
 
@@ -147,7 +147,7 @@ async function startXeonBotInc(){
                 console.log(chalk.bgGreen.black(' ✨ CONNECTED ✨ '))
 
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
-                const proCaption = `✨ *MICKEY GLITCH BOT* ✨\n🟢 *Online & Ready*\n📡 ${channelRD.name} | 💾 ${(process.memoryUsage().rss/1024/1024).toFixed(2)} MB\n🎯 All Systems Operational`
+                const proCaption = `✨ *MICKEY GLITCH BOT* ✨\n🟢 *Online & Ready*\n📡 ${channelRD.name}\n🎯 All Systems Operational`
 
                 await XeonBotInc.sendMessage(botJid,{
                     text: proCaption,
@@ -172,7 +172,7 @@ async function startXeonBotInc(){
             if(connection==='close'){
                 const reason = new Boom(lastDisconnect?.error)?.output?.statusCode
                 if(reason!==DisconnectReason.loggedOut){
-                    console.log(chalk.bgYellow.black(' 🔄 RECONNECT 🔄 '))
+                    console.log(chalk.bgYellow.black(' 🔄 RECONNECTING... 🔄 '))
                     setTimeout(()=>startXeonBotInc(),5000)
                 }else{
                     console.log(chalk.bgRed.black(' ❌ LOGGED OUT ❌ '))
@@ -191,14 +191,12 @@ async function startXeonBotInc(){
 
 // ====================== PROCESS HANDLERS ======================
 process.on('uncaughtException',(error)=>{
-    console.error(chalk.bgRed.white(' ⚠️ UNCAUGHT EXCEPTION ⚠️ '))
-    console.error(chalk.red(error.message))
+    console.error(chalk.bgRed.white(' ⚠️ EXCEPTION ⚠️ '))
 })
 process.on('unhandledRejection',(reason)=>{
-    console.error(chalk.bgYellow.white(' ⚠️ UNHANDLED REJECTION ⚠️ '))
-    console.error(reason)
+    console.error(chalk.bgYellow.white(' ⚠️ REJECTION ⚠️ '))
 })
 
 // ====================== START BOT ======================
-console.log(chalk.bgCyan.black(' 🤖 INITIALIZATION 🤖 '))
+console.log(chalk.bgCyan.black(' 🤖 INITIALIZING... 🤖 '))
 startXeonBotInc()
