@@ -221,57 +221,25 @@ function categorizeCommands(commands) {
 const aliveCommand = async (conn, chatId, msg) => {
     try {
         const senderName = msg.pushName || 'User';
-        const prefix = '.';
-
-        // RAM
-        const totalRAM = (os.totalmem() / (1024 * 1024 * 1024)).toFixed(2);
-        const freeRAM = (os.freemem() / (1024 * 1024 * 1024)).toFixed(2);
-        const usedRAM = (totalRAM - freeRAM).toFixed(2);
-
-        // Uptime
-        const uptimeSeconds = process.uptime();
-        const hours = Math.floor(uptimeSeconds / 3600);
-        const minutes = Math.floor((uptimeSeconds % 3600) / 60);
-        const seconds = Math.floor(uptimeSeconds % 60);
-        const uptimeString = `${hours}h ${minutes}m ${seconds}s`;
-
-        // Commands dynamically
+        // Get commands
         const registeredCommands = getRegisteredCommands();
         const categorizedCommands = categorizeCommands(registeredCommands);
         const totalCommands = registeredCommands.length;
 
-        // Build command list
-        let commandsList = "";
+        // Build lite command list
+        let commandsList = '';
         Object.entries(categorizedCommands).forEach(([categoryName, commands]) => {
-            const categoryEmoji = categoryName.split(' ')[0];
-            const categoryText = categoryName.substring(categoryName.indexOf(' ') + 1);
-            commandsList += `\n┌─ ${categoryEmoji} *${categoryText}* (${commands.length}) ─┐\n`;
-            commands.forEach(cmd => {
-                commandsList += `┃ ◈ *${cmd}*\n`;
-            });
-            commandsList += `└${'─'.repeat(35)}┘\n`;
+            commandsList += `\n${categoryName}:\n`;
+            commandsList += commands.map(cmd => `  • ${cmd}`).join('  ');
+            commandsList += '\n';
         });
 
-        // Final message
-        const finalMessage = `╭─ ${'═'.repeat(16)} *𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒* ${'═'.repeat(16)} ─╮
-│
-├─ ◈ *𝐒𝐄𝐍𝐃𝐄𝐑 𝐈𝐍𝐅𝐎*
-│ ◇ 👤 *User:* \`${senderName}\`
-│ ⏲️ *Uptime:* \`${uptimeString}\`
-│ 🧠 *RAM:* \`${usedRAM}GB / ${totalRAM}GB\`
-│ 🛡️ *Mode:* \`Public\`
-│
-├─ ◈ *𝐀𝐕𝐀𝐈𝐋𝐀𝐁𝐋𝐄 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒*
-│
-${commandsList}
-├─ ◈ *𝐒𝐓𝐀𝐓𝐒*
-│ 📊 *Total:* \`${totalCommands}\` Commands
-│ 🏷️ *Categories:* \`${Object.keys(categorizedCommands).length}\`
-│ ✅ *Status:* \`Active & Stable\`
-│
-╰─ 🔥 *Powered by Mickey Glitch V3* 🔥`;
+        // New short intro
+        const intro = `🤖 *Mickey Lite Bot* 🤖\nHello, ${senderName}!\nType any command below to get started.`;
 
-        // Send message
+        // Compose lite message
+        const finalMessage = `${intro}\n${commandsList}\nTotal: ${totalCommands} cmds | Status: Active`;
+
         await conn.sendMessage(chatId, {
             text: finalMessage,
             contextInfo: {
@@ -283,16 +251,15 @@ ${commandsList}
                     serverMessageId: 101
                 },
                 externalAdReply: {
-                    title: "🎯 𝙼𝙸𝙲𝙺𝙴𝚈 𝙶𝙻𝙸𝚃𝙲𝙷 🎯",
-                    body: `📊 ${totalCommands} Commands • ${Object.keys(categorizedCommands).length} Categories • ⚡ Active`,
+                    title: "Mickey Lite Help",
+                    body: `Total: ${totalCommands} cmds | Fast & Lite`,
                     mediaType: 1,
-                    renderLargerThumbnail: true,
+                    renderLargerThumbnail: false,
                     thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
                     sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
                 }
             }
         }, { quoted: msg });
-
     } catch (e) {
         console.error(e);
         await conn.sendMessage(chatId, { text: "Error loading commands..." });

@@ -22,7 +22,7 @@ const pino = require("pino")
 const readline = require("readline")
 
 // ====================== GLOBAL CONFIG ======================
-global.botname = "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™"
+global.botname = "𝙼𝚒𝚌𝚔𝚎𝚈 𝙶𝚕𝚒𝚝𝚌𝚑™"
 const customPairCode = "MICKDADY"
 const channelRD = {
     id: '120363398106360290@newsletter',
@@ -224,13 +224,13 @@ async function startXeonBotInc(){
 // ====================== PROCESS HANDLERS ======================
 process.on('uncaughtException',(error)=>{
     if (!error.message?.includes('Bad MAC') && !error.message?.includes('verifyMAC')) {
-        originalConsoleError(chalk.bgRed.white(' ⚠️ EXCEPTION ⚠️ '), error.message)
+        originalConsoleError(chalk.white.bgRed(' ⚠️ EXCEPTION ⚠️ '), error.message)
     }
 })
 process.on('unhandledRejection',(reason)=>{
     const msg = reason?.message || reason?.toString() || ''
     if (!msg.includes('Bad MAC') && !msg.includes('verifyMAC')) {
-        originalConsoleError(chalk.bgYellow.white(' ⚠️ REJECTION ⚠️ '), reason)
+        originalConsoleError(chalk.white.bgYellow(' ⚠️ REJECTION ⚠️ '), reason)
     }
 })
 

@@ -50,7 +50,6 @@ setInterval(() => {
 
 const settings = require('./settings');
 require('./config.js');
-const { isBanned } = require('./lib/isBanned');
 const yts = require('yt-search');
 const { fetchBuffer } = require('./lib/myfunc');
 const fetch = require('node-fetch');
@@ -399,16 +398,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
             // default isPublic=true on error
         }
         const isOwnerOrSudoCheck = message.key.fromMe || senderIsOwnerOrSudo;
-        // Check if user is banned (skip ban check for unban command)
-        if (isBanned(senderId) && !userMessage.startsWith('.unban')) {
-            // Only respond occasionally to avoid spam
-            if (Math.random() < 0.1) {
-                await sock.sendMessage(chatId, {
-                    text: '❌ You are banned from using the bot. Contact an admin to get unbanned.'
-                });
-            }
-            return;
-        }
+        // Ban check removed (isBanned)
 
         // TicTacToe moves disabled (command removed)
 
