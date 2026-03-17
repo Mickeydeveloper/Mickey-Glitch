@@ -29,6 +29,18 @@ const channelRD = {
     name: '🅼🅸🅲🅺🅴🆈'
 }
 
+// ====================== FICHA BAD MAC NOISE (SUPPRESS) ======================
+// Override console.error ili Bad MAC zisichapishwe
+const originalConsoleError = console.error
+console.error = function (...args) {
+    const msg = args.join(' ')
+    if (msg.includes('Bad MAC') || msg.includes('verifyMAC') || msg.includes('Failed to decrypt message with any known session')) {
+        // Ficha kabisa - au unaweza ku-log silent: originalConsoleError(chalk.gray('[Bad MAC suppressed]'))
+        return
+    }
+    originalConsoleError.apply(console, args)
+}
+
 // ====================== STORE ======================
 const store = require('./lib/lightweight_store')
 store.readFromFile()
@@ -36,27 +48,45 @@ store.readFromFile()
 setInterval(() => store.writeToFile(), 10000)
 setInterval(() => { if (global.gc) global.gc() }, 30000)
 
-// ====================== TEMP & MEMORY CLEANERS ======================
-setInterval(() => {
-    try {
-        const tmpDir = './tmp'
-        if(!fs.existsSync(tmpDir)) return
-        fs.readdirSync(tmpDir).forEach(f => fs.unlinkSync(path.join(tmpDir,f)))
-        console.log(chalk.blueBright('🧹 Temp media cleaned'))
-    } catch {}
-},1800000)
+// ====================== TEMP & MEMORY & SESSION CLEANERS ======================
+const cleanTempFolder = (dir) => {
+    if (!fs.existsSync(dir)) return
+    fs.readdirSync(dir).forEach(f => {
+        try { fs.unlinkSync(path.join(dir, f)) } catch {}
+    })
+}
 
-setInterval(()=>{
+setInterval(() => {
+    cleanTempFolder('./tmp')
+    cleanTempFolder('./temp')
+    console.log(chalk.blueBright('🧹 Temp na old files zimesafishwa'))
+}, 60 * 60 * 1000)  // Kila saa 1
+
+setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024
-    if(used>450){
-        console.log(chalk.bgRed.white(' ⚠️ MEMORY ALERT ⚠️ RAM > 450MB → Restarting...'))
+    if (used > 450) {
+        console.log(chalk.bgRed.white(' ⚠️ MEMORY > 450MB → RESTARTING...'))
         process.exit(1)
     }
-},20000)
+}, 20000)
 
 // ====================== CONSOLE INPUT ======================
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text) => new Promise(resolve => rl.question(text, resolve))
+
+// ====================== FANCY BOX (IMEBoreshwa) ======================
+const printBox = (title, content, bgColor = chalk.bgCyan, textColor = chalk.white) => {
+    const maxLen = Math.max(title.length, content.length) + 8
+    const topBottom = '═'.repeat(maxLen)
+    const paddedTitle = ' '.repeat(Math.floor((maxLen - title.length) / 2)) + title
+    const paddedContent = ' '.repeat(Math.floor((maxLen - content.length) / 2)) + content
+
+    console.log(bgColor(`╔${topBottom}╗`))
+    console.log(bgColor(`║${paddedTitle}║`))
+    console.log(bgColor(`╠${topBottom}╣`))
+    console.log(textColor(`║${paddedContent}║`))
+    console.log(bgColor(`╚${topBottom}╝\n`))
+}
 
 // ====================== BOT START ======================
 async function startXeonBotInc(){
@@ -65,16 +95,17 @@ async function startXeonBotInc(){
         const { state, saveCreds } = await useMultiFileAuthState('./session')
         const msgRetryCounterCache = new NodeCache()
 
+        printBox("INITIALIZING BOT", "Mickey Glitch ™ Starting...", chalk.bgMagenta, chalk.whiteBright)
+
         const XeonBotInc = makeWASocket({
             version,
-            // FIX: Nyamazisha logi zote za ndani zinazojaza console (Pino level fatal)
-            logger: pino({ level: 'silent' }), 
+            logger: pino({ level: 'fatal' }),  // Fatal ili noise iwe chini sana (Bad MAC bado inafichwa na override)
             printQRInTerminal: false,
             mobile: false,
             browser: ["Ubuntu","Chrome","20.0.04"],
             auth:{
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({level:"silent"})) 
+                keys: makeCacheableSignalKeyStore(state.keys, pino({level:"fatal"})) 
             },
             markOnlineOnConnect:true,
             msgRetryCounterCache,
@@ -86,30 +117,28 @@ async function startXeonBotInc(){
         })
 
         XeonBotInc.ev.on('creds.update', saveCreds)
-        
-        // FIX: Usiprint store kama ina logi nyingi
         store.bind(XeonBotInc.ev)
 
         // ====================== CUSTOM PAIRING ======================
         if(!XeonBotInc.authState.creds.registered){
-            console.log(chalk.bgMagenta.white(' ⏳ PAIRING REQUIRED ⏳ '))
+            printBox("PAIRING INAHITAJIKA", "Tayari ku-link bot na namba yako", chalk.bgYellow, chalk.black)
 
-            let phoneNumber = await question(chalk.bgBlack(chalk.greenBright("Weka namba ya simu (mfano: 255615858685): ")))
+            console.log(chalk.greenBright.bold("\nWeka namba ya simu (mfano: 255615858685):"))
+            let phoneNumber = await question(chalk.cyan("→ "))
             let number = phoneNumber.replace(/[^0-9]/g,'')
             if(!number.startsWith('255')) number='255'+number
 
-            console.log(chalk.cyan(`\n→ Unatumia Custom Code: ${customPairCode}`))
-            console.log(chalk.yellow(`→ Inatuma ombi la ku-pair kwa: ${number}...\n`))
+            console.log(chalk.cyan(`\n→ Custom Pair Code: ${customPairCode}`))
+            console.log(chalk.yellow(`→ Sending pairing request kwa ${number}...\n`))
 
             try{
                 await delay(3000)
                 let code = await XeonBotInc.requestPairingCode(number,customPairCode)
-                console.log(chalk.bgCyan.black(' 🔐 CUSTOM PAIRING CODE 🔐 '))
-                console.log(chalk.white.bgMagenta.bold(' ' + (code || customPairCode) + ' '))
-                console.log(chalk.yellow('→ Fungua WhatsApp > Linked Devices > Link with phone number'))
-                console.log(chalk.yellow('→ Weka code hapo juu sasa.\n'))
+                printBox("PAIRING CODE YAKO", code || customPairCode, chalk.bgGreen, chalk.black.bold)
+                console.log(chalk.yellowBright('→ Open WhatsApp > Linked Devices > Link with phone number'))
+                console.log(chalk.yellowBright('→ Weka code hapo haraka!\n'))
             }catch(err){
-                console.log(chalk.red('\n❌ Pair Error: '+err.message))
+                console.log(chalk.red('\n❌ Pairing Error: '+err.message))
             }
         }
 
@@ -142,10 +171,10 @@ async function startXeonBotInc(){
         })
 
         XeonBotInc.ev.on('connection.update', async s=>{
-            const { connection,lastDisconnect } = s
+            const { connection, lastDisconnect } = s
             if(connection==='open'){
-                console.log(chalk.bgGreen.black(' ✨ CONNECTED ✨ '))
-
+                printBox("BOT CONNECTED", "✨ Online & Ready ✨", chalk.bgGreen, chalk.black)
+                
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
                 const proCaption = `✨ *MICKEY GLITCH BOT* ✨\n🟢 *Online & Ready*\n📡 ${channelRD.name}\n🎯 All Systems Operational`
 
@@ -172,10 +201,10 @@ async function startXeonBotInc(){
             if(connection==='close'){
                 const reason = new Boom(lastDisconnect?.error)?.output?.statusCode
                 if(reason!==DisconnectReason.loggedOut){
-                    console.log(chalk.bgYellow.black(' 🔄 RECONNECTING... 🔄 '))
+                    printBox("RECONNECTING", "🔄 Inajaribu ku-connect tena... 🔄", chalk.bgYellow, chalk.black)
                     setTimeout(()=>startXeonBotInc(),5000)
                 }else{
-                    console.log(chalk.bgRed.black(' ❌ LOGGED OUT ❌ '))
+                    printBox("LOGGED OUT", "❌ Session ime-log out — pair upya", chalk.bgRed, chalk.white)
                 }
             }
         })
@@ -183,7 +212,10 @@ async function startXeonBotInc(){
         return XeonBotInc
 
     }catch(error){
-        console.log(chalk.red('Error: '+error.message))
+        // Hapa pia ficha kama ni Bad MAC
+        if (!error.message?.includes('Bad MAC') && !error.message?.includes('verifyMAC')) {
+            console.log(chalk.red('Error: '+error.message))
+        }
         await delay(8000)
         startXeonBotInc()
     }
@@ -191,12 +223,17 @@ async function startXeonBotInc(){
 
 // ====================== PROCESS HANDLERS ======================
 process.on('uncaughtException',(error)=>{
-    console.error(chalk.bgRed.white(' ⚠️ EXCEPTION ⚠️ '))
+    if (!error.message?.includes('Bad MAC') && !error.message?.includes('verifyMAC')) {
+        originalConsoleError(chalk.bgRed.white(' ⚠️ EXCEPTION ⚠️ '), error.message)
+    }
 })
 process.on('unhandledRejection',(reason)=>{
-    console.error(chalk.bgYellow.white(' ⚠️ REJECTION ⚠️ '))
+    const msg = reason?.message || reason?.toString() || ''
+    if (!msg.includes('Bad MAC') && !msg.includes('verifyMAC')) {
+        originalConsoleError(chalk.bgYellow.white(' ⚠️ REJECTION ⚠️ '), reason)
+    }
 })
 
 // ====================== START BOT ======================
-console.log(chalk.bgCyan.black(' 🤖 INITIALIZING... 🤖 '))
+printBox("BOT STARTING", "🤖 Mickey Glitch Initializing... 🤖", chalk.bgCyan, chalk.black)
 startXeonBotInc()
