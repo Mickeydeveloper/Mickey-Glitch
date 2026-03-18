@@ -8,10 +8,8 @@ const os = require('os');
  */
 function getAutomaticCommands() {
     try {
-        const commandsPath = path.join(__dirname, '../commands'); // Hakikisha path ni sahihi kulingana na folder structure yako
+        const commandsPath = path.join(__dirname, '../commands'); 
         const files = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-        
-        // Tunatoa ".js" kwenye jina la faili ili kupata jina la command
         return files.map(file => `.${file.replace('.js', '')}`);
     } catch (e) {
         console.error("Hitilafu kusoma folder la commands:", e);
@@ -19,7 +17,6 @@ function getAutomaticCommands() {
     }
 }
 
-// Map ya Categories kwa ajili ya kupanga muonekano
 const categoryMap = {
     '.gemini': '🤖 AI & Chat',
     '.ai': '🤖 AI & Chat',
@@ -38,7 +35,7 @@ const categoryMap = {
 function categorizeCommands(commands) {
     const categories = {};
     commands.forEach(cmd => {
-        const category = categoryMap[cmd] || '📂 Other Cmds';
+        const category = categoryMap[cmd] || '📂 Other Commands';
         if (!categories[category]) categories[category] = [];
         categories[category].push(cmd);
     });
@@ -47,30 +44,26 @@ function categorizeCommands(commands) {
 
 const aliveCommand = async (conn, chatId, msg) => {
     try {
-        // Taarifa za User & Bot
-        const senderName = msg.pushName || 'Mteja'; // Jina la user (User's Name)
+        const senderName = msg.pushName || 'User';
         const botName = 'MICKEY GLITCH';
         const prefix = '.';
         
-        // Muda & Tarehe
         const now = moment().tz('Africa/Dar_es_Salaam');
         const dateStr = now.format('ddd, MMM D, YYYY');
         const timeStr = now.format('HH:mm:ss');
         const hr = now.hour();
         const greet = hr < 12 ? 'Habari za Asubuhi ☀️' : hr < 18 ? 'Habari za Mchana 🌤️' : 'Habari za Jioni 🌙';
 
-        // Runtime
         const uptimeSec = process.uptime();
         const hrs = Math.floor(uptimeSec / 3600);
         const mins = Math.floor((uptimeSec % 3600) / 60);
         const runtimeStr = `${hrs}h ${mins}m`;
 
-        // Automatic Command Loading
         const allCommands = getAutomaticCommands();
         const categorizedCommands = categorizeCommands(allCommands);
         const totalCommands = allCommands.length;
 
-        // --- MUONEKANO MPYA WA KADI (AD IMPROVED) ---
+        // --- HEADER ---
         const header = `╔════════════════════╗
   ✨ *${botName}* — *V3.0*
 ╚════════════════════╝
@@ -80,21 +73,19 @@ const aliveCommand = async (conn, chatId, msg) => {
 │  📅 *Date:* ${dateStr}
 │  💻 *OS:* ${os.platform()}
 │  ⏳ *Up:* ${runtimeStr}
-│  📦 *Total Cmds:* ${totalCommands}
+│  📦 *Total:* ${totalCommands} Cmds
 └────────────────────┘`;
-
-        const intro = `\n*Habari, ${senderName}!* (Hello!)\nHizi hapa ni huduma zilizopo kwenye mfumo wetu:\n`;
 
         let commandsList = '';
         Object.entries(categorizedCommands).forEach(([categoryName, commands]) => {
             commandsList += `\n*╭───「 ${categoryName.toUpperCase()} 」*`;
-            commandsList += `\n│ ` + commands.map(cmd => `\`${cmd}\``).join('  ');
+            // Hapa ndipo tumebadilisha: .join('\n│  • ') inafanya kila moja iwe mstari mpya
+            commandsList += `\n│  • ` + commands.map(cmd => `\`${cmd}\``).join('\n│  • ');
             commandsList += `\n*╰───────────────💎*`;
         });
 
-        const finalMessage = `${header}\n${intro}${commandsList}\n\n*©2026 Powered by Mickey Labs™*`;
+        const finalMessage = `${header}\n${commandsList}\n\n*©2026 Powered by Mickey Labs™*`;
 
-        // Tuma ujumbe wenye Tangazo Kubwa (Big Ad)
         await conn.sendMessage(chatId, {
             text: finalMessage,
             contextInfo: {
@@ -102,12 +93,12 @@ const aliveCommand = async (conn, chatId, msg) => {
                 forwardingScore: 999,
                 forwardedNewsletterMessageInfo: {
                     newsletterJid: '120363398106360290@newsletter',
-                    newsletterName: `${botName}: ${runtimeStr}`,
+                    newsletterName: `${botName}: Active`,
                     serverMessageId: 101
                 },
                 externalAdReply: {
                     title: `${botName} — Smart Multi-Device`,
-                    body: `Hello ${senderName}, Total ${totalCommands} commands are ready!`,
+                    body: `Hello ${senderName}, Enjoy using ${botName}!`,
                     mediaType: 1,
                     renderLargerThumbnail: true,
                     thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
@@ -118,7 +109,7 @@ const aliveCommand = async (conn, chatId, msg) => {
 
     } catch (e) {
         console.error("Error in help.js:", e);
-        await conn.sendMessage(chatId, { text: "Hitilafu imetokea wakati wa kuandaa menu." });
+        await conn.sendMessage(chatId, { text: "Hitilafu imetokea! (Error loading menu)" });
     }
 };
 
