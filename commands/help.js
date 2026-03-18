@@ -23,7 +23,7 @@ function getRegisteredCommands() {
 
         module.exports = async (conn, chatId, msg) => {
             const senderName = msg.pushName || 'User';
-            const owner = 'Λ𝗫𝗜𝗦 Ł𝗮𝗯𝘀™';
+            const owner = 'Mickey™';
                     },
                     externalAdReply: {
                         title: `${botName} Help`,
@@ -38,10 +38,10 @@ function getRegisteredCommands() {
 
             module.exports = async (conn, chatId, msg) => {
                 const senderName = msg.pushName || 'User';
-                const owner = 'Λ𝗫𝗜𝗦 Ł𝗮𝗯𝘀™';
-                const botName = 'Λ𝗫𝗜𝗦 𝗫𝗠𝗗';
+                const owner = 'Mickey™';
+                const botName = 'Mickey Glitch';
                 const version = '1.1';
-                const developer = 'Λ𝗫𝗜𝗦 Ł𝗮𝗯𝘀™';
+                const developer = 'Mickey™';
                 const mode = 'PUBLIC';
                 const prefix = '.';
                 const platform = os.platform();
