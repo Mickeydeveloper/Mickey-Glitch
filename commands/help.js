@@ -6,8 +6,8 @@ const os = require('os');
 const aliveCommand = async (conn, chatId, msg) => {
     try {
         const senderName = msg.pushName || 'User';
-        const botName = 'Λ𝗫𝗜𝗦 𝗫𝗠𝐃';
-        const version = '1.1';
+        const botName = 'Mickey Glitch';
+        const version = '3.1';
         const prefix = '.';
         
         // Time & Date Setup
