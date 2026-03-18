@@ -67,11 +67,11 @@ const aliveCommand = async (conn, chatId, msg) => {
                 forwardingScore: 999,
                 forwardedNewsletterMessageInfo: {
                     newsletterJid: '120363398106360290@newsletter',
-                    newsletterName: `Λ𝗫𝗜𝗦 𝗫𝗠𝐃: ${runtime}`,
+                    newsletterName: `Mickey Glitch: ${runtime}`,
                     serverMessageId: 101
                 },
                 externalAdReply: {
-                    title: `Λ𝗫𝗜𝗦 𝗫𝗠𝐃 — Multi-Device Bot`,
+                    title: `Mickey Glitch — Multi-Device Bot`,
                     body: `Total: ${totalCommands} cmds | Fast & Lite`,
                     mediaType: 1,
                     renderLargerThumbnail: true, // Inafanya picha iwe kubwa na ivutie zaidi
