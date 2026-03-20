@@ -22,98 +22,66 @@ async function tryRequest(getter, attempts = 3) {
     throw lastError;
 }
 
-function collectAllUrls(obj, out = new Set()) {
-    if (!obj) return out;
-    const urlRegex = /https?:\/\/[^\s\"'<>]+/ig;
-    if (typeof obj === 'string') {
-        let m;
-        while ((m = urlRegex.exec(obj)) !== null) out.add(m[0]);
-        return out;
-    }
-    if (Array.isArray(obj)) {
-        for (const item of obj) collectAllUrls(item, out);
-        return out;
-    }
-    if (typeof obj === 'object') {
-        for (const key of Object.keys(obj)) collectAllUrls(obj[key], out);
-        return out;
-    }
-    return out;
-}
-
-function isImageUrl(u) {
-    return /\.(jpe?g|png|webp|gif|bmp)(?:\?|$)/i.test(u);
-}
-
-function isVideoLike(u) {
-    return /\.(mp4|webm|m3u8|mov|ts|3gp|mkv)(?:\?|$)/i.test(u) || /(video|play|download|mp4|nowm)/i.test(u);
-}
-
-async function validateVideoUrl(url) {
-    try {
-        // Try HEAD first
-        const head = await axios.head(url, { ...AXIOS_DEFAULTS, timeout: 5000, maxRedirects: 5, validateStatus: s => s >= 200 && s < 400 });
-        const ct = (head.headers['content-type'] || '').toLowerCase();
-        if (ct.startsWith('video') || ct.includes('octet-stream')) return true;
-    } catch (e) {
-        // ignore, try GET stream
-    }
-
-    try {
-        const r = await axios.get(url, { ...AXIOS_DEFAULTS, responseType: 'stream', timeout: 8000, maxRedirects: 5 });
-        const ct = (r.headers['content-type'] || '').toLowerCase();
-        if (r.data && typeof r.data.destroy === 'function') r.data.destroy();
-        if (ct.startsWith('video') || ct.includes('octet-stream')) return true;
-    } catch (e) {
-        // failed to fetch
-    }
-
-    return false;
-}
-
+// Function ya kupata data kutoka kwenye API mpya
 async function getTiktokDownload(url) {
-    const apiUrl = `https://nayan-video-downloader.vercel.app/tikdown?url=${encodeURIComponent(url)}`;
+    // API URL mpya uliyotoa
+    const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/tiktok?url=${encodeURIComponent(url)}`;
+    
     const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-    if (!res || !res.data || !res.data.data || !res.data.data.status) throw new Error('No response from TikTok API');
+    
+    // Kukagua kama data imerudi (muundo: res.data.status na res.data.data)
+    if (!res || !res.data || !res.data.status || !res.data.data) {
+        throw new Error('No response from TikTok API');
+    }
 
-    const d = res.data.data.data;
+    const d = res.data.data;
 
-    // The video URL is directly in d.video
+    // Video URL ipo kwenye d.video kulingana na JSON yako
     const videoUrl = d.video;
     if (!videoUrl) throw new Error('Could not find video URL in API response');
 
-    return { url: videoUrl, meta: d };
+    return { 
+        url: videoUrl, 
+        title: d.title, 
+        nickname: d.author?.nickname,
+        thumbnail: d.thumbnail 
+    };
 }
 
 async function tiktokCommand(sock, chatId, message) {
     try {
         const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
         const url = text.split(' ').slice(1).join(' ').trim();
+
         if (!url || !url.includes('tiktok.com')) {
-            return await sock.sendMessage(chatId, { text: '❌ Weka link ya TikTok. Mfano: .tiktok https://www.tiktok.com/@user/video/123' }, { quoted: message });
+            return await sock.sendMessage(chatId, { 
+                text: '❌ Weka link ya TikTok. Mfano: .tiktok https://www.tiktok.com/@user/video/123' 
+            }, { quoted: message });
         }
+
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
-        let videoUrl;
+
+        let tikData;
         try {
-            videoUrl = await getTiktokDownload(url);
+            tikData = await getTiktokDownload(url);
         } catch (err) {
-            return await sock.sendMessage(chatId, { text: '❌ API imeshindwa. Jaribu tena baadaye.' }, { quoted: message });
+            console.error("API Error:", err.message);
+            return await sock.sendMessage(chatId, { text: '❌ API imeshindwa (Error). Jaribu tena baadaye.' }, { quoted: message });
         }
-        if (!videoUrl) {
-            return await sock.sendMessage(chatId, { text: '❌ Imeshindwa kupata video.' }, { quoted: message });
-        }
+
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
-        // Stream video directly to WhatsApp
+
+        // Kutuma video kwenda WhatsApp
         try {
             await sock.sendMessage(chatId, {
-                video: { url: videoUrl },
+                video: { url: tikData.url },
                 mimetype: 'video/mp4',
-                caption: `✅ *TikTok Video Downloader*\n\n🔗 *Source:* ${url}`,
+                caption: `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`,
                 contextInfo: {
                     externalAdReply: {
-                        title: 'TikTok Video',
-                        body: 'TikTok Downloader',
-                        thumbnailUrl: '',
+                        title: 'TikTok Video Downloaded',
+                        body: tikData.nickname,
+                        thumbnailUrl: tikData.thumbnail,
                         sourceUrl: url,
                         mediaType: 1,
                         renderLargerThumbnail: true
@@ -121,12 +89,15 @@ async function tiktokCommand(sock, chatId, message) {
                 }
             }, { quoted: message });
         } catch (err) {
-            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Jaribu tena baadae.' });
+            console.error("Send Error:", err.message);
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana au link imekufa.' });
             return;
         }
+
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+
     } catch (err) {
-        console.error("TIKTOK ERROR:", err.message);
+        console.error("TIKTOK CMD ERROR:", err.message);
         await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' });
     }
 }
