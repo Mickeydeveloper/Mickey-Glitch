@@ -72,57 +72,17 @@ async function validateVideoUrl(url) {
 }
 
 async function getTiktokDownload(url) {
-    const apiUrl = `https://apis-starlights-team.koyeb.app/starlight/tiktok?url=${encodeURIComponent(url)}`;
+    const apiUrl = `https://nayan-video-downloader.vercel.app/tikdown?url=${encodeURIComponent(url)}`;
     const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-    if (!res || !res.data) throw new Error('No response from TikTok API');
+    if (!res || !res.data || !res.data.data || !res.data.data.status) throw new Error('No response from TikTok API');
 
-    const d = res.data;
+    const d = res.data.data.data;
 
-    // Collect candidate URLs from known fields and from scanning the whole response
-    const candidatesOrdered = [];
-    const pushIf = (u) => { if (u && typeof u === 'string' && u.startsWith('http')) candidatesOrdered.push(u); };
+    // The video URL is directly in d.video
+    const videoUrl = d.video;
+    if (!videoUrl) throw new Error('Could not find video URL in API response');
 
-    // Prefer common locations
-    pushIf(d.result?.video?.play);
-    pushIf(d.result?.nowm);
-    pushIf(d.result?.video || d.result?.mp4);
-    pushIf(d.data?.play);
-    pushIf(d.data?.video);
-    pushIf(d.video);
-    pushIf(d.download);
-    pushIf(d.url);
-
-    // Add all URLs found in the object
-    const all = Array.from(collectAllUrls(d));
-    for (const u of all) pushIf(u);
-
-    // Deduplicate
-    const unique = [...new Set(candidatesOrdered)];
-
-    // Filter out obvious images first
-    const nonImage = unique.filter(u => !isImageUrl(u));
-
-    // Sort: video-like URLs first
-    nonImage.sort((a, b) => (isVideoLike(b) ? 1 : 0) - (isVideoLike(a) ? 1 : 0));
-
-    // Try validating candidates (HEAD/stream) and return first valid video URL
-    for (const candidate of nonImage) {
-        try {
-            const ok = await validateVideoUrl(candidate);
-            if (ok) return { url: candidate, meta: d };
-        } catch (e) {
-            // ignore and continue
-        }
-    }
-
-    // As a last resort, allow video-like URLs even if validation failed
-    const fallback = nonImage.find(u => isVideoLike(u));
-    if (fallback) return { url: fallback, meta: d };
-
-    // If still nothing, try any URL (maybe it's behind redirects)
-    if (unique.length) return { url: unique[0], meta: d };
-
-    throw new Error('Could not find a video URL in API response');
+    return { url: videoUrl, meta: d };
 }
 
 async function tiktokCommand(sock, chatId, message) {
