@@ -1,166 +1,92 @@
-const fs = require('fs');
-const path = require('path');
-const fetch = require('node-fetch');
-const axios = require('axios');
-const isAdmin = require('../lib/isAdmin');
+const os = require('os');
+const { performance } = require('perf_hooks');
 
-// Paths
-const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
-const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
+// --- MSAIDIZI WA MUDA (UPTIME) ---
+const formatUptime = (secs) => {
+    const d = Math.floor(secs / (3600 * 24));
+    const h = Math.floor((secs % (3600 * 24)) / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.floor(secs % 60);
+    const dDisplay = d > 0 ? `${d}d ` : "";
+    return `${dDisplay}${h}h ${m}m ${s}s`;
+};
 
-// ────────────────────────────────────────────────
-//          MEMORY & STATE MANAGEMENT
-// ────────────────────────────────────────────────
-function loadState() {
+// --- MAIN ALIVE COMMAND (.alive) ---
+const aliveCommand = async (sock, chatId, msg) => {
+    // Hakikisha socket ipo
+    if (!sock || typeof sock.sendMessage !== 'function') return;
+
+    const start = performance.now();
+
     try {
-        if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
-        return JSON.parse(fs.readFileSync(STATE_PATH, 'utf8') || '{}');
-    } catch (e) { return { perGroup: {}, private: false }; }
-}
-
-function saveState(state) {
-    try {
-        const dir = path.dirname(STATE_PATH);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
-    } catch (e) { console.error('Save State Error:', e); }
-}
-
-function loadMemory() {
-    try {
-        if (!fs.existsSync(MEMORY_PATH)) return {};
-        const data = JSON.parse(fs.readFileSync(MEMORY_PATH, 'utf8'));
-        const now = Date.now();
-        let changed = false;
-        // AUTO-DELETE: Futa baada ya dakika 4 (240,000ms)
-        for (const id in data) {
-            if (data[id].lastUpdate && (now - data[id].lastUpdate > 240000)) {
-                delete data[id];
-                changed = true;
-            }
-        }
-        if (changed) saveMemory(data);
-        return data;
-    } catch (e) { return {}; }
-}
-
-function saveMemory(memory) {
-    try {
-        fs.writeFileSync(MEMORY_PATH, JSON.stringify(memory, null, 2));
-    } catch (e) { console.error('Memory Save Error:', e); }
-}
-
-async function isEnabledForChat(state, chatId) {
-    if (chatId.endsWith('@g.us')) return !!state.perGroup?.[chatId]?.enabled;
-    return !!state.private;
-}
-
-function extractMessageText(message) {
-    const msg = message.message;
-    if (!msg) return '';
-    return (msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || 
-            msg.interactiveMessage?.body?.text || msg.templateMessage?.hydratedTemplate?.hydratedContentText || '').trim();
-}
-
-// ────────────────────────────────────────────────
-//          MAIN CHATBOT HANDLER (MICKEY AI)
-// ────────────────────────────────────────────────
-async function handleChatbotMessage(sock, chatId, message) {
-    try {
-        if (!chatId || message.key?.fromMe) return;
-
-        const state = loadState();
-        if (!(await isEnabledForChat(state, chatId))) return;
-
-        const userText = extractMessageText(message);
-        if (!userText) return;
-
-        // --- MEMORY SYNC (Limit 6 Messages) ---
-        let memory = loadMemory();
-        if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
-
-        memory[chatId].chats.push({ role: "user", content: userText });
-        memory[chatId].lastUpdate = Date.now();
-
-        if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
-
-        const historyContext = memory[chatId].chats
-            .map(m => `${m.role === 'user' ? 'Mteja' : 'Mickey'}: ${m.content}`)
-            .join("\n");
-
-        // Typing Effect
+        // Typing effect kwa sekunde 1
         await sock.sendPresenceUpdate('composing', chatId);
 
-        // --- PROFESSIONAL SYSTEM PROMPT ---
-        const systemPrompt = 
-            "Wewe unaitwa Mickey, mtaalamu wa mifumo ya teknolojia kutoka Tanzania. " +
-            "Tumia lugha ya kitaaluma, sanifu, na yenye heshima. Epuka ucheshi usio na lazima. " +
-            "Usiwahi kusema wewe ni AI; jitambulishe kama Mickey. Jibu kwa ufupi na usahihi.";
+        const dateObj = new Date();
+        const options = { timeZone: 'Africa/Dar_es_Salaam', hour12: true, hour: '2-digit', minute: '2-digit' };
+        const time = dateObj.toLocaleTimeString('en-GB', options);
+        
+        // System Stats
+        const end = performance.now();
+        const ping = (end - start).toFixed(0);
+        const totalRam = os.totalmem() / 1024 / 1024 / 1024;
+        const freeRam = os.freemem() / 1024 / 1024 / 1024;
+        const usedRam = totalRam - freeRam;
+        const ramPercent = ((usedRam / totalRam) * 100).toFixed(1);
+        const cpuModel = os.cpus()[0]?.model.split('@')[0].trim() || 'Standard';
 
-        const fullPrompt = `${systemPrompt}\n\nKonteksti:\n${historyContext}\nMickey (Jibu Kitaaluma):`;
-        const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
+        const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
 
-        const res = await fetch(apiUrl).then(r => r.json()).catch(() => null);
-        const replyText = res?.response || res?.result || res?.message;
+        // --- MUUNDO MPYA NA WA KITAALUMU ---
+        const caption = `╭━━━〔 *ＭＩＣＫＥＹ-Ｖ３* 〕━━━┈⊷
+┃ 👤 *Mtumiaji:* ${msg.pushName || 'User'}
+┃ 🕒 *Muda:* ${time} EAT
+┃ 🚀 *Ping:* ${ping}ms ${ping < 100 ? '🚀' : '🟢'}
+╰━━━━━━━━━━━━━━━━━━┈⊷
 
-        if (!replyText) return;
+╭━━━〔 *SYSTEM STATUS* 〕━━━┈⊷
+┃ ⏳ *Uptime:* ${formatUptime(process.uptime())}
+┃ 🧠 *RAM:* ${usedRam.toFixed(1)}GB / ${totalRam.toFixed(0)}GB (${ramPercent}%)
+┃ 💾 *Free:* ${freeRam.toFixed(1)}GB
+┃ 🔧 *CPU:* ${cpuModel}
+┃ 🖥 *OS:* ${os.platform()} (${os.arch()})
+┃ 🟢 *Hali:* Stable & Active
+╰━━━━━━━━━━━━━━━━━━┈⊷
 
-        // Save AI response to memory
-        memory[chatId].chats.push({ role: "assistant", content: replyText });
-        saveMemory(memory);
+*Channel:* https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A
+_© 2026 Mickey Glitch Technology_`;
 
-        // 1. Send Text
-        const textMsg = await sock.sendMessage(chatId, { text: replyText }, { quoted: message });
-
-        // 2. Send Voice (Auto-Professional)
-        try {
-            if (replyText.length > 5 && replyText.length < 500) {
-                const voiceApi = `https://api.agatz.xyz/api/voiceover?text=${encodeURIComponent(replyText)}&model=ana`;
-                const vRes = await axios.get(voiceApi);
-                if (vRes.data?.data?.oss_url) {
-                    await sock.sendMessage(chatId, {
-                        audio: { url: vRes.data.data.oss_url },
-                        mimetype: 'audio/mpeg',
-                        ptt: true
-                    }, { quoted: textMsg });
+        // --- TUMA ALIVE MESSAGE NA PICHA (Mbinu iliyoboreshwa) ---
+        await sock.sendMessage(chatId, {
+            image: { url: imageUrl }, // Pakia picha moja kwa moja kutoka URL
+            caption: caption,
+            contextInfo: {
+                isForwarded: true,
+                forwardingScore: 999,
+                showAdAttribution: true, // Imerudishwa (Restored)
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: '120363398106360290@newsletter',
+                    newsletterName: '🅼🅸🅲🅺🅴𝚈-𝐆𝐋𝐈𝐓𝐂𝐇 🚀',
+                    serverMessageId: 1
+                },
+                externalAdReply: {
+                    title: 'ＭＩＣＫＥＹ 𝐕𝟑 𝐀𝐋𝐈𝐕𝐄',
+                    body: `Speed: ${ping}ms | Status: Active`,
+                    thumbnailUrl: imageUrl,
+                    sourceUrl: 'https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A', 
+                    mediaType: 1,
+                    renderLargerThumbnail: true,
                 }
             }
-        } catch (vErr) {}
+        }, { quoted: msg });
 
-    } catch (err) { console.error('Chatbot Error:', err); }
-}
+    } catch (e) {
+        console.error('❌ Alive Error:', e);
+        // Fallback message ikiwa picha itagoma kabisa
+        await sock.sendMessage(chatId, { 
+            text: `🟢 *Bot is Active!* (Picha imefeli)\n\n⚡ Speed: ${performance.now().toFixed(0)}ms` 
+        }, { quoted: msg });
+    }
+};
 
-// ────────────────────────────────────────────────
-//          TOGGLE COMMAND (.chatbot on/off)
-// ────────────────────────────────────────────────
-async function groupChatbotToggleCommand(sock, chatId, message, args) {
-    try {
-        const fullArgs = (Array.isArray(args) ? args.join(' ') : args || '').toLowerCase().trim();
-        const state = loadState();
-        const isOwner = message.key.fromMe || await require('../lib/isOwner')(message.key.participant || chatId, sock, chatId);
-
-        // Handle Private Mode
-        if (fullArgs.includes('private')) {
-            if (!isOwner) return sock.sendMessage(chatId, { text: 'Owner only.' }, { quoted: message });
-            state.private = fullArgs.includes('on');
-            saveState(state);
-            return sock.sendMessage(chatId, { text: `Chatbot Private sasa hivi ipo: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: message });
-        }
-
-        // Handle Group Mode
-        if (chatId.endsWith('@g.us')) {
-            const adminInfo = await isAdmin(sock, chatId, message.key.participant || message.key.remoteJid);
-            if (!adminInfo.isSenderAdmin && !isOwner) return sock.sendMessage(chatId, { text: 'Admins only.' }, { quoted: message });
-
-            if (fullArgs === 'on' || fullArgs === 'off') {
-                state.perGroup[chatId] = { enabled: (fullArgs === 'on') };
-                saveState(state);
-                return sock.sendMessage(chatId, { text: `Chatbot Group sasa hivi ipo: *${fullArgs.toUpperCase()}*` }, { quoted: message });
-            }
-        }
-
-        return sock.sendMessage(chatId, { text: '💡 *Usage:*\n.chatbot on|off\n.chatbot private on|off' }, { quoted: message });
-    } catch (e) { console.error('Toggle Error:', e); }
-}
-
-module.exports = { handleChatbotMessage, groupChatbotToggleCommand };
+module.exports = aliveCommand;
