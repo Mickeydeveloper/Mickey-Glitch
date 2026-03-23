@@ -1,121 +1,256 @@
 const fs = require('fs');
 const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai'); // Tumia library ya Gemini
+const fetch = require('node-fetch');
+const axios = require('axios');
 const isAdmin = require('../lib/isAdmin');
-
-// Weka API Key yako ya Gemini hapa au kwenye mazingira yako (env)
-const genAI = new GoogleGenerativeAI('GEMINI_KEY_HAPA');
 
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 
-// --- Helpers ---
 function loadState() {
   try {
-    if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false, memory: {} };
-    const data = fs.readFileSync(STATE_PATH, 'utf8');
-    const state = JSON.parse(data || '{}');
-    state.perGroup = state.perGroup || {};
-    state.memory = state.memory || {};
+    if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
+    const raw = fs.readFileSync(STATE_PATH, 'utf8');
+    const state = JSON.parse(raw || '{}');
+    if (!state.perGroup) state.perGroup = {};
+    if (typeof state.private !== 'boolean') state.private = false;
     return state;
-  } catch {
-    return { perGroup: {}, private: false, memory: {} };
+  } catch (e) {
+    return { perGroup: {}, private: false };
   }
 }
 
 function saveState(state) {
   try {
-    fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
-    fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
+    const dataDir = path.join(__dirname, '..', 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), 'utf8');
   } catch (e) {
-    console.error('Save failed:', e);
+    console.error('Failed to save chatbot state:', e);
   }
 }
 
-function extractMessageText(msg) {
-  if (!msg?.message) return '';
-  const m = msg.message || {};
-  return (
-    m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption ||
-    m.videoMessage?.caption || m.documentMessage?.caption || m.interactiveMessage?.body?.text ||
-    ''
-  ).trim();
-}
-
-/**
- * AI CALLER - Sasa inatumia Gemini
- */
-async function callAI(userPrompt, history = []) {
-  try {
-    const systemInstruction = `Wewe ni Mickdady Hamza, developer kutokea Tanzania. 
-    - Jibu kama binadamu (usiwe roboti). 
-    - Ukiulizwa jina: "Mimi ni Mickdady Hamza, developer kutokea Tanzania."
-    - Ukiulizwa wewe ni nani: "Mimi ni binadamu."
-    - Tumia Kiswahili cha mtaani/kifupi (mfano: 'vp', 'sawa', 'bdo', 'uko') pale inapofaa ili usikike kama kijana wa bongo.
-    - Kuwa msaidizi, mwenye adabu, na jibu kwa ufupi lakini kwa ufasaha.`;
-
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      systemInstruction: systemInstruction
-    });
-
-    const chat = model.startChat({
-      history: history.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      })),
-      generationConfig: {
-        temperature: 0.7,
-      },
-    });
-
-    const result = await chat.sendMessage(userPrompt);
-    return result.response.text().trim();
-  } catch (err) {
-    console.error("Gemini Error:", err);
-    return "Samahani, seva imegoma kidogo. Mickdady Hamza hapa, vipi unaendeleaje?";
+async function isEnabledForChat(state, chatId) {
+  if (!state || !chatId) return false;
+  if (chatId.endsWith('@g.us')) {
+    if (state.perGroup?.[chatId]?.enabled !== undefined) {
+      return !!state.perGroup[chatId].enabled;
+    }
+    try {
+      const lib = require('../lib/index');
+      const cfg = await lib.getChatbot(chatId);
+      return !!(cfg && cfg.enabled);
+    } catch (e) {
+      return false;
+    }
   }
+  return !!state.private;
 }
 
+function extractMessageText(message) {
+  if (!message?.message) return '';
+
+  const msg = message.message;
+
+  if (msg.conversation) return msg.conversation.trim();
+  if (msg.extendedTextMessage?.text) return msg.extendedTextMessage.text.trim();
+  if (msg.imageMessage?.caption) return msg.imageMessage.caption.trim();
+  if (msg.videoMessage?.caption) return msg.videoMessage.caption.trim();
+  if (msg.documentMessage?.caption) return msg.documentMessage.caption.trim();
+
+  if (msg.buttonsMessage?.text || msg.buttonsMessage?.headerText) {
+    return (msg.buttonsMessage.text || msg.buttonsMessage.headerText).trim();
+  }
+  if (msg.templateMessage?.hydratedTemplate?.hydratedContentText) {
+    return msg.templateMessage.hydratedTemplate.hydratedContentText.trim();
+  }
+  if (msg.interactiveMessage?.body?.text) return msg.interactiveMessage.body.text.trim();
+
+  if (msg.listMessage?.description) return msg.listMessage.description.trim();
+
+  return '';
+}
+
+// ────────────────────────────────────────────────
+//          VOICE SETTINGS - customize here
+// ────────────────────────────────────────────────
+const DEFAULT_VOICE_MODEL = "ana";           // Change to: nahida, nami, taylor_swift, goku, etc.
+
+// ────────────────────────────────────────────────
+//          MAIN CHATBOT HANDLER (sasa inajibu kama mtu halisi)
+// ────────────────────────────────────────────────
 async function handleChatbotMessage(sock, chatId, message) {
   try {
+    if (!chatId || message.key?.fromMe) return;
+
     const state = loadState();
-    const isGroup = chatId.endsWith('@g.us');
-    if (!(isGroup ? state.perGroup[chatId]?.enabled : state.private)) return;
+    if (!(await isEnabledForChat(state, chatId))) return;
 
     const userText = extractMessageText(message);
     if (!userText) return;
 
-    await sock.sendPresenceUpdate('composing', chatId);
+    console.log(`[Chatbot] \( {chatId} → " \){userText.substring(0, 70)}${userText.length > 70 ? '...' : ''}"`);
 
-    const history = state.memory[chatId] || [];
-    const reply = await callAI(userText, history);
+    // Typing effect (natural kidogo)
+    try {
+      await sock.sendPresenceUpdate('composing', chatId);
+      await new Promise(r => setTimeout(r, 600 + Math.random() * 800));
+    } catch {}
 
-    await sock.sendMessage(chatId, { text: reply }, { quoted: message });
+    // ──── SYSTEM PROMPT (hii inafanya bot isijulikane kama AI) ────
+    const systemPrompt = 
+      "You are a chill Tanzanian friend chatting on WhatsApp and you name Mickidady. " +
+      "Speak naturally like a real person from Dar: short sentences, local slang (poa, niaje, bro, pole, haha, etc.), emojis when it fits. " +
+      "Never ever mention AI, bot, robot, artificial intelligence, or anything techy. " +
+      "Be fun, playful, and reply exactly how a normal guy/girl from Tanzania would reply. Keep replies natural and short.";
 
-    // Update memory (hifadhi mwisho 10 tu ili kuepuka mzigo)
-    state.memory[chatId] = [...history, { role: 'user', content: userText }, { role: 'assistant', content: reply }].slice(-10);
-    saveState(state);
+    const fullPrompt = `${systemPrompt}\n\nUser: ${userText}`;
+    const encoded = encodeURIComponent(fullPrompt);
+
+    const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encoded}`;
+
+    let apiResult = null;
+    try {
+      const res = await fetch(apiUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(30000)
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      apiResult = data?.response || data?.message || data?.result || 
+                  data?.answer || data?.text || data?.content || 
+                  (typeof data === 'string' ? data : null);
+    } catch (err) {
+      console.error('[AI API failed]', err.message);
+    }
+
+    if (!apiResult) {
+      await sock.sendMessage(chatId, { 
+        text: 'Pole msee, niaje? Jaribu tena baadaye kidogo 😅' 
+      }, { quoted: message });
+      return;
+    }
+
+    const replyText = String(apiResult).trim();
+
+    // ──── Send text first (kama mtu halisi) ────
+    const textMsg = await sock.sendMessage(chatId, { 
+      text: replyText 
+    }, { quoted: message });
+
+    // ──── Voice note (inafanya iwe 100% kama mtu) ────
+    try {
+      if (replyText.length < 10 || replyText.length > 1100) {
+        console.log("[Voice] Skipped - too short/long");
+        return;
+      }
+
+      const voiceApiUrl = `https://api.agatz.xyz/api/voiceover?text=\( {encodeURIComponent(replyText)}&model= \){DEFAULT_VOICE_MODEL}`;
+
+      const response = await axios.get(voiceApiUrl, { timeout: 35000 });
+
+      if (response.data?.status === 200 && response.data?.data?.oss_url) {
+        const audioUrl = response.data.data.oss_url;
+
+        await sock.sendMessage(chatId, {
+          audio: { url: audioUrl },
+          mimetype: 'audio/mpeg',
+          ptt: true,
+          fileName: 'Voice.mp3'
+        }, { quoted: textMsg });
+
+        console.log(`[Voice] Sent using ${DEFAULT_VOICE_MODEL}`);
+      }
+    } catch (voiceErr) {
+      console.error("[Voice failed]", voiceErr.message);
+      // Text already sent, hakuna shida
+    }
+
   } catch (err) {
     console.error('Chatbot error:', err);
+    try {
+      await sock.sendMessage(chatId, { 
+        text: 'Pole sana, kuna shida kidogo. Jaribu tena 😊' 
+      }, { quoted: message });
+    } catch {}
   }
 }
 
-async function groupChatbotToggleCommand(sock, chatId, message, args = '') {
-  const arg = args.trim().toLowerCase();
-  const state = loadState();
+async function groupChatbotToggleCommand(sock, chatId, message, args) {
+  try {
+    const argStr = (args || '').trim().toLowerCase();
 
-  if (arg.startsWith('private')) {
-    const sub = arg.split(/\s+/)[1] || '';
-    state.private = (sub === 'on');
+    if (argStr.startsWith('private')) {
+      const parts = argStr.split(/\s+/);
+      const sub = parts[1];
+      if (!sub || !['on', 'off', 'status'].includes(sub)) {
+        return sock.sendMessage(chatId, { text: 'Usage: .chatbot private on|off|status' }, { quoted: message });
+      }
+
+      const sender = message.key.participant || message.key.remoteJid;
+      const isOwner = message.key.fromMe || await require('../lib/isOwner')(sender, sock, chatId);
+      if (!isOwner) return sock.sendMessage(chatId, { text: 'Owner only.' }, { quoted: message });
+
+      const state = loadState();
+      if (sub === 'status') {
+        return sock.sendMessage(chatId, { text: `Private mode: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: message });
+      }
+
+      state.private = sub === 'on';
+      saveState(state);
+      return sock.sendMessage(chatId, { text: `Private mode: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: message });
+    }
+
+    if (!chatId.endsWith('@g.us')) {
+      return sock.sendMessage(chatId, { text: 'Use in groups or .chatbot private ...' }, { quoted: message });
+    }
+
+    const sender = message.key.participant || message.key.remoteJid;
+    const adminInfo = await isAdmin(sock, chatId, sender);
+    if (!adminInfo.isSenderAdmin && !message.key.fromMe) {
+      return sock.sendMessage(chatId, { text: 'Admins only' }, { quoted: message });
+    }
+
+    const onoff = argStr;
+    if (!onoff || !['on', 'off', 'status'].includes(onoff)) {
+      return sock.sendMessage(chatId, { text: 'Usage: .chatbot on|off|status' }, { quoted: message });
+    }
+
+    const state = loadState();
+    state.perGroup = state.perGroup || {};
+
+    if (onoff === 'status') {
+      const lib = require('../lib/index');
+      const cfg = await lib.getChatbot(chatId);
+      const enabled = state.perGroup[chatId]?.enabled ?? !!(cfg && cfg.enabled);
+      return sock.sendMessage(chatId, { text: `Chatbot: *${enabled ? 'ON' : 'OFF'}*` }, { quoted: message });
+    }
+
+    const lib = require('../lib/index');
+    state.perGroup[chatId] = state.perGroup[chatId] || {};
+    state.perGroup[chatId].enabled = onoff === 'on';
     saveState(state);
-    return sock.sendMessage(chatId, { text: `Chatbot binafsi: *${state.private ? 'ON' : 'OFF'}*` });
-  }
 
-  // ... (Sema code nyingine ya toggle kama ilivyo hapo awali)
-  if (arg === 'on') state.perGroup[chatId] = { enabled: true };
-  else if (arg === 'off') state.perGroup[chatId] = { enabled: false };
-  saveState(state);
-  await sock.sendMessage(chatId, { text: `Group chatbot sasa ni: *${state.perGroup[chatId]?.enabled ? 'ON' : 'OFF'}*` });
+    try {
+      if (state.perGroup[chatId].enabled) await lib.setChatbot(chatId, true);
+      else await lib.removeChatbot(chatId);
+    } catch (e) {
+      console.log('Lib sync failed:', e?.message);
+    }
+
+    return sock.sendMessage(chatId, { 
+      text: `Chatbot is now *${state.perGroup[chatId].enabled ? 'ON' : 'OFF'}*` 
+    }, { quoted: message });
+
+  } catch (e) {
+    console.error('Toggle command error:', e);
+    sock.sendMessage(chatId, { text: 'Command failed.' }, { quoted: message });
+  }
 }
 
-module.exports = { handleChatbotMessage, groupChatbotToggleCommand, callAI };
+module.exports = {
+  handleChatbotMessage,
+  groupChatbotToggleCommand
+};
