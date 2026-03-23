@@ -1,24 +1,19 @@
 const fs = require('fs/promises');
+const fsSync = require('fs');
 const path = require('path');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 
 const isOwnerOrSudo = require('../lib/isOwner');
-const settings = require('../settings');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STATUS FORWARD: Forward status updates to bot's own number
+// STATUS AUTO-DOWNLOADER ONLY (SERVER SIDE)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CONFIG_FILE = path.join(__dirname, '../data/statusforward.json');
-const SYNC_DELAY = settings.syncDelay || 6;
-
-let BOT_NUMBER = null;
-let TARGET_JID = null;
+const DOWNLOAD_DIR = path.join(__dirname, '../downloads/statuses');
 
 const DEFAULT_CONFIG = Object.freeze({
     enabled: true,
-    forwardDelayMinMs: SYNC_DELAY * 200,
-    forwardDelayMaxMs: SYNC_DELAY * 600,
     retryAttempts: 2,
     maxProcessedCache: 2500
 });
@@ -29,14 +24,10 @@ const processedStatusIds = new Set();
 // ────────────────────────────────────────────────
 async function loadConfig() {
     if (configCache) return configCache;
-
     try {
         const data = await fs.readFile(CONFIG_FILE, 'utf8');
         configCache = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
     } catch (err) {
-        if (err.code !== 'ENOENT') {
-            console.debug('[StatusForward] Config load error', err.message);
-        }
         configCache = { ...DEFAULT_CONFIG };
         await saveConfig(configCache);
     }
@@ -49,167 +40,73 @@ async function saveConfig(updates) {
         await fs.mkdir(path.dirname(CONFIG_FILE), { recursive: true });
         await fs.writeFile(CONFIG_FILE, JSON.stringify(configCache, null, 2));
     } catch (err) {
-        console.error('[StatusForward] Save config failed', err.message);
+        console.error('[StatusDownloader] Save config failed', err.message);
     }
 }
 
-/**
- * Extract phone number from JID
- */
 function extractPhoneNumber(key) {
-    if (!key) return 'unknown';
     const jid = key.participant || key.remoteJid || '';
     const match = jid.match(/^(\d{9,15})/);
     return match ? match[1] : 'unknown';
 }
 
-/**
- * Get formatted time string
- */
-function getFormattedTime() {
-    return new Date().toLocaleString('en-US', {
-        timeZone: 'Africa/Dar_es_Salaam',
-        weekday: 'short',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-    });
-}
-
-/**
- * Get random delay in milliseconds
- */
-function randomDelay(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
 // ────────────────────────────────────────────────
 /**
- * Forward status (image or video) to bot's own number
+ * Core Downloader Logic
  */
 async function forwardStatus(sock, msg) {
     try {
         if (!msg?.message || !msg.key?.id) return;
 
-        // Initialize target JID if needed
-        if (!TARGET_JID) {
-            if (sock.user?.id) {
-                BOT_NUMBER = sock.user.id.split(':')[0];
-                TARGET_JID = `${BOT_NUMBER}@s.whatsapp.net`;
-                console.debug(`[StatusForward] Target set to ${TARGET_JID}`);
-            } else {
-                console.debug('[StatusForward] Bot ID not yet available');
-                return;
-            }
-        }
-
         const msgId = msg.key.id;
-
-        // Check if already processed
         if (processedStatusIds.has(msgId)) return;
         processedStatusIds.add(msgId);
 
-        // Cleanup cache when too large
-        if (processedStatusIds.size > (configCache?.maxProcessedCache || 2500)) {
+        // Cache cleanup
+        if (processedStatusIds.size > 2500) {
             const idsArray = Array.from(processedStatusIds);
             processedStatusIds.clear();
             idsArray.slice(-1000).forEach(id => processedStatusIds.add(id));
         }
 
-        // Only handle images and videos
         const isImage = !!msg.message?.imageMessage;
         const isVideo = !!msg.message?.videoMessage;
         if (!isImage && !isVideo) return;
 
-        const participant = msg.key.participant || msg.key.remoteJid;
-        let senderName = extractPhoneNumber(msg.key);
+        const cfg = await loadConfig();
+        if (!cfg.enabled) return;
 
-        // Try to get contact name
-        try {
-            if (participant && sock.getContactById) {
-                const contact = await sock.getContactById(participant).catch(() => null);
-                if (contact?.notify || contact?.verifiedName || contact?.name) {
-                    senderName = contact.notify || contact.verifiedName || contact.name;
-                }
-            }
-        } catch (err) {
-            // Silently ignore
-        }
+        const senderNum = extractPhoneNumber(msg.key);
 
-        // Get caption if present
-        let captionText = '';
-        if (isImage && msg.message.imageMessage?.caption) {
-            captionText = msg.message.imageMessage.caption.trim();
-        } else if (isVideo && msg.message.videoMessage?.caption) {
-            captionText = msg.message.videoMessage.caption.trim();
-        }
-
-        const timeStr = getFormattedTime();
-        const mediaType = isImage ? 'Photo' : 'Video';
-
-        // Build caption
-        const MAX_CAPTION_LEN = 1000;
-        const safeCaptionText = captionText ? captionText.replace(/\r?\n/g, ' ').trim() : '';
-        const truncatedCaption = safeCaptionText && safeCaptionText.length > MAX_CAPTION_LEN
-            ? safeCaptionText.slice(0, MAX_CAPTION_LEN - 1) + '…'
-            : safeCaptionText;
-
-        const caption = [
-            '✨ *New Status* ✨',
-            '══════════════════════',
-            `👤 ${senderName}`,
-            `🕒 ${timeStr}`,
-            truncatedCaption ? `💬 ${truncatedCaption}` : null,
-            '══════════════════════',
-            `Type: ${mediaType}`
-        ].filter(Boolean).join('\n');
-
-        console.debug(`[StatusForward] Forwarding ${mediaType} from ${senderName}`);
-
-        // Download media with retry
+        // Download Media
         let buffer = null;
         let attempts = 0;
-
-        while (!buffer && attempts < configCache.retryAttempts) {
+        while (!buffer && attempts < cfg.retryAttempts) {
             attempts++;
             try {
                 buffer = await downloadMediaMessage(msg, 'buffer', {}, {
                     logger: console,
                     reuploadRequest: sock.updateMediaMessage
                 });
-
-                if (buffer && buffer.length > 800) break;
+                if (buffer && buffer.length > 500) break;
             } catch (err) {
-                console.debug(`[StatusForward] Retry ${attempts}/${configCache.retryAttempts}`, err.message);
-                const backoffDelay = Math.min(1200 * Math.pow(1.5, attempts - 1), 5000);
-                await new Promise(r => setTimeout(r, backoffDelay + randomDelay(0, 500)));
+                await new Promise(r => setTimeout(r, 1000));
             }
         }
 
-        if (!buffer || buffer.length < 800) {
-            console.error(`[StatusForward] Failed to download from ${senderName}`);
-            await sock.sendMessage(TARGET_JID, {
-                text: `⚠️ *Download Failed*\nFrom: ${senderName}\nTime: ${timeStr}\nType: ${mediaType}`
-            }).catch(() => {});
-            return;
-        }
+        if (!buffer || buffer.length < 500) return;
 
-        // Send to bot number
-        await sock.sendMessage(TARGET_JID, {
-            [isImage ? 'image' : 'video']: buffer,
-            mimetype: isImage
-                ? (msg.message.imageMessage?.mimetype || 'image/jpeg')
-                : (msg.message.videoMessage?.mimetype || 'video/mp4'),
-            caption: caption,
-            fileName: `status_${Date.now()}.${isImage ? 'jpg' : 'mp4'}`
-        });
+        // [SAVE TO SERVER]
+        if (!fsSync.existsSync(DOWNLOAD_DIR)) fsSync.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+        const ext = isImage ? '.jpg' : '.mp4';
+        const fileName = `status_${senderNum}_${Date.now()}${ext}`;
+        const filePath = path.join(DOWNLOAD_DIR, fileName);
 
-        console.debug(`[StatusForward] Success: ${mediaType} from ${senderName}`);
+        fsSync.writeFileSync(filePath, buffer);
+        console.log(`✅ [AutoStatus] Saved: ${fileName}`);
+
     } catch (err) {
-        console.error('[StatusForward] Forward error', err.message);
+        console.error('[StatusDownloader] Error:', err.message);
     }
 }
 
@@ -221,107 +118,50 @@ async function handleStatusForward(sock, ev) {
     try {
         const cfg = await loadConfig();
         if (!cfg.enabled) return;
-
         if (!ev.messages?.length) return;
 
         const m = ev.messages[0];
-        if (m.key?.remoteJid !== 'status@broadcast' || !m.message) return;
+        if (m.key?.remoteJid !== 'status@broadcast') return;
 
-        // Forward with timeout
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000));
-        await Promise.race([forwardStatus(sock, m), timeoutPromise]);
+        await forwardStatus(sock, m);
     } catch (err) {
-        if (err.message !== 'timeout') {
-            console.debug('[StatusForward] Handler error', err.message);
-        }
+        console.debug('[StatusDownloader] Handler error', err.message);
     }
 }
 
 // ────────────────────────────────────────────────
 /**
- * Command: .statusforward [on|off|status|restart]
+ * Command: .statusforward [on|off]
  */
 async function statusForwardCommand(sock, chatId, msg, args = []) {
     try {
         const sender = msg.key.participant || msg.key.remoteJid;
         const isAllowed = msg.key.fromMe || (await isOwnerOrSudo(sender, sock, chatId));
+        if (!isAllowed) return;
 
-        if (!isAllowed) {
-            return sock.sendMessage(chatId, {
-                text: '⛔ *Only owner/sudo can use this*'
-            });
+        const cmd = (args[0] || '').toLowerCase();
+
+        if (cmd === 'on') {
+            await saveConfig({ enabled: true });
+            return sock.sendMessage(chatId, { text: '✅ *Auto Status Downloader:* Sasa imewashwa.' });
         }
 
-        // Initialize target JID
-        if (!TARGET_JID && sock.user?.id) {
-            BOT_NUMBER = sock.user.id.split(':')[0];
-            TARGET_JID = `${BOT_NUMBER}@s.whatsapp.net`;
+        if (cmd === 'off') {
+            await saveConfig({ enabled: false });
+            return sock.sendMessage(chatId, { text: '❌ *Auto Status Downloader:* Sasa imezimwa.' });
         }
 
         const cfg = await loadConfig();
-
-        // No args: show current status
-        if (!args.length) {
-            return sock.sendMessage(chatId, {
-                text: `📤 *Status Forwarding Control*\n\n` +
-                      `Status       : ${cfg.enabled ? '✅ ON' : '❌ OFF'}\n` +
-                      `Target       : ${TARGET_JID || 'Bot not connected yet'}\n` +
-                      `Retry Count  : ${cfg.retryAttempts}\n\n` +
-                      `Usage:\n` +
-                      `  .statusforward on\n` +
-                      `  .statusforward off\n` +
-                      `  .statusforward status\n` +
-                      `  .statusforward restart`
-            });
-        }
-
-        const cmd = args[0].toLowerCase();
-
-        // Turn on
-        if (cmd === 'on') {
-            await saveConfig({ enabled: true });
-            return sock.sendMessage(chatId, {
-                text: '✅ Status forwarding → **ON**'
-            });
-        }
-
-        // Turn off
-        if (cmd === 'off') {
-            await saveConfig({ enabled: false });
-            return sock.sendMessage(chatId, {
-                text: '❌ Status forwarding → **OFF**'
-            });
-        }
-
-        // Show config
-        if (cmd === 'status') {
-            return sock.sendMessage(chatId, {
-                text: `📊 *Current Config*\n\n\`\`\`${JSON.stringify(cfg, null, 2)}\`\`\`\n\nTarget: ${TARGET_JID || 'Not set'}`
-            });
-        }
-
-        // Restart (clear cache)
-        if (cmd === 'restart') {
-            processedStatusIds.clear();
-            configCache = null;
-            await loadConfig();
-            return sock.sendMessage(chatId, {
-                text: '🔄 Status forward restarted\n✅ Cache cleared & config reloaded'
-            });
-        }
-
-        return sock.sendMessage(chatId, {
-            text: '❌ Unknown command\n\nUse: .statusforward'
+        return sock.sendMessage(chatId, { 
+            text: `📊 *Status Downloader:* ${cfg.enabled ? 'ON' : 'OFF'}\nFolder: /downloads/statuses` 
         });
+
     } catch (err) {
-        console.error('[StatusForward] Command error', err.message);
-        return sock.sendMessage(chatId, {
-            text: '❌ Error executing command'
-        });
+        console.error('[StatusDownloader] Command error', err.message);
     }
 }
 
-// ────────────────────────────────────────────────
+// EXPORTS
 module.exports = {
     statusForwardCommand,
     handleStatusForward,
