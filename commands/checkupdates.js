@@ -3,7 +3,6 @@ const isOwnerOrSudo = require('../lib/isOwner');
 const fs = require('fs/promises');
 const path = require('path');
 
-// Auto-reminder config
 const REMINDER_FILE = path.join(__dirname, '../data/updateReminder.json');
 let reminderCache = null;
 
@@ -28,114 +27,76 @@ async function saveReminder() {
     }
 }
 
-// Calculate hash to detect if update is new
 function generateUpdateHash(files, mode) {
     const summary = `${mode}:${files.length}:${files.slice(0, 3).join(',')}`;
     return Buffer.from(summary).toString('base64');
 }
 
-// Format file changes into readable info
+// --- MABORESHO YA CATEGORIZATION ---
 function categorizeChanges(files) {
     const categories = {
         commands: [],
-        core: [],
+        core: [], // index.js, main.js, package.json nk.
         lib: [],
         other: []
     };
 
     files.forEach(f => {
-        if (f.startsWith('commands/')) categories.commands.push(f);
-        else if (['index.js', 'main.js', 'server.js', 'config.js', 'settings.js'].includes(f)) categories.core.push(f);
-        else if (f.startsWith('lib/')) categories.lib.push(f);
-        else categories.other.push(f);
+        const fileName = f.trim();
+        if (fileName.startsWith('commands/')) {
+            categories.commands.push(fileName.replace('commands/', ''));
+        } else if (['index.js', 'main.js', 'package.json', 'server.js', 'settings.js', 'config.js'].includes(fileName)) {
+            categories.core.push(fileName);
+        } else if (fileName.startsWith('lib/')) {
+            categories.lib.push(fileName.replace('lib/', ''));
+        } else {
+            categories.other.push(fileName);
+        }
     });
 
     return categories;
 }
 
-// Create detailed update info message
+// --- MABORESHO YA FORMATTING ---
 function formatUpdateInfo(res) {
-    let message = '🔄 *UPDATE CHECK RESULT*\n\n';
-
-    if (!res || res.mode === 'none') {
-        return '✅ *No updates available* — Your bot is up to date!';
+    if (!res || res.mode === 'none' || !res.available) {
+        return '✅ *Mfumo upo vizuri* — Bot yako haina update mpya kwa sasa.';
     }
 
-    const updateType = res.mode === 'git' ? 'GIT' : (res.mode === 'zip' ? 'ZIP' : res.mode);
-    message += `📦 *Update Type:* ${updateType}\n`;
-    const timeStr = new Date().toLocaleString('en-US', {
-        timeZone: 'Africa/Dar_es_Salaam',
-        hour12: true,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-    message += `📅 *Time:* ${timeStr}\n\n`;
+    let message = '🔄 *TAARIFA ZA UPDATE MPYA*\n\n';
+    const timeStr = new Date().toLocaleString('en-TZ', { timeZone: 'Africa/Dar_es_Salaam' });
+    message += `📅 *Muda:* ${timeStr}\n`;
+    message += `📦 *Aina:* ${res.mode.toUpperCase()}\n━━━━━━━━━━━━━━━━━━\n\n`;
 
-    // Helper to pretty-list up to N items
-    function prettyList(arr, limit = 6) {
-        if (!arr || arr.length === 0) return '';
-        if (arr.length <= limit) return arr.join(', ');
-        return `${arr.slice(0, limit).join(', ')} +${arr.length - limit}`;
-    }
-
-    // Build detailed location report for given file array
-    function locationReport(files) {
-        const flat = files.map(f => f.trim()).filter(Boolean);
-        const categories = categorizeChanges(flat);
-        let out = '';
-        if (categories.commands.length) out += `• Commands (${categories.commands.length}): ${prettyList(categories.commands)}\n`;
-        if (categories.lib.length) out += `• Lib (${categories.lib.length}): ${prettyList(categories.lib)}\n`;
-        if (categories.core.length) out += `• Core (${categories.core.length}): ${prettyList(categories.core)}\n`;
-        if (categories.other.length) out += `• Other (${categories.other.length}): ${prettyList(categories.other)}\n`;
-        return out || '• No relevant changes detected\n';
-    }
-
+    let allFiles = [];
     if (res.mode === 'git') {
-        const raw = res.files || '';
-        const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-        // Parse git status lines like: 'M\tpath/to/file'
-        const paths = lines.map(l => {
-            // split on whitespace / tab after status
-            const m = l.match(/^[A-Z]+\s+\t?(.+)$/i);
-            if (m && m[1]) return m[1].trim();
-            // Fallback: take last token
-            const parts = l.split(/\s+/);
-            return parts[parts.length - 1];
-        }).filter(Boolean);
-
-        if (!res.available || paths.length === 0) {
-            return `✅ *No updates available* — All files are up to date`;
-        }
-
-        message += `🟢 *STATUS:* UPDATE AVAILABLE\n\n`;
-        message += `📊 *Changes Summary:*\n`;
-        message += `  • Total files changed: ${paths.length}\n`;
-        message += locationReport(paths);
-        message += `\n💡 *Use .update to install now*`;
-        return message;
+        const lines = res.files.split('\n').filter(Boolean);
+        allFiles = lines.map(l => {
+            const m = l.match(/^[A-Z\s]+\t?(.+)$/i);
+            return m ? m[1].trim() : l.split(/\s+/).pop();
+        });
+    } else if (res.mode === 'zip' && res.changes) {
+        allFiles = [...(res.changes.added || []), ...(res.changes.modified || []), ...(res.changes.removed || [])];
     }
 
-    if (res.mode === 'zip') {
-        if (!res.available) return `✅ *No updates available* — Your bot is up to date`;
+    const cat = categorizeChanges(allFiles);
 
-        message += `🟢 *STATUS:* UPDATE AVAILABLE\n\n`;
-        const meta = res.remoteMeta || {};
-        message += `📁 *URL:* ${meta.url || 'Not available'}\n`;
+    message += `📊 *Mafaili Yaliyobadilika:* (${allFiles.length})\n\n`;
 
-        if (res.changes) {
-            const { added = [], removed = [], modified = [] } = res.changes;
-            const all = [...added, ...removed, ...modified].map(f => f.trim()).filter(Boolean);
-            message += `\n📊 *Changes Summary:*\n`;
-            message += `  • Total files affected: ${all.length}\n`;
-            message += `  • Added: ${added.length}  • Modified: ${modified.length}  • Removed: ${removed.length}\n\n`;
-            message += locationReport(all);
-        }
-
-        message += `\n💡 *Use .update to install now*`;
-        return message;
+    if (cat.core.length > 0) {
+        message += `⚙️ *Core Files (Muhimu):*\n└ ${cat.core.join(', ')}\n\n`;
+    }
+    if (cat.commands.length > 0) {
+        message += `🛠️ *Commands Zilizoongezwa/Badilishwa:*\n└ ${cat.commands.join(', ')}\n\n`;
+    }
+    if (cat.lib.length > 0) {
+        message += `📚 *Library Updates:*\n└ ${cat.lib.join(', ')}\n\n`;
+    }
+    if (cat.other.length > 0) {
+        message += `📁 *Mengineyo:*\n└ ${cat.other.slice(0, 5).join(', ')}${cat.other.length > 5 ? '...' : ''}\n\n`;
     }
 
+    message += `━━━━━━━━━━━━━━━━━━\n💡 *Tumia .update sasa hivi kuweka mabadiliko haya.*`;
     return message;
 }
 
@@ -143,96 +104,26 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
     const senderId = message.key.participant || message.key.remoteJid;
     const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
 
-    if (!message.key.fromMe && !isOwner) {
-        await sock.sendMessage(chatId, { text: 'Only bot owner or sudo can use .checkupdates' }, { quoted: message });
-        return;
-    }
-
-    const reminder = await loadReminder();
-    const cmd = (args[0] || '').toLowerCase();
-
-    // Check for update reminders if auto-enabled
-    if (cmd === 'auto') {
-        const enabled = reminder.autoReminder = !reminder.autoReminder;
-        await saveReminder();
-        await sock.sendMessage(chatId, {
-            text: `✅ Auto update reminders ${enabled ? 'ENABLED' : 'DISABLED'} — I will notify you every time an update is available`
-        }, { quoted: message });
-        return;
-    }
-
-    // Show reminder status
-    if (cmd === 'status') {
-        const status = reminder.autoReminder ? '✅ ENABLED' : '❌ DISABLED';
-        await sock.sendMessage(chatId, {
-            text: `📢 *Update Reminder Status:* ${status}\n\n💡 Use .checkupdates auto to toggle`
-        }, { quoted: message });
-        return;
-    }
+    if (!message.key.fromMe && !isOwner) return;
 
     try {
         const res = await updateCommand.checkUpdates();
-        const updateHash = res && res.files ? generateUpdateHash(res.files.split('\n'), res.mode) : null;
-        
-        // Check for npm/node version conflicts
-        let npmWarning = '';
-        try {
-            const { exec } = require('child_process');
-            const nodeVersion = await new Promise((resolve, reject) => {
-                exec('node --version', (err, stdout) => {
-                    if (err) reject(err);
-                    else resolve(stdout.toString().trim());
-                });
-            });
-            const npmVersion = await new Promise((resolve, reject) => {
-                exec('npm --version', (err, stdout) => {
-                    if (err) reject(err);
-                    else resolve(stdout.toString().trim());
-                });
-            });
-            
-            // Check for version compatibility issues
-            const nodeNumeric = parseInt(nodeVersion.slice(1).split('.')[0]);
-            const npmNumeric = parseInt(npmVersion.split('.')[0]);
-            
-            if (nodeNumeric < 14 || npmNumeric < 6) {
-                npmWarning = '\n⚠️ *Warning:* Node/NPM version may be outdated\nUpdate manually with: node/npm official installer';
-            }
-        } catch (err) {
-            // Silently ignore version check errors
-        }
-        
-        // Format and send update info
         const updateMsg = formatUpdateInfo(res);
-        await sock.sendMessage(chatId, { text: updateMsg + npmWarning }, { quoted: message });
+        
+        await sock.sendMessage(chatId, { text: updateMsg }, { quoted: message });
 
-        // Auto-reminder logic
+        const reminder = await loadReminder();
         if (res && res.available) {
-            // Only remind if it's a new update (different hash)
-            if (updateHash !== reminder.updateHash) {
+            const hash = generateUpdateHash(res.files || '', res.mode);
+            if (hash !== reminder.updateHash) {
                 reminder.updateFound = true;
-                reminder.updateHash = updateHash;
-                reminder.lastCheck = new Date().toISOString();
+                reminder.updateHash = hash;
                 await saveReminder();
-
-                // Send quick reminder
-                if (reminder.autoReminder) {
-                    await sock.sendMessage(chatId, {
-                        text: `🔔 *QUICK REMINDER*\n\nA new update is available! Type .update to install it now.`
-                    });
-                }
             }
-        } else {
-            reminder.updateFound = false;
-            reminder.updateHash = null;
-            await saveReminder();
         }
-
     } catch (err) {
-        console.error('CheckUpdates failed:', err);
-        await sock.sendMessage(chatId, {
-            text: `❌ *Update Check Failed*\n\n${String(err.message || err).slice(0, 300)}`
-        }, { quoted: message });
+        console.error(err);
+        await sock.sendMessage(chatId, { text: `❌ Kosa limetokea: ${err.message}` });
     }
 }
 
