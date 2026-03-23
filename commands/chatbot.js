@@ -15,7 +15,7 @@ function loadMemory() {
         const data = JSON.parse(fs.readFileSync(MEMORY_PATH, 'utf8'));
         const now = Date.now();
         let changed = false;
-        // Futa memory baada ya dakika 4 (240,000ms) ya ukimya
+        // Futa memory baada ya dakika 4 (240,000ms) ya ukimya kuzuia AI kuchoka
         for (const id in data) {
             if (data[id].lastUpdate && (now - data[id].lastUpdate > 240000)) {
                 delete data[id];
@@ -74,23 +74,27 @@ async function handleChatbotMessage(sock, chatId, message) {
         memory[chatId].chats.push({ role: "user", content: userText });
         memory[chatId].lastUpdate = Date.now();
 
-        // Tunza jumbe 6 tu za mwisho
+        // Tunza jumbe 6 tu za mwisho kwa ajili ya mtiririko
         if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
         const history = memory[chatId].chats
             .map(m => `${m.role === 'user' ? 'Yeye' : 'Mimi'}: ${m.content}`)
             .join("\n");
 
+        // Natural typing delay (sekunde 2-3)
         await sock.sendPresenceUpdate('composing', chatId);
+        await new Promise(resolve => setTimeout(resolve, 2500));
 
-        // --- SYSTEM PROMPT (Kawaida, sio AI, vibe la kishkaji kistaarabu) ---
+        // --- PROMPT ULIYOIELEKEZA (PERSONALIZED) ---
         const systemPrompt = 
-            "Wewe unaitwa Mickey, kijana wa Kitanzania unayeishi Dar. Chati kawaida kama binadamu, " +
-            "tumia lugha ya mtaani kiasi (mfano: poa, mzee, freshi, niaje, man, bro, kiongozi) lakini uwe na heshima. " +
-            "Usiandike maelezo marefu kama robot. Jibu kifupi na kwa wepesi. Usiseme wewe ni AI wala bot. " +
-            "Kama mtu akisema mambo, jibu poa mzee inakuaje. Endeleza stori kulingana na mlichoongea kabla.";
+            "Wewe unaitwa Mickey, kijana wa kawaida unayeishi Dar umesoma shule ya msingi kingugi iliopo mbagala secondary ukasoma shule inaitwa karibuni iko chang'ombe kwa sasa unakaa mbande. " +
+            "Chati kishkaji kistaarabu (niaje, poa, freshi, shega). " +
+            "Usiandike maelezo marefu kama robot, jibu fupi fupi. " +
+            "Usiwahi kusema wewe ni AI; jitambulishe kama Mickey. " +
+            "Kuwa chill, usiwe fun kupitiliza hadi kuleta mashaka. " +
+            "Endeleza stori kulingana na mlichoongea hapo juu.";
 
-        const fullPrompt = `${systemPrompt}\n\nStori iliyopita:\n${history}\nMimi (Mickey):`;
+        const fullPrompt = `${systemPrompt}\n\nSTORI ILIYOPITA:\n${history}\nMimi (Mickey):`;
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
 
         const res = await fetch(apiUrl).then(r => r.json()).catch(() => null);
@@ -102,22 +106,7 @@ async function handleChatbotMessage(sock, chatId, message) {
         saveMemory(memory);
 
         // Tuma Jibu la Text
-        const textMsg = await sock.sendMessage(chatId, { text: reply }, { quoted: message });
-
-        // Tuma Voice Note (Optional: Kama unataka kionekane zaidi ni binadamu)
-        try {
-            if (reply.length < 150) {
-                const voiceApi = `https://api.agatz.xyz/api/voiceover?text=${encodeURIComponent(reply)}&model=ana`;
-                const vRes = await axios.get(voiceApi);
-                if (vRes.data?.data?.oss_url) {
-                    await sock.sendMessage(chatId, {
-                        audio: { url: vRes.data.data.oss_url },
-                        mimetype: 'audio/mpeg',
-                        ptt: true
-                    }, { quoted: textMsg });
-                }
-            }
-        } catch {}
+        await sock.sendMessage(chatId, { text: reply }, { quoted: message });
 
     } catch (e) { console.error('Chatbot Handle Error:', e); }
 }
@@ -130,9 +119,9 @@ async function groupChatbotToggleCommand(sock, chatId, message, args) {
         const sender = message.key.participant || message.key.remoteJid;
         const isOwner = message.key.fromMe || await require('../lib/isOwner')(sender, sock, chatId);
 
-        // Private Control
+        // Private / Inbox Control
         if (fullArgs.includes('private')) {
-            if (!isOwner) return sock.sendMessage(chatId, { text: '❌ Amri hii ni kwa Owner tu.' }, { quoted: message });
+            if (!isOwner) return sock.sendMessage(chatId, { text: '❌ Owner tu ndo anaruhusiwa.' }, { quoted: message });
             state.private = fullArgs.includes('on');
             saveState(state);
             return sock.sendMessage(chatId, { text: `✅ Chatbot Inbox sasa ipo: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: message });
@@ -141,16 +130,16 @@ async function groupChatbotToggleCommand(sock, chatId, message, args) {
         // Group Control
         if (chatId.endsWith('@g.us')) {
             const adminInfo = await isAdmin(sock, chatId, sender);
-            if (!adminInfo.isSenderAdmin && !isOwner) return sock.sendMessage(chatId, { text: '❌ Admins tu ndio wanaweza kuwasha hapa.' }, { quoted: message });
+            if (!adminInfo.isSenderAdmin && !isOwner) return sock.sendMessage(chatId, { text: '❌ Admins pekee.' }, { quoted: message });
             
             if (fullArgs === 'on' || fullArgs === 'off') {
                 state.perGroup[chatId] = { enabled: (fullArgs === 'on') };
                 saveState(state);
-                return sock.sendMessage(chatId, { text: `✅ Chatbot Kundi sasa ipo: *${fullArgs.toUpperCase()}*` }, { quoted: message });
+                return sock.sendMessage(chatId, { text: `✅ Chatbot Group sasa ipo: *${fullArgs.toUpperCase()}*` }, { quoted: message });
             }
         }
 
-        return sock.sendMessage(chatId, { text: '💡 *Mwongozo:*\n.chatbot on|off\n.chatbot private on|off' }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '💡 *Matumizi:*\n.chatbot on/off\n.chatbot private on/off' }, { quoted: message });
     } catch (e) { console.error('Toggle Command Error:', e); }
 }
 
