@@ -33,14 +33,15 @@ const aliveCommand = async (conn, chatId, msg) => {
 ┃ ⏳ *Uptime:* ${formatUptime(process.uptime())}
 ┃ 🧠 *RAM:* ${usedRam.toFixed(1)}GB / ${totalRam.toFixed(0)}GB
 ┃ 🔧 *CPU:* ${os.cpus()[0]?.model.split('@')[0].trim()}
+┃ 🖥️ *OS:* ${os.platform()} (${os.arch()})
 ┃ 🟢 *Hali:* Stable & Active
 ╰━━━━━━━━━━━━━━━━━━┈⊷`;
 
         // ────────────────────────────────────────────────
-        // MBINU YA BUTTONS YENYE MEDIA (Interactive Message)
+        // MBINU YA LIST BUTTON (Interactive List Message)
         // ────────────────────────────────────────────────
         
-        const messageContent = {
+        const listMessage = {
             viewOnceMessage: {
                 message: {
                     interactiveMessage: {
@@ -53,29 +54,50 @@ const aliveCommand = async (conn, chatId, msg) => {
                             text: caption
                         },
                         footer: {
-                            text: "© 2026 Mickey Glitch Technology"
+                            text: "© 2026 Mickey Glitch Tech"
                         },
                         nativeFlowMessage: {
                             buttons: [
                                 {
-                                    name: "quick_reply",
+                                    name: "single_select",
                                     buttonParamsJson: JSON.stringify({
-                                        display_text: "📜 MAIN MENU",
-                                        id: ".menu"
-                                    })
-                                },
-                                {
-                                    name: "quick_reply",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "👤 OWNER",
-                                        id: ".owner"
-                                    })
-                                },
-                                {
-                                    name: "cta_url",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "📢 JOIN CHANNEL",
-                                        url: "https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A"
+                                        title: "SELECT HERE ⚡",
+                                        sections: [
+                                            {
+                                                title: "MAIN NAVIGATION",
+                                                rows: [
+                                                    {
+                                                        header: "📜 MENU",
+                                                        title: "Show All Commands",
+                                                        description: "Displays the bot main menu",
+                                                        id: ".menu"
+                                                    },
+                                                    {
+                                                        header: "👤 OWNER",
+                                                        title: "Contact Developer",
+                                                        description: "Get Mickey's contact info",
+                                                        id: ".owner"
+                                                    },
+                                                    {
+                                                        header: "📢 CHANNEL",
+                                                        title: "Join Official Channel",
+                                                        description: "Get latest bot updates",
+                                                        id: ".channel"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                title: "SUPPORT",
+                                                rows: [
+                                                    {
+                                                        header: "🛠️ SCRIPT",
+                                                        title: "Get Bot Source Code",
+                                                        description: "Github link for Mickey-v3",
+                                                        id: ".script"
+                                                    }
+                                                ]
+                                            }
+                                        ]
                                     })
                                 }
                             ]
@@ -83,7 +105,7 @@ const aliveCommand = async (conn, chatId, msg) => {
                         contextInfo: {
                             isForwarded: true,
                             forwardingScore: 999,
-                            showAdAttribution: true, // Imerudishwa (Restored)
+                            showAdAttribution: true,
                             forwardedNewsletterMessageInfo: {
                                 newsletterJid: '120363398106360290@newsletter',
                                 newsletterName: '🅼🅸🅲🅺🅴𝚈-𝐆𝐋𝐈𝐓𝐂𝐇 🚀',
@@ -95,13 +117,13 @@ const aliveCommand = async (conn, chatId, msg) => {
             }
         };
 
-        // Tuma ujumbe uliokamilika
-        await conn.relayMessage(chatId, messageContent, {});
+        // Tuma ujumbe uliokamilika kwa relayMessage
+        await conn.relayMessage(chatId, listMessage, {});
 
     } catch (e) {
         console.error('❌ Alive Error:', e);
-        // Fallback ikiwa interactive message itagoma
-        await conn.sendMessage(chatId, { image: { url: imageUrl }, caption: "Mickey is Alive!" });
+        // Fallback ikiwa kitu kitagoma
+        await conn.sendMessage(chatId, { text: `🟢 *Bot is Active!*` });
     }
 };
 
