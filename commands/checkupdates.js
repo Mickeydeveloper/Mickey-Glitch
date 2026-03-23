@@ -22,27 +22,33 @@ async function saveReminder() {
     try {
         await fs.mkdir(path.dirname(REMINDER_FILE), { recursive: true });
         await fs.writeFile(REMINDER_FILE, JSON.stringify(reminderCache, null, 2));
-    } catch (err) {
-        console.error('[UpdateReminder] Save failed:', err.message);
-    }
+    } catch (err) { console.error('[UpdateReminder] Error:', err.message); }
 }
 
 function generateUpdateHash(files, mode) {
-    const summary = `${mode}:${files.length}:${files.slice(0, 3).join(',')}`;
+    // Hakikisha files ni array kabla ya kutumia slice
+    const fileList = Array.isArray(files) ? files : String(files).split('\n').filter(Boolean);
+    const summary = `${mode}:${fileList.length}:${fileList.slice(0, 3).join(',')}`;
     return Buffer.from(summary).toString('base64');
 }
 
-// --- MABORESHO YA CATEGORIZATION ---
+// --- MABORESHO: CHUJA MAFAILI YASIYO NA LAZIMA ---
 function categorizeChanges(files) {
     const categories = {
         commands: [],
-        core: [], // index.js, main.js, package.json nk.
+        core: [],
         lib: [],
         other: []
     };
 
     files.forEach(f => {
         const fileName = f.trim();
+        
+        // 1. PUUZA (IGNORE) NPM NA NODE_MODULES
+        if (fileName.startsWith('.npm/') || fileName.includes('node_modules/') || fileName.includes('.cache')) {
+            return; 
+        }
+
         if (fileName.startsWith('commands/')) {
             categories.commands.push(fileName.replace('commands/', ''));
         } else if (['index.js', 'main.js', 'package.json', 'server.js', 'settings.js', 'config.js'].includes(fileName)) {
@@ -50,70 +56,70 @@ function categorizeChanges(files) {
         } else if (fileName.startsWith('lib/')) {
             categories.lib.push(fileName.replace('lib/', ''));
         } else {
-            categories.other.push(fileName);
+            // Usiongeze mafaili marefu sana ya cache hapa pia
+            if (fileName.length < 100) categories.other.push(fileName);
         }
     });
 
     return categories;
 }
 
-// --- MABORESHO YA FORMATTING ---
 function formatUpdateInfo(res) {
     if (!res || res.mode === 'none' || !res.available) {
         return '✅ *Mfumo upo vizuri* — Bot yako haina update mpya kwa sasa.';
     }
 
-    let message = '🔄 *TAARIFA ZA UPDATE MPYA*\n\n';
-    const timeStr = new Date().toLocaleString('en-TZ', { timeZone: 'Africa/Dar_es_Salaam' });
-    message += `📅 *Muda:* ${timeStr}\n`;
-    message += `📦 *Aina:* ${res.mode.toUpperCase()}\n━━━━━━━━━━━━━━━━━━\n\n`;
-
-    let allFiles = [];
-    if (res.mode === 'git') {
-        const lines = res.files.split('\n').filter(Boolean);
-        allFiles = lines.map(l => {
+    // Pata list ya mafaili
+    let allFilesRaw = [];
+    if (res.mode === 'git' && res.files) {
+        allFilesRaw = res.files.split('\n').filter(Boolean).map(l => {
             const m = l.match(/^[A-Z\s]+\t?(.+)$/i);
             return m ? m[1].trim() : l.split(/\s+/).pop();
         });
     } else if (res.mode === 'zip' && res.changes) {
-        allFiles = [...(res.changes.added || []), ...(res.changes.modified || []), ...(res.changes.removed || [])];
+        allFilesRaw = [...(res.changes.added || []), ...(res.changes.modified || []), ...(res.changes.removed || [])];
     }
 
-    const cat = categorizeChanges(allFiles);
+    const cat = categorizeChanges(allFilesRaw);
+    const totalRelevant = cat.commands.length + cat.core.length + cat.lib.length + cat.other.length;
 
-    message += `📊 *Mafaili Yaliyobadilika:* (${allFiles.length})\n\n`;
+    if (totalRelevant === 0) {
+        return '✅ *Mabadiliko yaliyopo ni ya mfumo wa ndani (cache) tu.* Hakuna haja ya ku-update.';
+    }
+
+    let message = '🔄 *TAARIFA ZA UPDATE MPYA*\n\n';
+    message += `📦 *Aina:* ${res.mode.toUpperCase()}\n━━━━━━━━━━━━━━━━━━\n\n`;
+    message += `📊 *Mafaili Muhimu:* (${totalRelevant})\n\n`;
 
     if (cat.core.length > 0) {
-        message += `⚙️ *Core Files (Muhimu):*\n└ ${cat.core.join(', ')}\n\n`;
+        message += `⚙️ *Core Files:*\n└ ${cat.core.join(', ')}\n\n`;
     }
     if (cat.commands.length > 0) {
-        message += `🛠️ *Commands Zilizoongezwa/Badilishwa:*\n└ ${cat.commands.join(', ')}\n\n`;
+        message += `🛠️ *Commands:*\n└ ${cat.commands.join(', ')}\n\n`;
     }
     if (cat.lib.length > 0) {
-        message += `📚 *Library Updates:*\n└ ${cat.lib.join(', ')}\n\n`;
+        message += `📚 *Library:*\n└ ${cat.lib.join(', ')}\n\n`;
     }
     if (cat.other.length > 0) {
-        message += `📁 *Mengineyo:*\n└ ${cat.other.slice(0, 5).join(', ')}${cat.other.length > 5 ? '...' : ''}\n\n`;
+        message += `📁 *Mengineyo:*\n└ ${cat.other.join(', ')}\n\n`;
     }
 
-    message += `━━━━━━━━━━━━━━━━━━\n💡 *Tumia .update sasa hivi kuweka mabadiliko haya.*`;
+    message += `━━━━━━━━━━━━━━━━━━\n💡 *Tumia .update kuweka mabadiliko haya.*`;
     return message;
 }
 
 async function checkUpdatesCommand(sock, chatId, message, args = []) {
     const senderId = message.key.participant || message.key.remoteJid;
     const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
-
     if (!message.key.fromMe && !isOwner) return;
 
     try {
         const res = await updateCommand.checkUpdates();
         const updateMsg = formatUpdateInfo(res);
-        
         await sock.sendMessage(chatId, { text: updateMsg }, { quoted: message });
 
-        const reminder = await loadReminder();
         if (res && res.available) {
+            const reminder = await loadReminder();
             const hash = generateUpdateHash(res.files || '', res.mode);
             if (hash !== reminder.updateHash) {
                 reminder.updateFound = true;
@@ -123,7 +129,7 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
         }
     } catch (err) {
         console.error(err);
-        await sock.sendMessage(chatId, { text: `❌ Kosa limetokea: ${err.message}` });
+        await sock.sendMessage(chatId, { text: `❌ Kosa limetokea wakati wa kukagua updates.` });
     }
 }
 
