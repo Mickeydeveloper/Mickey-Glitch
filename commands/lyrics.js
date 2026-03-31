@@ -1,4 +1,4 @@
-const axios = require('axios');
+const lyricsFinder = require('lyrics-finder');
 const yts = require('yt-search');
 
 async function lyricsCommand(sock, chatId, message) {
@@ -10,27 +10,38 @@ async function lyricsCommand(sock, chatId, message) {
     try {
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
 
-        // Optional: You can search YouTube to get exact video for metadata
+        // Tafuta metadata ya wimbo kwanza kupitia YT
         const { videos } = await yts(query);
         if (!videos.length) return sock.sendMessage(chatId, { text: '❌ Wimbo haupatikani!' });
 
         const vid = videos[0];
+        const songTitle = vid.title;
 
-        // Call lyrics API
-        const res = await axios.get(`https://api-aswin-sparky.koyeb.app/api/lyrics?title=${encodeURIComponent(vid.title)}`, { timeout: 15000 });
-        const lyrics = res.data?.lyrics;
+        // Pata lyrics kwa kutumia scraping (No API Key needed)
+        // Tunapita "" kwenye artist ili itafute kwa jina la wimbo moja kwa moja
+        let lyrics = await lyricsFinder("", songTitle);
 
-        if (!lyrics) return sock.sendMessage(chatId, { text: '❌ Lyrics hazipatikani!' });
-
-        // Send lyrics in manageable chunks
-        const chunkSize = 4000;
-        for (let i = 0; i < lyrics.length; i += chunkSize) {
-            await sock.sendMessage(chatId, { text: lyrics.slice(i, i + chunkSize) }, { quoted: message });
+        if (!lyrics) {
+            return sock.sendMessage(chatId, { text: `❌ Lyrics za *${songTitle}* hazijapatikana.` });
         }
 
+        // Muundo safi (Premium Look) bila urembo mwingi
+        const head = `*LYRICS:* ${songTitle.toUpperCase()}\n\n`;
+        const fullText = head + lyrics;
+
+        // Tuma lyrics kwa vipande (chunks) kama ni ndefu sana
+        const chunkSize = 4000;
+        for (let i = 0; i < fullText.length; i += chunkSize) {
+            await sock.sendMessage(chatId, { 
+                text: fullText.slice(i, i + chunkSize) 
+            }, { quoted: message });
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+
     } catch (err) {
-        console.log("LYRICS ERROR:", err.message.slice(0,50));
-        await sock.sendMessage(chatId, { text: '🚨 Hitilafu imetokea kwenye lyrics!' });
+        console.log("LYRICS ERROR:", err.message.slice(0, 50));
+        await sock.sendMessage(chatId, { text: '🚨 Hitilafu imetokea wakati wa kutafuta lyrics!' });
     }
 }
 
