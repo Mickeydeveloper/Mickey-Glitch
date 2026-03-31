@@ -1,4 +1,4 @@
-const lyricsFinder = require('lyrics-finder');
+const lyricsFinder = require('@chen4520/lyrics-finder'); // Imetumia jina jipya
 const yts = require('yt-search');
 
 async function lyricsCommand(sock, chatId, message) {
@@ -10,26 +10,23 @@ async function lyricsCommand(sock, chatId, message) {
     try {
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
 
-        // Tafuta metadata ya wimbo kwanza kupitia YT
         const { videos } = await yts(query);
         if (!videos.length) return sock.sendMessage(chatId, { text: '❌ Wimbo haupatikani!' });
 
         const vid = videos[0];
         const songTitle = vid.title;
 
-        // Pata lyrics kwa kutumia scraping (No API Key needed)
-        // Tunapita "" kwenye artist ili itafute kwa jina la wimbo moja kwa moja
-        let lyrics = await lyricsFinder("", songTitle);
+        // MATUMIZI YA @chen4520/lyrics-finder:
+        // Inahitaji jina la wimbo pekee au (artist, title)
+        let lyrics = await lyricsFinder(songTitle); 
 
-        if (!lyrics) {
+        if (!lyrics || lyrics.length < 10) { // Kama imerudisha tupu au text fupi sana
             return sock.sendMessage(chatId, { text: `❌ Lyrics za *${songTitle}* hazijapatikana.` });
         }
 
-        // Muundo safi (Premium Look) bila urembo mwingi
         const head = `*LYRICS:* ${songTitle.toUpperCase()}\n\n`;
         const fullText = head + lyrics;
 
-        // Tuma lyrics kwa vipande (chunks) kama ni ndefu sana
         const chunkSize = 4000;
         for (let i = 0; i < fullText.length; i += chunkSize) {
             await sock.sendMessage(chatId, { 
@@ -41,7 +38,7 @@ async function lyricsCommand(sock, chatId, message) {
 
     } catch (err) {
         console.log("LYRICS ERROR:", err.message.slice(0, 50));
-        await sock.sendMessage(chatId, { text: '🚨 Hitilafu imetokea wakati wa kutafuta lyrics!' });
+        await sock.sendMessage(chatId, { text: '🚨 Hitilafu imetokea kwenye mfumo wa lyrics!' });
     }
 }
 
