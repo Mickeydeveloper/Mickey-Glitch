@@ -1,4 +1,5 @@
-const { sendButtons, getBuffer } = require('../lib/myfunc');
+const { sendButtons } = require('gifted-btns');
+const { getBuffer } = require('../lib/myfunc');
 const settings = require('../settings');
 const axios = require('axios');
 const fs = require('fs');
@@ -79,9 +80,16 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
                 `━━━━━━━━━━━━━━━━━━━━\n` +
                 `*${CONFIG.FOOTER}*`;
             
-            return await sock.sendMessage(chatId, { 
-                image: { url: CONFIG.BANNER }, 
-                caption: menu 
+            return await sendButtons(sock, chatId, {
+                title: '🌐 HALOTEL DATA SHOP',
+                text: menu,
+                footer: CONFIG.FOOTER,
+                image: { url: CONFIG.BANNER },
+                buttons: [
+                    { id: '.halotel 10 0615xxxxxx', text: 'Agiza 10GB' },
+                    { id: '.halotel 20 0615xxxxxx', text: 'Agiza 20GB' },
+                    { id: '.help', text: 'Msaada' }
+                ]
             }, { quoted: message });
         }
 

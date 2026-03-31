@@ -1,5 +1,6 @@
 const os = require('os');
 const { performance } = require('perf_hooks');
+const { sendButtons } = require('gifted-btns');
 
 const formatUptime = (secs) => {
     const d = Math.floor(secs / (3600 * 24));
@@ -45,28 +46,18 @@ const aliveCommand = async (sock, chatId, msg) => {
 _© 2026 Mickey Glitch Technology_`;
 
         // ────────────────────────────────────────────────
-        // MBINU YA AD PEKEE (No Second Media Message)
+        // Interactive button reply (uses gifted-btns)
         // ────────────────────────────────────────────────
-        await sock.sendMessage(chatId, {
-            text: textMessage, // Tuma kama Text Message
-            contextInfo: {
-                isForwarded: true,
-                forwardingScore: 999,
-                showAdAttribution: true, // Lebo ya 'Ad'
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363398106360290@newsletter',
-                    newsletterName: '🅼🅸🅲🅺🅴𝚈-𝐆𝐋𝐈𝐓𝐂𝐇 🚀',
-                    serverMessageId: 1
-                },
-                externalAdReply: {
-                    title: 'ＭＩＣＫＥＹ 𝐕𝟑 𝐈𝐒 𝐀𝐂𝐓𝐈𝐕𝐄',
-                    body: `Speed: ${ping}ms | Stable & Secure`,
-                    thumbnailUrl: imageUrl, // Hii ndio picha ya AD pekee
-                    sourceUrl: 'https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A', 
-                    mediaType: 1,
-                    renderLargerThumbnail: true // Fanya picha iwe kubwa (AD style)
-                }
-            }
+        await sendButtons(sock, chatId, {
+            title: 'ＭＩＣＫＥＹ-Ｖ３ STATUS',
+            text: textMessage,
+            footer: '© 2026 Mickey Glitch Technology',
+            image: { url: imageUrl },
+            buttons: [
+                { id: '.help', text: 'Help' },
+                { id: '.ping', text: 'Ping' },
+                { id: '.owner', text: 'Owner' }
+            ]
         }, { quoted: msg });
 
     } catch (e) {
