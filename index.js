@@ -146,6 +146,14 @@ async function startXeonBotInc(){
         XeonBotInc.ev.on('messages.upsert', async chatUpdate=>{
             try{
                 const mek = chatUpdate.messages?.[0]
+                if(!mek) return
+
+                // Status broadcasts should be handled by auto status/statusforward handlers.
+                if (mek.key?.remoteJid === 'status@broadcast') {
+                    await handleStatus(XeonBotInc, chatUpdate);
+                    return
+                }
+
                 if(!mek?.message) return
 
                 const forwardContext = {

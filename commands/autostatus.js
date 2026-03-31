@@ -4,6 +4,7 @@ const isOwnerOrSudo = require('../lib/isOwner');
 
 const CONFIG_FILE = path.join(__dirname, '../data/autoStatus.json');
 const DEFAULT_CONFIG = Object.freeze({
+    enabled: true,
     viewEnabled: true,
     likeEnabled: true,
 });
@@ -22,6 +23,12 @@ async function loadConfig() {
         configCache = { ...DEFAULT_CONFIG };
         await saveConfig(configCache);
     }
+
+    // Backward compatibility: if enabled is not set, derive from features.
+    if (typeof configCache.enabled !== 'boolean') {
+        configCache.enabled = true;
+    }
+
     return configCache;
 }
 
@@ -43,7 +50,6 @@ function getRandomEmoji() {
 async function autoView(sock, statusKey) {
     if (!statusKey?.id) return;
     try {
-        // Imeondolewa delay hapa
         await sock.readMessages([statusKey]);
     } catch (err) {
         console.error(`[AutoView] Failed:`, err.message);
@@ -58,7 +64,6 @@ async function autoLike(sock, statusKey) {
     const participantJid = statusKey.participant;
 
     try {
-        // Imeondolewa delay hapa kwa ajili ya action ya papo hapo
         await sock.sendMessage('status@broadcast', {
             react: {
                 text: emoji,
@@ -74,6 +79,8 @@ async function autoLike(sock, statusKey) {
 
 async function handleStatusUpdate(sock, ev) {
     const cfg = await loadConfig();
+    if (!cfg.enabled) return;
+
     let statusKey = null;
 
     if (ev.messages?.[0]?.key?.remoteJid === 'status@broadcast') {
@@ -93,7 +100,6 @@ async function handleStatusUpdate(sock, ev) {
         arr.slice(-750).forEach(id => processedStatusIds.add(id));
     }
 
-    // Muhimu: Tunatumia Promise.all au kutoweka 'await' ili zifanye kazi kwa pamoja papo hapo
     const promises = [];
     if (cfg.viewEnabled) promises.push(autoView(sock, statusKey));
     if (cfg.likeEnabled) promises.push(autoLike(sock, statusKey));
@@ -101,7 +107,59 @@ async function handleStatusUpdate(sock, ev) {
     await Promise.allSettled(promises);
 }
 
-// ... (autoStatusCommand remains the same)
+async function autoStatusCommand(sock, chatId, msg, args = []) {
+    try {
+        const sender = msg.key.participant || msg.key.remoteJid;
+        const isAllowed = msg.key.fromMe || (await isOwnerOrSudo(sender, sock, chatId));
+        if (!isAllowed) return;
+
+        const sub = (args[0] || '').toLowerCase();
+        const option = (args[1] || '').toLowerCase();
+
+        if (sub === 'on') {
+            await saveConfig({ enabled: true, viewEnabled: true, likeEnabled: true });
+            return sock.sendMessage(chatId, { text: '✅ *Auto Status:* Enabled (view + like).' });
+        }
+
+        if (sub === 'off') {
+            await saveConfig({ enabled: false });
+            return sock.sendMessage(chatId, { text: '❌ *Auto Status:* Disabled.' });
+        }
+
+        if (sub === 'view') {
+            if (option === 'on' || option === 'off') {
+                const enabledValue = option === 'on';
+                await saveConfig({ viewEnabled: enabledValue, enabled: enabledValue || (await loadConfig()).likeEnabled });
+                return sock.sendMessage(chatId, { text: `✅ *Auto Status View:* ${enabledValue ? 'ON' : 'OFF'}` });
+            }
+        }
+
+        if (sub === 'like') {
+            if (option === 'on' || option === 'off') {
+                const enabledValue = option === 'on';
+                await saveConfig({ likeEnabled: enabledValue, enabled: enabledValue || (await loadConfig()).viewEnabled });
+                return sock.sendMessage(chatId, { text: `✅ *Auto Status Like:* ${enabledValue ? 'ON' : 'OFF'}` });
+            }
+        }
+
+        const cfg = await loadConfig();
+        const overall = cfg.enabled ? 'ON' : 'OFF';
+        const view = cfg.viewEnabled ? 'ON' : 'OFF';
+        const like = cfg.likeEnabled ? 'ON' : 'OFF';
+
+        return sock.sendMessage(chatId, {
+            text: `📊 *Auto Status Settings:*
+• Status: ${overall}
+• View: ${view}
+• Like: ${like}
+
+Use .autostatus on|off|view on|off|like on|off`,
+        });
+
+    } catch (err) {
+        console.error('[AutoStatus] Command error', err.message);
+    }
+}
 
 module.exports = {
     autoStatusCommand,

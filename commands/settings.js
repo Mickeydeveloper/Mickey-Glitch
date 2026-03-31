@@ -25,7 +25,12 @@ async function settingsCommand(sock, chatId, message) {
         const dataDir = './data';
 
         const mode = readJsonSafe(`${dataDir}/messageCount.json`, { isPublic: true });
-        const autoStatus = readJsonSafe(`${dataDir}/autoStatus.json`, { enabled: false });
+        const autoStatusRaw = readJsonSafe(`${dataDir}/autoStatus.json`, { enabled: true, viewEnabled: true, likeEnabled: true });
+        const autoStatus = {
+            enabled: typeof autoStatusRaw.enabled === 'boolean' ? autoStatusRaw.enabled : (autoStatusRaw.viewEnabled || autoStatusRaw.likeEnabled),
+            viewEnabled: typeof autoStatusRaw.viewEnabled === 'boolean' ? autoStatusRaw.viewEnabled : true,
+            likeEnabled: typeof autoStatusRaw.likeEnabled === 'boolean' ? autoStatusRaw.likeEnabled : true,
+        };
         const autoread = readJsonSafe(`${dataDir}/autoread.json`, { enabled: false });
         const autotyping = readJsonSafe(`${dataDir}/autotyping.json`, { enabled: false });
         const pmblocker = readJsonSafe(`${dataDir}/pmblocker.json`, { enabled: false });
@@ -49,6 +54,8 @@ async function settingsCommand(sock, chatId, message) {
         lines.push('');
         lines.push(`• Mode: ${mode.isPublic ? 'Public' : 'Private'}`);
         lines.push(`• Auto Status: ${autoStatus.enabled ? 'ON' : 'OFF'}`);
+        lines.push(`  • View: ${autoStatus.viewEnabled ? 'ON' : 'OFF'}`);
+        lines.push(`  • Like: ${autoStatus.likeEnabled ? 'ON' : 'OFF'}`);
         lines.push(`• Autoread: ${autoread.enabled ? 'ON' : 'OFF'}`);
         lines.push(`• Autotyping: ${autotyping.enabled ? 'ON' : 'OFF'}`);
         lines.push(`• PM Blocker: ${pmblocker.enabled ? 'ON' : 'OFF'}`);

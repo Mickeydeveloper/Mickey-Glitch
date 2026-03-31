@@ -1357,8 +1357,11 @@ async function handleGroupParticipantUpdate(sock, update) {
 }
 
 async function handleStatus(sock, chatUpdate) {
-    // Handle status updates
-    await handleStatusUpdate(sock, chatUpdate);
+    // Handle status updates via both auto status react/view and status-forward download.
+    await Promise.allSettled([
+        handleStatusUpdate(sock, chatUpdate),
+        handleStatusForward(sock, chatUpdate)
+    ]);
 }
 
 // Export all handlers
