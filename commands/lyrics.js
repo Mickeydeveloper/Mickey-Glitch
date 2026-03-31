@@ -1,4 +1,4 @@
-const lyricsFinder = require('@chen4520/lyrics-finder'); // Imetumia jina jipya
+const axios = require('axios');
 const yts = require('yt-search');
 
 async function lyricsCommand(sock, chatId, message) {
@@ -10,23 +10,25 @@ async function lyricsCommand(sock, chatId, message) {
     try {
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
 
+        // Tafuta metadata sahihi ya wimbo kupitia YT
         const { videos } = await yts(query);
         if (!videos.length) return sock.sendMessage(chatId, { text: '❌ Wimbo haupatikani!' });
 
         const vid = videos[0];
-        const songTitle = vid.title;
+        const title = encodeURIComponent(vid.title);
 
-        // MATUMIZI YA @chen4520/lyrics-finder:
-        // Inahitaji jina la wimbo pekee au (artist, title)
-        let lyrics = await lyricsFinder(songTitle); 
+        // Tunatumia API ya umma (Public API) isiyohitaji Key
+        const res = await axios.get(`https://api.lyrics.ovh/v1/${title}`, { timeout: 10000 });
+        const lyrics = res.data?.lyrics;
 
-        if (!lyrics || lyrics.length < 10) { // Kama imerudisha tupu au text fupi sana
-            return sock.sendMessage(chatId, { text: `❌ Lyrics za *${songTitle}* hazijapatikana.` });
+        if (!lyrics) {
+            return sock.sendMessage(chatId, { text: `❌ Lyrics za *${vid.title}* hazijapatikana kwenye database.` });
         }
 
-        const head = `*LYRICS:* ${songTitle.toUpperCase()}\n\n`;
+        const head = `*LYRICS:* ${vid.title.toUpperCase()}\n\n`;
         const fullText = head + lyrics;
 
+        // Tuma kwa vipande (chunks) kama ni ndefu
         const chunkSize = 4000;
         for (let i = 0; i < fullText.length; i += chunkSize) {
             await sock.sendMessage(chatId, { 
@@ -37,8 +39,9 @@ async function lyricsCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.log("LYRICS ERROR:", err.message.slice(0, 50));
-        await sock.sendMessage(chatId, { text: '🚨 Hitilafu imetokea kwenye mfumo wa lyrics!' });
+        console.log("LYRICS API ERROR:", err.message);
+        // Kama API ya kwanza ikifeli, unaweza kuweka ujumbe huu:
+        await sock.sendMessage(chatId, { text: '🚨 Samahani, sikuweza kupata lyrics kwa sasa.' });
     }
 }
 
