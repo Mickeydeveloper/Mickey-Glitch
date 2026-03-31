@@ -6,7 +6,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 // ────────────────────────────────────────────────
-// CONFIGURATION (Boresha hapa)
+// CONFIGURATION
 // ────────────────────────────────────────────────
 const CONFIG = {
     PRICE_PER_GB: 1000,
@@ -24,7 +24,7 @@ if (!fs.existsSync(CONFIG.TEMP_DIR)) fs.mkdirSync(CONFIG.TEMP_DIR, { recursive: 
 const SELLER_JID = `${CONFIG.SELLER_NUMBER}@s.whatsapp.net`;
 
 // ────────────────────────────────────────────────
-// UTILS (Improved Logic)
+// UTILS
 // ────────────────────────────────────────────────
 const formatTSh = (n) => new Intl.NumberFormat('en-TZ').format(n);
 
@@ -36,14 +36,13 @@ function normalizeNumber(num) {
     return cleaned;
 }
 
-// Optimized PTT conversion
 async function toPTT(buffer, ext) {
     const tmp = path.join(CONFIG.TEMP_DIR, `${Date.now()}_in.${ext}`);
     const out = path.join(CONFIG.TEMP_DIR, `${Date.now()}_out.opus`);
     try {
         await fs.promises.writeFile(tmp, buffer);
         await new Promise((resolve, reject) => {
-            const ff = spawn('ffmpeg', ['-y', '-i', tmp, '-vn', '-acodec', 'libopus', '-ab', '128k', '-ar', '48000', out]);
+            const ff = spawn('ffmpeg', ['-y', '-i', tmp, '-vn', '-acodec', 'libopus', '-ab', '128k', out]);
             ff.on('close', (code) => code === 0 ? resolve() : reject(new Error('FFmpeg error')));
             ff.on('error', reject);
         });
@@ -54,31 +53,31 @@ async function toPTT(buffer, ext) {
 }
 
 // ────────────────────────────────────────────────
-// MAIN COMMAND (Modern UI)
+// MAIN COMMAND
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
-        // Group restriction with style
+        // Usalama wa Group
         if (chatId.endsWith('@g.us')) {
             return await sock.sendMessage(chatId, {
-                text: '🔒 *SECURITY ALERT*\n\nHabari! Kwa usalama wa muamala wako, tafadhali agiza bundle kupitia *Private Message (DM)* pekee.'
+                text: '🔒 *USALAMA KWANZA*\n\nHabari! Tafadhali agiza bundle kupitia *Private Message (DM)* kwa usalama wa muamala wako.'
             }, { quoted: message });
         }
 
         const fullText = (userMessage || message.message?.conversation || message.message?.extendedTextMessage?.text || '').trim();
         const matches = fullText.match(/\d+/g); 
 
-        // --- MENU UI ---
+        // --- MENU YA AWALI (KAMA HAKUNA DATA) ---
         if (!matches || matches.length < 2) {
-            const menu = `🌐 *HALOTEL DATA HUB* 🇹🇿\n` +
+            const menu = `🌐 *HALOTEL DATA SHOP* 🇹🇿\n` +
                 `━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `💰 *OFFER:* TSh ${formatTSh(CONFIG.PRICE_PER_GB)} / 1GB\n` +
+                `💰 *BEI:* TSh ${formatTSh(CONFIG.PRICE_PER_GB)} / 1GB\n` +
                 `📉 *MINIMUM:* ${CONFIG.MIN_GB} GB\n\n` +
                 `📝 *JINSI YA KUAGIZA:*\n` +
-                `Andika: \`.halotel <KIASI> <NAMBA>\`\n\n` +
-                `💡 *MFANO:* \`.halotel 10 0612xxxxxx\`\n\n` +
+                `Andika: \`.halotel <GB> <NAMBA>\`\n\n` +
+                `💡 *MFANO:* \`.halotel 10 0615xxxxxx\`\n\n` +
                 `━━━━━━━━━━━━━━━━━━━━\n` +
-                `*Powered by Mickey Glitch*`;
+                `*${CONFIG.FOOTER}*`;
             
             return await sock.sendMessage(chatId, { 
                 image: { url: CONFIG.BANNER }, 
@@ -89,23 +88,23 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         let gbAmount = parseInt(matches[0]);
         let phoneNumber = normalizeNumber(matches[1]);
 
-        // Validation UI
+        // Validations
         if (gbAmount < CONFIG.MIN_GB) {
             return await sock.sendMessage(chatId, { 
-                text: `❌ *KOSA LA KIWANGO*\n\nSamahani, kiwango cha chini ni *${CONFIG.MIN_GB}GB*.\nJaribu tena na kiasi kuanzia ${CONFIG.MIN_GB}.` 
+                text: `❌ *KOSA:* Kiwango cha chini ni *${CONFIG.MIN_GB}GB*.\nJaribu tena na kiasi kikubwa zaidi.` 
             }, { quoted: message });
         }
 
         if (phoneNumber.length !== 12) {
             return await sock.sendMessage(chatId, { 
-                text: `❌ *NAMBA BATILI*\n\nNamba ya simu uliyoweka haijakamilika au imekosewa. Hakikisha ni namba ya Halotel.` 
+                text: `❌ *KOSA:* Namba ya simu (${matches[1]}) siyo sahihi. Hakikisha ni namba ya Halotel.` 
             }, { quoted: message });
         }
 
         const totalCost = gbAmount * CONFIG.PRICE_PER_GB;
         const orderRef = `HTL-${Math.random().toString(36).toUpperCase().substring(2, 7)}`;
 
-        // --- INVOICE UI (CARD STYLE) ---
+        // --- 1. TUMA INVOICE (CARD STYLE) ---
         const invoice = `💳 *INVOICE: #${orderRef}*\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
             `📦 *HUDUMA:* Halotel Data\n` +
@@ -113,56 +112,69 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
             `💵 *GHARAMA:* TSh ${formatTSh(totalCost)}\n` +
             `📱 *LENGO:* ${phoneNumber}\n` +
             `━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `🏦 *MAELEKEZO YA MALIPO:*\n` +
-            `Lipa *TSh ${formatTSh(totalCost)}* kwenda:\n\n` +
-            `👤 *JINA:* ${CONFIG.SELLER_NAME}\n` +
-            `📞 *NAMBA:* ${CONFIG.SELLER_NUMBER}\n\n` +
-            `_Bonyeza kitufe hapo chini kutuma uthibitisho._`;
-
-        const buttons = [{
-            name: "cta_url",
-            buttonParamsJson: JSON.stringify({
-                display_text: "💳 THIBITISHA MALIPO",
-                url: `https://wa.me/${CONFIG.SELLER_NUMBER}?text=NIMELIPA+ODA+%23${orderRef}+TSh${totalCost}+KWA+${gbAmount}GB+KWENDA+${phoneNumber}`
-            })
-        }];
+            `🚨 *MAELEKEZO:* Chagua njia ya malipo hapo chini ili kupata namba ya kulipia.`;
 
         let banner = await getBuffer(CONFIG.BANNER).catch(() => null);
 
-        // Sending with Ad Reply (Professional Look)
         await sock.sendMessage(chatId, {
             text: invoice,
-            footer: CONFIG.FOOTER,
-            buttons: buttons,
-            headerType: 4,
             contextInfo: {
                 externalAdReply: {
-                    title: `HALOTEL ORDER: ${gbAmount}GB`,
-                    body: `Total: TSh ${formatTSh(totalCost)}`,
+                    title: `AGIZO: ${gbAmount}GB | #${orderRef}`,
+                    body: `Jumla: TSh ${formatTSh(totalCost)}`,
                     thumbnail: banner,
-                    sourceUrl: `https://wa.me/${CONFIG.SELLER_NUMBER}`,
                     mediaType: 1,
                     renderLargerThumbnail: true
                 }
             }
         }, { quoted: message });
 
-        // Background Audio (Silent Error Handling)
+        // --- 2. TUMA MENU YA MALIPO (INTERACTIVE LIST) ---
+        const sections = [
+            {
+                title: "CHAGUA MTANDAO WA KULIPIA",
+                rows: [
+                    { 
+                        title: "Halopesa", 
+                        rowId: `pay_halo_${orderRef}`, 
+                        description: `Lipa TSh ${formatTSh(totalCost)} kwenda ${CONFIG.SELLER_NUMBER}` 
+                    },
+                    { 
+                        title: "M-Pesa (Vodacom)", 
+                        rowId: `pay_voda_${orderRef}`, 
+                        description: `Lipa TSh ${formatTSh(totalCost)} kwenda 07xxxxxxx` 
+                    },
+                    { 
+                        title: "Tigo Pesa", 
+                        rowId: `pay_tigo_${orderRef}`, 
+                        description: `Lipa TSh ${formatTSh(totalCost)} kwenda 06xxxxxxx` 
+                    }
+                ]
+            }
+        ];
+
+        const listMessage = {
+            text: "👇 *BONYEZA KITUFE HAPA CHINI:*",
+            footer: CONFIG.FOOTER,
+            title: "💳 CHAGUA NJIA YA MALIPO",
+            buttonText: "CHAGUA MTANDAO",
+            sections
+        };
+
+        await sock.sendMessage(chatId, listMessage, { quoted: message });
+
+        // --- 3. AUDIO RESPONSE (OPTIONAL) ---
         setTimeout(async () => {
             try {
                 const { data } = await axios.get(CONFIG.AUDIO, { responseType: 'arraybuffer' });
                 const ptt = await toPTT(Buffer.from(data), 'mp3');
-                await sock.sendMessage(chatId, { 
-                    audio: ptt, 
-                    mimetype: 'audio/ogg; codecs=opus', 
-                    ptt: true 
-                }, { quoted: message });
-            } catch (e) { /* ignore audio fail */ }
-        }, 1000);
+                await sock.sendMessage(chatId, { audio: ptt, mimetype: 'audio/ogg; codecs=opus', ptt: true }, { quoted: message });
+            } catch (e) {}
+        }, 2000);
 
-        // Alert Seller
+        // Alert kwa Muuzaji
         await sock.sendMessage(SELLER_JID, {
-            text: `🔔 *Oda Mpya Imerekodiwa!*\n\n🆔 ID: #${orderRef}\n📊 Kiasi: ${gbAmount}GB\n📱 Simu: ${phoneNumber}\n💰 Thamani: TSh ${formatTSh(totalCost)}`
+            text: `🔔 *ODA MPYA!*\nRef: #${orderRef}\nKiasi: ${gbAmount}GB\nSimu: ${phoneNumber}\nThamani: TSh ${formatTSh(totalCost)}`
         });
 
     } catch (error) {
