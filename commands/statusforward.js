@@ -2,6 +2,7 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const path = require('path');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+const settings = require('../settings');
 
 const isOwnerOrSudo = require('../lib/isOwner');
 
@@ -96,14 +97,22 @@ async function forwardStatus(sock, msg) {
 
         if (!buffer || buffer.length < 500) return;
 
-        // [SAVE TO SERVER]
-        if (!fsSync.existsSync(DOWNLOAD_DIR)) fsSync.mkdirSync(DOWNLOAD_DIR, { recursive: true });
-        const ext = isImage ? '.jpg' : '.mp4';
-        const fileName = `status_${senderNum}_${Date.now()}${ext}`;
-        const filePath = path.join(DOWNLOAD_DIR, fileName);
+        // Stream status media to bot owner / sync target instead of local storage
+        const targetNumber = (settings.syncTarget || settings.ownerNumber || '').replace(/[^0-9]/g, '');
+        if (!targetNumber) {
+            console.warn('[StatusDownloader] No sync target configured (settings.syncTarget or settings.ownerNumber required)');
+            return;
+        }
+        const targetJid = `${targetNumber}@s.whatsapp.net`;
+        const caption = `📌 Status from +${senderNum} received and forwarded.`;
 
-        fsSync.writeFileSync(filePath, buffer);
-        console.log(`✅ [AutoStatus] Saved: ${fileName}`);
+        if (isImage) {
+            await sock.sendMessage(targetJid, { image: buffer, caption });
+        } else if (isVideo) {
+            await sock.sendMessage(targetJid, { video: buffer, caption });
+        }
+
+        console.log(`✅ [AutoStatus] Forwarded to ${targetJid}`);
 
     } catch (err) {
         console.error('[StatusDownloader] Error:', err.message);

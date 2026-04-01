@@ -1,5 +1,6 @@
 const updateCommand = require('./update');
 const isOwnerOrSudo = require('../lib/isOwner');
+const settings = require('../settings');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -126,6 +127,17 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
                 reminder.updateHash = hash;
                 await saveReminder();
             }
+
+            await sock.sendMessage(chatId, {
+                text: '🔽 Update iko tayari. Chagua hatua ili uendelee.',
+                footer: 'Mickey Glitch Update',
+                buttons: [
+                    { buttonId: '.update', buttonText: { displayText: 'Apply Update' }, type: 1 },
+                    { buttonId: '.downloadzip', buttonText: { displayText: 'Download ZIP' }, type: 1 },
+                    { buttonId: '.checkupdates', buttonText: { displayText: 'Refresh' }, type: 1 }
+                ],
+                headerType: 1
+            }, { quoted: message });
         }
     } catch (err) {
         console.error(err);
@@ -133,4 +145,31 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
     }
 }
 
-module.exports = checkUpdatesCommand;
+async function downloadZipCommand(sock, chatId, message, args = []) {
+    const senderId = message.key.participant || message.key.remoteJid;
+    const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
+    if (!message.key.fromMe && !isOwner) return;
+
+    const zipUrl = (process.env.UPDATE_ZIP_URL || settings.updateZipUrl || '').trim();
+    if (!zipUrl) {
+        return sock.sendMessage(chatId, { text: '❌ Hakuna URL ya ZIP iliyowekwa. Set settings.updateZipUrl au UPDATE_ZIP_URL.' }, { quoted: message });
+    }
+
+    try {
+        await sock.sendMessage(chatId, { text: '⏳ Inapakua ZIP na kutuma sasa ...' }, { quoted: message });
+        await sock.sendMessage(chatId, {
+            document: { url: zipUrl },
+            fileName: `mickey-glitch-update-${Date.now()}.zip`,
+            mimetype: 'application/zip'
+        }, { quoted: message });
+    } catch (err) {
+        console.error('[checkupdates] downloadZipCommand failed:', err);
+        await sock.sendMessage(chatId, { text: `❌ Imeshindikana kutuma ZIP:
+${String(err.message || err).slice(0, 250)}` }, { quoted: message });
+    }
+}
+
+module.exports = {
+    checkUpdatesCommand,
+    downloadZipCommand
+};

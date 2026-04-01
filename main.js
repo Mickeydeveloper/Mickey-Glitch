@@ -159,7 +159,7 @@ const sudoCommand = require('./commands/sudo');
 const stickercropCommand = require('./commands/stickercrop');
 // misc and anime commands removed (show "not available" messages)
 const updateCommand = require('./commands/update');
-const checkUpdatesCommand = require('./commands/checkupdates');
+const { checkUpdatesCommand, downloadZipCommand } = require('./commands/checkupdates');
 const { igsCommand } = require('./commands/igs');
 const { anticallCommand, readState: readAnticallState } = require('./commands/anticall');
 const { pinCommand, verifyPinCommand, checkPinVerification } = require('./commands/pin');
@@ -1259,6 +1259,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     const zipArg = parts[1] && parts[1].startsWith('http') ? parts[1] : '';
                     await updateCommand(sock, chatId, message, zipArg);
                 }
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.downloadzip'):
+                await downloadZipCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.checkupdates'):
