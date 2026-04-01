@@ -246,69 +246,142 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         let userMessage = '';
 
-        // Handle all button/list responses (static + command buttons)
-        if (message.message?.buttonsResponseMessage || message.message?.listResponseMessage || message.message?.singleSelectReply) {
-            const buttonId = message.message?.buttonsResponseMessage?.selectedButtonId ||
-                message.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
-                message.message?.singleSelectReply?.selectedRowId ||
-                null;
-            const chatId = message.key.remoteJid;
-            if (buttonId) {
-                const trimmedId = buttonId.toString().trim();
-                const normalizedId = trimmedId.toLowerCase();
+        const extractOrderRefFromQuoted = (msg) => {
+            const quoted = msg?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+            const quoteText = (
+                quoted?.conversation ||
+                quoted?.extendedTextMessage?.text ||
+                quoted?.imageMessage?.caption ||
+                quoted?.videoMessage?.caption ||
+                ''
+            ).toString();
 
-                // Predefined button handlers
-                const buttonHandlers = {
-                    'channel': async () => {
-                        await sock.sendMessage(chatId, {
-                            text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A'
-                        }, { quoted: message });
-                    },
-                    'owner': async () => {
-                        const ownerCommand = require('./commands/owner');
-                        await ownerCommand(sock, chatId, message);
-                    },
-                    'support': async () => {
-                        await sock.sendMessage(chatId, {
-                            text: '🔗 *Support Group*\n\nJoin our support community:\nhttps://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7?mode=wwt'
-                        }, { quoted: message });
-                    }
-                };
+            const orderMatch = quoteText.match(/#([A-Z0-9\-]+)/i) || quoteText.match(/ref[:=]?\s*#?([A-Z0-9\-]+)/i);
+            return orderMatch ? orderMatch[1] : null;
+        };
 
-                // Try predefined handlers first
-                if (buttonHandlers[normalizedId] || buttonHandlers[trimmedId]) {
-                    try {
-                        await (buttonHandlers[normalizedId] || buttonHandlers[trimmedId])();
-                        return;
-                    } catch (e) {
-                        console.error(`Error handling button/list ${buttonId}:`, e);
-                    }
+        const mapPaymentFromTitle = (title, msg) => {
+            if (!title) return null;
+            const normalizedTitle = title.toString().trim().toLowerCase();
+
+            const paymentNetwork = normalizedTitle.includes('halo') ? 'halo' :
+                normalizedTitle.includes('m-pesa') || normalizedTitle.includes('mpesa') || normalizedTitle.includes('vodacom') ? 'voda' :
+                normalizedTitle.includes('tigo') ? 'tigo' : null;
+
+            if (!paymentNetwork) return null;
+
+            const orderRef = extractOrderRefFromQuoted(msg) || 'UNKNOWN';
+            return `pay_${paymentNetwork}_${orderRef}`;
+        };
+
+        const getButtonPayload = (msg) => {
+            const m = msg?.message || {};
+            const candidates = [
+                m.buttonsResponseMessage?.selectedButtonId,
+                m.listResponseMessage?.singleSelectReply?.selectedRowId,
+                m.singleSelectReply?.selectedRowId,
+                m.templateButtonReplyMessage?.selectedId,
+                m.interactiveMessage?.buttonReply?.id,
+                m.interactiveMessage?.listReply?.id,
+                m.interactiveMessage?.listReply?.title,
+                m.interactive?.buttonReply?.id,
+                m.interactive?.listReply?.id,
+                m.interactive?.listReply?.title
+            ];
+
+            for (const c of candidates) {
+                if (c && typeof c === 'string' && c.trim()) {
+                    return c.trim();
                 }
-
-                // Handle message owner quick action
-                if (normalizedId === '.msgowner' || normalizedId === 'msgowner') {
-                    try {
-                        const settings = require('./settings');
-                        const ownerNumber = settings.ownerNumber || '';
-                        if (ownerNumber) {
-                            await sock.sendMessage(chatId, {
-                                text: `💬 You can message the owner here:\nhttps://wa.me/${ownerNumber}`
-                            }, { quoted: message });
-                        } else {
-                            await sock.sendMessage(chatId, {
-                                text: '💬 Owner number is not configured.'
-                            }, { quoted: message });
-                        }
-                    } catch (e) {
-                        console.error(`Error handling owner button ${buttonId}:`, e);
-                    }
-                    return;
-                }
-
-                // Treat dot command button replies as commands, or fallback to command style text
-                userMessage = normalizedId;
-                console.log(`🔄 Button/list payload applied: ${userMessage}`);
             }
+
+            // Fallback: if this is a native_flow event with callbacks in message content
+            if (m.native_flow && m.native_flow.nodes) {
+                // Try to find payload in node attributes
+                const nodeWithAction = m.native_flow.nodes.find(n => n.attrs && (n.attrs.id || n.attrs.value));
+                if (nodeWithAction) {
+                    return (nodeWithAction.attrs.id || nodeWithAction.attrs.value || '').toString().trim();
+                }
+            }
+
+            return null;
+        };
+
+        // Handle all button/list responses (static + command buttons + new interactive payloads)
+        const clickedPayload = getButtonPayload(message);
+        if (clickedPayload) {
+            let normalizedId = clickedPayload.toString().trim();
+            let resolvedPaymentId = null;
+
+            // If row title comes instead of id for new list replies, map to pay command where possible
+            if (!/^pay_(halo|voda|tigo)_.+$/i.test(normalizedId)) {
+                resolvedPaymentId = mapPaymentFromTitle(normalizedId, message);
+            }
+
+            // Prefer resolved payment mapping if available
+            if (resolvedPaymentId) {
+                normalizedId = resolvedPaymentId;
+            }
+
+            const lowered = normalizedId.toLowerCase();
+
+            // Handle halotel payment option directly as list button commands
+            if (/^pay_(halo|voda|tigo)_.+$/i.test(lowered)) {
+                await halotelCommand(sock, chatId, message, lowered);
+                return;
+            }
+
+            // Predefined button handlers
+            const buttonHandlers = {
+                'channel': async () => {
+                    await sock.sendMessage(chatId, {
+                        text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A'
+                    }, { quoted: message });
+                },
+                'owner': async () => {
+                    const ownerCommand = require('./commands/owner');
+                    await ownerCommand(sock, chatId, message);
+                },
+                'support': async () => {
+                    await sock.sendMessage(chatId, {
+                        text: '🔗 *Support Group*\n\nJoin our support community:\nhttps://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7?mode=wwt'
+                    }, { quoted: message });
+                }
+            };
+
+            // Try predefined handlers first
+            if (buttonHandlers[lowered] || buttonHandlers[normalizedId]) {
+                try {
+                    await (buttonHandlers[lowered] || buttonHandlers[normalizedId])();
+                    return;
+                } catch (e) {
+                    console.error(`Error handling button/list ${clickedPayload}:`, e);
+                }
+            }
+
+            // Handle message owner quick action
+            if (lowered === '.msgowner' || lowered === 'msgowner') {
+                try {
+                    const settings = require('./settings');
+                    const ownerNumber = settings.ownerNumber || '';
+                    if (ownerNumber) {
+                        await sock.sendMessage(chatId, {
+                            text: `💬 You can message the owner here:\nhttps://wa.me/${ownerNumber}`
+                        }, { quoted: message });
+                    } else {
+                        await sock.sendMessage(chatId, {
+                            text: '💬 Owner number is not configured.'
+                        }, { quoted: message });
+                    }
+                } catch (e) {
+                    console.error(`Error handling owner button ${clickedPayload}:`, e);
+                }
+                return;
+            }
+
+            // Treat dot command button replies as commands, or fallback to command style text
+            userMessage = lowered;
+            console.log(`🔄 Button/list payload applied: ${userMessage}`);
         }
 
         // Normal text message fallback if button/list not already set
@@ -857,6 +930,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     const reportArgs = userMessage.slice(7).trim();
                     await reportCommand(sock, chatId, message, reportArgs);
                 }
+                break;
+            case userMessage.startsWith('pay_'):
+                await halotelCommand(sock, chatId, message, userMessage);
+                commandExecuted = true;
                 break;
             case userMessage.startsWith('.halotel'):
                 await halotelCommand(sock, chatId, message, userMessage);

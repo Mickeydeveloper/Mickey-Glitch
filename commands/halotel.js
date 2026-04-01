@@ -58,6 +58,31 @@ async function toPTT(buffer, ext) {
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
+        // Halotel pay-list callback handling: pay_<network>_<orderRef>
+        const payload = (userMessage || '').toString().trim();
+        if (payload.startsWith('pay_')) {
+            const parts = payload.split('_');
+            const network = parts[1] || '';
+            const orderRef = parts.slice(2).join('_') || 'unknown';
+            const methods = {
+                halo: `Halopesa: Tuma pesa kwa namba *${CONFIG.SELLER_NUMBER}* ili kumaliza malipo.\nTuma ujumbe: HALO ${orderRef} kama inahitajika.`,
+                voda: `M-Pesa (Vodacom): Tuma pesa kwa namba *07xxxxxxx*.\nAngalia Maelekezo ya M-Pesa kwa usalama.`,
+                tigo: `Tigo Pesa: Tuma pesa kwa namba *0711765335*.\nTumia maelekezo ya Tigo Pesa kwa uthibitisho.`
+            };
+            const methodText = methods[network] || 'Chagua njia sahihi ya malipo katika menu.';
+
+            return await sock.sendMessage(chatId, {
+                text: `✅ *UTACHAGUA UTOAJI WA MALIPO*
+
+*Order:* #${orderRef}
+*Njia:* ${network.toUpperCase()}
+
+${methodText}
+
+Mara baada ya malipo, tuma screenshot au ujumbe kwa muuzaji ili kuthibitisha.`
+            }, { quoted: message });
+        }
+
         // Usalama wa Group
         if (chatId.endsWith('@g.us')) {
             return await sock.sendMessage(chatId, {
