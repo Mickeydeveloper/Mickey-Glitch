@@ -1,6 +1,7 @@
 const { sendButtons } = require('gifted-btns');
 const { getBuffer } = require('../lib/myfunc');
 const settings = require('../settings');
+const { setPendingHalotelOrder, clearPendingHalotelOrder } = require('../lib/halotelSession');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
@@ -71,7 +72,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
             };
             const methodText = methods[network] || 'Chagua njia sahihi ya malipo katika menu.';
 
-            return await sock.sendMessage(chatId, {
+            const response = await sock.sendMessage(chatId, {
                 text: `✅ *UTACHAGUA UTOAJI WA MALIPO*
 
 *Order:* #${orderRef}
@@ -81,6 +82,10 @@ ${methodText}
 
 Mara baada ya malipo, tuma screenshot au ujumbe kwa muuzaji ili kuthibitisha.`
             }, { quoted: message });
+
+            // Clear stored pending ref once payment method is selected
+            clearPendingHalotelOrder(chatId);
+            return response;
         }
 
         // Usalama wa Group
@@ -98,10 +103,13 @@ Mara baada ya malipo, tuma screenshot au ujumbe kwa muuzaji ili kuthibitisha.`
             const menu = `🌐 *HALOTEL DATA SHOP* 🇹🇿\n` +
                 `━━━━━━━━━━━━━━━━━━━━\n\n` +
                 `💰 *BEI:* TSh ${formatTSh(CONFIG.PRICE_PER_GB)} / 1GB\n` +
-                `📉 *MINIMUM:* ${CONFIG.MIN_GB} GB\n\n` +
+                `📉 *MINIMUM:* ${CONFIG.MIN_GB} GB\n` +
+                `⚡ *HARAKA:* Huduma Kwa Wateja Binafsi & Biashara\n\n` +
                 `📝 *JINSI YA KUAGIZA:*\n` +
-                `Andika: \`.halotel <GB> <NAMBA>\`\n\n` +
-                `💡 *MFANO:* \`.halotel 10 0615xxxxxx\`\n\n` +
+                `1) Chagua kivungo hapa chini\n` +
+                `2) Au andika: \.halotel <GB> <NAMBA>\n` +
+                `3) Fuata maagizo ya malipo\n\n` +
+                `💡 *MFANO:* \.halotel 10 0615xxxxxx\n\n` +
                 `━━━━━━━━━━━━━━━━━━━━\n` +
                 `*${CONFIG.FOOTER}*`;
             
@@ -111,9 +119,9 @@ Mara baada ya malipo, tuma screenshot au ujumbe kwa muuzaji ili kuthibitisha.`
                 footer: CONFIG.FOOTER,
                 image: { url: CONFIG.BANNER },
                 buttons: [
-                    { id: '.halotel 10 0615xxxxxx', text: 'Agiza 10GB' },
-                    { id: '.halotel 20 0615xxxxxx', text: 'Agiza 20GB' },
-                    { id: '.help', text: 'Msaada' }
+                    { id: '.halotel 10 0615xxxxxx', text: '⚡ Agiza 10GB' },
+                    { id: '.halotel 20 0615xxxxxx', text: '🔥 Agiza 20GB' },
+                    { id: '.help', text: '🆘 Msaada' }
                 ]
             }, { quoted: message });
         }
@@ -136,6 +144,7 @@ Mara baada ya malipo, tuma screenshot au ujumbe kwa muuzaji ili kuthibitisha.`
 
         const totalCost = gbAmount * CONFIG.PRICE_PER_GB;
         const orderRef = `HTL-${Math.random().toString(36).toUpperCase().substring(2, 7)}`;
+        setPendingHalotelOrder(chatId, orderRef);
 
         // --- 1. TUMA INVOICE (CARD STYLE) ---
         const invoice = `💳 *INVOICE: #${orderRef}*\n` +

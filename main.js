@@ -21,6 +21,8 @@ const performanceCache = {
     messageCount: 0
 };
 
+const { setPendingHalotelOrder, getPendingHalotelOrder, clearPendingHalotelOrder } = require('./lib/halotelSession');
+
 // 🧹 OPTIMIZED temp cleanup - Every 30 minutes (reduced I/O stress)
 setInterval(() => {
   const foldersToClean = [customTemp, customTmp];
@@ -262,15 +264,27 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         const mapPaymentFromTitle = (title, msg) => {
             if (!title) return null;
-            const normalizedTitle = title.toString().trim().toLowerCase();
 
+            // Prioritize a possible rowId payload if present
+            const directId =
+                msg.message?.interactiveMessage?.listReply?.id ||
+                msg.message?.interactive?.listReply?.id ||
+                msg.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+                msg.message?.interactiveMessage?.buttonReply?.id ||
+                msg.message?.interactive?.buttonReply?.id;
+
+            if (directId && /^pay_(halo|voda|tigo)_.+$/i.test(directId)) {
+                return directId.toString().trim().toLowerCase();
+            }
+
+            const normalizedTitle = title.toString().trim().toLowerCase();
             const paymentNetwork = normalizedTitle.includes('halo') ? 'halo' :
                 normalizedTitle.includes('m-pesa') || normalizedTitle.includes('mpesa') || normalizedTitle.includes('vodacom') ? 'voda' :
                 normalizedTitle.includes('tigo') ? 'tigo' : null;
 
             if (!paymentNetwork) return null;
 
-            const orderRef = extractOrderRefFromQuoted(msg) || 'UNKNOWN';
+            const orderRef = extractOrderRefFromQuoted(msg) || getPendingHalotelOrder(chatId) || 'UNKNOWN';
             return `pay_${paymentNetwork}_${orderRef}`;
         };
 
@@ -327,7 +341,14 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
             // Handle halotel payment option directly as list button commands
             if (/^pay_(halo|voda|tigo)_.+$/i.test(lowered)) {
-                await halotelCommand(sock, chatId, message, lowered);
+                const parts = lowered.split('_');
+                const network = parts[1] || 'halo';
+                let orderRef = parts.slice(2).join('_') || '';
+                if (!orderRef || orderRef.toLowerCase() === 'unknown') {
+                    orderRef = getPendingHalotelOrder(chatId) || 'UNKNOWN';
+                }
+                const normalizedPay = `pay_${network}_${orderRef}`.toLowerCase();
+                await halotelCommand(sock, chatId, message, normalizedPay);
                 return;
             }
 

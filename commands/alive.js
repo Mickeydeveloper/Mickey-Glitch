@@ -33,14 +33,14 @@ const aliveCommand = async (sock, chatId, msg) => {
         const textMessage = `╭━━━〔 *ＭＩＣＫＥＹ-Ｖ３* 〕━━━┈⊷
 ┃ 👤 *Mtumiaji:* ${msg.pushName || 'User'}
 ┃ 🕒 *Muda:* ${time} EAT
-┃ 🚀 *Ping:* ${ping}ms ⚡
+┃ 🚀 *Ping:* ${ping}ms
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
 ╭━━━〔 *SYSTEM STATUS* 〕━━━┈⊷
 ┃ ⏳ *Uptime:* ${formatUptime(process.uptime())}
 ┃ 🧠 *RAM:* ${usedRam.toFixed(1)}GB / ${totalRam.toFixed(0)}GB (${ramPercent}%)
 ┃ 🔧 *CPU:* ${os.cpus()[0]?.model.split('@')[0].trim()}
-┃ 🟢 *Hali:* Stable & Active
+┃ 🟢 *Hali:* Inayofanya kazi vizuri
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
 _© 2026 Mickey Glitch Technology_`;
@@ -54,9 +54,9 @@ _© 2026 Mickey Glitch Technology_`;
             footer: '© 2026 Mickey Glitch Technology',
             image: { url: imageUrl },
             buttons: [
-                { id: '.help', text: 'Help' },
-                { id: '.ping', text: 'Ping' },
-                { id: '.owner', text: 'Owner' }
+                { id: '.help', text: '🆘 Help' },
+                { id: '.ping', text: '📡 Ping' },
+                { id: '.owner', text: '👑 Owner' }
             ]
         }, { quoted: msg });
 

@@ -1,3 +1,4 @@
+const { sendButtons } = require('gifted-btns');
 const updateCommand = require('./update');
 const isOwnerOrSudo = require('../lib/isOwner');
 const settings = require('../settings');
@@ -128,7 +129,7 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
                 await saveReminder();
             }
 
-            await sock.sendMessage(chatId, {
+            await sendButtons(sock, chatId, {
                 text: '🔽 Update iko tayari. Chagua hatua ili uendelee.',
                 footer: 'Mickey Glitch Update',
                 buttons: [
