@@ -2,6 +2,7 @@ const moment = require('moment-timezone');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { sendButtons } = require('gifted-btns');
 
 /**
  * Mfumo wa kusoma commands automatic kutoka kwenye folder
@@ -85,6 +86,29 @@ const aliveCommand = async (conn, chatId, msg) => {
         });
 
         const finalMessage = `${header}\n${commandsList}\n\n*©2026 Powered by Mickey Labs™*`;
+
+        // Interactive select-list menu for quick command navigation
+        const sections = [
+            {
+                title: '⚡ Kategoria za Menu',
+                rows: [
+                    { title: 'Msaada & Menu', rowId: '.help', description: 'Orodha ya amri zote' },
+                    { title: 'Kuishi Bot', rowId: '.alive', description: 'Angalia hali ya bot' },
+                    { title: 'Msaada Programu', rowId: '.settings', description: 'Badilisha mipangilio' },
+                    { title: 'Huduma za Halotel', rowId: '.halotel', description: 'Agiza bundle ya data' }
+                ]
+            }
+        ];
+
+        const listMessage = {
+            text: 'Chagua amri kutoka kwenye orodha ya chaguo hapa chini.',
+            footer: 'Mickey Glitch — Menu ya haraka',
+            title: '📜 MENU YA BOT',
+            buttonText: 'Chagua Amri',
+            sections
+        };
+
+        await conn.sendMessage(chatId, listMessage, { quoted: msg });
 
         await conn.sendMessage(chatId, {
             text: finalMessage,

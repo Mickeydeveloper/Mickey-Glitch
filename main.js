@@ -244,44 +244,50 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const senderIsSudo = await isSudo(senderId);
         const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
 
-        // Handle all button responses (static + command buttons)
-        if (message.message?.buttonsResponseMessage) {
-            const buttonId = message.message.buttonsResponseMessage.selectedButtonId;
-            const chatId = message.key.remoteJid;
-            
-            // Predefined button handlers
-            const buttonHandlers = {
-                'channel': async () => {
-                    await sock.sendMessage(chatId, { 
-                        text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A' 
-                    }, { quoted: message });
-                },
-                'owner': async () => {
-                    const ownerCommand = require('./commands/owner');
-                    await ownerCommand(sock, chatId, message);
-                },
-                'support': async () => {
-                    await sock.sendMessage(chatId, { 
-                        text: `🔗 *Support Group*\n\nJoin our support community:\nhttps://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7?mode=wwt` 
-                    }, { quoted: message });
-                }
-            };
+        let userMessage = '';
 
-            // Try predefined handlers first
-            if (buttonHandlers[buttonId]) {
-                try {
-                    await buttonHandlers[buttonId]();
-                    return;
-                } catch (e) {
-                    console.error(`Error handling button ${buttonId}:`, e);
+        // Handle all button/list responses (static + command buttons)
+        if (message.message?.buttonsResponseMessage || message.message?.listResponseMessage || message.message?.singleSelectReply) {
+            const buttonId = message.message?.buttonsResponseMessage?.selectedButtonId ||
+                message.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+                message.message?.singleSelectReply?.selectedRowId ||
+                null;
+            const chatId = message.key.remoteJid;
+            if (buttonId) {
+                const trimmedId = buttonId.toString().trim();
+                const normalizedId = trimmedId.toLowerCase();
+
+                // Predefined button handlers
+                const buttonHandlers = {
+                    'channel': async () => {
+                        await sock.sendMessage(chatId, {
+                            text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A'
+                        }, { quoted: message });
+                    },
+                    'owner': async () => {
+                        const ownerCommand = require('./commands/owner');
+                        await ownerCommand(sock, chatId, message);
+                    },
+                    'support': async () => {
+                        await sock.sendMessage(chatId, {
+                            text: '🔗 *Support Group*\n\nJoin our support community:\nhttps://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7?mode=wwt'
+                        }, { quoted: message });
+                    }
+                };
+
+                // Try predefined handlers first
+                if (buttonHandlers[normalizedId] || buttonHandlers[trimmedId]) {
+                    try {
+                        await (buttonHandlers[normalizedId] || buttonHandlers[trimmedId])();
+                        return;
+                    } catch (e) {
+                        console.error(`Error handling button/list ${buttonId}:`, e);
+                    }
                 }
-            }
-            
-            // Handle quick-reply buttons that start with . (commands)
-            if (buttonId && (buttonId.startsWith('.') || buttonId === 'msgowner' || buttonId === '.msgowner')) {
-                try {
-                    // Special handling for quick-reply 'Message Owner'
-                    if (buttonId === '.msgowner' || buttonId === 'msgowner') {
+
+                // Handle message owner quick action
+                if (normalizedId === '.msgowner' || normalizedId === 'msgowner') {
+                    try {
                         const settings = require('./settings');
                         const ownerNumber = settings.ownerNumber || '';
                         if (ownerNumber) {
@@ -289,92 +295,35 @@ async function handleMessages(sock, messageUpdate, printLog) {
                                 text: `💬 You can message the owner here:\nhttps://wa.me/${ownerNumber}`
                             }, { quoted: message });
                         } else {
-                            await sock.sendMessage(chatId, { 
-                                text: '💬 Owner number is not configured.' 
+                            await sock.sendMessage(chatId, {
+                                text: '💬 Owner number is not configured.'
                             }, { quoted: message });
                         }
-                        return;
+                    } catch (e) {
+                        console.error(`Error handling owner button ${buttonId}:`, e);
                     }
-                    
-                    // Treat button ID as a command (e.g., .meme, .joke)
-                    console.log(`🔄 Button command intercepted: ${buttonId}`);
-                    userMessage = buttonId.toLowerCase();
-                    // Fall through to command handling below (don't return)
-                } catch (e) {
-                    console.error(`Error handling command button ${buttonId}:`, e);
                     return;
                 }
-            } else {
-                // Unhandled button ID
-                console.log(`⚠️ Unhandled button: ${buttonId}`);
-                return;
-            }
 
-            // Handle list responses (single-select list menus)
-            if (message.message?.listResponseMessage || message.message?.singleSelectReply) {
-                const list = message.message.listResponseMessage || message.message.singleSelectReply || message.message?.singleSelectReply;
-                const selectedId = list?.singleSelectReply?.selectedRowId || list?.selectedRowId || list?.singleSelectReply?.rowId || list?.rowId || null;
-                if (!selectedId) return;
-                console.log(`🔘 List selected: ${selectedId}`);
-
-                // Reuse the same buttonHandlers logic for common ids
-                const listHandlers = {
-                    'channel': async () => {
-                        await sock.sendMessage(chatId, { text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A' }, { quoted: message });
-                    },
-                    'owner': async () => {
-                        const ownerCommand = require('./commands/owner');
-                        await ownerCommand(sock, chatId, message);
-                    },
-                    'support': async () => {
-                        await sock.sendMessage(chatId, { text: '🔗 *Support Group*\n\nJoin our support community:\nhttps://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7?mode=wwt' }, { quoted: message });
-                    }
-                };
-
-                if (listHandlers[selectedId]) {
-                    try {
-                        await listHandlers[selectedId]();
-                        return;
-                    } catch (e) {
-                        console.error(`Error handling list ${selectedId}:`, e);
-                    }
-                }
-
-                // If the selected id looks like a command, treat it as such
-                if (selectedId && (selectedId.startsWith('.') || selectedId === 'msgowner' || selectedId === '.msgowner')) {
-                    try {
-                        if (selectedId === '.msgowner' || selectedId === 'msgowner') {
-                            const settings = require('./settings');
-                            const ownerNumber = settings.ownerNumber || '';
-                            if (ownerNumber) {
-                                await sock.sendMessage(chatId, {
-                                    text: `💬 You can message the owner here:
-    https://wa.me/${ownerNumber}`
-                                }, { quoted: message });
-                            } else {
-                                await sock.sendMessage(chatId, { text: '💬 Owner number is not configured.' }, { quoted: message });
-                            }
-                            return;
-                        }
-
-                        userMessage = selectedId.toLowerCase();
-                    } catch (e) {
-                        console.error(chalk.red(`Error handling command list ${selectedId}:`), chalk.red.bold(e));
-                        return;
-                    }
-                }
+                // Treat dot command button replies as commands, or fallback to command style text
+                userMessage = normalizedId;
+                console.log(`🔄 Button/list payload applied: ${userMessage}`);
             }
         }
 
-        // Normal text message
-        var userMessage = (
-            message.message?.conversation?.trim() ||
-            message.message?.extendedTextMessage?.text?.trim() ||
-            message.message?.imageMessage?.caption?.trim() ||
-            message.message?.videoMessage?.caption?.trim() ||
-            message.message?.buttonsResponseMessage?.selectedButtonId?.trim() ||
-            ''
-        ).toLowerCase().replace(/\.\s+/g, '.').trim();
+        // Normal text message fallback if button/list not already set
+        if (!userMessage) {
+            userMessage = (
+                message.message?.conversation?.trim() ||
+                message.message?.extendedTextMessage?.text?.trim() ||
+                message.message?.imageMessage?.caption?.trim() ||
+                message.message?.videoMessage?.caption?.trim() ||
+                message.message?.buttonsResponseMessage?.selectedButtonId?.trim() ||
+                message.message?.listResponseMessage?.singleSelectReply?.selectedRowId?.trim() ||
+                message.message?.singleSelectReply?.selectedRowId?.trim() ||
+                ''
+            ).toLowerCase().replace(/\.\s+/g, '.').trim();
+        }
 
         // Preserve raw message for commands like .tag that need original casing
         const rawText = message.message?.conversation?.trim() ||
