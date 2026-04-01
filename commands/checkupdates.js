@@ -133,9 +133,9 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
                 text: '🔽 Update iko tayari. Chagua hatua ili uendelee.',
                 footer: 'Mickey Glitch Update',
                 buttons: [
-                    { buttonId: '.update', buttonText: { displayText: 'Apply Update' }, type: 1 },
-                    { buttonId: '.downloadzip', buttonText: { displayText: 'Download ZIP' }, type: 1 },
-                    { buttonId: '.checkupdates', buttonText: { displayText: 'Refresh' }, type: 1 }
+                    { buttonId: '.update', buttonText: 'Apply Update', type: 1 },
+                    { buttonId: '.downloadzip', buttonText: 'Download ZIP', type: 1 },
+                    { buttonId: '.checkupdates', buttonText: 'Refresh', type: 1 }
                 ],
                 headerType: 1
             }, { quoted: message });
