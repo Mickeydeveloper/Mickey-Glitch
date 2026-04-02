@@ -103,9 +103,6 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 ┃ 📅 *Due Date:* ${new Date(Date.now() + 86400000).toISOString().split('T')[0]}
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-Hi ${CONFIG.SELLER_NAME.split(' ')[0]}, your EasyBuy bill of ${formatCurrency(totalCost)} is due soon.
-Pay now to avoid service disruption.
-
 Bofya button hapo chini kulipia mara moja:`;
 
         // 🔘 BUTTONS - STYLE KAMA "PAYMENT DUE" ULIVYOONYESHA KWENYE PICHA
