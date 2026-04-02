@@ -58,9 +58,8 @@ async function toPTT(buffer, ext) {
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
-        // Capture text from various sources
         const fullText = (userMessage || message.message?.conversation || message.message?.extendedTextMessage?.text || '').trim();
-        
+
         // 1. SECURITY CHECK (GROUP BLOCK)
         if (chatId.endsWith('@g.us')) {
             return await sock.sendMessage(chatId, {
@@ -70,7 +69,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 
         const matches = fullText.match(/\d+/g); 
 
-        // 2. REMOVED INITIAL SHOP MENU - Direct processing only
+        // 2. USAGE CHECK
         if (!matches || matches.length < 2) {
             return await sock.sendMessage(chatId, { 
                 text: `❌ *ERROR:* Usage: \`.halotel <GB> <NUMBER>\`\n\n💡 *Example:* \`.halotel 10 0615123456\`` 
@@ -97,35 +96,38 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         const orderRef = `HTL-${Math.random().toString(36).toUpperCase().substring(2, 7)}`;
         setPendingHalotelOrder(chatId, orderRef);
 
-        // 4. DIGITAL RECEIPT (PAYMENT INFO STYLE)
+        // 4. DIGITAL RECEIPT + USSD INSTRUCTIONS
+        // Tunatumia format ya "tel:" ambayo simu nyingi zinaitambua kama clickable link
         const receiptText = `
 ╭━━━〔 *PAYMENT INFO* 〕━━━┈⊷
 ┃ 🎫 *Order ID:* #${orderRef}
 ┃ 📦 *Product:* Halotel ${gbAmount}GB
 ┃ 📱 *Target:* ${phoneNumber}
-┃ 💰 *Subtotal:* ${formatCurrency(totalCost)}
-┃ 🧾 *Tax (VAT):* TZS 0.00
-┃ 💎 *Total:* ${formatCurrency(totalCost)}
+┃ 💰 *Total:* ${formatCurrency(totalCost)}
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-*Please select your payment method and confirm:*`.trim();
+*GUSA NAMBA CHINI KULIPIA:*
+━━━━━━━━━━━━━━━━━━━━
+📞 *HALOTEL:* *150*88#
+📞 *TIGO:* *150*01#
+📞 *VODA/MPESA:* *150*00#
+━━━━━━━━━━━━━━━━━━━━
+_Baada ya kupiga code na kufanya malipo, bonyeza kitufe cha 'Confirm Order' hapo chini._`.trim();
 
-        // 5. SEND INTERACTIVE BUTTONS WITH RECEIPT + CONFIRM BUTTON
+        // 5. SEND INTERACTIVE BUTTONS
         await sendButtons(sock, chatId, {
             title: '💳 CHECKOUT & BILLING',
             text: receiptText,
-            footer: 'Mickey Glitch • Secure Payment',
+            footer: CONFIG.FOOTER,
             image: { url: CONFIG.BANNER },
             buttons: [
-                { id: `pay_halo_${orderRef}`, text: '🏦 Halopesa' },
-                { id: `pay_voda_${orderRef}`, text: '📱 M-Pesa' },
-                { id: `pay_tigo_${orderRef}`, text: '💸 Tigo Pesa' },
-                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Order' }
+                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Order' },
+                { id: `cancel_order_${orderRef}`, text: '❌ Cancel' }
             ],
             contextInfo: {
                 externalAdReply: {
-                    title: `BILLING FOR: ${phoneNumber}`,
-                    body: `Order Amount: ${formatCurrency(totalCost)}`,
+                    title: `PAYMENT FOR: ${phoneNumber}`,
+                    body: `Amount Due: ${formatCurrency(totalCost)}`,
                     mediaType: 1,
                     renderLargerThumbnail: true,
                     thumbnailUrl: CONFIG.BANNER,
