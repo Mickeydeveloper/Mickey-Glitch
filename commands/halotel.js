@@ -18,7 +18,8 @@ const CONFIG = {
     BANNER: 'https://files.catbox.moe/ljabyq.png',
     AUDIO: 'https://files.catbox.moe/t80fnj.mp3',
     FOOTER: 'Mickey Glitch Technology © 2026',
-    TEMP_DIR: path.join(__dirname, '../temp')
+    TEMP_DIR: path.join(__dirname, '../temp'),
+    CHANNEL_URL: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
 };
 
 if (!fs.existsSync(CONFIG.TEMP_DIR)) fs.mkdirSync(CONFIG.TEMP_DIR, { recursive: true });
@@ -101,30 +102,49 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 ┃ 💰 *Total:* ${formatCurrency(totalCost)}
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-*Bofya button hapo chini kulipia:*`.trim();
+*Bofya button hapo chini kulipia au kujiunga na channel yetu:*`.trim();
 
-        // 5. SEND INTERACTIVE BUTTONS (URL & QUICK REPLY)
+        // 🔘 SEND INTERACTIVE BUTTONS (NATIVE FLOW DESIGN)
         await sendButtons(sock, chatId, {
             title: '💳 CHECKOUT & BILLING',
             text: receiptText,
             footer: CONFIG.FOOTER,
             image: { url: CONFIG.BANNER },
             buttons: [
-                // Hizi ni URL Buttons (Kama hiyo ya "Visit Repo")
-                { id: `pay_halo`, text: '🏦 Halopesa', type: 'url', url: 'tel:*150*88#' },
-                { id: `pay_voda`, text: '📱 M-Pesa', type: 'url', url: 'tel:*150*00#' },
-                { id: `pay_tigo`, text: '💸 Tigo Pesa', type: 'url', url: 'tel:*150*01#' },
-                // Hii ni Quick Reply Button ya kawaida
-                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Payment', type: 'reply' }
+                // Button ya Quick Reply (Inasalia bot-side bila kutuma text chat-box)
+                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Payment' },
+                
+                // Button za URL (Zinafungua menu ya simu/browser moja kwa moja)
+                {
+                    name: "cta_url",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "🏦 Halopesa",
+                        url: "tel:*150*88#",
+                    })
+                },
+                {
+                    name: "cta_url",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "📱 M-Pesa",
+                        url: "tel:*150*00#",
+                    })
+                },
+                {
+                    name: "cta_url",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "📢 WaChannel",
+                        url: CONFIG.CHANNEL_URL,
+                    })
+                }
             ],
             contextInfo: {
                 externalAdReply: {
-                    title: `BILLING: ${gbAmount}GB - ${phoneNumber}`,
-                    body: `Amount Due: ${formatCurrency(totalCost)}`,
+                    title: `ORDER: ${gbAmount}GB - ${phoneNumber}`,
+                    body: `Ref: #${orderRef} | Total: ${formatCurrency(totalCost)}`,
                     mediaType: 1,
                     renderLargerThumbnail: true,
                     thumbnailUrl: CONFIG.BANNER,
-                    sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
+                    sourceUrl: CONFIG.CHANNEL_URL
                 }
             }
         }, { quoted: message });
