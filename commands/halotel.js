@@ -93,7 +93,6 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         const orderRef = `HTL-${Math.random().toString(36).toUpperCase().substring(2, 7)}`;
         setPendingHalotelOrder(chatId, orderRef);
 
-        // MAELEKEZO YA MALIPO (Clickable Links)
         const receiptText = `
 ╭━━━〔 *PAYMENT INFO* 〕━━━┈⊷
 ┃ 🎫 *Order ID:* #${orderRef}
@@ -102,30 +101,26 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 ┃ 💰 *Total:* ${formatCurrency(totalCost)}
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-*GUSA KODI CHINI KUPIGA (CALL):*
-━━━━━━━━━━━━━━━━━━━━
-📞 *HALOTEL:* tel:*150*88#
-📞 *TIGO:* tel:*150*01#
-📞 *MPESA:* tel:*150*00#
-━━━━━━━━━━━━━━━━━━━━
-_Baada ya kulipia, bonyeza button ya Confirm hapo chini._`.trim();
+*Bofya button hapo chini kulipia:*`.trim();
 
-        // 5. SEND INTERACTIVE BUTTONS
+        // 5. SEND INTERACTIVE BUTTONS (URL & QUICK REPLY)
         await sendButtons(sock, chatId, {
             title: '💳 CHECKOUT & BILLING',
             text: receiptText,
             footer: CONFIG.FOOTER,
             image: { url: CONFIG.BANNER },
             buttons: [
-                { id: `pay_halo_${orderRef}`, text: '🏦 Halopesa' },
-                { id: `pay_voda_${orderRef}`, text: '📱 M-Pesa' },
-                { id: `pay_tigo_${orderRef}`, text: '💸 Tigo Pesa' },
-                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Order' }
+                // Hizi ni URL Buttons (Kama hiyo ya "Visit Repo")
+                { id: `pay_halo`, text: '🏦 Halopesa', type: 'url', url: 'tel:*150*88#' },
+                { id: `pay_voda`, text: '📱 M-Pesa', type: 'url', url: 'tel:*150*00#' },
+                { id: `pay_tigo`, text: '💸 Tigo Pesa', type: 'url', url: 'tel:*150*01#' },
+                // Hii ni Quick Reply Button ya kawaida
+                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Payment', type: 'reply' }
             ],
             contextInfo: {
                 externalAdReply: {
-                    title: `ORDER FOR: ${phoneNumber}`,
-                    body: `Amount: ${formatCurrency(totalCost)}`,
+                    title: `BILLING: ${gbAmount}GB - ${phoneNumber}`,
+                    body: `Amount Due: ${formatCurrency(totalCost)}`,
                     mediaType: 1,
                     renderLargerThumbnail: true,
                     thumbnailUrl: CONFIG.BANNER,
@@ -134,6 +129,7 @@ _Baada ya kulipia, bonyeza button ya Confirm hapo chini._`.trim();
             }
         }, { quoted: message });
 
+        // 6. AUDIO CONFIRMATION
         setTimeout(async () => {
             try {
                 const { data } = await axios.get(CONFIG.AUDIO, { responseType: 'arraybuffer' });
@@ -142,6 +138,7 @@ _Baada ya kulipia, bonyeza button ya Confirm hapo chini._`.trim();
             } catch (e) {}
         }, 1500);
 
+        // Notify Seller
         await sock.sendMessage(SELLER_JID, {
             text: `🔔 *NEW ORDER:* #${orderRef}\nQty: ${gbAmount}GB\nNum: ${phoneNumber}\nValue: ${formatCurrency(totalCost)}`
         });
