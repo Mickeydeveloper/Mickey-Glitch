@@ -60,7 +60,6 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
         const fullText = (userMessage || message.message?.conversation || message.message?.extendedTextMessage?.text || '').trim();
 
-        // 1. SECURITY CHECK (GROUP BLOCK)
         if (chatId.endsWith('@g.us')) {
             return await sock.sendMessage(chatId, {
                 text: '🔒 *SECURE SHOPPING*\n\nPlease order data bundles via *Private Message (DM)* for security.'
@@ -69,14 +68,12 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 
         const matches = fullText.match(/\d+/g); 
 
-        // 2. USAGE CHECK
         if (!matches || matches.length < 2) {
             return await sock.sendMessage(chatId, { 
                 text: `❌ *ERROR:* Usage: \`.halotel <GB> <NUMBER>\`\n\n💡 *Example:* \`.halotel 10 0615123456\`` 
             }, { quoted: message });
         }
 
-        // 3. PROCESSING ORDER
         let gbAmount = parseInt(matches[0]);
         let phoneNumber = normalizeNumber(matches[1]);
 
@@ -96,8 +93,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         const orderRef = `HTL-${Math.random().toString(36).toUpperCase().substring(2, 7)}`;
         setPendingHalotelOrder(chatId, orderRef);
 
-        // 4. DIGITAL RECEIPT + USSD INSTRUCTIONS
-        // Tunatumia format ya "tel:" ambayo simu nyingi zinaitambua kama clickable link
+        // MAELEKEZO YA MALIPO (Clickable Links)
         const receiptText = `
 ╭━━━〔 *PAYMENT INFO* 〕━━━┈⊷
 ┃ 🎫 *Order ID:* #${orderRef}
@@ -106,13 +102,13 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 ┃ 💰 *Total:* ${formatCurrency(totalCost)}
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-*GUSA NAMBA CHINI KULIPIA:*
+*GUSA KODI CHINI KUPIGA (CALL):*
 ━━━━━━━━━━━━━━━━━━━━
-📞 *HALOTEL:* *150*88#
-📞 *TIGO:* *150*01#
-📞 *VODA/MPESA:* *150*00#
+📞 *HALOTEL:* tel:*150*88#
+📞 *TIGO:* tel:*150*01#
+📞 *MPESA:* tel:*150*00#
 ━━━━━━━━━━━━━━━━━━━━
-_Baada ya kupiga code na kufanya malipo, bonyeza kitufe cha 'Confirm Order' hapo chini._`.trim();
+_Baada ya kulipia, bonyeza button ya Confirm hapo chini._`.trim();
 
         // 5. SEND INTERACTIVE BUTTONS
         await sendButtons(sock, chatId, {
@@ -121,13 +117,15 @@ _Baada ya kupiga code na kufanya malipo, bonyeza kitufe cha 'Confirm Order' hapo
             footer: CONFIG.FOOTER,
             image: { url: CONFIG.BANNER },
             buttons: [
-                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Order' },
-                { id: `cancel_order_${orderRef}`, text: '❌ Cancel' }
+                { id: `pay_halo_${orderRef}`, text: '🏦 Halopesa' },
+                { id: `pay_voda_${orderRef}`, text: '📱 M-Pesa' },
+                { id: `pay_tigo_${orderRef}`, text: '💸 Tigo Pesa' },
+                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Order' }
             ],
             contextInfo: {
                 externalAdReply: {
-                    title: `PAYMENT FOR: ${phoneNumber}`,
-                    body: `Amount Due: ${formatCurrency(totalCost)}`,
+                    title: `ORDER FOR: ${phoneNumber}`,
+                    body: `Amount: ${formatCurrency(totalCost)}`,
                     mediaType: 1,
                     renderLargerThumbnail: true,
                     thumbnailUrl: CONFIG.BANNER,
@@ -136,7 +134,6 @@ _Baada ya kupiga code na kufanya malipo, bonyeza kitufe cha 'Confirm Order' hapo
             }
         }, { quoted: message });
 
-        // 6. AUDIO CONFIRMATION
         setTimeout(async () => {
             try {
                 const { data } = await axios.get(CONFIG.AUDIO, { responseType: 'arraybuffer' });
@@ -145,7 +142,6 @@ _Baada ya kupiga code na kufanya malipo, bonyeza kitufe cha 'Confirm Order' hapo
             } catch (e) {}
         }, 1500);
 
-        // Notify Seller
         await sock.sendMessage(SELLER_JID, {
             text: `🔔 *NEW ORDER:* #${orderRef}\nQty: ${gbAmount}GB\nNum: ${phoneNumber}\nValue: ${formatCurrency(totalCost)}`
         });
