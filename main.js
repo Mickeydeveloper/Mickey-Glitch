@@ -249,6 +249,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
             const buttonId = message.message.buttonsResponseMessage.selectedButtonId;
             const chatId = message.key.remoteJid;
             
+            console.log(`🔘 Button clicked: ${buttonId}`); // Debug log
+            
             // Centralized Button Registry - Auto-register handlers for specific commands
             const buttonRegistry = {
                 // Predefined static handlers
@@ -652,8 +654,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
             // else: userMessage now starts with '.' so fall through to command handling
         }
-        // In private mode, only owner/sudo can run commands
-        if (!isPublic && !isOwnerOrSudoCheck) {
+        // In private mode, only owner/sudo can run commands (except basic info commands)
+        const basicCommands = ['.help', '.ping', '.owner', '.menu', '.alive', '.status', '.connection'];
+        const isBasicCommand = basicCommands.some(cmd => userMessage === cmd);
+        
+        if (!isPublic && !isOwnerOrSudoCheck && !isBasicCommand) {
             return;
         }
 
@@ -708,8 +713,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
         // We'll show typing indicator after command execution if needed
         let commandExecuted = false;
 
-        // PIN Security Check - Allow .pin command always, verify others (with error handling)
-        const allowWithoutPin = userMessage.startsWith('.pin');
+        // PIN Security Check - Allow basic commands and .pin command always, verify others (with error handling)
+        const allowWithoutPin = userMessage.startsWith('.pin') || 
+                                userMessage === '.help' || 
+                                userMessage === '.ping' || 
+                                userMessage === '.owner' ||
+                                userMessage === '.menu' ||
+                                userMessage === '.alive';
         if (!allowWithoutPin) {
             try {
                 const pinVerified = await checkPinVerification(senderId);
@@ -771,6 +781,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ping':
                 await pingCommand(sock, chatId, message);
+                commandExecuted = true;
                 break;
             case userMessage === '.status' || userMessage === '.connection':
                 {
@@ -912,6 +923,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.owner':
                 await ownerCommand(sock, chatId);
+                commandExecuted = true;
                 break;
              case userMessage === '.tagall':
                 await tagAllCommand(sock, chatId, senderId, message);
