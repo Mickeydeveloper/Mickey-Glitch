@@ -2,66 +2,84 @@ const os = require('os');
 const { performance } = require('perf_hooks');
 const { sendButtons } = require('gifted-btns');
 
-const formatUptime = (secs) => {
-    const d = Math.floor(secs / (3600 * 24));
-    const h = Math.floor((secs % (3600 * 24)) / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = Math.floor(secs % 60);
-    return `${d > 0 ? d + 'd ' : ''}${h}h ${m}m ${s}s`;
+/**
+ * Formats seconds into a human-readable string (d h m s)
+ */
+const formatUptime = (seconds) => {
+    const d = Math.floor(seconds / (3600 * 24));
+    const h = Math.floor((seconds % (3600 * 24)) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    
+    const parts = [];
+    if (d > 0) parts.push(`${d}d`);
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0) parts.push(`${m}m`);
+    parts.push(`${s}s`);
+    
+    return parts.join(' ');
 };
 
+/**
+ * Main command handler
+ */
 const aliveCommand = async (sock, chatId, msg) => {
-    if (!sock || typeof sock.sendMessage !== 'function') return;
+    if (!sock?.sendMessage) return;
 
-    const start = performance.now();
+    const startTime = performance.now();
 
     try {
+        // Visual indicator that the bot is typing
         await sock.sendPresenceUpdate('composing', chatId);
 
-        const time = new Date().toLocaleTimeString('en-GB', { 
+        // System Calculations
+        const time = new Date().toLocaleTimeString('en-US', { 
             timeZone: 'Africa/Dar_es_Salaam', 
             hour: '2-digit', 
-            minute: '2-digit' 
+            minute: '2-digit',
+            hour12: true
         });
-        
-        const ping = (performance.now() - start).toFixed(0);
-        const totalRam = os.totalmem() / 1024 / 1024 / 1024;
-        const usedRam = (process.memoryUsage().heapUsed / 1024 / 1024 / 1024);
+
+        const latency = (performance.now() - startTime).toFixed(0);
+        const totalRam = os.totalmem() / Math.pow(1024, 3);
+        const usedRam = process.memoryUsage().heapUsed / Math.pow(1024, 3);
         const ramPercent = ((usedRam / totalRam) * 100).toFixed(1);
+        const cpuModel = os.cpus()[0]?.model.split('@')[0].trim() || 'Generic CPU';
+        
         const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
 
-        const textMessage = `╭━━━〔 *ＭＩＣＫＥＹ-Ｖ３* 〕━━━┈⊷
-┃ 👤 *Mtumiaji:* ${msg.pushName || 'User'}
-┃ 🕒 *Muda:* ${time} EAT
-┃ 🚀 *Ping:* ${ping}ms
+        // Message Template
+        const statusMessage = `
+╭━━━〔 *ＭＩＣＫＥＹ-Ｖ３* 〕━━━┈⊷
+┃ 👤 *User:* ${msg.pushName || 'Guest'}
+┃ 🕒 *Time:* ${time} EAT
+┃ 🚀 *Latency:* ${latency}ms
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
 ╭━━━〔 *SYSTEM STATUS* 〕━━━┈⊷
 ┃ ⏳ *Uptime:* ${formatUptime(process.uptime())}
-┃ 🧠 *RAM:* ${usedRam.toFixed(1)}GB / ${totalRam.toFixed(0)}GB (${ramPercent}%)
-┃ 🔧 *CPU:* ${os.cpus()[0]?.model.split('@')[0].trim()}
-┃ 🟢 *Hali:* Inayofanya kazi vizuri
+┃ 🧠 *RAM:* ${usedRam.toFixed(2)}GB / ${totalRam.toFixed(0)}GB (${ramPercent}%)
+┃ 🔧 *CPU:* ${cpuModel}
+┃ 🟢 *Status:* Online & Stable
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-_© 2026 Mickey Glitch Technology_`;
+*© 2026 Mickey Glitch Technology*`.trim();
 
-        // ────────────────────────────────────────────────
-        // Interactive button reply (uses gifted-btns)
-        // ────────────────────────────────────────────────
+        // Send interactive response
         await sendButtons(sock, chatId, {
-            title: 'ＭＩＣＫＥＹ-Ｖ３ STATUS',
-            text: textMessage,
-            footer: '© 2026 Mickey Glitch Technology',
+            title: 'SYSTEM ACTIVE',
+            text: statusMessage,
+            footer: 'Powered by Mickey Glitch Tech',
             image: { url: imageUrl },
             buttons: [
-                { id: '.help', text: '🆘 Help' },
-                { id: '.ping', text: '📡 Ping' },
-                { id: '.owner', text: '👑 Owner' }
+                { id: '.help', text: '🆘 Menu' },
+                { id: '.ping', text: '📡 Speed' },
+                { id: '.owner', text: '👑 Support' }
             ]
         }, { quoted: msg });
 
-    } catch (e) {
-        console.error('❌ Alive Ad Error:', e);
+    } catch (error) {
+        console.error('Critical Error in Alive Command:', error);
     }
 };
 
