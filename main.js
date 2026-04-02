@@ -105,7 +105,7 @@ const tagNotAdminCommand = require('./commands/tagnotadmin');
 const hideTagCommand = require('./commands/hidetag');
 const weatherCommand = require('./commands/weather');
 const reportCommand = require('./commands/report'); 
-const halotelCommand = require('./commands/halotel');
+const { halotelCommand } = require('./commands/halotel');
 const kickCommand = require('./commands/kick');
 // quote command removed
 const { complimentCommand } = require('./commands/compliment');
@@ -249,8 +249,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
             const buttonId = message.message.buttonsResponseMessage.selectedButtonId;
             const chatId = message.key.remoteJid;
             
-            // Predefined button handlers
-            const buttonHandlers = {
+            // Centralized Button Registry - Auto-register handlers for specific commands
+            const buttonRegistry = {
+                // Predefined static handlers
                 'channel': async () => {
                     await sock.sendMessage(chatId, { 
                         text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A' 
@@ -267,18 +268,92 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
             };
 
-            // Try predefined handlers first
-            if (buttonHandlers[buttonId]) {
+            // Dynamic button handlers for specific commands
+            const dynamicButtonHandlers = {
+                // Halotel payment handler
+                handlePayNow: async (orderRef) => {
+                    const { getPendingHalotelOrder, clearPendingHalotelOrder } = require('./lib/halotelSession');
+                    const pendingOrder = getPendingHalotelOrder(chatId);
+                    
+                    if (!pendingOrder || pendingOrder !== orderRef) {
+                        return await sock.sendMessage(chatId, { 
+                            text: '❌ *PAYMENT EXPIRED*\n\nYour payment session has expired. Please create a new order.' 
+                        }, { quoted: message });
+                    }
+
+                    // Clear the pending order
+                    clearPendingHalotelOrder(chatId);
+                    
+                    // Process payment (you can add actual payment logic here)
+                    await sock.sendMessage(chatId, { 
+                        text: `✅ *PAYMENT CONFIRMED*\n\nOrder #${orderRef} has been processed successfully!\n\n📱 Your Halotel data bundle will be activated within 5-10 minutes.\n\nThank you for using Mickey Glitch Technology!` 
+                    }, { quoted: message });
+                    
+                    // Notify seller
+                    const { CONFIG } = require('./commands/halotel');
+                    const SELLER_JID = `${CONFIG.SELLER_NUMBER}@s.whatsapp.net`;
+                    await sock.sendMessage(SELLER_JID, {
+                        text: `💰 *PAYMENT RECEIVED*\nOrder #${orderRef}\nCustomer: ${chatId.split('@')[0]}\nStatus: ✅ Confirmed`
+                    });
+                },
+
+                // CheckUpdates handlers
+                handleUpdate: async () => {
+                    const updateCommand = require('./commands/update');
+                    await updateCommand(sock, chatId, message);
+                },
+
+                handleDownloadZip: async () => {
+                    const { downloadZipCommand } = require('./commands/checkupdates');
+                    await downloadZipCommand(sock, chatId, message);
+                },
+
+                handleCopyUrl: async (url) => {
+                    await sock.sendMessage(chatId, { 
+                        text: `🔗 *UPDATE ZIP URL*\n\n${url}\n\nCopy this URL to download the update package.` 
+                    }, { quoted: message });
+                }
+            };
+
+            // Check for dynamic button patterns
+            let handled = false;
+
+            // Handle pay_now buttons from halotel
+            if (buttonId.startsWith('pay_now_')) {
+                const orderRef = buttonId.replace('pay_now_', '');
                 try {
-                    await buttonHandlers[buttonId]();
+                    await dynamicButtonHandlers.handlePayNow(orderRef);
+                    handled = true;
+                } catch (e) {
+                    console.error(`Error handling pay_now button:`, e);
+                    handled = true; // Still mark as handled to prevent further processing
+                }
+            }
+
+            // Handle copyurl buttons from checkupdates
+            if (buttonId.startsWith('.copyurl ')) {
+                const url = buttonId.replace('.copyurl ', '');
+                try {
+                    await dynamicButtonHandlers.handleCopyUrl(url);
+                    handled = true;
+                } catch (e) {
+                    console.error(`Error handling copyurl button:`, e);
+                    handled = true;
+                }
+            }
+
+            // Handle static registered buttons
+            if (!handled && buttonRegistry[buttonId]) {
+                try {
+                    await buttonRegistry[buttonId]();
                     return;
                 } catch (e) {
                     console.error(`Error handling button ${buttonId}:`, e);
                 }
             }
             
-            // Handle quick-reply buttons that start with . (commands)
-            if (buttonId && (buttonId.startsWith('.') || buttonId === 'msgowner' || buttonId === '.msgowner')) {
+            // Handle quick-reply buttons that start with . (commands) - including alive.js buttons
+            if (!handled && buttonId && (buttonId.startsWith('.') || buttonId === 'msgowner' || buttonId === '.msgowner')) {
                 try {
                     // Special handling for quick-reply 'Message Owner'
                     if (buttonId === '.msgowner' || buttonId === 'msgowner') {
@@ -296,7 +371,18 @@ async function handleMessages(sock, messageUpdate, printLog) {
                         return;
                     }
                     
-                    // Treat button ID as a command (e.g., .meme, .joke)
+                    // Handle specific command buttons from checkupdates
+                    if (buttonId === '.update') {
+                        await dynamicButtonHandlers.handleUpdate();
+                        return;
+                    }
+                    
+                    if (buttonId === '.downloadzip') {
+                        await dynamicButtonHandlers.handleDownloadZip();
+                        return;
+                    }
+                    
+                    // Treat other button IDs as commands (e.g., .help, .ping, .owner from alive.js)
                     console.log(`🔄 Button command intercepted: ${buttonId}`);
                     userMessage = buttonId.toLowerCase();
                     // Fall through to command handling below (don't return)
@@ -304,7 +390,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     console.error(`Error handling command button ${buttonId}:`, e);
                     return;
                 }
-            } else {
+            } else if (!handled) {
                 // Unhandled button ID
                 console.log(`⚠️ Unhandled button: ${buttonId}`);
                 return;

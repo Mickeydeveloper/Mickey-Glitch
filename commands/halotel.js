@@ -178,4 +178,7 @@ Bofya button hapo chini kulipia mara moja:`;
     }
 }
 
-module.exports = halotelCommand;
+module.exports = {
+    halotelCommand,
+    CONFIG
+};
