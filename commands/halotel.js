@@ -55,7 +55,7 @@ async function toPTT(buffer, ext) {
 }
 
 // ────────────────────────────────────────────────
-// MAIN COMMAND (UPDATED)
+// MAIN COMMAND (UPDATED WITH "PAY NOW" STYLE)
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
@@ -95,25 +95,34 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         setPendingHalotelOrder(chatId, orderRef);
 
         const receiptText = `
-╭━━━〔 *PAYMENT INFO* 〕━━━┈⊷
+╭━━━〔 *PAYMENT DUE* 〕━━━┈⊷
 ┃ 🎫 *Order ID:* #${orderRef}
 ┃ 📦 *Product:* Halotel ${gbAmount}GB
-┃ 📱 *Target:* ${phoneNumber}
-┃ 💰 *Total:* ${formatCurrency(totalCost)}
+┃ 📱 *Target Number:* ${phoneNumber}
+┃ 💰 *Amount Due:* ${formatCurrency(totalCost)}
+┃ 📅 *Due Date:* ${new Date(Date.now() + 86400000).toISOString().split('T')[0]}
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-*Bofya button hapo chini kulipia kupitia USSD au kujiunga na channel yetu:*`.trim();
+Hi ${CONFIG.SELLER_NAME.split(' ')[0]}, your EasyBuy bill of ${formatCurrency(totalCost)} is due soon.
+Pay now to avoid service disruption.
 
-        // 🔘 SEND INTERACTIVE BUTTONS (CTA URL STYLE - KAMA ZILE ULIZOONYESHA KWENYE PICHA)
-        // NO QUICK REPLY BUTTON (Hakuna "Confirm Payment" ambayo inatuma reply)
-        // Tumia tu cta_url buttons (direct action: open USSD au link bila kutuma text reply)
+Bofya button hapo chini kulipia mara moja:`;
+
+        // 🔘 BUTTONS - STYLE KAMA "PAYMENT DUE" ULIVYOONYESHA KWENYE PICHA
+        // Tumia CTA URL buttons + moja Quick Reply kwa "Pay Now" ili ifanane na EasyBuy
         await sendButtons(sock, chatId, {
-            title: '💳 CHECKOUT & BILLING',
+            title: '💳 PAYMENT DUE - HALOTEL DATA',
             text: receiptText,
             footer: CONFIG.FOOTER,
             image: { url: CONFIG.BANNER },
             buttons: [
-                // Button 1: Halopesa (USSD direct)
+                // PAY NOW - Quick Reply Button (Inafanana na "Pay now" kwenye picha)
+                { 
+                    id: `pay_now_${orderRef}`, 
+                    text: '✅ Pay Now' 
+                },
+
+                // Halopesa USSD
                 {
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
@@ -121,7 +130,8 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
                         url: "tel:*150*88#",
                     })
                 },
-                // Button 2: M-Pesa (USSD direct)
+
+                // M-Pesa USSD
                 {
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
@@ -129,19 +139,20 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
                         url: "tel:*150*00#",
                     })
                 },
-                // Button 3: Channel (link direct)
+
+                // Channel
                 {
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
-                        display_text: "📢 WaChannel",
+                        display_text: "📢 Jiunge na Channel",
                         url: CONFIG.CHANNEL_URL,
                     })
                 }
             ],
             contextInfo: {
                 externalAdReply: {
-                    title: `ORDER: ${gbAmount}GB - ${phoneNumber}`,
-                    body: `Ref: #${orderRef} | Total: ${formatCurrency(totalCost)}`,
+                    title: `HALOTEL ${gbAmount}GB - TSH ${totalCost}`,
+                    body: `Order #${orderRef} | Due: ${formatCurrency(totalCost)}`,
                     mediaType: 1,
                     renderLargerThumbnail: true,
                     thumbnailUrl: CONFIG.BANNER,
@@ -150,7 +161,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
             }
         }, { quoted: message });
 
-        // 6. AUDIO CONFIRMATION
+        // Audio confirmation
         setTimeout(async () => {
             try {
                 const { data } = await axios.get(CONFIG.AUDIO, { responseType: 'arraybuffer' });
@@ -161,7 +172,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 
         // Notify Seller
         await sock.sendMessage(SELLER_JID, {
-            text: `🔔 *NEW ORDER:* #${orderRef}\nQty: ${gbAmount}GB\nNum: ${phoneNumber}\nValue: ${formatCurrency(totalCost)}`
+            text: `🔔 *NEW HALOTEL ORDER*\nOrder ID: #${orderRef}\nAmount: ${formatCurrency(totalCost)}\nTarget: ${phoneNumber}\nCustomer: ${chatId.split('@')[0]}`
         });
 
     } catch (error) {
