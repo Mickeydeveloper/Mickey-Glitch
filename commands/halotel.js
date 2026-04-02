@@ -39,7 +39,7 @@ function normalizeNumber(num) {
 }
 
 async function toPTT(buffer, ext) {
-    const tmp = path.join(CONFIG.TEMP_DIR, `${Date.now()}_in.${ext}`);
+    const tmp = path.join(CONFIG.TEMP_DIR, `\( {Date.now()}_in. \){ext}`);
     const out = path.join(CONFIG.TEMP_DIR, `${Date.now()}_out.opus`);
     try {
         await fs.promises.writeFile(tmp, buffer);
@@ -55,7 +55,7 @@ async function toPTT(buffer, ext) {
 }
 
 // ────────────────────────────────────────────────
-// MAIN COMMAND
+// MAIN COMMAND (UPDATED)
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
@@ -102,19 +102,18 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 ┃ 💰 *Total:* ${formatCurrency(totalCost)}
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-*Bofya button hapo chini kulipia au kujiunga na channel yetu:*`.trim();
+*Bofya button hapo chini kulipia kupitia USSD au kujiunga na channel yetu:*`.trim();
 
-        // 🔘 SEND INTERACTIVE BUTTONS (NATIVE FLOW DESIGN)
+        // 🔘 SEND INTERACTIVE BUTTONS (CTA URL STYLE - KAMA ZILE ULIZOONYESHA KWENYE PICHA)
+        // NO QUICK REPLY BUTTON (Hakuna "Confirm Payment" ambayo inatuma reply)
+        // Tumia tu cta_url buttons (direct action: open USSD au link bila kutuma text reply)
         await sendButtons(sock, chatId, {
             title: '💳 CHECKOUT & BILLING',
             text: receiptText,
             footer: CONFIG.FOOTER,
             image: { url: CONFIG.BANNER },
             buttons: [
-                // Button ya Quick Reply (Inasalia bot-side bila kutuma text chat-box)
-                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Payment' },
-                
-                // Button za URL (Zinafungua menu ya simu/browser moja kwa moja)
+                // Button 1: Halopesa (USSD direct)
                 {
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
@@ -122,6 +121,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
                         url: "tel:*150*88#",
                     })
                 },
+                // Button 2: M-Pesa (USSD direct)
                 {
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
@@ -129,6 +129,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
                         url: "tel:*150*00#",
                     })
                 },
+                // Button 3: Channel (link direct)
                 {
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
