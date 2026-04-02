@@ -2,9 +2,10 @@ const moment = require('moment-timezone');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { sendButtons } = require('gifted-btns');
 
 /**
- * Automatically fetch commands from the directory
+ * Auto-fetch commands from the folder
  */
 function getAutomaticCommands() {
     try {
@@ -12,7 +13,7 @@ function getAutomaticCommands() {
         const files = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
         return files.map(file => `.${file.replace('.js', '')}`);
     } catch (e) {
-        console.error("Error reading commands folder:", e);
+        console.error("Error reading commands:", e);
         return [];
     }
 }
@@ -33,36 +34,8 @@ const aliveCommand = async (conn, chatId, msg) => {
 
         const totalCommands = getAutomaticCommands().length;
 
-        // --- THE LIST SECTIONS ---
-        const sections = [
-            {
-                title: "🚀 SYSTEM & STATUS",
-                rows: [
-                    { title: "Check Speed", rowId: ".ping", description: "View bot response latency" },
-                    { title: "Bot Status", rowId: ".alive", description: "Check if system is stable" },
-                    { title: "Runtime", rowId: ".uptime", description: "See how long the bot has been up" }
-                ]
-            },
-            {
-                title: "🛠️ CATEGORIES",
-                rows: [
-                    { title: "AI Services", rowId: ".ai", description: "Gemini, ChatGPT, and more" },
-                    { title: "Tools & Utils", rowId: ".help", description: "View all utility commands" },
-                    { title: "Settings", rowId: ".settings", description: "Configure bot behavior" }
-                ]
-            },
-            {
-                title: "👑 SUPPORT",
-                rows: [
-                    { title: "Contact Owner", rowId: ".owner", description: "Get help from the developer" },
-                    { title: "Update Bot", rowId: ".update", description: "Check for latest patches" }
-                ]
-            }
-        ];
-
-        // --- THE LIST MESSAGE STRUCTURE ---
-        const listMessage = {
-            text: `
+        // --- English UI Template ---
+        const statusText = `
 ╭━━━〔 *${botName}* 〕━━━┈⊷
 ┃ 👤 *User:* ${senderName}
 ┃ 🕒 *Time:* ${timeStr}
@@ -71,19 +44,29 @@ const aliveCommand = async (conn, chatId, msg) => {
 ┃ 📦 *Total:* ${totalCommands} Cmds
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-Welcome to the main menu. Please click the button below to browse all available services.`.trim(),
-            footer: "©2026 Mickey Glitch Technology",
-            title: "〔 INTERACTIVE COMMAND CENTER 〕",
-            buttonText: "Tap to Open Menu", // This is the text on the single list button
-            sections
-        };
+Select an option below to interact with the bot.`.trim();
 
-        // Send the list message
-        await conn.sendMessage(chatId, listMessage, { quoted: msg });
+        // --- GIFTED BTNS WITH CTA (CALL BUTTON) ---
+        await sendButtons(conn, chatId, {
+            title: 'MAIN CONTROL PANEL',
+            text: statusText,
+            footer: '©2026 Mickey Glitch Technology',
+            image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
+            buttons: [
+                { id: '.alive', text: '📚 alive' },
+                { id: '.ping', text: '🚀 Speed' },
+                // Hii ndio CTA button ya kupiga simu
+                { 
+                    type: 'call', 
+                    text: '📞 Contact Us', 
+                    id: 'tel:255615944741' 
+                }
+            ]
+        }, { quoted: msg });
 
     } catch (e) {
-        console.error("List Menu Error:", e);
-        await conn.sendMessage(chatId, { text: "⚠️ Error: The interactive list could not be displayed." });
+        console.error("CTA Button Error:", e);
+        await conn.sendMessage(chatId, { text: "⚠️ Error loading interactive buttons." });
     }
 };
 
