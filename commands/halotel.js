@@ -70,34 +70,10 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 
         const matches = fullText.match(/\d+/g); 
 
-        // 2. INITIAL SHOP MENU (If no GB/Number provided)
+        // 2. REMOVED INITIAL SHOP MENU - Direct processing only
         if (!matches || matches.length < 2) {
-            const menu = `🌐 *HALOTEL DATA STORE*
-━━━━━━━━━━━━━━━━━━━━
-
-💰 *Rate:* ${formatCurrency(CONFIG.PRICE_PER_GB)} / 1GB
-📉 *Minimum:* ${CONFIG.MIN_GB} GB
-⚡ *Instant Delivery:* Automated Systems
-
-📝 *HOW TO ORDER:*
-1. Select a bundle below
-2. Or Type: \`.halotel <GB> <NUMBER>\`
-
-💡 *Example:* \`.halotel 10 0615xxxxxx\`
-
-━━━━━━━━━━━━━━━━━━━━
-*Powered by Mickey Glitch Tech*`;
-
-            return await sendButtons(sock, chatId, {
-                title: '🌐 HALOTEL DATA SHOP',
-                text: menu,
-                footer: CONFIG.FOOTER,
-                image: { url: CONFIG.BANNER },
-                buttons: [
-                    { id: '.halotel 10 0615xxxxxx', text: '⚡ Buy 10GB' },
-                    { id: '.halotel 20 0615xxxxxx', text: '🔥 Buy 20GB' },
-                    { type: 'call', text: '📞 Contact Us', id: `tel:${CONFIG.SELLER_NUMBER}` }
-                ]
+            return await sock.sendMessage(chatId, { 
+                text: `❌ *ERROR:* Usage: \`.halotel <GB> <NUMBER>\`\n\n💡 *Example:* \`.halotel 10 0615123456\`` 
             }, { quoted: message });
         }
 
@@ -132,9 +108,9 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 ┃ 💎 *Total:* ${formatCurrency(totalCost)}
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-*Please select your payment network below to get details:*`.trim();
+*Please select your payment method and confirm:*`.trim();
 
-        // 5. SEND INTERACTIVE BUTTONS WITH RECEIPT
+        // 5. SEND INTERACTIVE BUTTONS WITH RECEIPT + CONFIRM BUTTON
         await sendButtons(sock, chatId, {
             title: '💳 CHECKOUT & BILLING',
             text: receiptText,
@@ -143,7 +119,8 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
             buttons: [
                 { id: `pay_halo_${orderRef}`, text: '🏦 Halopesa' },
                 { id: `pay_voda_${orderRef}`, text: '📱 M-Pesa' },
-                { id: `pay_tigo_${orderRef}`, text: '💸 Tigo Pesa' }
+                { id: `pay_tigo_${orderRef}`, text: '💸 Tigo Pesa' },
+                { id: `confirm_order_${orderRef}`, text: '✅ Confirm Order' }
             ],
             contextInfo: {
                 externalAdReply: {
