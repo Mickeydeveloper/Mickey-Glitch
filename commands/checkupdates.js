@@ -24,32 +24,27 @@ async function saveReminder() {
     try {
         await fs.mkdir(path.dirname(REMINDER_FILE), { recursive: true });
         await fs.writeFile(REMINDER_FILE, JSON.stringify(reminderCache, null, 2));
-    } catch (err) { console.error('[UpdateReminder] Error:', err.message); }
+    } catch (err) { 
+        console.error('[UpdateReminder] Error:', err.message); 
+    }
 }
 
 function generateUpdateHash(files, mode) {
-    // Hakikisha files ni array kabla ya kutumia slice
     const fileList = Array.isArray(files) ? files : String(files).split('\n').filter(Boolean);
     const summary = `${mode}:${fileList.length}:${fileList.slice(0, 3).join(',')}`;
     return Buffer.from(summary).toString('base64');
 }
 
-// --- MABORESHO: CHUJA MAFAILI YASIYO NA LAZIMA ---
+/**
+ * Filters and categorizes system changes
+ */
 function categorizeChanges(files) {
-    const categories = {
-        commands: [],
-        core: [],
-        lib: [],
-        other: []
-    };
+    const categories = { commands: [], core: [], lib: [], other: [] };
 
     files.forEach(f => {
         const fileName = f.trim();
-        
-        // 1. PUUZA (IGNORE) NPM NA NODE_MODULES
-        if (fileName.startsWith('.npm/') || fileName.includes('node_modules/') || fileName.includes('.cache')) {
-            return; 
-        }
+        // Ignore node_modules and cache files
+        if (fileName.startsWith('.npm/') || fileName.includes('node_modules/') || fileName.includes('.cache')) return;
 
         if (fileName.startsWith('commands/')) {
             categories.commands.push(fileName.replace('commands/', ''));
@@ -58,7 +53,6 @@ function categorizeChanges(files) {
         } else if (fileName.startsWith('lib/')) {
             categories.lib.push(fileName.replace('lib/', ''));
         } else {
-            // Usiongeze mafaili marefu sana ya cache hapa pia
             if (fileName.length < 100) categories.other.push(fileName);
         }
     });
@@ -66,12 +60,14 @@ function categorizeChanges(files) {
     return categories;
 }
 
+/**
+ * Generates English Status Message
+ */
 function formatUpdateInfo(res) {
     if (!res || res.mode === 'none' || !res.available) {
-        return '✅ *Mfumo upo vizuri* — Bot yako haina update mpya kwa sasa.';
+        return '✅ *System Up to Date* — Your bot is currently running the latest version.';
     }
 
-    // Pata list ya mafaili
     let allFilesRaw = [];
     if (res.mode === 'git' && res.files) {
         allFilesRaw = res.files.split('\n').filter(Boolean).map(l => {
@@ -86,31 +82,25 @@ function formatUpdateInfo(res) {
     const totalRelevant = cat.commands.length + cat.core.length + cat.lib.length + cat.other.length;
 
     if (totalRelevant === 0) {
-        return '✅ *Mabadiliko yaliyopo ni ya mfumo wa ndani (cache) tu.* Hakuna haja ya ku-update.';
+        return '✅ *Minor Internal Changes Detected.* No critical update required.';
     }
 
-    let message = '🔄 *TAARIFA ZA UPDATE MPYA*\n\n';
-    message += `📦 *Aina:* ${res.mode.toUpperCase()}\n━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `📊 *Mafaili Muhimu:* (${totalRelevant})\n\n`;
+    let message = '🔄 *NEW UPDATE AVAILABLE*\n\n';
+    message += `📦 *Type:* ${res.mode.toUpperCase()}\n━━━━━━━━━━━━━━━━━━\n\n`;
+    message += `📊 *Relevant Files:* (${totalRelevant})\n\n`;
 
-    if (cat.core.length > 0) {
-        message += `⚙️ *Core Files:*\n└ ${cat.core.join(', ')}\n\n`;
-    }
-    if (cat.commands.length > 0) {
-        message += `🛠️ *Commands:*\n└ ${cat.commands.join(', ')}\n\n`;
-    }
-    if (cat.lib.length > 0) {
-        message += `📚 *Library:*\n└ ${cat.lib.join(', ')}\n\n`;
-    }
-    if (cat.other.length > 0) {
-        message += `📁 *Mengineyo:*\n└ ${cat.other.join(', ')}\n\n`;
-    }
-
-    message += `━━━━━━━━━━━━━━━━━━\n💡 *Tumia .update kuweka mabadiliko haya.*`;
+    if (cat.core.length > 0) message += `⚙️ *Core:*\n└ ${cat.core.join(', ')}\n\n`;
+    if (cat.commands.length > 0) message += `🛠️ *Commands:*\n└ ${cat.commands.join(', ')}\n\n`;
+    if (cat.lib.length > 0) message += `📚 *Library:*\n└ ${cat.lib.join(', ')}\n\n`;
+    
+    message += `━━━━━━━━━━━━━━━━━━\n💡 *Use the buttons below to manage the update.*`;
     return message;
 }
 
-async function checkUpdatesCommand(sock, chatId, message, args = []) {
+/**
+ * Main Check Updates Command
+ */
+async function checkUpdatesCommand(sock, chatId, message) {
     const senderId = message.key.participant || message.key.remoteJid;
     const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
     if (!message.key.fromMe && !isOwner) return;
@@ -118,55 +108,59 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
     try {
         const res = await updateCommand.checkUpdates();
         const updateMsg = formatUpdateInfo(res);
-        await sock.sendMessage(chatId, { text: updateMsg }, { quoted: message });
 
         if (res && res.available) {
             const reminder = await loadReminder();
             const hash = generateUpdateHash(res.files || '', res.mode);
+            
             if (hash !== reminder.updateHash) {
                 reminder.updateFound = true;
                 reminder.updateHash = hash;
                 await saveReminder();
             }
 
+            // Interactive Buttons
             await sendButtons(sock, chatId, {
-                text: '🔽 Update iko tayari. Chagua hatua ili uendelee.',
-                footer: 'Mickey Glitch Update',
+                title: 'SYSTEM UPDATE CENTER',
+                text: updateMsg,
+                footer: 'Mickey Glitch Technology',
                 buttons: [
-                    { buttonId: '.update', buttonText: 'Apply Update', type: 1 },
-                    { buttonId: '.downloadzip', buttonText: 'Download ZIP', type: 1 },
-                    { buttonId: '.checkupdates', buttonText: 'Refresh', type: 1 }
-                ],
-                headerType: 1
+                    { id: '.update', text: '🚀 Apply Now' },
+                    { id: '.downloadzip', text: '📦 Download ZIP' },
+                    { id: `.copyurl ${settings.updateZipUrl || 'No URL'}`, text: '🔗 Copy URL' }
+                ]
             }, { quoted: message });
+        } else {
+            await sock.sendMessage(chatId, { text: updateMsg }, { quoted: message });
         }
     } catch (err) {
         console.error(err);
-        await sock.sendMessage(chatId, { text: `❌ Kosa limetokea wakati wa kukagua updates.` });
+        await sock.sendMessage(chatId, { text: `❌ Error occurred while checking for updates.` });
     }
 }
 
-async function downloadZipCommand(sock, chatId, message, args = []) {
+/**
+ * Download ZIP Logic
+ */
+async function downloadZipCommand(sock, chatId, message) {
     const senderId = message.key.participant || message.key.remoteJid;
     const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
     if (!message.key.fromMe && !isOwner) return;
 
     const zipUrl = (process.env.UPDATE_ZIP_URL || settings.updateZipUrl || '').trim();
     if (!zipUrl) {
-        return sock.sendMessage(chatId, { text: '❌ Hakuna URL ya ZIP iliyowekwa. Set settings.updateZipUrl au UPDATE_ZIP_URL.' }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '❌ No Update URL found in settings.' }, { quoted: message });
     }
 
     try {
-        await sock.sendMessage(chatId, { text: '⏳ Inapakua ZIP na kutuma sasa ...' }, { quoted: message });
+        await sock.sendMessage(chatId, { text: '⏳ Fetching update package... please wait.' }, { quoted: message });
         await sock.sendMessage(chatId, {
             document: { url: zipUrl },
-            fileName: `mickey-glitch-update-${Date.now()}.zip`,
+            fileName: `update-package-${Date.now()}.zip`,
             mimetype: 'application/zip'
         }, { quoted: message });
     } catch (err) {
-        console.error('[checkupdates] downloadZipCommand failed:', err);
-        await sock.sendMessage(chatId, { text: `❌ Imeshindikana kutuma ZIP:
-${String(err.message || err).slice(0, 250)}` }, { quoted: message });
+        await sock.sendMessage(chatId, { text: `❌ Failed to send ZIP: ${err.message}` }, { quoted: message });
     }
 }
 
