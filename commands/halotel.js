@@ -8,7 +8,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 // ────────────────────────────────────────────────
-// CONFIGURATION
+// CONFIGURATION (ENGLISH OPTIMIZED)
 // ────────────────────────────────────────────────
 const CONFIG = {
     PRICE_PER_GB: 1000,
@@ -22,13 +22,12 @@ const CONFIG = {
 };
 
 if (!fs.existsSync(CONFIG.TEMP_DIR)) fs.mkdirSync(CONFIG.TEMP_DIR, { recursive: true });
-
 const SELLER_JID = `${CONFIG.SELLER_NUMBER}@s.whatsapp.net`;
 
 // ────────────────────────────────────────────────
 // UTILS
 // ────────────────────────────────────────────────
-const formatTSh = (n) => new Intl.NumberFormat('en-TZ').format(n);
+const formatCurrency = (n) => new Intl.NumberFormat('en-TZ', { style: 'currency', currency: 'TZS' }).format(n);
 
 function normalizeNumber(num) {
     if (!num) return '';
@@ -59,86 +58,85 @@ async function toPTT(buffer, ext) {
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
-        // Halotel pay-list callback handling: pay_<network>_<orderRef>
         const payload = (userMessage || '').toString().trim();
+
+        // 1. PAYMENT CALLBACK HANDLING
         if (payload.startsWith('pay_')) {
             const parts = payload.split('_');
             const network = parts[1] || '';
             const orderRef = parts.slice(2).join('_') || 'unknown';
+            
             const methods = {
-                halo: `Halopesa: Tuma pesa kwa namba *${CONFIG.SELLER_NUMBER}* ili kumaliza malipo.\nTuma ujumbe: HALO ${orderRef} kama inahitajika.`,
-                voda: `M-Pesa (Vodacom): Tuma pesa kwa namba *07xxxxxxx*.\nAngalia Maelekezo ya M-Pesa kwa usalama.`,
-                tigo: `Tigo Pesa: Tuma pesa kwa namba *0711765335*.\nTumia maelekezo ya Tigo Pesa kwa uthibitisho.`
+                halo: `*Halopesa:* Send money to *${CONFIG.SELLER_NUMBER}*.\nReference: HALO ${orderRef}`,
+                voda: `*M-Pesa:* Send money to *07xxxxxxx*.\nReference: VODA ${orderRef}`,
+                tigo: `*Tigo Pesa:* Send money to *06xxxxxxx*.\nReference: TIGO ${orderRef}`
             };
-            const methodText = methods[network] || 'Chagua njia sahihi ya malipo katika menu.';
 
-            const response = await sock.sendMessage(chatId, {
-                text: `✅ *UTACHAGUA UTOAJI WA MALIPO*
+            const methodText = methods[network] || 'Please select a valid payment method.';
 
-*Order:* #${orderRef}
-*Njia:* ${network.toUpperCase()}
-
-${methodText}
-
-Mara baada ya malipo, tuma screenshot au ujumbe kwa muuzaji ili kuthibitisha.`
+            await sock.sendMessage(chatId, {
+                text: `✅ *PAYMENT INSTRUCTIONS*\n\n*Order:* #${orderRef}\n*Method:* ${network.toUpperCase()}\n\n${methodText}\n\nAfter payment, please send a screenshot to the owner for instant activation.`
             }, { quoted: message });
 
-            // Clear stored pending ref once payment method is selected
             clearPendingHalotelOrder(chatId);
-            return response;
+            return;
         }
 
-        // Usalama wa Group
+        // 2. SECURITY CHECK (GROUP BLOCK)
         if (chatId.endsWith('@g.us')) {
             return await sock.sendMessage(chatId, {
-                text: '🔒 *USALAMA KWANZA*\n\nHabari! Tafadhali agiza bundle kupitia *Private Message (DM)* kwa usalama wa muamala wako.'
+                text: '🔒 *SECURE SHOPPING*\n\nFor privacy and security, please order data bundles via *Private Message (DM)*.'
             }, { quoted: message });
         }
 
-        const fullText = (userMessage || message.message?.conversation || message.message?.extendedTextMessage?.text || '').trim();
+        const fullText = (userMessage || '').trim();
         const matches = fullText.match(/\d+/g); 
 
-        // --- MENU YA AWALI (KAMA HAKUNA DATA) ---
+        // 3. INITIAL SHOP MENU
         if (!matches || matches.length < 2) {
-            const menu = `🌐 *HALOTEL DATA SHOP* 🇹🇿\n` +
-                `━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `💰 *BEI:* TSh ${formatTSh(CONFIG.PRICE_PER_GB)} / 1GB\n` +
-                `📉 *MINIMUM:* ${CONFIG.MIN_GB} GB\n` +
-                `⚡ *HARAKA:* Huduma Kwa Wateja Binafsi & Biashara\n\n` +
-                `📝 *JINSI YA KUAGIZA:*\n` +
-                `1) Chagua kivungo hapa chini\n` +
-                `2) Au andika: \.halotel <GB> <NAMBA>\n` +
-                `3) Fuata maagizo ya malipo\n\n` +
-                `💡 *MFANO:* \.halotel 10 0615xxxxxx\n\n` +
-                `━━━━━━━━━━━━━━━━━━━━\n` +
-                `*${CONFIG.FOOTER}*`;
-            
+            const menu = `🌐 *HALOTEL DATA STORE* 🇹🇿
+━━━━━━━━━━━━━━━━━━━━
+
+💰 *Rate:* ${formatCurrency(CONFIG.PRICE_PER_GB)} / 1GB
+📉 *Minimum:* ${CONFIG.MIN_GB} GB
+⚡ *Instant Delivery:* Personal & Business
+
+📝 *HOW TO ORDER:*
+1. Select a bundle below
+2. Or Type: \`.halotel <GB> <NUMBER>\`
+3. Follow payment steps
+
+💡 *Example:* \`.halotel 10 0615xxxxxx\`
+
+━━━━━━━━━━━━━━━━━━━━
+*Powered by Mickey Glitch Tech*`;
+
             return await sendButtons(sock, chatId, {
                 title: '🌐 HALOTEL DATA SHOP',
                 text: menu,
                 footer: CONFIG.FOOTER,
                 image: { url: CONFIG.BANNER },
                 buttons: [
-                    { id: '.halotel 10 0615xxxxxx', text: '⚡ Agiza 10GB' },
-                    { id: '.halotel 20 0615xxxxxx', text: '🔥 Agiza 20GB' },
-                    { id: '.help', text: '🆘 Msaada' }
+                    { id: '.halotel 10 0615xxxxxx', text: '⚡ Buy 10GB' },
+                    { id: '.halotel 20 0615xxxxxx', text: '🔥 Buy 20GB' },
+                    { type: 'call', text: '📞 Contact Support', id: `tel:${CONFIG.SELLER_NUMBER}` }
                 ]
             }, { quoted: message });
         }
 
+        // 4. DATA PROCESSING
         let gbAmount = parseInt(matches[0]);
         let phoneNumber = normalizeNumber(matches[1]);
 
-        // Validations
         if (gbAmount < CONFIG.MIN_GB) {
             return await sock.sendMessage(chatId, { 
-                text: `❌ *KOSA:* Kiwango cha chini ni *${CONFIG.MIN_GB}GB*.\nJaribu tena na kiasi kikubwa zaidi.` 
+                text: `❌ *ERROR:* Minimum order is *${CONFIG.MIN_GB}GB*.\nPlease increase your amount.` 
             }, { quoted: message });
         }
 
         if (phoneNumber.length !== 12) {
             return await sock.sendMessage(chatId, { 
-                text: `❌ *KOSA:* Namba ya simu (${matches[1]}) siyo sahihi. Hakikisha ni namba ya Halotel.` 
+                text: `❌ *ERROR:* Invalid phone number (${matches[1]}). Use a valid Halotel number.` 
             }, { quoted: message });
         }
 
@@ -146,82 +144,69 @@ Mara baada ya malipo, tuma screenshot au ujumbe kwa muuzaji ili kuthibitisha.`
         const orderRef = `HTL-${Math.random().toString(36).toUpperCase().substring(2, 7)}`;
         setPendingHalotelOrder(chatId, orderRef);
 
-        // --- 1. TUMA INVOICE (CARD STYLE) ---
-        const invoice = `💳 *INVOICE: #${orderRef}*\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `📦 *HUDUMA:* Halotel Data\n` +
-            `📊 *KIASI:* ${gbAmount} GB\n` +
-            `💵 *GHARAMA:* TSh ${formatTSh(totalCost)}\n` +
-            `📱 *LENGO:* ${phoneNumber}\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `🚨 *MAELEKEZO:* Chagua njia ya malipo hapo chini ili kupata namba ya kulipia.`;
+        // 5. SEND INVOICE
+        const invoice = `💳 *ORDER INVOICE: #${orderRef}*
+━━━━━━━━━━━━━━━━━━━━
+📦 *Service:* Halotel Data
+📊 *Amount:* ${gbAmount} GB
+💵 *Total Cost:* ${formatCurrency(totalCost)}
+📱 *Target:* ${phoneNumber}
+━━━━━━━━━━━━━━━━━━━━
 
-        let banner = await getBuffer(CONFIG.BANNER).catch(() => null);
+🚨 *ACTION:* Please select your preferred payment network below to get the account details.`;
+
+        let bannerBuf = await getBuffer(CONFIG.BANNER).catch(() => null);
 
         await sock.sendMessage(chatId, {
             text: invoice,
             contextInfo: {
                 externalAdReply: {
-                    title: `AGIZO: ${gbAmount}GB | #${orderRef}`,
-                    body: `Jumla: TSh ${formatTSh(totalCost)}`,
-                    thumbnail: banner,
+                    title: `ORDER: ${gbAmount}GB | #${orderRef}`,
+                    body: `Total: ${formatCurrency(totalCost)}`,
+                    thumbnail: bannerBuf,
                     mediaType: 1,
                     renderLargerThumbnail: true
                 }
             }
         }, { quoted: message });
 
-        // --- 2. TUMA MENU YA MALIPO (INTERACTIVE LIST) ---
+        // 6. PAYMENT METHOD LIST
         const sections = [
             {
-                title: "CHAGUA MTANDAO WA KULIPIA",
+                title: "SELECT PAYMENT GATEWAY",
                 rows: [
-                    { 
-                        title: "Halopesa", 
-                        rowId: `pay_halo_${orderRef}`, 
-                        description: `Lipa TSh ${formatTSh(totalCost)} kwenda ${CONFIG.SELLER_NUMBER}` 
-                    },
-                    { 
-                        title: "M-Pesa (Vodacom)", 
-                        rowId: `pay_voda_${orderRef}`, 
-                        description: `Lipa TSh ${formatTSh(totalCost)} kwenda 07xxxxxxx` 
-                    },
-                    { 
-                        title: "Tigo Pesa", 
-                        rowId: `pay_tigo_${orderRef}`, 
-                        description: `Lipa TSh ${formatTSh(totalCost)} kwenda 06xxxxxxx` 
-                    }
+                    { title: "Halopesa", rowId: `pay_halo_${orderRef}`, description: `Pay ${formatCurrency(totalCost)} via Halotel` },
+                    { title: "M-Pesa", rowId: `pay_voda_${orderRef}`, description: `Pay ${formatCurrency(totalCost)} via Vodacom` },
+                    { title: "Tigo Pesa", rowId: `pay_tigo_${orderRef}`, description: `Pay ${formatCurrency(totalCost)} via Tigo` }
                 ]
             }
         ];
 
-        const listMessage = {
-            text: "👇 *BONYEZA KITUFE HAPA CHINI:*",
+        await sock.sendMessage(chatId, {
+            text: "👇 *TAP BUTTON BELOW TO PAY:*",
             footer: CONFIG.FOOTER,
-            title: "💳 CHAGUA NJIA YA MALIPO",
-            buttonText: "CHAGUA MTANDAO",
+            title: "💳 PAYMENT OPTIONS",
+            buttonText: "CHOOSE NETWORK",
             sections
-        };
+        }, { quoted: message });
 
-        await sock.sendMessage(chatId, listMessage, { quoted: message });
-
-        // --- 3. AUDIO RESPONSE (OPTIONAL) ---
+        // 7. AUDIO GREETING
         setTimeout(async () => {
             try {
                 const { data } = await axios.get(CONFIG.AUDIO, { responseType: 'arraybuffer' });
                 const ptt = await toPTT(Buffer.from(data), 'mp3');
                 await sock.sendMessage(chatId, { audio: ptt, mimetype: 'audio/ogg; codecs=opus', ptt: true }, { quoted: message });
             } catch (e) {}
-        }, 2000);
+        }, 1500);
 
-        // Alert kwa Muuzaji
+        // Notify Seller
         await sock.sendMessage(SELLER_JID, {
-            text: `🔔 *ODA MPYA!*\nRef: #${orderRef}\nKiasi: ${gbAmount}GB\nSimu: ${phoneNumber}\nThamani: TSh ${formatTSh(totalCost)}`
+            text: `🔔 *NEW ORDER RECEIVED!*\n\nRef: #${orderRef}\nQuantity: ${gbAmount}GB\nTarget: ${phoneNumber}\nValue: ${formatCurrency(totalCost)}`
         });
 
     } catch (error) {
-        console.error('Core Error:', error);
-        await sock.sendMessage(chatId, { text: '⚠️ *System Error:* Jaribu tena hivi punde.' });
+        console.error('System Error:', error);
+        await sock.sendMessage(chatId, { text: '⚠️ *System Error:* Please try again later.' });
     }
 }
 
