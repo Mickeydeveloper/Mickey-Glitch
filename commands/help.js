@@ -5,7 +5,7 @@ const os = require('os');
 const { sendButtons } = require('gifted-btns');
 
 /**
- * Mfumo wa kusoma commands automatic kutoka kwenye folder
+ * Automatically fetch commands from the directory
  */
 function getAutomaticCommands() {
     try {
@@ -13,7 +13,7 @@ function getAutomaticCommands() {
         const files = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
         return files.map(file => `.${file.replace('.js', '')}`);
     } catch (e) {
-        console.error("Hitilafu kusoma folder la commands:", e);
+        console.error("Error reading commands folder:", e);
         return [];
     }
 }
@@ -30,13 +30,15 @@ const categoryMap = {
     '.owner': '👑 Owner Only',
     '.eval': '👑 Owner Only',
     '.menu': '🔧 Utilities',
-    '.help': '🔧 Utilities'
+    '.help': '🔧 Utilities',
+    '.ping': '🚀 System Stats',
+    '.uptime': '🚀 System Stats'
 };
 
 function categorizeCommands(commands) {
     const categories = {};
     commands.forEach(cmd => {
-        const category = categoryMap[cmd] || '📂 Other Commands';
+        const category = categoryMap[cmd] || '📂 Other Services';
         if (!categories[category]) categories[category] = [];
         categories[category].push(cmd);
     });
@@ -46,14 +48,14 @@ function categorizeCommands(commands) {
 const aliveCommand = async (conn, chatId, msg) => {
     try {
         const senderName = msg.pushName || 'User';
-        const botName = 'MICKEY GLITCH';
-        const prefix = '.';
+        const botName = 'MICKEY-V3';
         
         const now = moment().tz('Africa/Dar_es_Salaam');
         const dateStr = now.format('ddd, MMM D, YYYY');
-        const timeStr = now.format('HH:mm:ss');
-        const hr = now.hour();
-        const greet = hr < 12 ? 'Habari za Asubuhi ☀️' : hr < 18 ? 'Habari za Mchana 🌤️' : 'Habari za Jioni 🌙';
+        const timeStr = now.format('hh:mm A');
+        const hour = now.hour();
+        
+        const greeting = hour < 12 ? 'Good Morning ☀️' : hour < 18 ? 'Good Afternoon 🌤️' : 'Good Evening 🌙';
 
         const uptimeSec = process.uptime();
         const hrs = Math.floor(uptimeSec / 3600);
@@ -61,68 +63,65 @@ const aliveCommand = async (conn, chatId, msg) => {
         const runtimeStr = `${hrs}h ${mins}m`;
 
         const allCommands = getAutomaticCommands();
-        const categorizedCommands = categorizeCommands(allCommands);
+        const categorized = categorizeCommands(allCommands);
         const totalCommands = allCommands.length;
 
-        // --- HEADER ---
-        const header = `╔════════════════════╗
-  ✨ *${botName}* — *V3.0*
-╚════════════════════╝
-┌  👋 *${greet}*
-│  👤 *User:* ${senderName}
-│  🕒 *Time:* ${timeStr}
-│  📅 *Date:* ${dateStr}
-│  💻 *OS:* ${os.platform()}
-│  ⏳ *Up:* ${runtimeStr}
-│  📦 *Total:* ${totalCommands} Cmds
-└────────────────────┘`;
+        // --- VISUAL HEADER ---
+        const header = `
+╭━━━〔 *${botName}* 〕━━━┈⊷
+┃ 👋 *${greeting}*
+┃ 👤 *User:* ${senderName}
+┃ 🕒 *Time:* ${timeStr}
+┃ 📅 *Date:* ${dateStr}
+┃ ⏳ *Uptime:* ${runtimeStr}
+┃ 📦 *Library:* ${totalCommands} Cmds
+╰━━━━━━━━━━━━━━━━━━┈⊷`.trim();
 
-        let commandsList = '';
-        Object.entries(categorizedCommands).forEach(([categoryName, commands]) => {
-            commandsList += `\n*╭───「 ${categoryName.toUpperCase()} 」*`;
-            // Hapa ndipo tumebadilisha: .join('\n│  • ') inafanya kila moja iwe mstari mpya
-            commandsList += `\n│  • ` + commands.map(cmd => `\`${cmd}\``).join('\n│  • ');
-            commandsList += `\n*╰───────────────💎*`;
+        let commandsBody = '';
+        Object.entries(categorized).forEach(([category, list]) => {
+            commandsBody += `\n\n*${category.toUpperCase()}*`;
+            commandsBody += `\n└  ` + list.map(cmd => `\`${cmd}\``).join(', ');
         });
 
-        const finalMessage = `${header}\n${commandsList}\n\n*©2026 Powered by Mickey Labs™*`;
+        const footer = `\n\n*©2026 Mickey Glitch Labs™*`;
+        const finalMessage = `${header}${commandsBody}${footer}`;
 
-        // Interactive select-list menu for quick command navigation
+        // --- BUTTON & LIST CONFIGURATION ---
+        // We use a combination of a Select List and Quick Action Buttons
         const sections = [
             {
-                title: '⚡ Kategoria za Menu',
+                title: '⚡ QUICK NAVIGATION',
                 rows: [
-                    { title: 'Msaada & Menu', rowId: '.help', description: 'Orodha ya amri zote' },
-                    { title: 'Kuishi Bot', rowId: '.alive', description: 'Angalia hali ya bot' },
-                    { title: 'Msaada Programu', rowId: '.settings', description: 'Badilisha mipangilio' },
-                    { title: 'Huduma za Halotel', rowId: '.halotel', description: 'Agiza bundle ya data' }
+                    { title: '📜 Full Menu', rowId: '.help', description: 'Show all available commands' },
+                    { title: '🟢 Status', rowId: '.alive', description: 'Check if bot is online' },
+                    { title: '⚙️ Settings', rowId: '.settings', description: 'Bot configuration' },
+                    { title: '👑 Support', rowId: '.owner', description: 'Contact the developer' }
                 ]
             }
         ];
 
-        const listMessage = {
-            text: 'Chagua amri kutoka kwenye orodha ya chaguo hapa chini.',
-            footer: 'Mickey Glitch — Menu ya haraka',
-            title: '📜 MENU YA BOT',
-            buttonText: 'Chagua Amri',
-            sections
-        };
-
-        await conn.sendMessage(chatId, listMessage, { quoted: msg });
-
-        await conn.sendMessage(chatId, {
+        // Sending the main interactive Menu
+        await sendButtons(conn, chatId, {
+            title: `*${botName} MAIN MENU*`,
             text: finalMessage,
+            footer: 'Select a category or use buttons below',
+            image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
+            buttons: [
+                { id: '.ping', text: '🚀 Speed' },
+                { id: '.owner', text: '👑 Owner' },
+                { id: '.help', text: '📚 Help' }
+            ],
+            // Adding a list section for cleaner organization
+            list: {
+                buttonText: 'Open Command List',
+                sections: sections
+            },
             contextInfo: {
                 isForwarded: true,
                 forwardingScore: 999,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363398106360290@newsletter',
-                    newsletterName: `${botName}: Active`,
-                    serverMessageId: 101
-                },
                 externalAdReply: {
-                    title: `${botName} — Smart Multi-Device`,
-                    body: `Hello ${senderName}, Enjoy using ${botName}!`,
+                    title: `${botName} V3 — Active`,
+                    body: `Hello ${senderName}, how can I help you today?`,
                     mediaType: 1,
                     renderLargerThumbnail: true,
                     thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
@@ -132,8 +131,8 @@ const aliveCommand = async (conn, chatId, msg) => {
         }, { quoted: msg });
 
     } catch (e) {
-        console.error("Error in help.js:", e);
-        await conn.sendMessage(chatId, { text: "Hitilafu imetokea! (Error loading menu)" });
+        console.error("Menu Error:", e);
+        await conn.sendMessage(chatId, { text: "⚠️ Error: Unable to load the command menu." });
     }
 };
 
