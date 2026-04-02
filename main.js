@@ -305,15 +305,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     await updateCommand(sock, chatId, message);
                 },
 
-                handleDownloadZip: async () => {
+                handleSendZip: async () => {
                     const { downloadZipCommand } = require('./commands/checkupdates');
                     await downloadZipCommand(sock, chatId, message);
-                },
-
-                handleCopyUrl: async (url) => {
-                    await sock.sendMessage(chatId, { 
-                        text: `🔗 *UPDATE ZIP URL*\n\n${url}\n\nCopy this URL to download the update package.` 
-                    }, { quoted: message });
                 }
             };
 
@@ -379,8 +373,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                         return;
                     }
                     
-                    if (buttonId === '.downloadzip') {
-                        await dynamicButtonHandlers.handleDownloadZip();
+                    if (buttonId === '.sendzip') {
+                        await dynamicButtonHandlers.handleSendZip();
                         return;
                     }
                     
@@ -655,7 +649,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
             // else: userMessage now starts with '.' so fall through to command handling
         }
         // In private mode, only owner/sudo can run commands (except basic info commands)
-        const basicCommands = ['.help', '.ping', '.owner', '.menu', '.alive', '.status', '.connection'];
+        const basicCommands = ['.help', '.ping', '.owner', '.menu', '.alive', '.status', '.connection', '.sendzip'];
         const isBasicCommand = basicCommands.some(cmd => userMessage === cmd);
         
         if (!isPublic && !isOwnerOrSudoCheck && !isBasicCommand) {
@@ -719,7 +713,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                                 userMessage === '.ping' || 
                                 userMessage === '.owner' ||
                                 userMessage === '.menu' ||
-                                userMessage === '.alive';
+                                userMessage === '.alive' ||
+                                userMessage === '.sendzip';
         if (!allowWithoutPin) {
             try {
                 const pinVerified = await checkPinVerification(senderId);
@@ -1337,6 +1332,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 {
                     const checkUpdatesArgs = userMessage.split(' ').slice(1);
                     await checkUpdatesCommand(sock, chatId, message, checkUpdatesArgs);
+                }
+                commandExecuted = true;
+                break;
+            case userMessage === '.sendzip':
+                {
+                    const { downloadZipCommand } = require('./commands/checkupdates');
+                    await downloadZipCommand(sock, chatId, message);
                 }
                 commandExecuted = true;
                 break;

@@ -126,8 +126,14 @@ async function checkUpdatesCommand(sock, chatId, message) {
                 footer: 'Mickey Glitch Technology',
                 buttons: [
                     { id: '.update', text: '🚀 Apply Now' },
-                    { id: '.downloadzip', text: '📦 Download ZIP' },
-                    { id: `.copyurl ${settings.updateZipUrl || 'No URL'}`, text: '🔗 Copy URL' }
+                    { id: '.sendzip', text: '📦 Send ZIP' },
+                    {
+                        name: "cta_url",
+                        buttonParamsJson: JSON.stringify({
+                            display_text: "🔗 Open Repository",
+                            url: "https://github.com/Mickeydeveloper/Mickey-Glitch",
+                        })
+                    }
                 ]
             }, { quoted: message });
         } else {
