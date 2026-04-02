@@ -8,7 +8,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 // ────────────────────────────────────────────────
-// CONFIGURATION (ENGLISH OPTIMIZED)
+// CONFIGURATION
 // ────────────────────────────────────────────────
 const CONFIG = {
     PRICE_PER_GB: 1000,
@@ -58,53 +58,30 @@ async function toPTT(buffer, ext) {
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
-        const payload = (userMessage || '').toString().trim();
-
-        // 1. PAYMENT CALLBACK HANDLING
-        if (payload.startsWith('pay_')) {
-            const parts = payload.split('_');
-            const network = parts[1] || '';
-            const orderRef = parts.slice(2).join('_') || 'unknown';
-            
-            const methods = {
-                halo: `*Halopesa:* Send money to *${CONFIG.SELLER_NUMBER}*.\nReference: HALO ${orderRef}`,
-                voda: `*M-Pesa:* Send money to *07xxxxxxx*.\nReference: VODA ${orderRef}`,
-                tigo: `*Tigo Pesa:* Send money to *06xxxxxxx*.\nReference: TIGO ${orderRef}`
-            };
-
-            const methodText = methods[network] || 'Please select a valid payment method.';
-
-            await sock.sendMessage(chatId, {
-                text: `✅ *PAYMENT INSTRUCTIONS*\n\n*Order:* #${orderRef}\n*Method:* ${network.toUpperCase()}\n\n${methodText}\n\nAfter payment, please send a screenshot to the owner for instant activation.`
-            }, { quoted: message });
-
-            clearPendingHalotelOrder(chatId);
-            return;
-        }
-
-        // 2. SECURITY CHECK (GROUP BLOCK)
+        // Capture text from various sources
+        const fullText = (userMessage || message.message?.conversation || message.message?.extendedTextMessage?.text || '').trim();
+        
+        // 1. SECURITY CHECK (GROUP BLOCK)
         if (chatId.endsWith('@g.us')) {
             return await sock.sendMessage(chatId, {
-                text: '🔒 *SECURE SHOPPING*\n\nFor privacy and security, please order data bundles via *Private Message (DM)*.'
+                text: '🔒 *SECURE SHOPPING*\n\nPlease order data bundles via *Private Message (DM)* for security.'
             }, { quoted: message });
         }
 
-        const fullText = (userMessage || '').trim();
         const matches = fullText.match(/\d+/g); 
 
-        // 3. INITIAL SHOP MENU
+        // 2. INITIAL SHOP MENU (If no GB/Number provided)
         if (!matches || matches.length < 2) {
-            const menu = `🌐 *HALOTEL DATA STORE* 🇹🇿
+            const menu = `🌐 *HALOTEL DATA STORE*
 ━━━━━━━━━━━━━━━━━━━━
 
 💰 *Rate:* ${formatCurrency(CONFIG.PRICE_PER_GB)} / 1GB
 📉 *Minimum:* ${CONFIG.MIN_GB} GB
-⚡ *Instant Delivery:* Personal & Business
+⚡ *Instant Delivery:* Automated Systems
 
 📝 *HOW TO ORDER:*
 1. Select a bundle below
 2. Or Type: \`.halotel <GB> <NUMBER>\`
-3. Follow payment steps
 
 💡 *Example:* \`.halotel 10 0615xxxxxx\`
 
@@ -119,24 +96,24 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
                 buttons: [
                     { id: '.halotel 10 0615xxxxxx', text: '⚡ Buy 10GB' },
                     { id: '.halotel 20 0615xxxxxx', text: '🔥 Buy 20GB' },
-                    { type: 'call', text: '📞 Contact Support', id: `tel:${CONFIG.SELLER_NUMBER}` }
+                    { type: 'call', text: '📞 Contact Us', id: `tel:${CONFIG.SELLER_NUMBER}` }
                 ]
             }, { quoted: message });
         }
 
-        // 4. DATA PROCESSING
+        // 3. PROCESSING ORDER
         let gbAmount = parseInt(matches[0]);
         let phoneNumber = normalizeNumber(matches[1]);
 
         if (gbAmount < CONFIG.MIN_GB) {
             return await sock.sendMessage(chatId, { 
-                text: `❌ *ERROR:* Minimum order is *${CONFIG.MIN_GB}GB*.\nPlease increase your amount.` 
+                text: `❌ *ERROR:* Minimum order is *${CONFIG.MIN_GB}GB*.` 
             }, { quoted: message });
         }
 
         if (phoneNumber.length !== 12) {
             return await sock.sendMessage(chatId, { 
-                text: `❌ *ERROR:* Invalid phone number (${matches[1]}). Use a valid Halotel number.` 
+                text: `❌ *ERROR:* Invalid number. Provide a valid Halotel number.` 
             }, { quoted: message });
         }
 
@@ -144,53 +121,43 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
         const orderRef = `HTL-${Math.random().toString(36).toUpperCase().substring(2, 7)}`;
         setPendingHalotelOrder(chatId, orderRef);
 
-        // 5. SEND INVOICE
-        const invoice = `💳 *ORDER INVOICE: #${orderRef}*
-━━━━━━━━━━━━━━━━━━━━
-📦 *Service:* Halotel Data
-📊 *Amount:* ${gbAmount} GB
-💵 *Total Cost:* ${formatCurrency(totalCost)}
-📱 *Target:* ${phoneNumber}
-━━━━━━━━━━━━━━━━━━━━
+        // 4. DIGITAL RECEIPT (PAYMENT INFO STYLE)
+        const receiptText = `
+╭━━━〔 *PAYMENT INFO* 〕━━━┈⊷
+┃ 🎫 *Order ID:* #${orderRef}
+┃ 📦 *Product:* Halotel ${gbAmount}GB
+┃ 📱 *Target:* ${phoneNumber}
+┃ 💰 *Subtotal:* ${formatCurrency(totalCost)}
+┃ 🧾 *Tax (VAT):* TZS 0.00
+┃ 💎 *Total:* ${formatCurrency(totalCost)}
+╰━━━━━━━━━━━━━━━━━━┈⊷
 
-🚨 *ACTION:* Please select your preferred payment network below to get the account details.`;
+*Please select your payment network below to get details:*`.trim();
 
-        let bannerBuf = await getBuffer(CONFIG.BANNER).catch(() => null);
-
-        await sock.sendMessage(chatId, {
-            text: invoice,
+        // 5. SEND INTERACTIVE BUTTONS WITH RECEIPT
+        await sendButtons(sock, chatId, {
+            title: '💳 CHECKOUT & BILLING',
+            text: receiptText,
+            footer: 'Mickey Glitch • Secure Payment',
+            image: { url: CONFIG.BANNER },
+            buttons: [
+                { id: `pay_halo_${orderRef}`, text: '🏦 Halopesa' },
+                { id: `pay_voda_${orderRef}`, text: '📱 M-Pesa' },
+                { id: `pay_tigo_${orderRef}`, text: '💸 Tigo Pesa' }
+            ],
             contextInfo: {
                 externalAdReply: {
-                    title: `ORDER: ${gbAmount}GB | #${orderRef}`,
-                    body: `Total: ${formatCurrency(totalCost)}`,
-                    thumbnail: bannerBuf,
+                    title: `BILLING FOR: ${phoneNumber}`,
+                    body: `Order Amount: ${formatCurrency(totalCost)}`,
                     mediaType: 1,
-                    renderLargerThumbnail: true
+                    renderLargerThumbnail: true,
+                    thumbnailUrl: CONFIG.BANNER,
+                    sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
                 }
             }
         }, { quoted: message });
 
-        // 6. PAYMENT METHOD LIST
-        const sections = [
-            {
-                title: "SELECT PAYMENT GATEWAY",
-                rows: [
-                    { title: "Halopesa", rowId: `pay_halo_${orderRef}`, description: `Pay ${formatCurrency(totalCost)} via Halotel` },
-                    { title: "M-Pesa", rowId: `pay_voda_${orderRef}`, description: `Pay ${formatCurrency(totalCost)} via Vodacom` },
-                    { title: "Tigo Pesa", rowId: `pay_tigo_${orderRef}`, description: `Pay ${formatCurrency(totalCost)} via Tigo` }
-                ]
-            }
-        ];
-
-        await sock.sendMessage(chatId, {
-            text: "👇 *TAP BUTTON BELOW TO PAY:*",
-            footer: CONFIG.FOOTER,
-            title: "💳 PAYMENT OPTIONS",
-            buttonText: "CHOOSE NETWORK",
-            sections
-        }, { quoted: message });
-
-        // 7. AUDIO GREETING
+        // 6. AUDIO CONFIRMATION
         setTimeout(async () => {
             try {
                 const { data } = await axios.get(CONFIG.AUDIO, { responseType: 'arraybuffer' });
@@ -201,12 +168,12 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 
         // Notify Seller
         await sock.sendMessage(SELLER_JID, {
-            text: `🔔 *NEW ORDER RECEIVED!*\n\nRef: #${orderRef}\nQuantity: ${gbAmount}GB\nTarget: ${phoneNumber}\nValue: ${formatCurrency(totalCost)}`
+            text: `🔔 *NEW ORDER:* #${orderRef}\nQty: ${gbAmount}GB\nNum: ${phoneNumber}\nValue: ${formatCurrency(totalCost)}`
         });
 
     } catch (error) {
-        console.error('System Error:', error);
-        await sock.sendMessage(chatId, { text: '⚠️ *System Error:* Please try again later.' });
+        console.error('Core Error:', error);
+        await sock.sendMessage(chatId, { text: '⚠️ *System Error:* Try again later.' });
     }
 }
 
