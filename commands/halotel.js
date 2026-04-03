@@ -106,7 +106,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 Bofya button hapo chini kulipia mara moja:`;
 
         // 🔘 BUTTONS - STYLE KAMA "PAYMENT DUE" ULIVYOONYESHA KWENYE PICHA
-        // Tumia CTA URL buttons + moja Quick Reply kwa "Pay Now" ili ifanane na EasyBuy
+        // Tumia CTA URL buttons + moja Quick Reply kwa "Pay Now" ili ifanane na real button 
         await sendButtons(sock, chatId, {
             title: '💳 PAYMENT DUE - HALOTEL DATA',
             text: receiptText,
@@ -124,7 +124,7 @@ Bofya button hapo chini kulipia mara moja:`;
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
                         display_text: "🏦 Halopesa",
-                        url: "tel:*150*88#",
+                        url: "tel:*150*88# ",
                     })
                 },
 
@@ -133,7 +133,7 @@ Bofya button hapo chini kulipia mara moja:`;
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
                         display_text: "📱 M-Pesa",
-                        url: "tel:*150*00#",
+                        url: "tel:*150*00# ",
                     })
                 },
 
@@ -142,7 +142,7 @@ Bofya button hapo chini kulipia mara moja:`;
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
                         display_text: "📢 Jiunge na Channel",
-                        url: CONFIG.CHANNEL_URL,
+                        url: "https://whatsapp.com/channel/0029VbBDVEEHLHQdjvSGpU1q",
                     })
                 }
             ],
