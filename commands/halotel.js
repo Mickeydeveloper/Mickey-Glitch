@@ -12,8 +12,8 @@ const { spawn } = require('child_process');
 // ────────────────────────────────────────────────
 const CONFIG = {
     PRICE_PER_GB: 1000,
-    MIN_GB: 10,
     SELLER_NUMBER: '255615944741',
+    SUPPORT_CALL: '255612130873',
     SELLER_NAME: 'MICKDADI HAMZA SALIM',
     BANNER: 'https://files.catbox.moe/ljabyq.png',
     AUDIO: 'https://files.catbox.moe/t80fnj.mp3',
@@ -22,163 +22,132 @@ const CONFIG = {
     CHANNEL_URL: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
 };
 
-if (!fs.existsSync(CONFIG.TEMP_DIR)) fs.mkdirSync(CONFIG.TEMP_DIR, { recursive: true });
-const SELLER_JID = `${CONFIG.SELLER_NUMBER}@s.whatsapp.net`;
-
-// ────────────────────────────────────────────────
-// UTILS
-// ────────────────────────────────────────────────
 const formatCurrency = (n) => new Intl.NumberFormat('en-TZ', { style: 'currency', currency: 'TZS' }).format(n);
 
-function normalizeNumber(num) {
-    if (!num) return '';
-    let cleaned = num.replace(/\D/g, ''); 
-    if (cleaned.startsWith('0')) cleaned = '255' + cleaned.slice(1);
-    else if (cleaned.length === 9) cleaned = '255' + cleaned;
-    return cleaned;
-}
-
-async function toPTT(buffer, ext) {
-    const tmp = path.join(CONFIG.TEMP_DIR, `\( {Date.now()}_in. \){ext}`);
-    const out = path.join(CONFIG.TEMP_DIR, `${Date.now()}_out.opus`);
-    try {
-        await fs.promises.writeFile(tmp, buffer);
-        await new Promise((resolve, reject) => {
-            const ff = spawn('ffmpeg', ['-y', '-i', tmp, '-vn', '-acodec', 'libopus', '-ab', '128k', out]);
-            ff.on('close', (code) => code === 0 ? resolve() : reject(new Error('FFmpeg error')));
-            ff.on('error', reject);
-        });
-        return await fs.promises.readFile(out);
-    } finally {
-        [tmp, out].forEach(f => fs.existsSync(f) && fs.unlinkSync(f));
-    }
-}
-
 // ────────────────────────────────────────────────
-// MAIN COMMAND (UPDATED WITH "PAY NOW" STYLE)
+// MAIN COMMAND & DYNAMIC HANDLER
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
-        const fullText = (userMessage || message.message?.conversation || message.message?.extendedTextMessage?.text || '').trim();
+        const fullText = (userMessage || '').trim().toLowerCase();
+        const sender = message.key.participant || message.key.remoteJid;
 
-        if (chatId.endsWith('@g.us')) {
-            return await sock.sendMessage(chatId, {
-                text: '🔒 *SECURE SHOPPING*\n\nPlease order data bundles via *Private Message (DM)* for security.'
+        // --- 1. HATUA YA KWANZA: .halotel (MAELIZO NA KUCHAGUA GB) ---
+        if (fullText === '.halotel' || fullText === 'halotel_menu') {
+            const welcomeText = `
+👋 *HABARI, KARIBU MICKEY GLITCH SHOP!*
+
+Tunauza Bando za Halotel kwa bei nafuu zaidi:
+💰 *Bei:* TSh 1,000 tu kwa @1GB
+🚀 *Kasi:* 4G High Speed
+⏳ *Muda:* Masaa 24/7
+
+Chagua kiasi unachotaka hapa chini:`;
+
+            return await sendButtons(sock, chatId, {
+                title: '📶 HALOTEL DATA MENU',
+                text: welcomeText,
+                footer: CONFIG.FOOTER,
+                image: { url: CONFIG.BANNER },
+                buttons: [
+                    { id: '.halotel 10', text: '📦 GB 10' },
+                    { id: '.halotel 20', text: '📦 GB 20' },
+                    { id: 'halotel_custom', text: '➕ ZAIDI YA GB 20' }
+                ]
             }, { quoted: message });
         }
 
-        const matches = fullText.match(/\d+/g); 
+        // --- 2. HATUA YA PILI: ZAIDI YA GB 20 ---
+        if (fullText === 'halotel_custom') {
+            const customText = `
+💡 *MSAADA WA ORDER KUBWA:*
+Kama unataka zaidi ya GB 20, tafadhali tumia command hii:
 
-        if (!matches || matches.length < 2) {
-            return await sock.sendMessage(chatId, { 
-                text: `❌ *ERROR:* Usage: \`.halotel <GB> <NUMBER>\`\n\n💡 *Example:* \`.halotel 10 0615123456\`` 
+👉 \`.halotel <GB> <NAMBA>\`
+Mfano: \`.halotel 30 ${CONFIG.SELLER_NUMBER}\`
+
+Bofya button hapa chini kupata msaada wa haraka:`;
+
+            return await sendButtons(sock, chatId, {
+                title: '➕ ORDER NYINGINE',
+                text: customText,
+                footer: CONFIG.FOOTER,
+                buttons: [
+                    { name: "cta_call", buttonParamsJson: JSON.stringify({ display_text: "📞 Piga Simu Sasa", phoneNumber: CONFIG.SUPPORT_CALL }) },
+                    { id: 'halotel_menu', text: '⬅️ Rudi Nyuma' }
+                ]
             }, { quoted: message });
         }
 
-        let gbAmount = parseInt(matches[0]);
-        let phoneNumber = normalizeNumber(matches[1]);
-
-        if (gbAmount < CONFIG.MIN_GB) {
-            return await sock.sendMessage(chatId, { 
-                text: `❌ *ERROR:* Minimum order is *${CONFIG.MIN_GB}GB*.` 
-            }, { quoted: message });
-        }
-
-        if (phoneNumber.length !== 12) {
-            return await sock.sendMessage(chatId, { 
-                text: `❌ *ERROR:* Invalid number. Provide a valid Halotel number.` 
-            }, { quoted: message });
-        }
-
-        const totalCost = gbAmount * CONFIG.PRICE_PER_GB;
-        const orderRef = `HTL-${Math.random().toString(36).toUpperCase().substring(2, 7)}`;
-        setPendingHalotelOrder(chatId, orderRef);
-
-        const receiptText = `
-╭━━━〔 *PAYMENT DUE* 〕━━━┈⊷
-┃ 🎫 *Order ID:* #${orderRef}
-┃ 📦 *Product:* Halotel ${gbAmount}GB
-┃ 📱 *Target Number:* ${phoneNumber}
-┃ 💰 *Amount Due:* ${formatCurrency(totalCost)}
-┃ 📅 *Due Date:* ${new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-╰━━━━━━━━━━━━━━━━━━┈⊷
-
-Bofya button hapo chini kulipia mara moja:`;
-
-        // 🔘 BUTTONS - STYLE KAMA "PAYMENT DUE" ULIVYOONYESHA KWENYE PICHA
-        // Tumia CTA URL buttons + moja Quick Reply kwa "Pay Now" ili ifanane na real button 
-        await sendButtons(sock, chatId, {
-            title: '💳 PAYMENT DUE - HALOTEL DATA',
-            text: receiptText,
-            footer: CONFIG.FOOTER,
-            image: { url: CONFIG.BANNER },
-            buttons: [
-                // PAY NOW - Quick Reply Button (Inafanana na "Pay now" kwenye picha)
-                { 
-                    id: `pay_now_${orderRef}`, 
-                    text: '✅ Pay Now' 
-                },
-
-                // Halopesa USSD
-                {
-                    name: "cta_url",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "🏦 Halopesa",
-                        url: "tel:*150*88# ",
-                    })
-                },
-
-                // M-Pesa USSD
-                {
-                    name: "cta_url",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "📱 M-Pesa",
-                        url: "tel:*150*00# ",
-                    })
-                },
-
-                // Channel
-                {
-                    name: "cta_url",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "📢 Jiunge na Channel",
-                        url: "https://whatsapp.com/channel/0029VbBDVEEHLHQdjvSGpU1q",
-                    })
-                }
-            ],
-            contextInfo: {
-                externalAdReply: {
-                    title: `HALOTEL ${gbAmount}GB - TSH ${totalCost}`,
-                    body: `Order #${orderRef} | Due: ${formatCurrency(totalCost)}`,
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    thumbnailUrl: CONFIG.BANNER,
-                    sourceUrl: CONFIG.CHANNEL_URL
-                }
+        // --- 3. HATUA YA TATU: KULIPIA (PAY NOW RESPONSES) ---
+        if (fullText.startsWith('pay_now_')) {
+            const [_, orderId, amount] = fullText.split('_').slice(1);
+            
+            // Futa ujumbe uliopita (Ule wa Payment Due) ili kuleta njia za malipo
+            if (message.message?.extendedTextMessage?.contextInfo?.stanzaId) {
+                await sock.sendMessage(chatId, { delete: message.key });
             }
-        }, { quoted: message });
 
-        // Audio confirmation
-        setTimeout(async () => {
-            try {
-                const { data } = await axios.get(CONFIG.AUDIO, { responseType: 'arraybuffer' });
-                const ptt = await toPTT(Buffer.from(data), 'mp3');
-                await sock.sendMessage(chatId, { audio: ptt, mimetype: 'audio/ogg; codecs=opus', ptt: true }, { quoted: message });
-            } catch (e) {}
-        }, 1500);
+            const payMenuText = `
+💳 *CHAGUA NJIA YA MALIPO:*
+Order ID: #${orderId}
+Kiasi: ${formatCurrency(amount)}
 
-        // Notify Seller
-        await sock.sendMessage(SELLER_JID, {
-            text: `🔔 *NEW HALOTEL ORDER*\nOrder ID: #${orderRef}\nAmount: ${formatCurrency(totalCost)}\nTarget: ${phoneNumber}\nCustomer: ${chatId.split('@')[0]}`
-        });
+Bofya button ya mtandao unaotumia kulipia:`;
+
+            return await sendButtons(sock, chatId, {
+                title: '💸 SELECT PAYMENT METHOD',
+                text: payMenuText,
+                footer: CONFIG.FOOTER,
+                buttons: [
+                    { name: "cta_url", buttonParamsJson: JSON.stringify({ display_text: "🏦 Halopesa", url: "tel:*150*88#" }) },
+                    { name: "cta_url", buttonParamsJson: JSON.stringify({ display_text: "📱 Mixx by Yas", url: "tel:*150*98#" }) },
+                    { id: 'confirm_payment', text: '✅ Nimeshalipia' }
+                ]
+            }, { quoted: message });
+        }
+
+        if (fullText === 'confirm_payment') {
+            return await sock.sendMessage(chatId, { text: '🙏 *ASANTE:* Tafadhali tuma *Screenshot* ya muamala hapa ili mhudumu athibitishe na kukuwekea bando sasa hivi.' }, { quoted: message });
+        }
+
+        // --- 4. HATUA YA NNE: PROCESS ORDER (Kama .halotel 10 061...) ---
+        const matches = fullText.match(/\d+/g);
+        if (matches && matches.length >= 1) {
+            let gbAmount = parseInt(matches[0]);
+            let phoneNumber = matches[1] || ''; // Inaweza kuwa tupu kama amebonyeza button ya GB 10 tu
+
+            // Kama hana namba, muulize namba
+            if (!phoneNumber) {
+                return await sock.sendMessage(chatId, { text: `⚠️ Tafadhali rudia kwa kuweka namba.\n\nMfano: \`.halotel ${gbAmount} 0615xxxxxx\`` }, { quoted: message });
+            }
+
+            const totalCost = gbAmount * CONFIG.PRICE_PER_GB;
+            const orderRef = Math.random().toString(36).toUpperCase().substring(2, 7);
+
+            const receiptText = `
+╭━━━〔 *PAYMENT DUE* 〕━━━┈⊷
+┃ 🎫 *Ref:* #${orderRef}
+┃ 📦 *Item:* Halotel ${gbAmount}GB
+┃ 📱 *Target:* ${phoneNumber}
+┃ 💰 *Price:* ${formatCurrency(totalCost)}
+╰━━━━━━━━━━━━━━━━━━┈⊷`;
+
+            await sendButtons(sock, chatId, {
+                title: '🛒 ORDER SUMMARY',
+                text: receiptText,
+                footer: CONFIG.FOOTER,
+                image: { url: CONFIG.BANNER },
+                buttons: [
+                    { id: `pay_now_${orderRef}_${totalCost}`, text: '✅ Pay Now' },
+                    { id: 'halotel_menu', text: '❌ Cancel' }
+                ]
+            }, { quoted: message });
+        }
 
     } catch (error) {
-        console.error('Core Error:', error);
-        await sock.sendMessage(chatId, { text: '⚠️ *System Error:* Try again later.' });
+        console.error('Halotel Error:', error);
     }
 }
 
-module.exports = {
-    halotelCommand,
-    CONFIG
-};
+module.exports = { halotelCommand, CONFIG };
