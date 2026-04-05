@@ -10,13 +10,13 @@ const formatUptime = (seconds) => {
     const h = Math.floor((seconds % (3600 * 24)) / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-    
+
     const parts = [];
     if (d > 0) parts.push(`${d}d`);
     if (h > 0) parts.push(`${h}h`);
     if (m > 0) parts.push(`${m}m`);
     parts.push(`${s}s`);
-    
+
     return parts.join(' ');
 };
 
@@ -29,9 +29,6 @@ const aliveCommand = async (sock, chatId, msg) => {
     const startTime = performance.now();
 
     try {
-        // Visual indicator that the bot is typing
-        await sock.sendPresenceUpdate('composing', chatId);
-
         // System Calculations
         const time = new Date().toLocaleTimeString('en-US', { 
             timeZone: 'Africa/Dar_es_Salaam', 
@@ -45,7 +42,7 @@ const aliveCommand = async (sock, chatId, msg) => {
         const usedRam = process.memoryUsage().heapUsed / Math.pow(1024, 3);
         const ramPercent = ((usedRam / totalRam) * 100).toFixed(1);
         const cpuModel = os.cpus()[0]?.model.split('@')[0].trim() || 'Generic CPU';
-        
+
         const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
 
         // Message Template
@@ -65,7 +62,7 @@ const aliveCommand = async (sock, chatId, msg) => {
 
 *© 2026 Mickey Glitch Technology*`.trim();
 
-        // Send interactive response
+        // Send interactive response directly
         await sendButtons(sock, chatId, {
             title: 'SYSTEM ACTIVE',
             text: statusMessage,
