@@ -1,8 +1,7 @@
-// Identify song from audio/video using Shazam-like API
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
-const { sendButtons } = require('gifted-btns'); // Tumeongeza hii hapa
+const { sendButtons } = require('gifted-btns');
 const acrcloud = require('acrcloud');
-const fs = require('fs');
+const fs = require('fs-extra'); // Tumia fs-extra kwa usalama zaidi
 const path = require('path');
 const settings = require('../settings');
 const { exec } = require('child_process');
@@ -10,67 +9,59 @@ const util = require('util');
 const execAsync = util.promisify(exec);
 
 async function shazamCommand(sock, chatId, message) {
-    const messageToQuote = message;
-
-    // Check if it's a reply
-    const ctxInfo = message.message?.extendedTextMessage?.contextInfo;
-    if (!ctxInfo?.quotedMessage) {
-        return sock.sendMessage(chatId, {
-            text: 'Please reply to an audio or video message with .shazam'
-        }, { quoted: messageToQuote });
-    }
-
-    const quotedMsg = ctxInfo.quotedMessage;
-    const mediaMessage = quotedMsg.audioMessage || quotedMsg.videoMessage;
-    if (!mediaMessage) {
-        return sock.sendMessage(chatId, {
-            text: 'The replied message must be an audio or video.'
-        }, { quoted: messageToQuote });
-    }
-
-    const targetMessage = {
-        key: {
-            remoteJid: chatId,
-            id: ctxInfo.stanzaId,
-            participant: ctxInfo.participant
-        },
-        message: quotedMsg
-    };
-
     try {
-        await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+        // 1. Pata Quoted Message kwa usalama
+        const ctxInfo = message.message?.extendedTextMessage?.contextInfo;
+        const quotedMsg = ctxInfo?.quotedMessage;
+
+        if (!quotedMsg) {
+            return sock.sendMessage(chatId, { text: '❌ *Tafadhali reply kwenye Audio au Video ukitumia .shazam*' }, { quoted: message });
+        }
+
+        const mediaMessage = quotedMsg.audioMessage || quotedMsg.videoMessage;
+        if (!mediaMessage) {
+            return sock.sendMessage(chatId, { text: '❌ *Reply kwenye Audio au Video pekee!*' }, { quoted: message });
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
+
+        // 2. Download Media
+        const targetMessage = {
+            key: {
+                remoteJid: chatId,
+                id: ctxInfo.stanzaId,
+                participant: ctxInfo.participant
+            },
+            message: quotedMsg
+        };
 
         const mediaBuffer = await downloadMediaMessage(targetMessage, 'buffer', {}, {
             logger: undefined,
             reuploadRequest: sock.updateMediaMessage
         });
 
-        if (!mediaBuffer) {
-            return sock.sendMessage(chatId, { text: 'Failed to download media.' }, { quoted: messageToQuote });
-        }
+        if (!mediaBuffer) throw new Error("Media download failed");
 
-        const tempDir = path.join(__dirname, '../temp');
+        // 3. Maandalizi ya Files
+        const tempDir = path.join(process.cwd(), 'tmp');
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
-        const tempInput = path.join(tempDir, `input_${Date.now()}`);
-        const tempAudio = path.join(tempDir, `audio_${Date.now()}.wav`);
+        
+        const tempInput = path.join(tempDir, `shazam_in_${Date.now()}`);
+        const tempAudio = path.join(tempDir, `shazam_out_${Date.now()}.wav`);
 
         fs.writeFileSync(tempInput, mediaBuffer);
 
-        // Logic ya FFmpeg (Imebaki ile ile uliyokuwa nayo)
-        let duration = 0;
+        // 4. FFmpeg Conversion (Tunakata sekunde 15 tu kwa haraka)
         try {
-            const probeResult = await execAsync(`ffprobe -v quiet -print_format json -show_format "${tempInput}"`);
-            const probeData = JSON.parse(probeResult.stdout);
-            duration = parseFloat(probeData.format?.duration || 0);
-        } catch (e) { duration = 60; }
+            await execAsync(`ffmpeg -i "${tempInput}" -vn -acodec pcm_s16le -ar 44100 -ac 2 -t 15 "${tempAudio}" -y`);
+        } catch (e) {
+            console.log("FFmpeg missing or failed, trying direct identification...");
+            fs.copySync(tempInput, tempAudio); // Jaribu kutumia original kama ffmpeg imefeli
+        }
 
-        let clipDuration = duration < 10 ? duration : 30;
-        let startTime = duration > 120 ? 30 : 0;
-
-        await execAsync(`ffmpeg -i "${tempInput}" -vn -acodec pcm_s16le -ar 44100 -ac 2 -ss ${startTime} -t ${clipDuration} "${tempAudio}" -y`);
-
+        // 5. ACRCloud Identification
         if (!settings.acrcloud || !settings.acrcloud.access_key) {
-            return sock.sendMessage(chatId, { text: '❌ *ACRCloud not configured!*' }, { quoted: messageToQuote });
+            return sock.sendMessage(chatId, { text: '❌ *ACRCloud API haijawekwa kwenye settings.js!*' });
         }
 
         const acr = new acrcloud({
@@ -81,44 +72,43 @@ async function shazamCommand(sock, chatId, message) {
 
         const result = await acr.identify(fs.readFileSync(tempAudio));
 
-        // Cleanup
+        // Cleanup haraka
         if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
         if (fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
 
+        // 6. Response Logic
         if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
             const song = result.metadata.music[0];
-            const title = song.title || 'Unknown Title';
-            const artist = song.artists?.[0]?.name || 'Unknown Artist';
-            const album = song.album?.name || 'Unknown Album';
+            const title = song.title || 'Unknown';
+            const artist = song.artists?.[0]?.name || 'Unknown';
 
             const caption = `
-🎵 *SONG IDENTIFIED!* 🎵
+🎵 *MICKEY SHAZAM IDENTIFIED!*
 ━━━━━━━━━━━━━━━━━━━━━━
 📌 *Title:* ${title}
 👤 *Artist:* ${artist}
-💿 *Album:* ${album}
+💿 *Album:* ${song.album?.name || 'N/A'}
 ━━━━━━━━━━━━━━━━━━━━━━
-_Click the button below to download the audio file._`;
+_Bonyeza button hapa chini kupata wimbo huu._`;
 
-            // HAPA NDIPO TUNAWEKA BUTTON
             await sendButtons(sock, chatId, {
-                title: '🎧 MICKEY SHAZAM ENGINE',
+                title: '🎧 SONG FINDER',
                 text: caption,
-                footer: 'Mickey Glitch Technology',
+                footer: 'Mickey Glitch Tech',
                 buttons: [
                     { id: `.play ${artist} ${title}`, text: '📥 DOWNLOAD MP3' }
                 ]
-            }, { quoted: messageToQuote });
+            }, { quoted: message });
 
         } else {
-            await sock.sendMessage(chatId, { text: '❌ *Song not found!* Try a clearer part of the audio.' }, { quoted: messageToQuote });
+            await sock.sendMessage(chatId, { text: '❌ *Wimbo haukutambulika. Jaribu sehemu yenye sauti safi.*' });
         }
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error(err);
-        await sock.sendMessage(chatId, { text: `❌ *Error:* ${err.message}` }, { quoted: messageToQuote });
+        console.error("SHAZAM ERROR:", err);
+        // Usitume error ndefu kwa user, mpe tu ishara kuwa imefeli
     }
 }
 
