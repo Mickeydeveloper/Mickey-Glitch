@@ -1,54 +1,64 @@
-const truecallerjs = require('truecallerjs');
+const axios = require('axios');
 
 async function whoisCommand(sock, chatId, message, args) {
     try {
-        let target;
-        const ctxInfo = message.message?.extendedTextMessage?.contextInfo || {};
+        // --- 1. Pata Body kwa usalama (Kuzuia .slice error) ---
+        const body = message.message?.conversation || 
+                     message.message?.extendedTextMessage?.text || "";
         
-        if (ctxInfo.mentionedJid?.[0]) {
-            target = ctxInfo.mentionedJid[0].split('@')[0];
-        } else if (ctxInfo.participant) {
-            target = ctxInfo.participant.split('@')[0];
+        // --- 2. Tafuta namba ya simu (User ID) ---
+        let user;
+        if (message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0]) {
+            // Kama amem-tag mtu (e.g. .whois @255xxx)
+            user = message.message.extendedTextMessage.contextInfo.mentionedJid[0];
+        } else if (message.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
+            // Kama amereply meseji ya mtu
+            user = message.message.extendedTextMessage.contextInfo.participant;
         } else if (args[0]) {
-            target = args[0].replace(/[^0-9]/g, '');
+            // Kama ameandika namba (e.g. .whois 2557xxx)
+            user = args[0].replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+        } else {
+            // Kama hajataja mtu, angalia namba yake mwenyewe
+            user = message.key.participant || message.key.remoteJid;
         }
 
-        if (!target) return sock.sendMessage(chatId, { text: "🔎 Tag mtu au andika namba!" });
+        if (!user) return await sock.sendMessage(chatId, { text: "❌ *Taja mtu au andika namba ya simu!*" }, { quoted: message });
 
-        await sock.sendMessage(chatId, { react: { text: '🕵️', key: message.key } });
+        await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
 
-        // MPANGILIO (Search Parameter)
-        const searchData = {
-            number: target,
-            countryCode: "TZ",
-            installationId: "WEKA_INSTALLATION_ID_YAKO_HAPA", // Weka ile ID uliyopata
-        };
-
-        // Tafuta kwa kutumia NPM Library
-        const response = await truecallerjs.search(searchData);
-        const info = response.json();
-
-        if (!info || !info.data || info.data.length === 0) {
-            return sock.sendMessage(chatId, { text: `❌ Identity for +${target} not found.` });
+        // --- 3. Pata Info za WhatsApp (Bio & Profile Pic) ---
+        let ppUrl;
+        try {
+            ppUrl = await sock.profilePictureUrl(user, 'image');
+        } catch {
+            ppUrl = 'https://telegra.ph/file/02324707639e7b2353396.jpg'; // Default pic kama hana
         }
 
-        const user = info.data[0];
-        const report = `
-🕵️ *TRUECALLER INTELLIGENCE*
+        const status = await sock.fetchStatus(user).catch(() => ({ status: "No Bio available" }));
+        const pushName = message.pushName || "Mtumiaji";
+        const phoneNumber = user.split('@')[0];
+
+        // --- 4. Tengeneza Ripoti ---
+        const caption = `
+👤 *USER INFORMATION*
 ━━━━━━━━━━━━━━━━━━━━━━
-👤 *Name:* ${user.name || 'Private'}
-📱 *Number:* +${target}
-📧 *Email:* ${user.internetAddresses?.[0]?.id || 'N/A'}
-🏢 *Carrier:* ${user.phones?.[0]?.carrier || 'N/A'}
-📍 *Region:* ${user.addresses?.[0]?.city || 'N/A'}
-🛡️ *Spam Score:* ${user.spamScore || '0'}
-━━━━━━━━━━━━━━━━━━━━━━`;
+📝 *Name:* ${pushName}
+📞 *Number:* ${phoneNumber}
+📖 *Bio:* ${status.status || "Hidden"}
+🔗 *Link:* wa.me/${phoneNumber}
+━━━━━━━━━━━━━━━━━━━━━━
+*Mickey Glitch Technology*`;
 
-        await sock.sendMessage(chatId, { text: report }, { quoted: message });
+        await sock.sendMessage(chatId, {
+            image: { url: ppUrl },
+            caption: caption
+        }, { quoted: message });
+
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error(err);
-        await sock.sendMessage(chatId, { text: "⚠️ Tatizo la mfumo limetokea." });
+        console.error("WHOIS ERROR:", err);
+        // Hatuwezi kutuma error kama sock imekufa, ila hapa tunahakikisha bot haizimi
     }
 }
 
