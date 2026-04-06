@@ -140,6 +140,8 @@ const { anticallCommand, readState: readAnticallState, handleAnticall } = requir
 const { pinCommand, verifyPinCommand, checkPinVerification } = require('./commands/pin');
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
+const whoisCommand = require('./commands/whois');
+
 
 global.packname = settings.packname;
 global.author = settings.author;
