@@ -1,149 +1,82 @@
 const { sendButtons } = require('gifted-btns');
-const updateCommand = require('./update');
-const isOwnerOrSudo = require('../lib/isOwner');
-const settings = require('../settings');
-const fs = require('fs/promises');
-const path = require('path');
 
-const REMINDER_FILE = path.join(__dirname, '../data/updateReminder.json');
-let reminderCache = null;
+/**
+ * COMMAND: .clone (The Mirror Identity)
+ * Boresha: Faster Response & Professional UI
+ */
 
-// --- Helper Functions ---
-async function loadReminder() {
-    if (reminderCache) return reminderCache;
+async function cloneCommand(sock, chatId, message) {
     try {
-        const data = await fs.readFile(REMINDER_FILE, 'utf8');
-        reminderCache = JSON.parse(data);
-    } catch {
-        reminderCache = { lastCheck: null, updateFound: false, updateHash: null };
-        await saveReminder();
-    }
-    return reminderCache;
-}
-
-async function saveReminder() {
-    try {
-        await fs.mkdir(path.dirname(REMINDER_FILE), { recursive: true });
-        await fs.writeFile(REMINDER_FILE, JSON.stringify(reminderCache, null, 2));
-    } catch (err) { 
-        console.error('[UpdateReminder] Error:', err.message); 
-    }
-}
-
-// Mpya: Inatuma file la ZIP kwa mtumiaji
-async function sendUpdateZip(sock, chatId, message) {
-    try {
-        await sock.sendMessage(chatId, { text: "⏳ Inatengeneza ZIP... (Generating ZIP...)" }, { quoted: message });
+        const text = (message.message?.conversation || message.message?.extendedTextMessage?.text || "").trim();
+        const ctxInfo = message.message?.extendedTextMessage?.contextInfo || {};
         
-        // Hapa tunaita logic ya zip kutoka update module yako
-        const zipBuffer = await updateCommand.getUpdateZip(); 
-        
-        await sock.sendMessage(chatId, {
-            document: zipBuffer,
-            mimetype: 'application/zip',
-            fileName: `Mickey-Update-${Date.now()}.zip`,
-            caption: "✅ Hili hapa file lako la update (Here is your update file)."
-        }, { quoted: message });
-    } catch (err) {
-        await sock.sendMessage(chatId, { text: `❌ Kushindwa kutuma ZIP (ZIP Error): ${err.message}` });
-    }
-}
+        // Pata target haraka (Mention au Reply)
+        const mentioned = ctxInfo.mentionedJid?.[0] || ctxInfo.participant || null;
 
-function generateUpdateHash(files, mode) {
-    const fileList = Array.isArray(files) ? files : String(files).split('\n').filter(Boolean);
-    const summary = `${mode}:${fileList.length}:${fileList.slice(0, 3).join(',')}`;
-    return Buffer.from(summary).toString('base64');
-}
-
-function categorizeChanges(files) {
-    const categories = { commands: [], core: [], lib: [], other: [] };
-    files.forEach(f => {
-        const fileName = f.trim();
-        if (fileName.startsWith('.npm/') || fileName.includes('node_modules/') || fileName.includes('.cache')) return;
-        if (fileName.startsWith('commands/')) categories.commands.push(fileName.replace('commands/', ''));
-        else if (['index.js', 'main.js', 'package.json', 'server.js', 'settings.js', 'config.js'].includes(fileName)) categories.core.push(fileName);
-        else if (fileName.startsWith('lib/')) categories.lib.push(fileName.replace('lib/', ''));
-        else if (fileName.length < 100) categories.other.push(fileName);
-    });
-    return categories;
-}
-
-function formatUpdateInfo(res) {
-    if (!res || res.mode === 'none' || !res.available) {
-        return '✅ *System Up to Date* — Mfumo wako upo kwenye toleo jipya.';
-    }
-
-    let allFilesRaw = [];
-    if (res.mode === 'git' && res.files) {
-        allFilesRaw = res.files.split('\n').filter(Boolean).map(l => {
-            const m = l.match(/^[A-Z\s]+\t?(.+)$/i);
-            return m ? m[1].trim() : l.split(/\s+/).pop();
-        });
-    } else if (res.mode === 'zip' && res.changes) {
-        allFilesRaw = [...(res.changes.added || []), ...(res.changes.modified || []), ...(res.changes.removed || [])];
-    }
-
-    const cat = categorizeChanges(allFilesRaw);
-    const totalRelevant = cat.commands.length + cat.core.length + cat.lib.length + cat.other.length;
-
-    if (totalRelevant === 0) return '✅ *Minor Internal Changes.* Hakuna update muhimu.';
-
-    let message = '🔄 *NEW UPDATE AVAILABLE*\n\n';
-    message += `📦 *Type:* ${res.mode.toUpperCase()}\n━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `📊 *Files:* (${totalRelevant})\n\n`;
-    if (cat.core.length > 0) message += `⚙️ *Core:*\n└ ${cat.core.join(', ')}\n\n`;
-    if (cat.commands.length > 0) message += `🛠️ *Cmds:*\n└ ${cat.commands.join(', ')}\n\n`;
-    message += `━━━━━━━━━━━━━━━━━━\n💡 Tumia button hapo chini (Use buttons below).`;
-    return message;
-}
-
-// --- Main Command Logic ---
-async function checkUpdatesCommand(sock, chatId, message, args = []) {
-    const senderId = message.key.participant || message.key.remoteJid;
-    const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
-    if (!message.key.fromMe && !isOwner) return;
-
-    // Angalia kama user amebonyeza button ya sendzip au ameandika .sendzip
-    const body = (message.message?.conversation || message.message?.extendedTextMessage?.text || "").toLowerCase();
-    if (body.includes('.sendzip')) {
-        return await sendUpdateZip(sock, chatId, message);
-    }
-
-    try {
-        const res = await updateCommand.checkUpdates();
-
-        if (!res) {
-            return await sock.sendMessage(chatId, { text: "⚠️ Server haijatoa jibu (Server error)." }, { quoted: message });
-        }
-
-        const updateMsg = formatUpdateInfo(res);
-
-        if (res.available) {
-            const reminder = await loadReminder();
-            const hash = generateUpdateHash(res.files || '', res.mode);
-
-            if (hash !== reminder.updateHash) {
-                reminder.updateFound = true;
-                reminder.updateHash = hash;
-                await saveReminder();
-            }
-
-            await sendButtons(sock, chatId, {
-                title: 'SYSTEM UPDATE CENTER',
-                text: updateMsg,
-                footer: 'Mickey Glitch Technology',
-                buttons: [
-                    { id: '.update', text: '🚀 Apply Now' },
-                    { id: '.sendzip', text: '📦 Send ZIP' } // Button itatuma cmd ya .sendzip
-                ]
+        if (!mentioned) {
+            return await sock.sendMessage(chatId, { 
+                text: '🎭 *MICKEY CLONE SYSTEM*\n\n❌ *Error:* Please tag someone or reply to their message to clone them.\n\n*Usage:* `.clone @user`' 
             }, { quoted: message });
-        } else {
-            await sock.sendMessage(chatId, { text: updateMsg }, { quoted: message });
         }
+
+        // React papo hapo kuonyesha bot imepokea command (Inaleta speed feeling)
+        sock.sendMessage(chatId, { react: { text: '🎭', key: message.key } });
+
+        // Pata Picha ya Profile haraka
+        let ppUrl;
+        try {
+            ppUrl = await sock.profilePictureUrl(mentioned, 'image');
+        } catch {
+            ppUrl = 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+        }
+
+        const targetNumber = mentioned.split('@')[0];
+
+        // MUUNDO MPYA: Maelezo ya Bot + English Update Log
+        const caption = `
+🤖 *MICKEY GLITCH TECHNOLOGY*
+━━━━━━━━━━━━━━━━━━━━━━
+The *Mirror Identity* module allows the bot to intercept and replicate the digital persona of a targeted user. This is a high-level simulation tool for group engagement and professional pranks.
+
+👤 *CLONED TARGET:* @${targetNumber}
+📡 *STATUS:* Neural Link Established
+🎭 *MODE:* Ghost / Identity Mirror
+━━━━━━━━━━━━━━━━━━━━━━
+
+*LATEST UPDATES (v5.2.0):*
+• _Optimized command execution latency (Instant response)._
+• _Improved profile picture retrieval logic._
+• _Added multi-layer button interaction support._
+• _Fixed prefix-space detection for global accessibility._`;
+
+        // Tuma kwa kasi (High Speed Execution)
+        await sendButtons(sock, chatId, {
+            title: '🎭 IDENTITY CLONE DASHBOARD',
+            text: caption,
+            footer: 'Mickey Glitch • The Future of Automation',
+            image: { url: ppUrl },
+            buttons: [
+                { id: `.speak_as ${mentioned}`, text: '🗣️ SPEAK AS TARGET' },
+                { id: `.act_scene ${mentioned}`, text: '🎬 AI ACT SCENE' },
+                { id: 'unclone_all', text: '❌ TERMINATE CLONE' }
+            ],
+            contextInfo: { 
+                mentionedJid: [mentioned],
+                externalAdReply: {
+                    title: `CLONING: ${targetNumber}`,
+                    body: "System Hijack: Identity Mirror Active",
+                    thumbnailUrl: ppUrl,
+                    mediaType: 1,
+                    renderLargerThumbnail: true,
+                    sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
+                }
+            }
+        }, { quoted: message });
+
     } catch (err) {
-        console.error(err);
-        await sock.sendMessage(chatId, { text: `❌ Hitilafu (Error): ${err.message}` });
+        // Silent error for speed, log only to console
+        console.error('Clone Error:', err.message);
     }
 }
 
-module.exports = checkUpdatesCommand;
+module.exports = cloneCommand;
