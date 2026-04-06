@@ -131,6 +131,8 @@ const stickercropCommand = require('./commands/stickercrop');
 const updateCommand = require('./commands/update');
 const checkUpdatesCommand = require('./commands/checkupdates');
 const { igsCommand } = require('./commands/igs');
+const { cloneCommand } = require('./commands/clone');
+
 
 // --- ANTICALL IMPORT FIX ---
 const { anticallCommand, readState: readAnticallState, handleAnticall } = require('./commands/anticall');
