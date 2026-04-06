@@ -1,63 +1,78 @@
 const { sendButtons } = require('gifted-btns');
-const axios = require('axios');
 const yts = require('yt-search');
+const ruhend = require('ruhend-scraper'); // Unayo kwenye package.json yako
 
-const AXIOS_DEFAULTS = {
-    timeout: 60000,
-    headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-};
-
-async function videoCommand(sock, chatId, message) {
+async function videoCommand(sock, chatId, message, args) {
     try {
-        const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
-        const searchQuery = text.split(' ').slice(1).join(' ').trim();
+        const command = message.body.slice(1).trim().split(/ +/).shift().toLowerCase();
+        const searchQuery = args.join(' ').trim();
 
-        if (!searchQuery) {
-            return await sock.sendMessage(chatId, { text: '❌ *Unatafuta nini?*\nMfano: .play Diamond Platnumz' }, { quoted: message });
-        }
+        // --- SEHEMU YA 1: KULETA BUTTONS (.video [jina]) ---
+        if (command === 'video' && !message.body.startsWith('.ytvideo')) {
+            if (!searchQuery) {
+                return await sock.sendMessage(chatId, { text: '❌ *Unatafuta nini?*\nMfano: .video Diamond Platnumz' }, { quoted: message });
+            }
 
-        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
+            await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
-        // 1. Tafuta Video YouTube
-        const { videos } = await yts(searchQuery);
-        if (!videos || videos.length === 0) {
-            return await sock.sendMessage(chatId, { text: '❌ Video haikupatikana!' }, { quoted: message });
-        }
+            const { videos } = await yts(searchQuery);
+            if (!videos || videos.length === 0) return await sock.sendMessage(chatId, { text: '❌ Haikupatikana!' });
 
-        const v = videos[0]; // Chukua video ya kwanza
-        const videoUrl = v.url;
+            const v = videos[0];
+            const title = v.title;
 
-        // 2. Tengeneza Ujumbe wa Maelezo (Ad Style)
-        const caption = `
-🎵 *YOUTUBE DOWNLOADER* 🎵
+            const caption = `
+🎥 *MICKEY MEDIA SEARCH*
 ━━━━━━━━━━━━━━━━━━━━━━
-📝 *Title:* ${v.title}
+📝 *Title:* ${title}
 ⏳ *Duration:* ${v.timestamp}
 👀 *Views:* ${v.views.toLocaleString()}
-📅 *Uploaded:* ${v.ago}
 ━━━━━━━━━━━━━━━━━━━━━━
-*Chagua aina ya file unalotaka hapa chini:* 👇`;
+*Chagua unachotaka hapa chini:* 👇`;
 
-        // 3. Tuma Button (Video & Audio)
-        // Tunatuma URL ndani ya ID ili handler yetu iweze kuitumia
-        await sendButtons(sock, chatId, {
-            title: '🎥 MICKEY MEDIA DOWNLOADER',
-            text: caption,
-            footer: 'Mickey Glitch Technology',
-            image: { url: v.thumbnail },
-            buttons: [
-                { id: `.ytvideo ${videoUrl}`, text: '🎬 VIDEO (MP4)' },
-                { id: `.ytaudio ${videoUrl}`, text: '🎵 AUDIO (MP3)' }
-            ]
-        }, { quoted: message });
+            await sendButtons(sock, chatId, {
+                title: '🎬 DOWNLOADER PANEL',
+                text: caption,
+                footer: 'Mickey Glitch Tech',
+                image: { url: v.thumbnail },
+                buttons: [
+                    { id: `.ytvideo ${title}`, text: '🎥 VIDEO (MP4)' },
+                    { id: `.play ${title}`, text: '🎵 AUDIO (MP3)' }
+                ]
+            }, { quoted: message });
+            
+            return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+        }
 
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+        // --- SEHEMU YA 2: KUDOWNLOAD VIDEO (.ytvideo [jina]) ---
+        if (command === 'ytvideo') {
+            if (!searchQuery) return;
+
+            await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+            
+            // Tunatafuta URL tena kwa kutumia jina lililotumwa na button
+            const { videos } = await yts(searchQuery);
+            if (!videos || videos.length === 0) return;
+
+            const videoUrl = videos[0].url;
+
+            // Kutumia ruhend-scraper (Nguvu zaidi na rahisi kuliko ytdl-core)
+            const res = await ruhend.ytmp4(videoUrl);
+            
+            if (res.status) {
+                await sock.sendMessage(chatId, {
+                    video: { url: res.video },
+                    caption: `✅ *Success:* ${res.title}`,
+                    mimetype: 'video/mp4'
+                }, { quoted: message });
+            } else {
+                throw new Error("Failed to get download link");
+            }
+        }
 
     } catch (err) {
-        console.error("YT ERROR:", err.message);
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena.' });
+        console.error(err);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu:* Server imeshindwa kupata faili.' });
     }
 }
 
