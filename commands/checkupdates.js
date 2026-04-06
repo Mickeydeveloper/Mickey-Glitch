@@ -30,6 +30,25 @@ async function saveReminder() {
     }
 }
 
+// Mpya: Inatuma file la ZIP kwa mtumiaji
+async function sendUpdateZip(sock, chatId, message) {
+    try {
+        await sock.sendMessage(chatId, { text: "⏳ Inatengeneza ZIP... (Generating ZIP...)" }, { quoted: message });
+        
+        // Hapa tunaita logic ya zip kutoka update module yako
+        const zipBuffer = await updateCommand.getUpdateZip(); 
+        
+        await sock.sendMessage(chatId, {
+            document: zipBuffer,
+            mimetype: 'application/zip',
+            fileName: `Mickey-Update-${Date.now()}.zip`,
+            caption: "✅ Hili hapa file lako la update (Here is your update file)."
+        }, { quoted: message });
+    } catch (err) {
+        await sock.sendMessage(chatId, { text: `❌ Kushindwa kutuma ZIP (ZIP Error): ${err.message}` });
+    }
+}
+
 function generateUpdateHash(files, mode) {
     const fileList = Array.isArray(files) ? files : String(files).split('\n').filter(Boolean);
     const summary = `${mode}:${fileList.length}:${fileList.slice(0, 3).join(',')}`;
@@ -51,7 +70,7 @@ function categorizeChanges(files) {
 
 function formatUpdateInfo(res) {
     if (!res || res.mode === 'none' || !res.available) {
-        return '✅ *System Up to Date* — Mfumo wako upo kwenye toleo jipya (Your bot is up to date).';
+        return '✅ *System Up to Date* — Mfumo wako upo kwenye toleo jipya.';
     }
 
     let allFilesRaw = [];
@@ -67,7 +86,7 @@ function formatUpdateInfo(res) {
     const cat = categorizeChanges(allFilesRaw);
     const totalRelevant = cat.commands.length + cat.core.length + cat.lib.length + cat.other.length;
 
-    if (totalRelevant === 0) return '✅ *Minor Internal Changes.* Hakuna update muhimu (No critical update).';
+    if (totalRelevant === 0) return '✅ *Minor Internal Changes.* Hakuna update muhimu.';
 
     let message = '🔄 *NEW UPDATE AVAILABLE*\n\n';
     message += `📦 *Type:* ${res.mode.toUpperCase()}\n━━━━━━━━━━━━━━━━━━\n\n`;
@@ -79,17 +98,22 @@ function formatUpdateInfo(res) {
 }
 
 // --- Main Command Logic ---
-async function checkUpdatesCommand(sock, chatId, message) {
+async function checkUpdatesCommand(sock, chatId, message, args = []) {
     const senderId = message.key.participant || message.key.remoteJid;
     const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
     if (!message.key.fromMe && !isOwner) return;
 
+    // Angalia kama user amebonyeza button ya sendzip au ameandika .sendzip
+    const body = (message.message?.conversation || message.message?.extendedTextMessage?.text || "").toLowerCase();
+    if (body.includes('.sendzip')) {
+        return await sendUpdateZip(sock, chatId, message);
+    }
+
     try {
         const res = await updateCommand.checkUpdates();
-        
-        // Fix: Hakikisha 'res' ipo kuzuia crash
+
         if (!res) {
-            return await sock.sendMessage(chatId, { text: "⚠️ Server haijatoa jibu, jaribu tena (Server error)." }, { quoted: message });
+            return await sock.sendMessage(chatId, { text: "⚠️ Server haijatoa jibu (Server error)." }, { quoted: message });
         }
 
         const updateMsg = formatUpdateInfo(res);
@@ -110,7 +134,7 @@ async function checkUpdatesCommand(sock, chatId, message) {
                 footer: 'Mickey Glitch Technology',
                 buttons: [
                     { id: '.update', text: '🚀 Apply Now' },
-                    { id: '.sendzip', text: '📦 Send ZIP' }
+                    { id: '.sendzip', text: '📦 Send ZIP' } // Button itatuma cmd ya .sendzip
                 ]
             }, { quoted: message });
         } else {
@@ -122,5 +146,4 @@ async function checkUpdatesCommand(sock, chatId, message) {
     }
 }
 
-// EXPORT FIX: Hii inahakikisha main.js inaipata function moja kwa moja
 module.exports = checkUpdatesCommand;
