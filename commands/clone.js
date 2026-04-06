@@ -1,65 +1,51 @@
-const { sendButtons } = require('gifted-btns');
+const fs = require('fs');
+
+/**
+ * COMMAND: .clone
+ * FUNCTION: Inachukua Profile Picture na Jina la mtu na kuweka kwenye bot
+ */
 
 async function cloneCommand(sock, chatId, message) {
     try {
-        // Pata maandishi yote ya meseji
-        const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
-        const ctxInfo = message.message?.extendedTextMessage?.contextInfo || {};
-        
-        // Pata namba iliyotagiwa au namba iliyoreply-wa
-        const mentioned = ctxInfo.mentionedJid?.[0] || ctxInfo.participant || null;
+        // 1. Check kama kuna mtu ametag-iwa (mentioned) au kureply-iwa
+        const quoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+        const mentioned = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+        const target = mentioned || message.message?.extendedTextMessage?.contextInfo?.participant;
 
-        if (!mentioned) {
-            return await sock.sendMessage(chatId, { 
-                text: '⚠️ *TAG MTU!* \nTumia: `.clone @tag_mtu` au reply meseji yake kwa kuandika `.clone`' 
-            }, { quoted: message });
+        if (!target) {
+            return await sock.sendMessage(chatId, { text: "❌ *Usage:* Reply to a message or tag someone to clone them.\nExample: `.clone @user`" }, { quoted: message });
         }
 
-        await sock.sendMessage(chatId, { react: { text: '🎭', key: message.key } });
+        await sock.sendMessage(chatId, { react: { text: '👥', key: message.key } });
 
-        // Pata Picha ya Profile
+        // 2. Pata Profile Picture ya mlengwa
         let ppUrl;
         try {
-            ppUrl = await sock.profilePictureUrl(mentioned, 'image');
-        } catch {
-            ppUrl = 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+            ppUrl = await sock.profilePictureUrl(target, 'image');
+        } catch (e) {
+            ppUrl = 'https://i.ibb.co/vzVv8Yp/mickey.jpg'; // Default kama hana picha
         }
 
-        const targetName = "Mlengwa (Target)";
+        // 3. Pata Jina lake (Contact Info)
+        const contact = await sock.onWhatsApp(target);
+        const name = contact[0]?.notify || "Mickey Glitch User";
 
-        const cloneMsg = `
-🎭 *IDENTITY CLONED!*
-━━━━━━━━━━━━━━━
-👤 *Target:* @${mentioned.split('@')[0]}
-🕵️ *Status:* Mirror Active!
+        // 4. Update Profile ya Bot (Jina na Picha)
+        // Kumbuka: Baadhi ya hosting panels zinaweza kuzuia hili, lakini hapa ndio logic yake
+        await sock.updateProfileStatus(`Cloned from ${name} | Powered by Mickey Glitch`);
+        
+        // Download picha na ku-update PP ya bot
+        const { fetchBuffer } = require('../lib/myfunc');
+        const buffer = await fetchBuffer(ppUrl);
+        await sock.updateProfilePicture(sock.user.id, buffer);
 
-Bot sasa inaweza ku-act kama mwanachama huyu.
-━━━━━━━━━━━━━━━`;
-
-        await sendButtons(sock, chatId, {
-            title: '👤 CLONE DASHBOARD',
-            text: cloneMsg,
-            footer: 'Mickey Glitch Technology',
-            image: { url: ppUrl },
-            buttons: [
-                { id: `.speak_as ${mentioned}`, text: '🗣️ ONGEA KAMA YEYE' },
-                { id: `.act_scene ${mentioned}`, text: '🎭 ACT SCENE' },
-                { id: 'unclone_all', text: '❌ UNCLONE' }
-            ],
-            contextInfo: { 
-                mentionedJid: [mentioned],
-                externalAdReply: {
-                    title: `Mirroring: ${mentioned.split('@')[0]}`,
-                    thumbnailUrl: ppUrl,
-                    mediaType: 1,
-                    renderLargerThumbnail: true
-                }
-            }
+        await sock.sendMessage(chatId, { 
+            text: `✅ *IDENTITY CLONED SUCCESSFUL*\n\n👤 *Name:* ${name}\n📸 *Status:* Profile Picture Updated.\n\n_Bot now mirrors this user._` 
         }, { quoted: message });
 
     } catch (err) {
-        console.error(err);
-        await sock.sendMessage(chatId, { text: '❌ Hitilafu imetokea!' });
+        console.error("Clone Error:", err.message);
+        await sock.sendMessage(chatId, { text: "❌ *Clone Failed:* Bot lacks permission or target hidden profile." });
     }
 }
 
