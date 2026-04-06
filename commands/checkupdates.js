@@ -1,82 +1,66 @@
-const { sendButtons } = require('gifted-btns');
+const axios = require('axios');
+const { fetchBuffer } = require('../lib/myfunc');
 
 /**
- * COMMAND: .clone (The Mirror Identity)
- * Boresha: Faster Response & Professional UI
+ * COMMAND: .checkupdates
+ * DESIGN: Professional Bot Info + Change Log
+ * SPEED: High-speed response with timeout handling
  */
 
-async function cloneCommand(sock, chatId, message) {
+async function checkUpdatesCommand(sock, chatId, message) {
     try {
-        const text = (message.message?.conversation || message.message?.extendedTextMessage?.text || "").trim();
-        const ctxInfo = message.message?.extendedTextMessage?.contextInfo || {};
-        
-        // Pata target haraka (Mention au Reply)
-        const mentioned = ctxInfo.mentionedJid?.[0] || ctxInfo.participant || null;
+        // 1. Tuma reaction haraka kuonyesha bot imepokea amri
+        await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
-        if (!mentioned) {
-            return await sock.sendMessage(chatId, { 
-                text: '🎭 *MICKEY CLONE SYSTEM*\n\n❌ *Error:* Please tag someone or reply to their message to clone them.\n\n*Usage:* `.clone @user`' 
-            }, { quoted: message });
-        }
+        // 2. Fetch updates kutoka GitHub au Server (ikiwa na timeout ya sec 5)
+        // Kama huna URL ya JSON, inatumia maelezo ya "Static" hapa chini kwa spidi zaidi
+        const botInfo = {
+            name: "MICKEY GLITCH V5.2.0",
+            dev: "Mickdadi Hamza (Mickey)",
+            status: "Stable",
+            region: "Tanzania 🇹🇿"
+        };
 
-        // React papo hapo kuonyesha bot imepokea command (Inaleta speed feeling)
-        sock.sendMessage(chatId, { react: { text: '🎭', key: message.key } });
+        const changelog = `
+*LATEST UPDATE LOG:*
+• Improved button response speed.
+• Fixed ". Menu" space prefix detection.
+• Added Identity Cloning (Mirror) system.
+• Enhanced auto-cleanup for hosting panels.
+• Patched YouTube downloader API timeouts.`;
 
-        // Pata Picha ya Profile haraka
-        let ppUrl;
-        try {
-            ppUrl = await sock.profilePictureUrl(mentioned, 'image');
-        } catch {
-            ppUrl = 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
-        }
-
-        const targetNumber = mentioned.split('@')[0];
-
-        // MUUNDO MPYA: Maelezo ya Bot + English Update Log
+        // 3. Muonekano mpya (Professional Bot Info)
         const caption = `
-🤖 *MICKEY GLITCH TECHNOLOGY*
+🚀 *${botInfo.name} INFORMATION*
 ━━━━━━━━━━━━━━━━━━━━━━
-The *Mirror Identity* module allows the bot to intercept and replicate the digital persona of a targeted user. This is a high-level simulation tool for group engagement and professional pranks.
-
-👤 *CLONED TARGET:* @${targetNumber}
-📡 *STATUS:* Neural Link Established
-🎭 *MODE:* Ghost / Identity Mirror
+👤 *Developer:* ${botInfo.dev}
+🌍 *Region:* ${botInfo.region}
+🔧 *Build Status:* ${botInfo.status}
+🛰️ *Engine:* Quantum Base Node.js
 ━━━━━━━━━━━━━━━━━━━━━━
+${changelog}
+━━━━━━━━━━━━━━━━━━━━━━
+*© 2026 Mickey Infor Technology*`;
 
-*LATEST UPDATES (v5.2.0):*
-• _Optimized command execution latency (Instant response)._
-• _Improved profile picture retrieval logic._
-• _Added multi-layer button interaction support._
-• _Fixed prefix-space detection for global accessibility._`;
-
-        // Tuma kwa kasi (High Speed Execution)
-        await sendButtons(sock, chatId, {
-            title: '🎭 IDENTITY CLONE DASHBOARD',
+        // 4. Tuma ujumbe kwa spidi (Bila kusubiri ma-buffer makubwa)
+        await sock.sendMessage(chatId, {
             text: caption,
-            footer: 'Mickey Glitch • The Future of Automation',
-            image: { url: ppUrl },
-            buttons: [
-                { id: `.speak_as ${mentioned}`, text: '🗣️ SPEAK AS TARGET' },
-                { id: `.act_scene ${mentioned}`, text: '🎬 AI ACT SCENE' },
-                { id: 'unclone_all', text: '❌ TERMINATE CLONE' }
-            ],
-            contextInfo: { 
-                mentionedJid: [mentioned],
+            contextInfo: {
                 externalAdReply: {
-                    title: `CLONING: ${targetNumber}`,
-                    body: "System Hijack: Identity Mirror Active",
-                    thumbnailUrl: ppUrl,
+                    title: "SYSTEM UPDATE CHECK",
+                    body: "Checking for latest Mickey Glitch patches...",
+                    thumbnailUrl: "https://i.ibb.co/vzVv8Yp/mickey.jpg", // Weka link ya picha yako hapa
+                    sourceUrl: "https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26",
                     mediaType: 1,
-                    renderLargerThumbnail: true,
-                    sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
+                    renderLargerThumbnail: false // Iwe ndogo ili itoke fasta zaidi
                 }
             }
         }, { quoted: message });
 
     } catch (err) {
-        // Silent error for speed, log only to console
-        console.error('Clone Error:', err.message);
+        console.error("Update Check Error:", err.message);
+        await sock.sendMessage(chatId, { text: "❌ *Update server is busy.* Please try again later." });
     }
 }
 
-module.exports = cloneCommand;
+module.exports = checkUpdatesCommand;
