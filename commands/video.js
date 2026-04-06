@@ -1,16 +1,24 @@
 const { sendButtons } = require('gifted-btns');
 const yts = require('yt-search');
-const ruhend = require('ruhend-scraper'); // Unayo kwenye package.json yako
+const ruhend = require('ruhend-scraper');
 
 async function videoCommand(sock, chatId, message, args) {
     try {
-        const command = message.body.slice(1).trim().split(/ +/).shift().toLowerCase();
+        // --- MABORESHO YA USALAMA (Safety Fix) ---
+        // Tunahakikisha body ipo kabla ya kuitumia
+        const body = message.message?.conversation || 
+                     message.message?.extendedTextMessage?.text || 
+                     message.message?.buttonsResponseMessage?.selectedButtonId || "";
+        
+        if (!body) return; // Kama hakuna maandishi, usifanye kitu
+
+        const command = body.slice(1).trim().split(/ +/).shift().toLowerCase();
         const searchQuery = args.join(' ').trim();
 
-        // --- SEHEMU YA 1: KULETA BUTTONS (.video [jina]) ---
-        if (command === 'video' && !message.body.startsWith('.ytvideo')) {
+        // --- 1. KULETA BUTTONS (.video [jina]) ---
+        if (command === 'video' && !body.startsWith('.ytvideo')) {
             if (!searchQuery) {
-                return await sock.sendMessage(chatId, { text: '❌ *Unatafuta nini?*\nMfano: .video Diamond Platnumz' }, { quoted: message });
+                return await sock.sendMessage(chatId, { text: '❌ *Unatafuta nini?*\nMfano: .video Mario oluwa' }, { quoted: message });
             }
 
             await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
@@ -26,7 +34,6 @@ async function videoCommand(sock, chatId, message, args) {
 ━━━━━━━━━━━━━━━━━━━━━━
 📝 *Title:* ${title}
 ⏳ *Duration:* ${v.timestamp}
-👀 *Views:* ${v.views.toLocaleString()}
 ━━━━━━━━━━━━━━━━━━━━━━
 *Chagua unachotaka hapa chini:* 👇`;
 
@@ -44,19 +51,18 @@ async function videoCommand(sock, chatId, message, args) {
             return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         }
 
-        // --- SEHEMU YA 2: KUDOWNLOAD VIDEO (.ytvideo [jina]) ---
+        // --- 2. KUDOWNLOAD VIDEO (.ytvideo [jina]) ---
         if (command === 'ytvideo') {
-            if (!searchQuery) return;
+            // Hapa tunatumia jina lililotoka kwenye button search
+            const downloadQuery = body.replace(/^\.ytvideo\s+/i, ''); 
+            if (!downloadQuery) return;
 
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
             
-            // Tunatafuta URL tena kwa kutumia jina lililotumwa na button
-            const { videos } = await yts(searchQuery);
+            const { videos } = await yts(downloadQuery);
             if (!videos || videos.length === 0) return;
 
             const videoUrl = videos[0].url;
-
-            // Kutumia ruhend-scraper (Nguvu zaidi na rahisi kuliko ytdl-core)
             const res = await ruhend.ytmp4(videoUrl);
             
             if (res.status) {
@@ -65,14 +71,12 @@ async function videoCommand(sock, chatId, message, args) {
                     caption: `✅ *Success:* ${res.title}`,
                     mimetype: 'video/mp4'
                 }, { quoted: message });
-            } else {
-                throw new Error("Failed to get download link");
             }
         }
 
     } catch (err) {
-        console.error(err);
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu:* Server imeshindwa kupata faili.' });
+        console.error("VIDEO ERROR:", err);
+        // Hatuwezi kutumia slice hapa tena bila hofu
     }
 }
 
