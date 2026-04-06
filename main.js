@@ -38,7 +38,7 @@ setInterval(() => {
       }
     } catch (e) {}
   });
-  performanceCache.lastCleanup = Date.now(),
+  performanceCache.lastCleanup = Date.now(); // 🛠️ FIXED: Koma imeondolewa hapa
 }, 30 * 60 * 1000);
 
 const settings = require('./settings');
