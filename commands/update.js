@@ -5,6 +5,7 @@ const https = require('https');
 const settings = require('../settings');
 const isOwnerOrSudo = require('../lib/isOwner');
 
+// Utility ya kuendesha commands za terminal
 function run(cmd) {
     return new Promise((resolve, reject) => {
         exec(cmd, { windowsHide: true }, (err, stdout, stderr) => {
@@ -14,447 +15,107 @@ function run(cmd) {
     });
 }
 
-async function hasGitRepo() {
-    const gitDir = path.join(process.cwd(), '.git');
-    if (!fs.existsSync(gitDir)) return false;
+// 🤖 AUTO-DETECT URL: Inatafuta pa kwenda ikikwama
+function getAutoUrl() {
     try {
-        await run('git --version');
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-async function updateViaGit() {
-    const oldRev = (await run('git rev-parse HEAD').catch(() => 'unknown')).trim();
-    await run('git fetch --all --prune');
-    const newRev = (await run('git rev-parse origin/main')).trim();
-    const alreadyUpToDate = oldRev === newRev;
-    const commits = alreadyUpToDate ? '' : await run(`git log --pretty=format:"%h %s (%an)" ${oldRev}..${newRev}`).catch(() => '');
-    const files = alreadyUpToDate ? '' : await run(`git diff --name-status ${oldRev} ${newRev}`).catch(() => '');
-    await run(`git reset --hard ${newRev}`);
-    await run('git clean -fd');
-    return { oldRev, newRev, alreadyUpToDate, commits, files };
-}
-
-function downloadFile(url, dest, visited = new Set()) {
-    return new Promise((resolve, reject) => {
-        try {
-            // Avoid infinite redirect loops
-            if (visited.has(url) || visited.size > 5) {
-                return reject(new Error('Too many redirects'));
+        const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+        let repoUrl = settings.updateZipUrl || process.env.UPDATE_ZIP_URL || pkg.repository?.url || pkg.homepage || "";
+        
+        if (repoUrl.includes('github.com')) {
+            repoUrl = repoUrl.replace(/\.git$/, '').replace(/\/$/, '');
+            if (!repoUrl.endsWith('.zip')) {
+                return `${repoUrl}/archive/refs/heads/main.zip`;
             }
-            visited.add(url);
-
-            const useHttps = url.startsWith('https://');
-            const client = useHttps ? require('https') : require('http');
-            const req = client.get(url, {
-                headers: {
-                    'User-Agent': 'KnightBot-Updater/1.0',
-                    'Accept': '*/*'
-                }
-            }, res => {
-                // Handle redirects
-                if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
-                    const location = res.headers.location;
-                    if (!location) return reject(new Error(`HTTP ${res.statusCode} without Location`));
-                    const nextUrl = new URL(location, url).toString();
-                    res.resume();
-                    return downloadFile(nextUrl, dest, visited).then(resolve).catch(reject);
-                }
-
-                if (res.statusCode !== 200) {
-                    return reject(new Error(`HTTP ${res.statusCode}`));
-                }
-
-                const file = fs.createWriteStream(dest);
-                res.pipe(file);
-                file.on('finish', () => file.close(resolve));
-                file.on('error', err => {
-                    try { file.close(() => {}); } catch {}
-                    fs.unlink(dest, () => reject(err));
-                });
-            });
-            req.on('error', err => {
-                fs.unlink(dest, () => reject(err));
-            });
-        } catch (e) {
-            reject(e);
         }
+        return repoUrl;
+    } catch (e) { return ""; }
+}
+
+// 📥 Download Engine na Redirect Handling
+function downloadFile(url, dest) {
+    return new Promise((resolve, reject) => {
+        const client = url.startsWith('https') ? require('https') : require('http');
+        client.get(url, (res) => {
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                return downloadFile(new URL(res.headers.location, url).toString(), dest).then(resolve).catch(reject);
+            }
+            if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
+            const file = fs.createWriteStream(dest);
+            res.pipe(file);
+            file.on('finish', () => file.close(resolve));
+        }).on('error', reject);
     });
 }
 
+// 📦 Extraction Engine (Universal)
 async function extractZip(zipPath, outDir) {
-    // Try to use platform tools; no extra npm modules required
-    if (process.platform === 'win32') {
-        const cmd = `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${outDir.replace(/\\/g, '/')}' -Force"`;
-        await run(cmd);
-        return;
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    try {
+        await run(`unzip -o "${zipPath}" -d "${outDir}"`);
+    } catch (e) {
+        // Backup kama unzip haipo kwenye panel
+        try { await run(`7z x -y "${zipPath}" -o"${outDir}"`); }
+        catch (e2) { throw new Error("No unzip tool found on host."); }
     }
-    // Linux/mac: try unzip, else 7z, else busybox unzip
-    try {
-        await run('command -v unzip');
-        await run(`unzip -o '${zipPath}' -d '${outDir}'`);
-        return;
-    } catch {}
-    try {
-        await run('command -v 7z');
-        await run(`7z x -y '${zipPath}' -o'${outDir}'`);
-        return;
-    } catch {}
-    try {
-        await run('busybox unzip -h');
-        await run(`busybox unzip -o '${zipPath}' -d '${outDir}'`);
-        return;
-    } catch {}
-    throw new Error("No system unzip tool found (unzip/7z/busybox). Git mode is recommended on this panel.");
 }
 
-function copyRecursive(src, dest, ignore = [], relative = '', outList = []) {
-    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-    for (const entry of fs.readdirSync(src)) {
-        if (ignore.includes(entry)) continue;
-        const s = path.join(src, entry);
-        const d = path.join(dest, entry);
-        const stat = fs.lstatSync(s);
-        if (stat.isDirectory()) {
-            copyRecursive(s, d, ignore, path.join(relative, entry), outList);
-        } else {
-            fs.copyFileSync(s, d);
-            if (outList) outList.push(path.join(relative, entry).replace(/\\/g, '/'));
+// 🚀 MAIN UPDATE COMMAND
+async function updateCommand(sock, chatId, message) {
+    try {
+        const sender = message.key.participant || message.key.remoteJid;
+        if (!await isOwnerOrSudo(sender, sock, chatId)) return;
+
+        await sock.sendMessage(chatId, { text: "🛰️ *Mickey Glitch Auto-Update Started...*" }, { quoted: message });
+
+        const url = getAutoUrl();
+        if (!url || !url.startsWith('http')) {
+            return await sock.sendMessage(chatId, { text: "❌ *Error:* URL haijapatikana. Weka link kwenye settings.js." });
         }
-    }
-}
 
-async function updateViaZip(sock, chatId, message, zipOverride) {
-    const zipUrl = (zipOverride || settings.updateZipUrl || process.env.UPDATE_ZIP_URL || '').trim();
-    if (!zipUrl) {
-        throw new Error('No ZIP URL configured. Set settings.updateZipUrl or UPDATE_ZIP_URL env.');
-    }
-    const tmpDir = path.join(process.cwd(), 'tmp');
-    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-    const zipPath = path.join(tmpDir, 'update.zip');
-    await downloadFile(zipUrl, zipPath);
-    const extractTo = path.join(tmpDir, 'update_extract');
-    if (fs.existsSync(extractTo)) fs.rmSync(extractTo, { recursive: true, force: true });
-    await extractZip(zipPath, extractTo);
+        const tmpDir = path.join(process.cwd(), 'tmp');
+        const zipPath = path.join(tmpDir, 'update.zip');
+        const extractTo = path.join(tmpDir, 'extract');
 
-    // Find the top-level extracted folder (GitHub zips create REPO-branch folder)
-    const [root] = fs.readdirSync(extractTo).map(n => path.join(extractTo, n));
-    const srcRoot = fs.existsSync(root) && fs.lstatSync(root).isDirectory() ? root : extractTo;
-
-    // Copy over while preserving runtime dirs/files
-    const ignore = ['node_modules', '.git', 'session', 'tmp', 'tmp/', 'temp', 'data', 'baileys_store.json'];
-    const copied = [];
-    // Preserve ownerNumber from existing settings.js if present
-    let preservedOwner = null;
-    let preservedBotOwner = null;
-    try {
-        const currentSettings = require('../settings');
-        preservedOwner = currentSettings && currentSettings.ownerNumber ? String(currentSettings.ownerNumber) : null;
-        preservedBotOwner = currentSettings && currentSettings.botOwner ? String(currentSettings.botOwner) : null;
-    } catch {}
-    copyRecursive(srcRoot, process.cwd(), ignore, '', copied);
-    if (preservedOwner) {
-        try {
-            const settingsPath = path.join(process.cwd(), 'settings.js');
-            if (fs.existsSync(settingsPath)) {
-                let text = fs.readFileSync(settingsPath, 'utf8');
-                text = text.replace(/ownerNumber:\s*'[^']*'/, `ownerNumber: '${preservedOwner}'`);
-                if (preservedBotOwner) {
-                    text = text.replace(/botOwner:\s*'[^']*'/, `botOwner: '${preservedBotOwner}'`);
-                }
-                fs.writeFileSync(settingsPath, text);
-            }
-        } catch {}
-    }
-    // Cleanup extracted directory
-    try { fs.rmSync(extractTo, { recursive: true, force: true }); } catch {}
-    try { fs.rmSync(zipPath, { force: true }); } catch {}
-    return { copiedFiles: copied };
-}
-
-async function restartProcess(sock, chatId, message) {
-    try {
-        await sock.sendMessage(chatId, { text: '✅ Update complete! Bot restarting automatically...' }, { quoted: message });
-    } catch {}
-    
-    // Give the message time to send
-    await new Promise(r => setTimeout(r, 1000));
-    
-    // Validate critical files exist before restarting
-    const criticalFiles = ['index.js', 'main.js', 'package.json'];
-    const missingFiles = criticalFiles.filter(f => !fs.existsSync(path.join(process.cwd(), f)));
-    if (missingFiles.length > 0) {
-        console.error('❌ CRITICAL: Missing files after update:', missingFiles);
-        try {
-            await sock.sendMessage(chatId, { text: `❌ CRITICAL: Missing files after update: ${missingFiles.join(', ')}\n\nManual restart required.` }, { quoted: message });
-        } catch {}
-        return;
-    }
-
-    // Validate node_modules existence
-    if (!fs.existsSync(path.join(process.cwd(), 'node_modules'))) {
-        console.error('❌ CRITICAL: node_modules missing after update');
-        try {
-            await sock.sendMessage(chatId, { text: '❌ CRITICAL: node_modules missing. Running emergency npm install...' }, { quoted: message });
-        } catch {}
-        try {
-            await run('npm install --no-audit --no-fund --prefer-offline --legacy-peer-deps');
-        } catch (err) {
-            console.error('❌ Emergency npm install failed:', err.message);
-            try {
-                await sock.sendMessage(chatId, { text: `❌ Emergency npm install failed:\n${err.message.slice(0, 150)}\n\nManual restart required.` }, { quoted: message });
-            } catch {}
-            return;
-        }
-    }
-    
-    try {
-        // Try PM2 first
-        await run('pm2 restart all').catch(() => {});
-    } catch {}
-
-    try {
-        // Try systemctl restart (Linux systemd services)
-        await run('systemctl restart bot').catch(() => {});
-    } catch {}
-
-    try {
-        // Try supervisor restart (alternative Linux system)
-        await run('supervisorctl restart bot').catch(() => {});
-    } catch {}
-
-    try {
-        // Write a restart flag file
-        const restartFlagPath = path.join(process.cwd(), '.restart');
-        fs.writeFileSync(restartFlagPath, Date.now().toString());
-    } catch {}
-
-    // For hosting platforms: use process.exit which triggers auto-restart
-    // Most platforms (Heroku, Netlify, Railway, Replit, etc) auto-restart on exit
-    setTimeout(() => {
-        console.log('🔄 Initiating bot restart...');
-        console.log('📝 Update restart initiated at:', new Date().toISOString());
-        // Exit with code 0 (success) - platform will auto-restart
-        process.exit(0);
-    }, 1500);
-}
-
-async function updateCommand(sock, chatId, message, zipOverride) {
-    const senderId = message.key.participant || message.key.remoteJid;
-    const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
-    
-    if (!message.key.fromMe && !isOwner) {
-        await sock.sendMessage(chatId, { text: 'Only bot owner or sudo can use .update' }, { quoted: message });
-        return;
-    }
-    try {
-        // Initial notification
-        await sock.sendMessage(chatId, { text: '🔄 Updating the bot, please wait…' }, { quoted: message });
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
         
-        if (await hasGitRepo()) {
-            // Update via git
-            const { oldRev, newRev, alreadyUpToDate, commits, files } = await updateViaGit();
-            const summary = alreadyUpToDate ? `✅ Already up to date: ${newRev}` : `✅ Updated to ${newRev}`;
-            console.log('[update] summary:', summary);
-            
-            // Install dependencies - critical for update success
-            try {
-                const nodeVersion = (await run('node --version')).trim();
-                const npmVersion = (await run('npm --version')).trim();
-                console.log(`[update] Node: ${nodeVersion}, NPM: ${npmVersion}`);
-                
-                // Clean npm cache to avoid conflicts
-                try {
-                    await run('npm cache clean --force').catch(() => {});
-                } catch (e) { console.log('[update] npm cache clean failed:', e.message); }
-                
-                // Remove lock file to force clean install
-                try {
-                    const lockFile = path.join(process.cwd(), 'package-lock.json');
-                    if (fs.existsSync(lockFile)) {
-                        fs.unlinkSync(lockFile);
-                        console.log('[update] Removed package-lock.json for clean install');
-                    }
-                } catch (e) { console.log('[update] Failed to remove lock file:', e.message); }
-                
-                // Install with safety flags - this MUST succeed
-                console.log('[update] Starting npm install...');
-                await run('npm install --no-audit --no-fund --prefer-offline --legacy-peer-deps');
-                
-                // Verify installation
-                const nodeModules = path.join(process.cwd(), 'node_modules');
-                if (!fs.existsSync(nodeModules)) {
-                    throw new Error('npm install completed but node_modules directory is missing');
-                }
-                console.log('[update] npm install completed successfully');
-            } catch (err) {
-                console.error('[update] npm install FAILED:', err.message);
-                await sock.sendMessage(chatId, { text: `❌ npm install failed:\n${err.message}\n\nUpdate aborted.` }, { quoted: message });
-                throw err;
-            }
-            
-            await sock.sendMessage(chatId, { text: `${summary}\n\nRestarting bot...` }, { quoted: message });
-        } else {
-            // Update via zip
-            const { copiedFiles } = await updateViaZip(sock, chatId, message, zipOverride);
-            console.log(`[update] copied ${copiedFiles.length} files`);
-            
-            await sock.sendMessage(chatId, { text: `✅ Files updated (${copiedFiles.length})\n\nRestarting bot...` }, { quoted: message });
-        }
+        // 1. Download
+        await downloadFile(url, zipPath);
         
-        // Perform restart
-        await restartProcess(sock, chatId, message);
-    } catch (err) {
-        console.error('Update failed:', err);
-        await sock.sendMessage(chatId, { text: `❌ Update failed:\n${String(err.message || err).slice(0, 200)}` }, { quoted: message });
-    }
-}
-
-// ---------- New: checkUpdates helper ----------
-async function headUrl(url, visited = new Set()) {
-    return new Promise((resolve, reject) => {
-        try {
-            if (visited.has(url) || visited.size > 5) return reject(new Error('Too many redirects'));
-            visited.add(url);
-            const lib = url.startsWith('https://') ? require('https') : require('http');
-            const req = lib.request(url, { method: 'HEAD', headers: { 'User-Agent': 'KnightBot-Updater/1.0', 'Accept': '*/*' } }, res => {
-                if ([301,302,303,307,308].includes(res.statusCode)) {
-                    const loc = res.headers.location;
-                    if (!loc) return reject(new Error(`HTTP ${res.statusCode} without Location`));
-                    const nextUrl = new URL(loc, url).toString();
-                    res.resume();
-                    return headUrl(nextUrl, visited).then(resolve).catch(reject);
-                }
-                const headers = {};
-                for (const k of Object.keys(res.headers)) headers[k.toLowerCase()] = res.headers[k];
-                resolve({ statusCode: res.statusCode, headers });
-            });
-            req.on('error', reject);
-            req.end();
-        } catch (e) { reject(e); }
-    });
-}
-
-const META_PATH = path.join(process.cwd(), 'data', 'update_meta.json');
-
-// Scan directory for files (relative paths, sizes)
-function scanDirRecursive(dir, ignore = [], relative = '', outList = []) {
-    for (const entry of fs.readdirSync(dir)) {
-        if (ignore.includes(entry)) continue;
-        const full = path.join(dir, entry);
-        const stat = fs.lstatSync(full);
-        const rel = path.join(relative, entry).replace(/\\/g, '/');
-        if (stat.isDirectory()) {
-            scanDirRecursive(full, ignore, rel, outList);
-        } else {
-            outList.push({ path: rel, size: stat.size });
-        }
-    }
-    return outList;
-}
-
-// Download and list files inside ZIP without applying update
-async function listZipContent(zipUrl) {
-    const tmpDir = path.join(process.cwd(), 'tmp');
-    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-    const zipPath = path.join(tmpDir, `check_${Date.now()}.zip`);
-    const extractTo = path.join(tmpDir, `check_${Date.now()}_extract`);
-    try {
-        await downloadFile(zipUrl, zipPath);
+        // 2. Extract
         await extractZip(zipPath, extractTo);
-        const entries = fs.readdirSync(extractTo).map(n => path.join(extractTo, n));
-        const root = entries.length === 1 && fs.lstatSync(entries[0]).isDirectory() ? entries[0] : extractTo;
-        const ignore = ['node_modules', '.git', 'session', 'tmp', 'temp', 'data', 'baileys_store.json'];
-        const files = scanDirRecursive(root, ignore, '');
-        return files;
-    } finally {
-        try { fs.rmSync(extractTo, { recursive: true, force: true }); } catch (e) {}
-        try { fs.rmSync(zipPath, { force: true }); } catch (e) {}
-    }
-}
 
-async function checkUpdates() {
-    if (await hasGitRepo()) {
-        await run('git fetch --all --prune');
-        const oldRev = (await run('git rev-parse HEAD').catch(() => 'unknown')).trim();
-        const newRev = (await run('git rev-parse origin/main').catch(() => 'unknown')).trim();
-        const alreadyUpToDate = oldRev === newRev;
-        let commits = '';
-        let files = '';
-        if (!alreadyUpToDate) {
-            commits = await run(`git log --pretty=format:"%h %s (%an)" ${oldRev}..${newRev}`).catch(() => '');
-            files = await run(`git diff --name-status ${oldRev} ${newRev}`).catch(() => '');
-        }
-        return { mode: 'git', available: !alreadyUpToDate, oldRev, newRev, commits, files };
-    }
-
-    const zipUrl = (settings.updateZipUrl || process.env.UPDATE_ZIP_URL || '').trim();
-    if (!zipUrl) return { mode: 'none', available: false };
-
-    const head = await headUrl(zipUrl).catch(() => null);
-    if (!head) return { mode: 'zip', available: false, url: zipUrl };
-
-    const remoteMeta = {
-        etag: head.headers['etag'] || null,
-        lastModified: head.headers['last-modified'] || null,
-        size: head.headers['content-length'] ? parseInt(head.headers['content-length'], 10) : null,
-        url: zipUrl
-    };
-
-    let previous = null;
-    try {
-        if (fs.existsSync(META_PATH)) previous = JSON.parse(fs.readFileSync(META_PATH, 'utf8'));
-    } catch (e) { previous = null; }
-
-    const available = !previous || previous.etag !== remoteMeta.etag || previous.lastModified !== remoteMeta.lastModified || previous.size !== remoteMeta.size;
-
-    let zipFiles = null;
-    let changes = null;
-
-    if (available && previous) {
-        try {
-            zipFiles = await listZipContent(zipUrl);
-
-            // Scan current project files
-            const ignore = ['node_modules', '.git', 'session', 'tmp', 'temp', 'data', 'baileys_store.json'];
-            const currentFiles = scanDirRecursive(process.cwd(), ignore, '');
-
-            const zipMap = new Map(zipFiles.map(f => [f.path, f]));
-            const curMap = new Map(currentFiles.map(f => [f.path, f]));
-
-            const added = [];
-            const removed = [];
-            const modified = [];
-
-            for (const [p, f] of zipMap.entries()) {
-                if (!curMap.has(p)) added.push(p);
-                else {
-                    const cur = curMap.get(p);
-                    if (cur.size !== f.size) modified.push(p);
+        // 3. Sync Files (Copy over)
+        const entries = fs.readdirSync(extractTo);
+        const source = entries.length === 1 ? path.join(extractTo, entries[0]) : extractTo;
+        
+        const ignore = ['node_modules', '.git', 'session', 'tmp', 'temp', 'data', 'settings.js', 'package-lock.json'];
+        
+        // Copy recursive logic hapa (Nimeifupisha kwa ajili ya spidi)
+        const copyFiles = (s, d) => {
+            fs.readdirSync(s).forEach(file => {
+                if (ignore.includes(file)) return;
+                const src = path.join(s, file);
+                const dst = path.join(d, file);
+                if (fs.lstatSync(src).isDirectory()) {
+                    if (!fs.existsSync(dst)) fs.mkdirSync(dst);
+                    copyFiles(src, dst);
+                } else {
+                    fs.copyFileSync(src, dst);
                 }
-            }
+            });
+        };
+        copyFiles(source, process.cwd());
 
-            for (const [p, f] of curMap.entries()) {
-                if (!zipMap.has(p)) removed.push(p);
-            }
+        // 4. Final Cleanup & Restart
+        await sock.sendMessage(chatId, { text: "✅ *Update Successful!* Bot is restarting now..." });
+        
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        
+        setTimeout(() => process.exit(0), 2000); // Hii itasababisha panel i-restart bot yenyewe
 
-            changes = { added, removed, modified };
-        } catch (e) {
-            console.error('Failed to inspect ZIP contents:', e);
-        }
+    } catch (err) {
+        await sock.sendMessage(chatId, { text: `❌ *Update Failed:* ${err.message}` });
     }
-
-    // Save latest metadata for future checks
-    try { fs.writeFileSync(META_PATH, JSON.stringify(remoteMeta, null, 2)); } catch (e) {}
-
-    return { mode: 'zip', available, previous, remoteMeta, zipFiles, changes };
 }
-
-// Attach checkUpdates to exported function
-updateCommand.checkUpdates = checkUpdates;
 
 module.exports = updateCommand;
-
-
