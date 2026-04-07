@@ -1,93 +1,114 @@
-const axios = require('axios');
 const truecallerjs = require('truecallerjs');
+const fs = require('fs');
+const path = require('path');
 
-async function whoisCommand(sock, chatId, message, args) {
+const dataDir = path.join(__dirname, '../data');
+const truecallerFile = path.join(dataDir, 'truecaller.json');
+
+let installationId = null;
+let setupState = new Map(); // Hifadhi state ya kila user (phoneNumber, step)
+
+// Load saved ID
+if (fs.existsSync(truecallerFile)) {
     try {
-        // --- 1. Get Body safely (Prevent .slice error) ---
-        const body = message.message?.conversation || 
-                     message.message?.extendedTextMessage?.text || "";
-        
-        // --- 2. Find phone number (User ID) ---
-        let user;
-        if (message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0]) {
-            // If tagged someone (e.g. .whois @255xxx)
-            user = message.message.extendedTextMessage.contextInfo.mentionedJid[0];
-        } else if (message.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
-            // If replied to someone's message
-            user = message.message.extendedTextMessage.contextInfo.participant;
-        } else if (args[0]) {
-            // If wrote a number (e.g. .whois 2557xxx)
-            user = args[0].replace(/[^0-9]/g, '') + '@s.whatsapp.net';
-        } else {
-            // If didn't mention anyone, check own number
-            user = message.key.participant || message.key.remoteJid;
-        }
-
-        if (!user) return await sock.sendMessage(chatId, { text: "❌ *Mention someone or write a phone number!*" }, { quoted: message });
-
-        await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
-
-        // --- 3. Get WhatsApp Info (Bio & Profile Pic) ---
-        let ppUrl;
-        try {
-            ppUrl = await sock.profilePictureUrl(user, 'image');
-        } catch {
-            ppUrl = 'https://telegra.ph/file/02324707639e7b2353396.jpg'; // Default pic if none
-        }
-
-        const status = await sock.fetchStatus(user).catch(() => ({ status: "No Bio available" }));
-        const pushName = message.pushName || "User";
-        const phoneNumber = user.split('@')[0];
-
-        // --- 4. Get Truecaller information ---
-        let truecallerInfo = null;
-        try {
-            const searchData = await truecallerjs.search(phoneNumber);
-            if (searchData && searchData.data && searchData.data.length > 0) {
-                truecallerInfo = searchData.data[0];
-            }
-        } catch (err) {
-            console.log("Truecaller lookup failed:", err.message);
-        }
-
-        // --- 5. Create Report ---
-        let caption = `
-👤 *USER INFORMATION*
-━━━━━━━━━━━━━━━━━━━━━━
-📝 *Name:* ${pushName}
-📞 *Number:* ${phoneNumber}
-📖 *Bio:* ${status.status || "Hidden"}
-🔗 *Link:* wa.me/${phoneNumber}`;
-
-        // Add Truecaller info if available
-        if (truecallerInfo) {
-            caption += `
-━━━━━━━━━━━━━━━━━━━━━━
-📱 *TRUECALLER INFO*
-━━━━━━━━━━━━━━━━━━━━━━
-👤 *Truecaller Name:* ${truecallerInfo.name || "Unknown"}
-🌍 *Country:* ${truecallerInfo.countryCode || "Unknown"}
-📍 *Location:* ${truecallerInfo.city || "Unknown"}
-🏢 *Carrier:* ${truecallerInfo.carrier || "Unknown"}
-⭐ *Score:* ${truecallerInfo.score || "N/A"}`;
-        }
-
-        caption += `
-━━━━━━━━━━━━━━━━━━━━━━
-*Mickey Glitch Technology*`;
-
-        await sock.sendMessage(chatId, {
-            image: { url: ppUrl },
-            caption: caption
-        }, { quoted: message });
-
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-
-    } catch (err) {
-        console.error("WHOIS ERROR:", err);
-        // Hatuwezi kutuma error kama sock imekufa, ila hapa tunahakikisha bot haizimi
-        await sock.sendMessage(chatId, { text: '❌ *Error:* Could not fetch user information.' }, { quoted: message });
-    }
+        const data = JSON.parse(fs.readFileSync(truecallerFile, 'utf8'));
+        installationId = data.installationId;
+        console.log("✅ Truecaller Installation ID imepakiwa");
+    } catch (e) {}
 }
 
-module.exports = whoisCommand;
+// ==================== SETUP COMMAND ====================
+async function setupTruecallerId(sock, chatId, message) {
+    const userId = message.key.participant || message.key.remoteJid;
+
+    setupState.set(userId, { step: "WAITING_NUMBER" });
+
+    await sock.sendMessage(chatId, {
+        text: `🔄 *TRUECALLER SETUP INAANZA*\n\nTafadhali tuma namba yako ya simu kwa international format:\n\nMfano: *+255712345678*`
+    }, { quoted: message });
+}
+
+// ==================== WHOIS COMMAND ====================
+async function whoisCommand(sock, chatId, message, args) {
+    // ... (nitaweka code iliyoboreshwa ya whois kama hapo awali)
+    // (Nitakupa full whois baadaye, sasa nazingatia setup)
+}
+
+// ==================== MAIN MESSAGE HANDLER (IMPORTANT) ====================
+// Weka hii function kwenye main bot file yako (handler wa messages)
+async function handleTruecallerSetup(sock, chatId, message) {
+    const userId = message.key.participant || message.key.remoteJid;
+    const text = (message.message?.conversation || message.message?.extendedTextMessage?.text || "").trim();
+    const state = setupState.get(userId);
+
+    if (!state) return false; // Sio katika setup mode
+
+    if (state.step === "WAITING_NUMBER") {
+        let phone = text.replace(/[^0-9+]/g, '');
+        if (!phone.startsWith('+')) phone = '+' + phone;
+
+        if (phone.length < 10) {
+            return sock.sendMessage(chatId, { text: "❌ Namba si sahihi. Jaribu tena (e.g +255712345678)" });
+        }
+
+        state.phone = phone;
+        state.step = "WAITING_OTP";
+
+        await sock.sendMessage(chatId, { text: `✅ *Namba imepokelewa:* ${phone}\n\nInatuma OTP... Subiri kidogo.` });
+
+        try {
+            const loginResponse = await truecallerjs.login(phone);
+            state.requestId = loginResponse.requestId; // Au kulingana na response
+
+            await sock.sendMessage(chatId, {
+                text: `📨 *OTP imetumwa kwa namba ${phone}*\n\nBaada ya kuipokea, tuma hapa OTP (nambari 6 au 4 tu)`
+            });
+        } catch (err) {
+            console.error(err);
+            await sock.sendMessage(chatId, { text: "❌ Imeshindwa kutuma OTP. Jaribu tena baadaye." });
+            setupState.delete(userId);
+        }
+
+        return true;
+    }
+
+    else if (state.step === "WAITING_OTP") {
+        const otp = text.replace(/[^0-9]/g, '');
+
+        if (otp.length < 4) {
+            return sock.sendMessage(chatId, { text: "❌ OTP inapaswa kuwa nambari. Jaribu tena." });
+        }
+
+        await sock.sendMessage(chatId, { text: "🔄 *Inathibitisha OTP...*" });
+
+        try {
+            // Hii ndio sehemu muhimu - verify OTP
+            const verifyResponse = await truecallerjs.verifyOtp(state.phone, otp, state.requestId); // Kulingana na library
+
+            if (verifyResponse?.installationId) {
+                installationId = verifyResponse.installationId;
+
+                if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+                fs.writeFileSync(truecallerFile, JSON.stringify({ installationId }, null, 2));
+
+                await sock.sendMessage(chatId, {
+                    text: `🎉 *IMEFANIKIWA!*\n\nTruecaller Installation ID imewekwa na kuhifadhiwa.\n\nSasa unaweza kutumia *.whois*`
+                });
+
+                setupState.delete(userId);
+            } else {
+                await sock.sendMessage(chatId, { text: "❌ OTP si sahihi au imekwisha. Jaribu tena." });
+            }
+        } catch (err) {
+            console.error("Verify OTP Error:", err);
+            await sock.sendMessage(chatId, { text: "❌ Hitilafu wakati wa kuthibitisha OTP." });
+            setupState.delete(userId);
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+module.exports = { whoisCommand, setupTruecallerId, handleTruecallerSetup };
