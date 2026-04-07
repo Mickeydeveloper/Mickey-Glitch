@@ -1,6 +1,6 @@
 const yts = require('yt-search');
 const ytdl = require('ytdl-core');
-const ffmpeg = require('fluent-ffmpeg');
+const { toAudio } = require('../lib/converter');  // ← Badilisha path kama inahitajika
 const { sendButtons } = require('gifted-btns');
 
 async function songCommand(sock, chatId, message, buttonResponse = null) {
@@ -16,7 +16,7 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
             const url = `https://www.youtube.com/watch?v=${videoId}`;
 
             await sock.sendMessage(chatId, { react: { text: '⬇️', key: message.key } });
-            await sock.sendMessage(chatId, { text: '⬇️ *Inapakuliwa... Subiri kidogo*' }, { quoted: message });
+            await sock.sendMessage(chatId, { text: '⬇️ *Inapakuliwa Audio... Subiri kidogo*' }, { quoted: message });
 
             try {
                 const stream = ytdl(url, {
@@ -27,57 +27,54 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
 
                 const buffers = [];
 
-                ffmpeg(stream)
-                    .audioBitrate(192)        // Unaweza kuweka 256 au 320 kwa ubora zaidi
-                    .format('mp3')
-                    .on('error', (err) => {
-                        console.error('FFmpeg Error:', err);
-                        sock.sendMessage(chatId, { 
-                            text: '❌ *FFmpeg imeshindwa kubadilisha audio*' 
+                stream.on('data', (chunk) => {
+                    buffers.push(chunk);
+                });
+
+                stream.on('end', async () => {
+                    const audioBuffer = Buffer.concat(buffers);
+
+                    if (audioBuffer.length < 10000) {
+                        return sock.sendMessage(chatId, { 
+                            text: '❌ *Audio file ni tupu au ndogo sana*' 
                         }, { quoted: message });
-                    })
-                    .on('end', async () => {
-                        const audioBuffer = Buffer.concat(buffers);
+                    }
 
-                        if (audioBuffer.length < 10000) {
-                            return sock.sendMessage(chatId, { 
-                                text: '❌ *Audio file ni tupu au ndogo sana*' 
-                            }, { quoted: message });
-                        }
+                    // ←←← HAPA NDIO MAGIC - Tumia converter yako
+                    const convertedAudio = await toAudio(audioBuffer, 'webm');  // webm au m4a inaweza kuja
 
-                        await sock.sendMessage(chatId, {
-                            audio: audioBuffer,
-                            mimetype: 'audio/mpeg',
-                            fileName: `${videoId}.mp3`,
-                            ptt: false,
-                            contextInfo: {
-                                externalAdReply: {
-                                    title: "Now Playing",
-                                    body: "Mickey Glitch Tech",
-                                    mediaType: 2,
-                                    thumbnailUrl: "https://i.ibb.co/0jZ8Y7s/music.jpg",
-                                    sourceUrl: url,
-                                }
+                    await sock.sendMessage(chatId, {
+                        audio: convertedAudio,
+                        mimetype: 'audio/mpeg',
+                        fileName: `${videoId}.mp3`,
+                        ptt: false,
+                        contextInfo: {
+                            externalAdReply: {
+                                title: "Now Playing",
+                                body: "Mickey Glitch Tech",
+                                mediaType: 2,
+                                thumbnailUrl: "https://i.ibb.co/0jZ8Y7s/music.jpg",
+                                sourceUrl: url,
                             }
-                        }, { quoted: message });
+                        }
+                    }, { quoted: message });
 
-                        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-                    })
-                    .pipe()
-                    .on('data', (chunk) => {
-                        buffers.push(chunk);
-                    });
+                    await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+                });
+
+                stream.on('error', (err) => {
+                    console.error("Stream Error:", err);
+                    sock.sendMessage(chatId, { text: '❌ *Stream error while downloading*' }, { quoted: message });
+                });
 
             } catch (err) {
                 console.error("Audio Error:", err);
-                await sock.sendMessage(chatId, { 
-                    text: '❌ *Download imeshindwa!*' 
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: '❌ *Download imeshindwa!*' }, { quoted: message });
             }
             return;
         }
 
-        // ==================== VIDEO HANDLER (Iliendelee kufanya kama zamani) ====================
+        // ==================== VIDEO HANDLER ====================
         if (buttonId.startsWith('play_video_')) {
             const videoId = buttonId.replace('play_video_', '');
             const url = `https://www.youtube.com/watch?v=${videoId}`;
@@ -118,7 +115,7 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
                 });
 
                 stream.on('error', (err) => {
-                    console.error("Video Stream Error:", err);
+                    console.error("Video Error:", err);
                     sock.sendMessage(chatId, { text: '❌ *Video download imeshindwa*' }, { quoted: message });
                 });
 
