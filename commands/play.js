@@ -5,7 +5,7 @@ const { sendButtons } = require('gifted-btns');
 async function songCommand(sock, chatId, message, buttonResponse = null) {
     if (!sock) return;
 
-    // ==================== KUSHUGHULIKIA BUTTON ====================
+    // ==================== BUTTON HANDLER ====================
     if (buttonResponse) {
         const buttonId = buttonResponse;
 
@@ -20,33 +20,55 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
                 const stream = ytdl(url, {
                     filter: 'audioonly',
                     quality: 'highestaudio',
+                    highWaterMark: 1 << 25,   // Important
                 });
 
                 let bufferArray = [];
-                stream.on('data', (chunk) => bufferArray.push(chunk));
-                
+
+                stream.on('data', (chunk) => {
+                    bufferArray.push(chunk);
+                });
+
                 stream.on('end', async () => {
                     const audioBuffer = Buffer.concat(bufferArray);
 
+                    if (audioBuffer.length < 10000) {
+                        return sock.sendMessage(chatId, { text: '❌ *Audio file is empty or too small*' }, { quoted: message });
+                    }
+
                     await sock.sendMessage(chatId, {
                         audio: audioBuffer,
-                        mimetype: 'audio/mp4',
-                        fileName: `Mickey_Music.m4a`,
-                        ptt: false,   // Muhimu ili iwe Music si Voice Note
+                        mimetype: 'audio/mpeg',
+                        fileName: `${videoId}.mp3`,
+                        ptt: false,
+                        contextInfo: {
+                            externalAdReply: {
+                                title: "Now Playing",
+                                body: "Mickey Glitch Tech",
+                                mediaType: 2,
+                                thumbnailUrl: "https://i.ibb.co/0jZ8Y7s/music.jpg",
+                                sourceUrl: url,
+                            }
+                        }
                     }, { quoted: message });
 
                     await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
                 });
 
+                stream.on('error', (err) => {
+                    console.error("Stream Error:", err);
+                    sock.sendMessage(chatId, { text: '❌ *Stream error while downloading*' }, { quoted: message });
+                });
+
             } catch (err) {
-                console.error("Audio Download Error:", err);
-                await sock.sendMessage(chatId, { text: '❌ *Download ya audio imeshindwa!*' }, { quoted: message });
+                console.error("Audio Error:", err);
+                await sock.sendMessage(chatId, { text: '❌ *Download imeshindwa!*' }, { quoted: message });
             }
             return;
         }
     }
 
-    // ==================== COMMAND YA .play ====================
+    // ==================== .play COMMAND ====================
     const textBody = message.message?.conversation || 
                     message.message?.extendedTextMessage?.text || '';
     const query = textBody.split(" ").slice(1).join(" ").trim();
@@ -80,8 +102,7 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
 
         const playButtons = [
             { id: `play_audio_${vid.videoId}`, text: '🎵 AUDIO (MP3)' },
-            { id: `play_video_${vid.videoId}`, text: '🎥 VIDEO (MP4)' },
-            { id: `play_search_${encodeURIComponent(query)}`, text: '🔍 MORE RESULTS' }
+            { id: `play_video_${vid.videoId}`, text: '🎥 VIDEO (MP4)' }
         ];
 
         await sendButtons(sock, chatId, {
