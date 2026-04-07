@@ -19,34 +19,40 @@ async function songCommand(sock, chatId, message) {
         if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
 
         const vid = videos[0];
+        const url = vid.url;
 
-        const playText = `
-🎵 *SONG FOUND*
-━━━━━━━━━━━━━━━━━━━━━━
-📝 *Title:* ${vid.title}
-👤 *Channel:* ${vid.author.name}
-⏱️ *Duration:* ${vid.timestamp}
-👁️ *Views:* ${vid.views}
-📅 *Uploaded:* ${vid.ago}
-━━━━━━━━━━━━━━━━━━━━━━
-*Chagua format ya kudownload:*`;
+        // --- SEHEMU YA KUREKEBISHA TATIZO LA KUTOPLAY ---
+        // Tunatumia API kupata direct link ya audio inayokubalika na WA
+        try {
+            const downloadRes = await axios.get(`https://api.giftedtech.my.id/api/download/dl?url=${encodeURIComponent(url)}`);
+            const dlData = downloadRes.data;
 
-        const playButtons = [
-            { id: `play_audio_${encodeURIComponent(vid.title)}`, text: '🎵 AUDIO (MP3)' },
-            { id: `play_video_${encodeURIComponent(vid.title)}`, text: '🎥 VIDEO (MP4)' },
-            { id: `play_search_${encodeURIComponent(query)}`, text: '🔍 MORE RESULTS' }
-        ];
+            if (dlData.success) {
+                const audioUrl = dlData.result.download_url;
 
-        await sendButtons(sock, chatId, {
-            title: '🎧 MUSIC DOWNLOADER',
-            text: playText,
-            footer: 'Mickey Glitch Tech',
-            image: { url: vid.thumbnail },
-            buttons: playButtons
-        }, { quoted: message });
+                // Tuma audio ikiwa na mimetype sahihi (audio/mpeg) ili icheze
+                await sock.sendMessage(chatId, { 
+                    audio: { url: audioUrl }, 
+                    mimetype: 'audio/mpeg', 
+                    fileName: `${vid.title}.mp3`,
+                    ptt: false // Hii inafanya iwe wimbo unaopitika (playable)
+                }, { quoted: message });
 
-        // Hii sasa iko ndani ya function vizuri
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+                await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+            } else {
+                throw new Error("Failed to get download link");
+            }
+
+        } catch (downloadErr) {
+            console.error("DOWNLOAD ERROR:", downloadErr.message);
+            // Kama ikishindika kutuma moja kwa moja, tuma angalau taarifa za wimbo na buttons
+            const playText = `🎵 *Wimbo Umepatikana lakini kuna tatizo la kupakua.*\n📝 *Title:* ${vid.title}`;
+            
+            await sock.sendMessage(chatId, { 
+                image: { url: vid.thumbnail }, 
+                caption: playText 
+            }, { quoted: message });
+        }
 
     } catch (err) {
         console.error("PLAY ERROR:", err.message);
