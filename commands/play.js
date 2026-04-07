@@ -9,14 +9,14 @@ async function songCommand(sock, chatId, message) {
     const query = textBody.split(" ").slice(1).join(" ");
 
     if (!query) {
-        return sock.sendMessage(chatId, { text: '🎵 *Write the name of the song!*\nExample: .play Adele Hello' }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\nExample: .play Adele Hello' }, { quoted: message });
     }
 
     try {
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
         const { videos } = await yts(query);
-        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Not found!*' });
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
 
         const vid = videos[0];
 
@@ -29,7 +29,7 @@ async function songCommand(sock, chatId, message) {
 👁️ *Views:* ${vid.views}
 📅 *Uploaded:* ${vid.ago}
 ━━━━━━━━━━━━━━━━━━━━━━
-*Choose download format:*`;
+*Chagua format ya kudownload:*`;
 
         const playButtons = [
             { id: `play_audio_${encodeURIComponent(vid.title)}`, text: '🎵 AUDIO (MP3)' },
@@ -45,17 +45,12 @@ async function songCommand(sock, chatId, message) {
             buttons: playButtons
         }, { quoted: message });
 
-    } catch (err) {
-        console.error("PLAY ERROR:", err);
-        await sock.sendMessage(chatId, { text: '❌ *Search failed!*' }, { quoted: message });
-    }
-        }
-
+        // Hii sasa iko ndani ya function vizuri
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
         console.error("PLAY ERROR:", err.message);
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' });
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' }, { quoted: message });
     }
 }
 
