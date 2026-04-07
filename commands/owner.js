@@ -1,6 +1,7 @@
 const settings = require('../settings');
 const { getBuffer } = require('../lib/myfunc');
 const QRCode = require('qrcode');
+const { sendButtons } = require('gifted-btns');
 
 /**
  * Handles the Owner Information Command
@@ -59,6 +60,43 @@ async function ownerCommand(sock, chatId, message) {
                      `📱 *Contact:* +${ownerNumberRaw}\n` +
                      `🔗 *Link:* ${waLink}\n\n` +
                      `_Scan the code above to start a direct chat._`
+        }, { quoted: message });
+
+        // 5. Send Interactive Contact Options
+        const contactText = `
+📞 *CONTACT OWNER*
+━━━━━━━━━━━━━━━━━━━━━━
+👨‍💻 *Developer:* ${settings.botOwner}
+📱 *WhatsApp:* +${ownerNumberRaw}
+🌐 *Channel:* https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610
+
+*Choose how to contact:*
+━━━━━━━━━━━━━━━━━━━━━━`;
+
+        const contactButtons = [
+            {
+                name: "cta_call",
+                buttonParamsJson: JSON.stringify({
+                    display_text: `📞 CALL OWNER`,
+                    phoneNumber: ownerNumberRaw
+                })
+            },
+            {
+                name: "cta_url",
+                buttonParamsJson: JSON.stringify({
+                    display_text: "💬 SEND MESSAGE",
+                    url: waLink
+                })
+            },
+            { id: 'owner_channel', text: '📺 JOIN CHANNEL' }
+        ];
+
+        await sendButtons(sock, chatId, {
+            title: '👑 OWNER CONTACT',
+            text: contactText,
+            footer: 'Mickey Glitch Tech',
+            image: { url: settings.ownerImage || 'https://water-billing-292n.onrender.com/1761205727440.png' },
+            buttons: contactButtons
         }, { quoted: message });
 
     } catch (error) {

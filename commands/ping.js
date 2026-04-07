@@ -1,5 +1,6 @@
 const os = require('os');
 const { safeSendMessage } = require('../lib/myfunc');
+const { sendButtons } = require('gifted-btns');
 
 function formatTime(seconds) {
     const h = Math.floor(seconds / 3600);
@@ -16,16 +17,38 @@ async function pingCommand(sock, chatId, message) {
 
         const uptime = formatTime(process.uptime());
         const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
+        const totalRam = (os.totalmem() / 1024 / 1024 / 1024).toFixed(1);
+        const freeRam = (os.freemem() / 1024 / 1024 / 1024).toFixed(1);
+        const cpu = os.cpus().length;
+        const platform = os.platform();
 
-        // Monospace font style used below
-        const smallInfo = `\`\`\`
-[ MICKEY GLITCH ]
-• Speed  : ${latency}ms
-• Online : ${uptime}
-• Memory : ${ram}MB
-\`\`\``;
+        // System status
+        const status = latency < 100 ? '🟢 Excellent' : latency < 300 ? '🟡 Good' : '🔴 Slow';
 
-        await safeSendMessage(sock, chatId, { text: smallInfo }, { edit: sentMsg.key });
+        const pingText = `
+🚀 *SYSTEM STATUS CHECK*
+━━━━━━━━━━━━━━━━━━━━━━
+⚡ *Speed:* ${latency}ms (${status})
+⏱️ *Uptime:* ${uptime}
+💾 *RAM:* ${ram}MB / ${totalRam}GB
+🆓 *Free RAM:* ${freeRam}GB
+🖥️ *CPU Cores:* ${cpu}
+💻 *Platform:* ${platform}
+━━━━━━━━━━━━━━━━━━━━━━
+*© 2026 Mickey Glitch Labs™*`;
+
+        const buttons = [
+            { id: 'ping_refresh', text: '🔄 REFRESH' },
+            { id: 'ping_detailed', text: '📊 DETAILED INFO' },
+            { id: 'ping_help', text: '❓ HELP' }
+        ];
+
+        await sendButtons(sock, chatId, {
+            title: '⚡ PING RESULTS',
+            text: pingText,
+            footer: 'Mickey Glitch Tech',
+            buttons: buttons
+        }, { quoted: message });
 
     } catch (error) {
         console.error('Ping command error:', error);

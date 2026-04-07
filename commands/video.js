@@ -43,8 +43,8 @@ async function videoCommand(sock, chatId, message, args) {
                 footer: 'Mickey Glitch Tech',
                 image: { url: v.thumbnail },
                 buttons: [
-                    { id: `.ytvideo ${title}`, text: '🎥 VIDEO (MP4)' },
-                    { id: `.play ${title}`, text: '🎵 AUDIO (MP3)' }
+                    { id: `ytvideo_${encodeURIComponent(title)}`, text: '🎥 VIDEO (MP4)' },
+                    { id: `play_video_${encodeURIComponent(title)}`, text: '🎵 AUDIO (MP3)' }
                 ]
             }, { quoted: message });
             

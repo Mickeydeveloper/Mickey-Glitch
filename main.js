@@ -50,6 +50,7 @@ const ytdl = require('ytdl-core');
 const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
 const os = require('os');
+const { sendButtons } = require('gifted-btns');
 const { isSudo } = require('./lib/index');
 const isOwnerOrSudo = require('./lib/isOwner');
 const { autotypingCommand, isAutotypingEnabled, handleAutotypingForMessage, handleAutotypingForCommand, showTypingAfterCommand } = require('./commands/autotyping');
@@ -141,6 +142,7 @@ const { pinCommand, verifyPinCommand, checkPinVerification } = require('./comman
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const whoisCommand = require('./commands/whois');
+const os = require('os');
 
 
 global.packname = settings.packname;
@@ -190,6 +192,28 @@ async function handleMessages(sock, messageUpdate, printLog) {
                          (mType === 'listResponseMessage') ? (message.message.listResponseMessage.singleSelectReply?.selectedRowId || message.message.listResponseMessage.selectedRowId) :
                          (mType === 'interactiveResponseMessage') ? (message.message.interactiveResponseMessage.nativeFlowResponseMessage?.paramsJson ? JSON.parse(message.message.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson).id : null) : null;
 
+        // --- DECODE ENCODED BUTTON IDs ---
+        let decodedButtonId = buttonId;
+        if (buttonId && buttonId.startsWith('play_')) {
+            if (buttonId.startsWith('play_video_')) {
+                // Decode video play button: play_video_Song -> .play Song
+                const title = decodeURIComponent(buttonId.replace('play_video_', ''));
+                decodedButtonId = `.play ${title}`;
+            } else {
+                // Decode shazam play button: play_Artist_Song -> .play Artist Song
+                const parts = buttonId.split('_');
+                if (parts.length >= 3) {
+                    const artist = decodeURIComponent(parts[1]);
+                    const title = decodeURIComponent(parts.slice(2).join('_'));
+                    decodedButtonId = `.play ${artist} ${title}`;
+                }
+            }
+        } else if (buttonId && buttonId.startsWith('ytvideo_')) {
+            // Decode ytvideo button: ytvideo_Title -> .ytvideo Title
+            const title = decodeURIComponent(buttonId.replace('ytvideo_', ''));
+            decodedButtonId = `.ytvideo ${title}`;
+        }
+
         const chatIdEarly = message.key.remoteJid;
         handleAutoread(sock, message).catch(() => {});
         if (message.message) storeMessage(sock, message).catch(() => {});
@@ -207,7 +231,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // Map buttonId to userMessage to trigger commands
         let userMessage = (
-            buttonId || 
+            decodedButtonId || 
             message.message?.conversation ||
             message.message?.extendedTextMessage?.text ||
             message.message?.imageMessage?.caption ||
@@ -223,7 +247,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const lowerUserMessage = userMessage.toLowerCase();
 
         // Auto-fix command prefix for button IDs
-        if (buttonId && !lowerUserMessage.startsWith('.')) {
+        if (decodedButtonId && !lowerUserMessage.startsWith('.')) {
             userMessage = '.' + userMessage;
         }
 
@@ -322,6 +346,73 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         let commandExecuted = false;
+
+        // --- HANDLE BUTTON RESPONSES ---
+        if (buttonId && buttonId.startsWith('ping_')) {
+            if (buttonId === 'ping_refresh') {
+                await pingCommand(sock, chatId, message);
+                commandExecuted = true;
+            } else if (buttonId === 'ping_detailed') {
+                const detailedInfo = `
+📊 *DETAILED SYSTEM INFO*
+━━━━━━━━━━━━━━━━━━━━━━
+🖥️ *OS:* ${os.platform()} ${os.release()}
+🏗️ *Architecture:* ${os.arch()}
+💾 *Total RAM:* ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)}GB
+🆓 *Free RAM:* ${(os.freemem() / 1024 / 1024 / 1024).toFixed(1)}GB
+💽 *Disk:* ${os.hostname()}
+⏰ *Timezone:* ${Intl.DateTimeFormat().resolvedOptions().timeZone}
+━━━━━━━━━━━━━━━━━━━━━━`;
+                await sock.sendMessage(chatId, { text: detailedInfo }, { quoted: message });
+                commandExecuted = true;
+            } else if (buttonId === 'ping_help') {
+                await sock.sendMessage(chatId, {
+                    text: '❓ *PING HELP*\n\n• Speed test shows latency\n• Uptime shows online duration\n• RAM shows memory usage\n• Refresh updates the stats'
+                }, { quoted: message });
+                commandExecuted = true;
+            }
+        } else if (buttonId && buttonId.startsWith('owner_')) {
+            if (buttonId === 'owner_channel') {
+                await sock.sendMessage(chatId, {
+                    text: '📺 *JOIN OUR OFFICIAL CHANNEL*\n\nhttps://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610'
+                }, { quoted: message });
+                commandExecuted = true;
+            }
+        } else if (buttonId && buttonId.startsWith('settings_')) {
+            if (buttonId === 'settings_refresh') {
+                await settingsCommand(sock, chatId, message);
+                commandExecuted = true;
+            } else if (buttonId === 'settings_global') {
+                await sock.sendMessage(chatId, {
+                    text: '🌐 *GLOBAL SETTINGS*\n\nUse these commands:\n• .mode public/private\n• .autostatus on/off\n• .autoread on/off\n• .autotyping on/off\n• .pmblocker on/off\n• .anticall on/off'
+                }, { quoted: message });
+                commandExecuted = true;
+            } else if (buttonId === 'settings_group') {
+                await sock.sendMessage(chatId, {
+                    text: '👥 *GROUP SETTINGS*\n\nUse these commands:\n• .antilink on/off\n• .antibadword on/off\n• .welcome on/off\n• .goodbye on/off\n• .chatbot on/off\n• .antitag on/off'
+                }, { quoted: message });
+                commandExecuted = true;
+            } else if (buttonId === 'settings_status') {
+                await sock.sendMessage(chatId, {
+                    text: '📊 *STATUS SETTINGS*\n\nUse these commands:\n• .autostatus view on/off\n• .autostatus like on/off\n• .statusforward on/off'
+                }, { quoted: message });
+                commandExecuted = true;
+            }
+        } else if (buttonId && buttonId.startsWith('play_')) {
+            if (buttonId.startsWith('play_audio_')) {
+                const title = decodeURIComponent(buttonId.replace('play_audio_', ''));
+                await handlePlayDownload(sock, chatId, message, title, 'audio');
+                commandExecuted = true;
+            } else if (buttonId.startsWith('play_video_')) {
+                const title = decodeURIComponent(buttonId.replace('play_video_', ''));
+                await handlePlayDownload(sock, chatId, message, title, 'video');
+                commandExecuted = true;
+            } else if (buttonId.startsWith('play_search_')) {
+                const query = decodeURIComponent(buttonId.replace('play_search_', ''));
+                await handlePlaySearch(sock, chatId, message, query);
+                commandExecuted = true;
+            }
+        }
 
         const allowWithoutPin = lowerUserMessage.startsWith('.pin') || isBasicCommand;
         if (!allowWithoutPin) {
@@ -606,6 +697,77 @@ async function handleStatus(sock, chatUpdate) {
     // 2. Handle Anticall (Incoming calls)
     if (chatUpdate.call || chatUpdate[0]?.tag === 'call') {
         await handleAnticall(sock, chatUpdate);
+    }
+}
+
+async function handlePlayDownload(sock, chatId, message, title, type) {
+    try {
+        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+
+        const { videos } = await yts(title);
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Song not found!*' });
+
+        const vid = videos[0];
+        const api = `https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(vid.url)}`;
+
+        const res = await axios.get(api);
+        const dlUrl = res.data?.data?.[type];
+        if (!dlUrl) return sock.sendMessage(chatId, { text: '❌ *Download failed!*' });
+
+        const mimeType = type === 'audio' ? 'audio/mp4' : 'video/mp4';
+        const fileName = `${vid.title}.${type === 'audio' ? 'mp3' : 'mp4'}`;
+
+        await sock.sendMessage(chatId, {
+            [type]: { url: dlUrl },
+            mimetype: mimeType,
+            fileName: fileName,
+            ptt: false,
+            contextInfo: {
+                externalAdReply: {
+                    title: vid.title,
+                    body: `Mickey Glitch Tech | ${vid.timestamp}`,
+                    thumbnailUrl: vid.thumbnail,
+                    sourceUrl: vid.url,
+                    mediaType: type === 'audio' ? 1 : 2,
+                    renderLargerThumbnail: true
+                }
+            }
+        }, { quoted: message });
+
+    } catch (err) {
+        console.error("PLAY DOWNLOAD ERROR:", err);
+        await sock.sendMessage(chatId, { text: '❌ *Download failed!*' }, { quoted: message });
+    }
+}
+
+async function handlePlaySearch(sock, chatId, message, query) {
+    try {
+        const { videos } = await yts(query);
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *No results found!*' });
+
+        let searchText = `🔍 *SEARCH RESULTS FOR: ${query}*\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        const buttons = [];
+
+        videos.slice(0, 5).forEach((vid, index) => {
+            searchText += `${index + 1}. *${vid.title}*\n👤 ${vid.author.name} • ${vid.timestamp} • ${vid.views} views\n\n`;
+            buttons.push(
+                { id: `play_audio_${encodeURIComponent(vid.title)}`, text: `🎵 ${index + 1}. AUDIO` },
+                { id: `play_video_${encodeURIComponent(vid.title)}`, text: `🎥 ${index + 1}. VIDEO` }
+            );
+        });
+
+        searchText += '━━━━━━━━━━━━━━━━━━━━━━\n*Choose a song to download:*';
+
+        await sendButtons(sock, chatId, {
+            title: '🎧 MUSIC SEARCH',
+            text: searchText,
+            footer: 'Mickey Glitch Tech',
+            buttons: buttons
+        }, { quoted: message });
+
+    } catch (err) {
+        console.error("PLAY SEARCH ERROR:", err);
+        await sock.sendMessage(chatId, { text: '❌ *Search failed!*' }, { quoted: message });
     }
 }
 
