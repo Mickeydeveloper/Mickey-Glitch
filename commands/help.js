@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Automatically fetch commands from the directory
+ * Fetch commands auto kutoka folder
  */
 function getAutomaticCommands() {
     try {
@@ -17,44 +17,20 @@ function getAutomaticCommands() {
     }
 }
 
+// Map ya categories (Unaweza kuongeza hapa)
 const categoryMap = {
-    '.gemini': '🤖 AI & Chat',
-    '.ai': '🤖 AI & Chat',
-    '.chatbot': '🤖 AI & Chat',
-    '.imagine': '🎨 Image Generation',
-    '.mode': '⚙️ Settings & Admin',
-    '.settings': '⚙️ Settings & Admin',
-    '.owner': '👑 Owner Commands',
-    '.help': '🔧 Utilities',
-    '.ping': '🚀 System',
-    '.alive': '🔧 Utilities',
-    '.halotel': '💰 Data Services',
-    '.play': '🎵 Music & Audio',
-    '.video': '🎬 Video & Media',
-    '.download': '📥 Downloads',
-    '.instagram': '📥 Downloads',
-    '.tiktok': '📥 Downloads',
-    '.facebook': '📥 Downloads',
-    '.youtube': '📥 Downloads',
-    '.shazam': '🎵 Music & Audio',
-    '.ban': '⚔️ Group Management',
-    '.kick': '⚔️ Group Management',
-    '.mute': '⚔️ Group Management',
-    '.promote': '⚔️ Group Management',
-    '.demote': '⚔️ Group Management',
-    '.groupmanage': '⚔️ Group Management',
-    '.whois': '👤 User Info',
-    '.pp': '👤 User Info',
-    '.sticker': '🎭 Media Tools',
-    '.meme': '😂 Fun & Games',
-    '.weather': '🌍 Info Services',
-    '.lyrics': '🎵 Music & Audio'
+    '.gemini': '🤖 AI & CHAT', '.ai': '🤖 AI & CHAT', '.imagine': '🎨 IMAGE GEN',
+    '.mode': '⚙️ SETTINGS', '.settings': '⚙️ SETTINGS',
+    '.play': '🎵 MUSIC & AUDIO', '.video': '🎬 VIDEO & MEDIA',
+    '.download': '📥 DOWNLOADS', '.instagram': '📥 DOWNLOADS', '.tiktok': '📥 DOWNLOADS',
+    '.kick': '⚔️ GROUP MANAGE', '.promote': '⚔️ GROUP MANAGE',
+    '.sticker': '🎭 MEDIA TOOLS', '.weather': '🌍 INFO SERVICES'
 };
 
 function categorizeCommands(commands) {
     const categories = {};
     commands.forEach(cmd => {
-        const category = categoryMap[cmd] || '📂 Other Services';
+        const category = categoryMap[cmd] || '📂 OTHER SERVICES';
         if (!categories[category]) categories[category] = [];
         categories[category].push(cmd);
     });
@@ -67,89 +43,69 @@ const helpCommand = async (conn, chatId, msg, userMessage = '.help') => {
         const botName = 'ＭＩＣＫＥＹ-Ｖ３';
         const now = moment().tz('Africa/Dar_es_Salaam');
         const timeStr = now.format('hh:mm A');
-        const dateStr = now.format('ddd, MMM D, YYYY');
-
-        const uptimeSec = process.uptime();
-        const hrs = Math.floor(uptimeSec / 3600);
-        const mins = Math.floor((uptimeSec % 3600) / 60);
-        const runtimeStr = `${hrs}h ${mins}m`;
+        const runtimeStr = `${Math.floor(process.uptime() / 3600)}h ${Math.floor((process.uptime() % 3600) / 60)}m`;
 
         const allCommands = getAutomaticCommands();
         const categorized = categorizeCommands(allCommands);
-        const totalCommands = allCommands.length;
+        
+        // Safisha input (kama ni button ID au text)
+        let input = userMessage.trim();
+        
+        // Logic ya Button ID Response
+        if (input.startsWith('help_cat_')) {
+            input = decodeURIComponent(input.replace('help_cat_', ''));
+        }
 
-        const normalizedInput = (userMessage || '.help').trim();
-        const lowerInput = normalizedInput.toLowerCase();
+        // 1. RENDER CATEGORY LIST (Kama amechagua kundi)
+        const categoryKeys = Object.keys(categorized);
+        const selectedCat = categoryKeys.find(k => k.toLowerCase() === input.toLowerCase() || input.includes(k));
 
-        const renderMainMenu = async () => {
-            const menuText = `
-╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-┃ 🤖 *${botName} COMMAND CENTER*
-┃ 
-┃ 👋 *Welcome:* ${senderName}
+        if (selectedCat) {
+            const cmds = categorized[selectedCat];
+            const catText = `*╭━━━━━━━ ⚡ ━━━━━━━╮*
+┃ 📂 *CAT:* ${selectedCat}
+*╰━━━━━━━━━━━━━━━━━━━━━╯*
+
+${cmds.map(c => `  ◦ ${c}`).join('\n')}
+
+📌 *Tip:* Type command exactly to use.`;
+
+            return await sendButtons(conn, chatId, {
+                title: `[ ${selectedCat} ]`,
+                text: catText,
+                footer: '© 2026 Mickey Glitch Labs™',
+                buttons: [{ id: '.help', text: '⬅️ BACK TO MENU' }]
+            }, { quoted: msg });
+        }
+
+        // 2. RENDER MAIN MENU (Default)
+        const mainMenuText = `
+╭━━━━━━━━━━━━━━━━━━━━━━━
+┃ 👋 *Hi,* ${senderName}
 ┃ 🕒 *Time:* ${timeStr}
-┃ 📅 *Date:* ${dateStr}
 ┃ ⏳ *Uptime:* ${runtimeStr}
-┃ 📦 *Commands:* ${totalCommands}
-┃ 📍 *Status:* ✅ Online
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃ 📦 *Total:* ${allCommands.length} Cmds
+╰━━━━━━━━━━━━━━━━━━━━━━━
 
-*SELECT CATEGORY BELOW TO VIEW:* 👇`;
+*Select a category below to see commands:*`;
 
-            const categoryButtons = Object.keys(categorized).map(category => ({
-                id: `help_category_${encodeURIComponent(category)}`,
-                text: category
-            }));
+        // Tengeneza button za categories (Max 5 kwa WhatsApp limit ya kawaida)
+        const buttons = categoryKeys.slice(0, 5).map(cat => ({
+            id: `help_cat_${encodeURIComponent(cat)}`,
+            text: cat
+        }));
 
-            const displayButtons = categoryButtons.slice(0, 5);
-            if (categoryButtons.length > 5) {
-                displayButtons.push({ id: 'help_more', text: '📋 MORE CATEGORIES' });
-            }
+        return await sendButtons(conn, chatId, {
+            title: `ＭＩＣＫＥＹ-Ｖ３ MENU`,
+            text: mainMenuText,
+            footer: 'Mickey Glitch Labs - Innovation with Precision',
+            image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
+            buttons: buttons
+        }, { quoted: msg });
 
-            return await sendButtons(conn, chatId, {
-                title: `🎮 ${botName} MAIN MENU`,
-                text: menuText,
-                footer: '© 2026 Mickey Glitch Labs™',
-                image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
-                buttons: displayButtons
-            }, { quoted: msg });
-        };
-
-        if (lowerInput === '.help' || lowerInput === '.menu' || lowerInput === '.list') {
-            return await renderMainMenu();
-        }
-
-        if (lowerInput.startsWith('.help ')) {
-            const requestedCategory = normalizedInput.slice(6).trim();
-            const categoryKey = Object.keys(categorized).find(category => category.toLowerCase() === requestedCategory.toLowerCase());
-
-            if (!categoryKey) {
-                await conn.sendMessage(chatId, {
-                    text: `❌ Category not found: ${requestedCategory}\nPlease use .help again and select a category.`
-                }, { quoted: msg });
-                return await renderMainMenu();
-            }
-
-            const categoryCommands = categorized[categoryKey] || [];
-            const categoryText = `
-📂 *${categoryKey}*
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${categoryCommands.map(cmd => `• ${cmd}`).join('\n')}
-
-*Use the button below to return to the main menu.*`;
-
-            return await sendButtons(conn, chatId, {
-                title: `📚 ${categoryKey}`,
-                text: categoryText,
-                footer: '© 2026 Mickey Glitch Labs™',
-                buttons: [{ id: 'help_more', text: '⬅️ MAIN MENU' }]
-            }, { quoted: msg });
-        }
-
-        return await renderMainMenu();
     } catch (e) {
-        console.error('Help command error:', e);
-        await conn.sendMessage(chatId, { text: '⚠️ Error: Unable to display help menu.' });
+        console.error('Help Error:', e);
+        await conn.sendMessage(chatId, { text: '⚠️ Error loading menu.' });
     }
 };
 
