@@ -1,4 +1,5 @@
 const axios = require('axios');
+const truecallerjs = require('truecallerjs');
 
 async function whoisCommand(sock, chatId, message, args) {
     try {
@@ -38,14 +39,40 @@ async function whoisCommand(sock, chatId, message, args) {
         const pushName = message.pushName || "Mtumiaji";
         const phoneNumber = user.split('@')[0];
 
-        // --- 4. Tengeneza Ripoti ---
-        const caption = `
+        // --- 4. Pata taarifa za Truecaller ---
+        let truecallerInfo = null;
+        try {
+            const searchData = await truecallerjs.search(phoneNumber);
+            if (searchData && searchData.data && searchData.data.length > 0) {
+                truecallerInfo = searchData.data[0];
+            }
+        } catch (err) {
+            console.log("Truecaller lookup failed:", err.message);
+        }
+
+        // --- 5. Tengeneza Ripoti ---
+        let caption = `
 👤 *USER INFORMATION*
 ━━━━━━━━━━━━━━━━━━━━━━
 📝 *Name:* ${pushName}
 📞 *Number:* ${phoneNumber}
 📖 *Bio:* ${status.status || "Hidden"}
-🔗 *Link:* wa.me/${phoneNumber}
+🔗 *Link:* wa.me/${phoneNumber}`;
+
+        // Ongeza taarifa za Truecaller kama zinapatikana
+        if (truecallerInfo) {
+            caption += `
+━━━━━━━━━━━━━━━━━━━━━━
+📱 *TRUECALLER INFO*
+━━━━━━━━━━━━━━━━━━━━━━
+👤 *Truecaller Name:* ${truecallerInfo.name || "Unknown"}
+🌍 *Country:* ${truecallerInfo.countryCode || "Unknown"}
+📍 *Location:* ${truecallerInfo.city || "Unknown"}
+🏢 *Carrier:* ${truecallerInfo.carrier || "Unknown"}
+⭐ *Score:* ${truecallerInfo.score || "N/A"}`;
+        }
+
+        caption += `
 ━━━━━━━━━━━━━━━━━━━━━━
 *Mickey Glitch Technology*`;
 
