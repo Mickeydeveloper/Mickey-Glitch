@@ -5,65 +5,74 @@ const { sendButtons } = require('gifted-btns');
 async function songCommand(sock, chatId, message) {
     if (!sock) return;
 
+    // 1. Kupata jina la wimbo toka kwa user
     const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
     const query = textBody.split(" ").slice(1).join(" ");
 
     if (!query) {
-        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*' }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\nEx: .play Adele Hello' }, { quoted: message });
     }
 
     try {
+        // Reaction ya kutafuta
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
+        // 2. Kutafuta wimbo YouTube
         const { videos } = await yts(query);
-        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' });
 
         const vid = videos[0];
-        
-        // --- SEHEMU YA KUPATA JSON KUTOKA NAYAN API ---
-        const res = await axios.get(`https://api.nayan-video-downloader.com/api/ytpv?url=${encodeURIComponent(vid.url)}`);
-        const data = res.data; 
+        const url = vid.url;
 
-        if (!data.status) return sock.sendMessage(chatId, { text: '❌ API imeshindwa (Failed)!' });
+        // 3. Kupiga Nayan API (Kudownload)
+        // Hapa tunatumia muundo wa JSON uliouulizia
+        const res = await axios.get(`https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(url)}`);
+        const data = res.data;
 
-        const playText = `🎵 *SONG FOUND*\n\n📝 *Title:* ${vid.title}\n⏱️ *Dur:* ${vid.timestamp}`;
+        // Kwenye Nayan, mara nyingi link ya audio iko kwenye data.data au data.links
+        // Tunachukua audio link (mfano: data.data.mp3 au data.links[0])
+        const audioLink = data.data?.mp3 || data.data?.audio || data.links?.[0]?.url;
 
-        // 1. Tuma Menu/Buttons
+        if (!audioLink) {
+            return sock.sendMessage(chatId, { text: '❌ *Imeshindwa kupata link ya audio!*' });
+        }
+
+        const playText = `
+🎵 *SONG FOUND*
+━━━━━━━━━━━━━━━━━━━━━━
+📝 *Title:* ${vid.title}
+👤 *Channel:* ${vid.author.name}
+⏱️ *Duration:* ${vid.timestamp}
+━━━━━━━━━━━━━━━━━━━━━━
+*Mickey Glitch Tech - Downloader*`;
+
+        const playButtons = [
+            { id: `.play ${query}`, text: '🔄 REPLAY' },
+            { id: `.menu`, text: '📜 MENU' }
+        ];
+
+        // 4. Tuma Buttons na Picha
         await sendButtons(sock, chatId, {
-            title: '🎧 MUSIC DOWNLOADER',
+            title: '🎧 AUDIO DOWNLOADER',
             text: playText,
             footer: 'Mickey Glitch Tech',
             image: { url: vid.thumbnail },
-            buttons: [
-                { id: `audio_${vid.url}`, text: '🎵 MP3' },
-                { id: `video_${vid.url}`, text: '🎥 MP4' }
-            ]
+            buttons: playButtons
         }, { quoted: message });
 
-        // 2. SEHEMU YA KUTUMA AUDIO (FIXED)
-        // Tumia audio/mp4 na ptt: false ili iplay kama music file
+        // 5. Tuma Audio (Hapa ndipo inapoplay)
         await sock.sendMessage(chatId, { 
-            audio: { url: data.audio }, // Link toka Nayan JSON
-            mimetype: 'audio/mp4',      // Hii ni muhimu ili iplay (Playable)
-            ptt: false,                 // Weka true kama unataka iwe kama Voice Note
-            fileName: `${vid.title}.mp3`,
-            contextInfo: {
-                externalAdReply: {
-                    title: vid.title,
-                    body: vid.author.name,
-                    thumbnailUrl: vid.thumbnail,
-                    sourceUrl: vid.url,
-                    mediaType: 1,
-                    renderLargerThumbnail: true
-                }
-            }
+            audio: { url: audioLink }, 
+            mimetype: 'audio/mp4', // Hii inafanya iplay (Playable)
+            ptt: false,            // false = Music file, true = Voice Note
+            fileName: `${vid.title}.mp3`
         }, { quoted: message });
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error("PLAY ERR:", err.message);
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!*' }, { quoted: message });
+        console.error("API ERR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya API!* Jaribu tena baadae.' }, { quoted: message });
     }
 }
 
