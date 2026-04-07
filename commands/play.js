@@ -1,5 +1,6 @@
 const yts = require('yt-search');
 const ytdl = require('ytdl-core');
+const ffmpeg = require('fluent-ffmpeg');
 const { sendButtons } = require('gifted-btns');
 
 async function songCommand(sock, chatId, message, buttonResponse = null) {
@@ -9,6 +10,7 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
     if (buttonResponse) {
         const buttonId = buttonResponse;
 
+        // ==================== AUDIO HANDLER ====================
         if (buttonId.startsWith('play_audio_')) {
             const videoId = buttonId.replace('play_audio_', '');
             const url = `https://www.youtube.com/watch?v=${videoId}`;
@@ -20,32 +22,92 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
                 const stream = ytdl(url, {
                     filter: 'audioonly',
                     quality: 'highestaudio',
-                    highWaterMark: 1 << 25,   // Important
+                    highWaterMark: 1 << 25,
                 });
 
-                let bufferArray = [];
+                const buffers = [];
 
-                stream.on('data', (chunk) => {
-                    bufferArray.push(chunk);
+                ffmpeg(stream)
+                    .audioBitrate(192)        // Unaweza kuweka 256 au 320 kwa ubora zaidi
+                    .format('mp3')
+                    .on('error', (err) => {
+                        console.error('FFmpeg Error:', err);
+                        sock.sendMessage(chatId, { 
+                            text: '❌ *FFmpeg imeshindwa kubadilisha audio*' 
+                        }, { quoted: message });
+                    })
+                    .on('end', async () => {
+                        const audioBuffer = Buffer.concat(buffers);
+
+                        if (audioBuffer.length < 10000) {
+                            return sock.sendMessage(chatId, { 
+                                text: '❌ *Audio file ni tupu au ndogo sana*' 
+                            }, { quoted: message });
+                        }
+
+                        await sock.sendMessage(chatId, {
+                            audio: audioBuffer,
+                            mimetype: 'audio/mpeg',
+                            fileName: `${videoId}.mp3`,
+                            ptt: false,
+                            contextInfo: {
+                                externalAdReply: {
+                                    title: "Now Playing",
+                                    body: "Mickey Glitch Tech",
+                                    mediaType: 2,
+                                    thumbnailUrl: "https://i.ibb.co/0jZ8Y7s/music.jpg",
+                                    sourceUrl: url,
+                                }
+                            }
+                        }, { quoted: message });
+
+                        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+                    })
+                    .pipe()
+                    .on('data', (chunk) => {
+                        buffers.push(chunk);
+                    });
+
+            } catch (err) {
+                console.error("Audio Error:", err);
+                await sock.sendMessage(chatId, { 
+                    text: '❌ *Download imeshindwa!*' 
+                }, { quoted: message });
+            }
+            return;
+        }
+
+        // ==================== VIDEO HANDLER (Iliendelee kufanya kama zamani) ====================
+        if (buttonId.startsWith('play_video_')) {
+            const videoId = buttonId.replace('play_video_', '');
+            const url = `https://www.youtube.com/watch?v=${videoId}`;
+
+            await sock.sendMessage(chatId, { react: { text: '⬇️', key: message.key } });
+            await sock.sendMessage(chatId, { text: '⬇️ *Inapakuliwa Video... Subiri kidogo*' }, { quoted: message });
+
+            try {
+                const stream = ytdl(url, {
+                    filter: 'audioandvideo',
+                    quality: 'highest',
+                    highWaterMark: 1 << 25,
                 });
 
+                const buffers = [];
+
+                stream.on('data', (chunk) => buffers.push(chunk));
                 stream.on('end', async () => {
-                    const audioBuffer = Buffer.concat(bufferArray);
-
-                    if (audioBuffer.length < 10000) {
-                        return sock.sendMessage(chatId, { text: '❌ *Audio file is empty or too small*' }, { quoted: message });
-                    }
+                    const videoBuffer = Buffer.concat(buffers);
 
                     await sock.sendMessage(chatId, {
-                        audio: audioBuffer,
-                        mimetype: 'audio/mpeg',
-                        fileName: `${videoId}.mp3`,
-                        ptt: false,
+                        video: videoBuffer,
+                        mimetype: 'video/mp4',
+                        fileName: `${videoId}.mp4`,
+                        caption: '✅ Video imepakuliwa na Mickey Glitch Tech',
                         contextInfo: {
                             externalAdReply: {
-                                title: "Now Playing",
+                                title: "Video Downloaded",
                                 body: "Mickey Glitch Tech",
-                                mediaType: 2,
+                                mediaType: 1,
                                 thumbnailUrl: "https://i.ibb.co/0jZ8Y7s/music.jpg",
                                 sourceUrl: url,
                             }
@@ -56,13 +118,13 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
                 });
 
                 stream.on('error', (err) => {
-                    console.error("Stream Error:", err);
-                    sock.sendMessage(chatId, { text: '❌ *Stream error while downloading*' }, { quoted: message });
+                    console.error("Video Stream Error:", err);
+                    sock.sendMessage(chatId, { text: '❌ *Video download imeshindwa*' }, { quoted: message });
                 });
 
             } catch (err) {
-                console.error("Audio Error:", err);
-                await sock.sendMessage(chatId, { text: '❌ *Download imeshindwa!*' }, { quoted: message });
+                console.error("Video Error:", err);
+                await sock.sendMessage(chatId, { text: '❌ *Video download imeshindwa!*' }, { quoted: message });
             }
             return;
         }
