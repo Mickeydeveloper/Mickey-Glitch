@@ -9,7 +9,7 @@ async function songCommand(sock, chatId, message) {
     const query = textBody.split(" ").slice(1).join(" ");
 
     if (!query) {
-        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\nExample: .play Adele Hello' }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*' }, { quoted: message });
     }
 
     try {
@@ -19,38 +19,51 @@ async function songCommand(sock, chatId, message) {
         if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
 
         const vid = videos[0];
+        
+        // --- SEHEMU YA KUPATA JSON KUTOKA NAYAN API ---
+        const res = await axios.get(`https://api.nayan-video-downloader.com/api/ytpv?url=${encodeURIComponent(vid.url)}`);
+        const data = res.data; 
 
-        const playText = `
-🎵 *SONG FOUND*
-━━━━━━━━━━━━━━━━━━━━━━
-📝 *Title:* ${vid.title}
-👤 *Channel:* ${vid.author.name}
-⏱️ *Duration:* ${vid.timestamp}
-👁️ *Views:* ${vid.views}
-📅 *Uploaded:* ${vid.ago}
-━━━━━━━━━━━━━━━━━━━━━━
-*Chagua format ya kudownload:*`;
+        if (!data.status) return sock.sendMessage(chatId, { text: '❌ API imeshindwa (Failed)!' });
 
-        const playButtons = [
-            { id: `play_audio_${encodeURIComponent(vid.title)}`, text: '🎵 AUDIO (MP3)' },
-            { id: `play_video_${encodeURIComponent(vid.title)}`, text: '🎥 VIDEO (MP4)' },
-            { id: `play_search_${encodeURIComponent(query)}`, text: '🔍 MORE RESULTS' }
-        ];
+        const playText = `🎵 *SONG FOUND*\n\n📝 *Title:* ${vid.title}\n⏱️ *Dur:* ${vid.timestamp}`;
 
+        // 1. Tuma Menu/Buttons
         await sendButtons(sock, chatId, {
             title: '🎧 MUSIC DOWNLOADER',
             text: playText,
             footer: 'Mickey Glitch Tech',
             image: { url: vid.thumbnail },
-            buttons: playButtons
+            buttons: [
+                { id: `audio_${vid.url}`, text: '🎵 MP3' },
+                { id: `video_${vid.url}`, text: '🎥 MP4' }
+            ]
         }, { quoted: message });
 
-        // Hii sasa iko ndani ya function vizuri
+        // 2. SEHEMU YA KUTUMA AUDIO (FIXED)
+        // Tumia audio/mp4 na ptt: false ili iplay kama music file
+        await sock.sendMessage(chatId, { 
+            audio: { url: data.audio }, // Link toka Nayan JSON
+            mimetype: 'audio/mp4',      // Hii ni muhimu ili iplay (Playable)
+            ptt: false,                 // Weka true kama unataka iwe kama Voice Note
+            fileName: `${vid.title}.mp3`,
+            contextInfo: {
+                externalAdReply: {
+                    title: vid.title,
+                    body: vid.author.name,
+                    thumbnailUrl: vid.thumbnail,
+                    sourceUrl: vid.url,
+                    mediaType: 1,
+                    renderLargerThumbnail: true
+                }
+            }
+        }, { quoted: message });
+
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error("PLAY ERROR:", err.message);
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' }, { quoted: message });
+        console.error("PLAY ERR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!*' }, { quoted: message });
     }
 }
 
