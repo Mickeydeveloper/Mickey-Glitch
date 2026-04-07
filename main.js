@@ -405,6 +405,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await helpCommand(sock, chatId, message, '.help');
                 commandExecuted = true;
             }
+        } else if (buttonId && buttonId.startsWith('help_cat_')) {
+            const category = decodeURIComponent(buttonId.replace('help_cat_', ''));
+            await helpCommand(sock, chatId, message, category);
+            commandExecuted = true;
+        } else if (buttonId === '.help') {
+            await helpCommand(sock, chatId, message, '.help');
+            commandExecuted = true;
         } else if (buttonId && buttonId.startsWith('halotel_')) {
             await halotelCommand(sock, chatId, message, buttonId);
             commandExecuted = true;
