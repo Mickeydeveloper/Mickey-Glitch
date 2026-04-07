@@ -4,27 +4,27 @@ const ruhend = require('ruhend-scraper');
 
 async function videoCommand(sock, chatId, message, args) {
     try {
-        // --- MABORESHO YA USALAMA (Safety Fix) ---
-        // Tunahakikisha body ipo kabla ya kuitumia
+        // --- SAFETY IMPROVEMENTS (Safety Fix) ---
+        // We ensure body exists before using it
         const body = message.message?.conversation || 
                      message.message?.extendedTextMessage?.text || 
                      message.message?.buttonsResponseMessage?.selectedButtonId || "";
         
-        if (!body) return; // Kama hakuna maandishi, usifanye kitu
+        if (!body) return; // If no text, don't do anything
 
         const command = body.slice(1).trim().split(/ +/).shift().toLowerCase();
         const searchQuery = args.join(' ').trim();
 
-        // --- 1. KULETA BUTTONS (.video [jina]) ---
+        // --- 1. BRING BUTTONS (.video [name]) ---
         if (command === 'video' && !body.startsWith('.ytvideo')) {
             if (!searchQuery) {
-                return await sock.sendMessage(chatId, { text: '❌ *Unatafuta nini?*\nMfano: .video Mario oluwa' }, { quoted: message });
+                return await sock.sendMessage(chatId, { text: '❌ *What are you searching for?*\nExample: .video Mario oluwa' }, { quoted: message });
             }
 
             await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
             const { videos } = await yts(searchQuery);
-            if (!videos || videos.length === 0) return await sock.sendMessage(chatId, { text: '❌ Haikupatikana!' });
+            if (!videos || videos.length === 0) return await sock.sendMessage(chatId, { text: '❌ Not found!' });
 
             const v = videos[0];
             const title = v.title;
@@ -35,7 +35,7 @@ async function videoCommand(sock, chatId, message, args) {
 📝 *Title:* ${title}
 ⏳ *Duration:* ${v.timestamp}
 ━━━━━━━━━━━━━━━━━━━━━━
-*Chagua unachotaka hapa chini:* 👇`;
+*Choose what you want below:* 👇`;
 
             await sendButtons(sock, chatId, {
                 title: '🎬 DOWNLOADER PANEL',

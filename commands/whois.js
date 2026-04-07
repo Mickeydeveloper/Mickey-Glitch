@@ -3,43 +3,43 @@ const truecallerjs = require('truecallerjs');
 
 async function whoisCommand(sock, chatId, message, args) {
     try {
-        // --- 1. Pata Body kwa usalama (Kuzuia .slice error) ---
+        // --- 1. Get Body safely (Prevent .slice error) ---
         const body = message.message?.conversation || 
                      message.message?.extendedTextMessage?.text || "";
         
-        // --- 2. Tafuta namba ya simu (User ID) ---
+        // --- 2. Find phone number (User ID) ---
         let user;
         if (message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0]) {
-            // Kama amem-tag mtu (e.g. .whois @255xxx)
+            // If tagged someone (e.g. .whois @255xxx)
             user = message.message.extendedTextMessage.contextInfo.mentionedJid[0];
         } else if (message.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
-            // Kama amereply meseji ya mtu
+            // If replied to someone's message
             user = message.message.extendedTextMessage.contextInfo.participant;
         } else if (args[0]) {
-            // Kama ameandika namba (e.g. .whois 2557xxx)
+            // If wrote a number (e.g. .whois 2557xxx)
             user = args[0].replace(/[^0-9]/g, '') + '@s.whatsapp.net';
         } else {
-            // Kama hajataja mtu, angalia namba yake mwenyewe
+            // If didn't mention anyone, check own number
             user = message.key.participant || message.key.remoteJid;
         }
 
-        if (!user) return await sock.sendMessage(chatId, { text: "❌ *Taja mtu au andika namba ya simu!*" }, { quoted: message });
+        if (!user) return await sock.sendMessage(chatId, { text: "❌ *Mention someone or write a phone number!*" }, { quoted: message });
 
         await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
 
-        // --- 3. Pata Info za WhatsApp (Bio & Profile Pic) ---
+        // --- 3. Get WhatsApp Info (Bio & Profile Pic) ---
         let ppUrl;
         try {
             ppUrl = await sock.profilePictureUrl(user, 'image');
         } catch {
-            ppUrl = 'https://telegra.ph/file/02324707639e7b2353396.jpg'; // Default pic kama hana
+            ppUrl = 'https://telegra.ph/file/02324707639e7b2353396.jpg'; // Default pic if none
         }
 
         const status = await sock.fetchStatus(user).catch(() => ({ status: "No Bio available" }));
-        const pushName = message.pushName || "Mtumiaji";
+        const pushName = message.pushName || "User";
         const phoneNumber = user.split('@')[0];
 
-        // --- 4. Pata taarifa za Truecaller ---
+        // --- 4. Get Truecaller information ---
         let truecallerInfo = null;
         try {
             const searchData = await truecallerjs.search(phoneNumber);
@@ -50,7 +50,7 @@ async function whoisCommand(sock, chatId, message, args) {
             console.log("Truecaller lookup failed:", err.message);
         }
 
-        // --- 5. Tengeneza Ripoti ---
+        // --- 5. Create Report ---
         let caption = `
 👤 *USER INFORMATION*
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -59,7 +59,7 @@ async function whoisCommand(sock, chatId, message, args) {
 📖 *Bio:* ${status.status || "Hidden"}
 🔗 *Link:* wa.me/${phoneNumber}`;
 
-        // Ongeza taarifa za Truecaller kama zinapatikana
+        // Add Truecaller info if available
         if (truecallerInfo) {
             caption += `
 ━━━━━━━━━━━━━━━━━━━━━━

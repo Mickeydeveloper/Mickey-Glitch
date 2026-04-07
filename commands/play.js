@@ -9,14 +9,14 @@ async function songCommand(sock, chatId, message) {
     const query = textBody.split(" ").slice(1).join(" ");
 
     if (!query) {
-        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\nMfano: .play Adele Hello' }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '🎵 *Write the name of the song!*\nExample: .play Adele Hello' }, { quoted: message });
     }
 
     try {
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
         const { videos } = await yts(query);
-        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Not found!*' });
 
         const vid = videos[0];
 

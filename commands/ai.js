@@ -20,7 +20,7 @@ async function aiCommand(sock, chatId, message) {
 
     if (!userText) {
       await sock.sendMessage(chatId, { 
-        text: '🤖 *AI Chat*\n\nMfano: *.ai hello*\n\nYaani:\n*.ai why is sky blue?*'
+        text: '🤖 *AI Chat*\n\nExample: *.ai hello*\n\nMeaning:\n*.ai why is sky blue?*'
       }, { quoted: message });
       return;
     }
@@ -42,7 +42,7 @@ async function aiCommand(sock, chatId, message) {
       const reply = await callAI(userText);
 
       // Clean reply
-      let cleanReply = reply || "Samahani, siwezi kujibu kwa sasa.";
+      let cleanReply = reply || "Sorry, I can't answer right now.";
 
       // Send response
       await sock.sendMessage(chatId, { 
@@ -57,9 +57,9 @@ async function aiCommand(sock, chatId, message) {
     } catch (apiError) {
       console.error('API Error:', apiError.message || apiError);
       
-      let errorMsg = '❌ Api error, jaribu tena baada ya dakika.';
+      let errorMsg = '❌ API error, try again after a minute.';
       if (apiError?.message?.includes('timeout')) {
-        errorMsg = '⏱️ Timeout - jaribu swali rahisi zaidi.';
+        errorMsg = '⏱️ Timeout - try a simpler question.';
       }
       
       await sock.sendMessage(chatId, { 
@@ -70,7 +70,7 @@ async function aiCommand(sock, chatId, message) {
   } catch (error) {
     console.error('AI Command Error:', error.message || error);
     await sock.sendMessage(chatId, { 
-      text: '🚨 Hitilafu imetokea, jaribu tena.' 
+      text: '🚨 An error occurred, try again.' 
     }, { quoted: message });
   }
 }

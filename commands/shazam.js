@@ -10,17 +10,17 @@ const execAsync = util.promisify(exec);
 
 async function shazamCommand(sock, chatId, message) {
     try {
-        // 1. Pata Quoted Message kwa usalama
+        // 1. Get Quoted Message safely
         const ctxInfo = message.message?.extendedTextMessage?.contextInfo;
         const quotedMsg = ctxInfo?.quotedMessage;
 
         if (!quotedMsg) {
-            return sock.sendMessage(chatId, { text: '❌ *Tafadhali reply kwenye Audio au Video ukitumia .shazam*' }, { quoted: message });
+            return sock.sendMessage(chatId, { text: '❌ *Please reply to Audio or Video using .shazam*' }, { quoted: message });
         }
 
         const mediaMessage = quotedMsg.audioMessage || quotedMsg.videoMessage;
         if (!mediaMessage) {
-            return sock.sendMessage(chatId, { text: '❌ *Reply kwenye Audio au Video pekee!*' }, { quoted: message });
+            return sock.sendMessage(chatId, { text: '❌ *Reply to Audio or Video only!*' }, { quoted: message });
         }
 
         await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
@@ -42,7 +42,7 @@ async function shazamCommand(sock, chatId, message) {
 
         if (!mediaBuffer) throw new Error("Media download failed");
 
-        // 3. Maandalizi ya Files
+        // 3. File Preparations
         const tempDir = path.join(process.cwd(), 'tmp');
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
         

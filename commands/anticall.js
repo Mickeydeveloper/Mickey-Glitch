@@ -87,7 +87,7 @@ async function handleAnticall(sock, update) {
         // 3. Tuma Ujumbe wa Button
         const msgText = `Habari @${callerId.split('@')[0]},\n\n` +
                         `Samahani, sipokei simu kwa sasa (Sorry, I can't take calls right now).\n` +
-                        `Simu yako imekatwa kiotomatiki na mfumo wangu.`;
+                        `Your call has been automatically rejected by my system.`;
 
         await sendButtons(sock, callerId, {
             title: '📵 CALL REJECTED',
@@ -101,8 +101,8 @@ async function handleAnticall(sock, update) {
                 {
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
-                        display_text: "📞 Namba Nyingine",
-                        url: "https://wa.me/255615944741?text=Habari, nimekupigia simu bot ikakata.",
+                        display_text: "📞 Other Number",
+                        url: "https://wa.me/255615944741?text=Hello, I called you but the bot rejected it.",
                     })
                 }
             ]

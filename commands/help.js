@@ -2,7 +2,6 @@ const { sendButtons } = require('gifted-btns');
 const moment = require('moment-timezone');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 
 /**
  * Automatically fetch commands from the directory
@@ -62,11 +61,10 @@ function categorizeCommands(commands) {
     return categories;
 }
 
-const aliveCommand = async (conn, chatId, msg) => {
+const helpCommand = async (conn, chatId, msg, userMessage = '.help') => {
     try {
         const senderName = msg.pushName || 'User';
         const botName = 'ＭＩＣＫＥＹ-Ｖ３';
-        
         const now = moment().tz('Africa/Dar_es_Salaam');
         const timeStr = now.format('hh:mm A');
         const dateStr = now.format('ddd, MMM D, YYYY');
@@ -80,8 +78,11 @@ const aliveCommand = async (conn, chatId, msg) => {
         const categorized = categorizeCommands(allCommands);
         const totalCommands = allCommands.length;
 
-        // --- MAIN MENU WITH GIFTED BUTTONS ---
-        const menuText = `
+        const normalizedInput = (userMessage || '.help').trim();
+        const lowerInput = normalizedInput.toLowerCase();
+
+        const renderMainMenu = async () => {
+            const menuText = `
 ╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ┃ 🤖 *${botName} COMMAND CENTER*
 ┃ 
@@ -95,30 +96,61 @@ const aliveCommand = async (conn, chatId, msg) => {
 
 *SELECT CATEGORY BELOW TO VIEW:* 👇`;
 
-        // Create category buttons
-        const categoryButtons = Object.keys(categorized).map(category => ({
-            id: `help_category_${encodeURIComponent(category)}`,
-            text: category
-        }));
+            const categoryButtons = Object.keys(categorized).map(category => ({
+                id: `help_category_${encodeURIComponent(category)}`,
+                text: category
+            }));
 
-        // Limit buttons to 5 per message
-        const displayButtons = categoryButtons.slice(0, 5);
-        if (categoryButtons.length > 5) {
-            displayButtons.push({ id: 'help_more', text: '📋 MORE CATEGORIES' });
+            const displayButtons = categoryButtons.slice(0, 5);
+            if (categoryButtons.length > 5) {
+                displayButtons.push({ id: 'help_more', text: '📋 MORE CATEGORIES' });
+            }
+
+            return await sendButtons(conn, chatId, {
+                title: `🎮 ${botName} MAIN MENU`,
+                text: menuText,
+                footer: '© 2026 Mickey Glitch Labs™',
+                image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
+                buttons: displayButtons
+            }, { quoted: msg });
+        };
+
+        if (lowerInput === '.help' || lowerInput === '.menu' || lowerInput === '.list') {
+            return await renderMainMenu();
         }
 
-        return await sendButtons(conn, chatId, {
-            title: `🎮 ${botName} MAIN MENU`,
-            text: menuText,
-            footer: '© 2026 Mickey Glitch Labs™',
-            image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
-            buttons: displayButtons
-        }, { quoted: msg });
+        if (lowerInput.startsWith('.help ')) {
+            const requestedCategory = normalizedInput.slice(6).trim();
+            const categoryKey = Object.keys(categorized).find(category => category.toLowerCase() === requestedCategory.toLowerCase());
 
+            if (!categoryKey) {
+                await conn.sendMessage(chatId, {
+                    text: `❌ Category not found: ${requestedCategory}\nPlease use .help again and select a category.`
+                }, { quoted: msg });
+                return await renderMainMenu();
+            }
+
+            const categoryCommands = categorized[categoryKey] || [];
+            const categoryText = `
+📂 *${categoryKey}*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${categoryCommands.map(cmd => `• ${cmd}`).join('\n')}
+
+*Use the button below to return to the main menu.*`;
+
+            return await sendButtons(conn, chatId, {
+                title: `📚 ${categoryKey}`,
+                text: categoryText,
+                footer: '© 2026 Mickey Glitch Labs™',
+                buttons: [{ id: 'help_more', text: '⬅️ MAIN MENU' }]
+            }, { quoted: msg });
+        }
+
+        return await renderMainMenu();
     } catch (e) {
-        console.error("Menu Error:", e);
-        await conn.sendMessage(chatId, { text: "⚠️ Error: Unable to display command list." });
+        console.error('Help command error:', e);
+        await conn.sendMessage(chatId, { text: '⚠️ Error: Unable to display help menu.' });
     }
 };
 
-module.exports = aliveCommand;
+module.exports = helpCommand;

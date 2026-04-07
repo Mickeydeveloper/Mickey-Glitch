@@ -52,7 +52,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 🔥 *SPECIAL OFFER: GB 1 = TSh 1,000*
 ⚡ *24/7 Instant Activation*
 
-*CHAGUA KIFURUSHI CHAKO HAPA CHINI:* 👇`;
+*CHOOSE YOUR PACKAGE BELOW:* 👇`;
 
             const buttons = [
                 { id: 'halotel_packages', text: '📦 VIEW PACKAGES' },
@@ -93,7 +93,7 @@ async function halotelCommand(sock, chatId, message, userMessage = '') {
 
             packageText += `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-*Bonyeza button ili kuamua:* `;
+*Click button to decide:* `;
 
             return await sendButtons(sock, chatId, {
                 title: '📱 CHOOSE YOUR DATA PLAN',

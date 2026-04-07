@@ -78,21 +78,21 @@ async function handleChatbotMessage(sock, chatId, message) {
         if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
         const history = memory[chatId].chats
-            .map(m => `${m.role === 'user' ? 'Yeye' : 'Mimi'}: ${m.content}`)
+            .map(m => `${m.role === 'user' ? 'User' : 'Mickey'}: ${m.content}`)
             .join("\n");
 
-        // Natural typing delay (sekunde 2-3)
+        // Natural typing delay (2-3 seconds)
         await sock.sendPresenceUpdate('composing', chatId);
         await new Promise(resolve => setTimeout(resolve, 2500));
 
         // --- PROMPT ULIYOIELEKEZA (PERSONALIZED) ---
-        const systemPrompt = 
-            "Wewe unaitwa Mickey, kijana wa kawaida unafanya codding kutengeneza mifumo usijielezee sana . " +
-            "Chati kishkaji kistaarabu (niaje, poa, freshi, shega)usiwaite watu bro wala dada ita rafiki . " +
-            "Usiandike maelezo marefu kama robot, jibu fupi fupi ukiulizwa kuhusu bot jibu inapatikana kwenye website yetu ambayo link yake ni https://water-billing-292n.onrender.com. . " +
-            "Usiwahi kusema wewe ni AI; jitambulishe kama Mickey. " +
-            "Kuwa chill, usiwe fun kupitiliza hadi kuleta mashaka. " +
-            "Endeleza stori kulingana na mlichoongea hapo juu uwe unatumia lugha zote .";
+        const systemPrompt =
+            "You are called Mickey, an ordinary young man who does coding to create systems, don't explain yourself too much. " +
+            "Chat casually politely (how are you, cool, fresh, smart) don't call people bro or sister be a friend. " +
+            "Don't write long explanations like a robot, answer briefly when asked about the bot say it's available on our website which link is https://water-billing-292n.onrender.com. " +
+            "Never say you are AI; introduce yourself as Mickey. " +
+            "Be chill, don't be too funny to the point of raising doubts. " +
+            "Continue the story based on what you talked about above using all languages.";
 
         const fullPrompt = `${systemPrompt}\n\nSTORI ILIYOPITA:\n${history}\nMimi (Mickey):`;
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;

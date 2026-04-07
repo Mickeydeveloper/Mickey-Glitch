@@ -142,8 +142,6 @@ const { pinCommand, verifyPinCommand, checkPinVerification } = require('./comman
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const whoisCommand = require('./commands/whois');
-const os = require('os');
-
 
 global.packname = settings.packname;
 global.author = settings.author;
@@ -398,6 +396,18 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }, { quoted: message });
                 commandExecuted = true;
             }
+        } else if (buttonId && buttonId.startsWith('help_')) {
+            if (buttonId.startsWith('help_category_')) {
+                const category = decodeURIComponent(buttonId.replace('help_category_', ''));
+                await helpCommand(sock, chatId, message, `.help ${category}`);
+                commandExecuted = true;
+            } else if (buttonId === 'help_more') {
+                await helpCommand(sock, chatId, message, '.help');
+                commandExecuted = true;
+            }
+        } else if (buttonId && buttonId.startsWith('halotel_')) {
+            await halotelCommand(sock, chatId, message, buttonId);
+            commandExecuted = true;
         } else if (buttonId && buttonId.startsWith('play_')) {
             if (buttonId.startsWith('play_audio_')) {
                 const title = decodeURIComponent(buttonId.replace('play_audio_', ''));
