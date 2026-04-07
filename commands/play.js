@@ -8,7 +8,7 @@ async function songCommand(sock, chatId, message) {
     // 1. Kupata jina la wimbo toka kwa user
     const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
     const query = textBody.split(" ").slice(1).join(" ");
-
+p
     if (!query) {
         return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\nEx: .play Adele Hello' }, { quoted: message });
     }
