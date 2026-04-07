@@ -1,5 +1,6 @@
 const axios = require('axios');
 const yts = require('yt-search');
+const { sendButtons } = require('gifted-btns');
 
 async function songCommand(sock, chatId, message) {
     if (!sock) return;
@@ -8,45 +9,48 @@ async function songCommand(sock, chatId, message) {
     const query = textBody.split(" ").slice(1).join(" ");
 
     if (!query) {
-        return sock.sendMessage(chatId, { text: '🎵 *Please provide a song name!*\nExample: .play Adele Hello' }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\nExample: .play Adele Hello' }, { quoted: message });
     }
 
     try {
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
         const { videos } = await yts(query);
-        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Song not found!*' });
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
 
         const vid = videos[0];
-        const url = vid.url;
 
-        // --- FIXED AUDIO DOWNLOAD LOGIC ---
-        try {
-            // Using a reliable API to get the direct MP3 link
-            const res = await axios.get(`https://api.dreaded.site/api/ytdl/video?url=${encodeURIComponent(url)}`);
-            
-            // Extract the download URL from the specific API response structure
-            const downloadUrl = res.data.result.downloadUrl || res.data.result;
+        const playText = `
+🎵 *SONG FOUND*
+━━━━━━━━━━━━━━━━━━━━━━
+📝 *Title:* ${vid.title}
+👤 *Channel:* ${vid.author.name}
+⏱️ *Duration:* ${vid.timestamp}
+👁️ *Views:* ${vid.views}
+📅 *Uploaded:* ${vid.ago}
+━━━━━━━━━━━━━━━━━━━━━━
+*Chagua format ya kudownload:*`;
 
-            await sock.sendMessage(chatId, { 
-                audio: { url: downloadUrl }, 
-                mimetype: 'audio/mpeg', // CRITICAL: This fixes the "File Error" on WhatsApp
-                fileName: `${vid.title}.mp3`,
-                ptt: false 
-            }, { quoted: message });
+        const playButtons = [
+            { id: `play_audio_${encodeURIComponent(vid.title)}`, text: '🎵 AUDIO (MP3)' },
+            { id: `play_video_${encodeURIComponent(vid.title)}`, text: '🎥 VIDEO (MP4)' },
+            { id: `play_search_${encodeURIComponent(query)}`, text: '🔍 MORE RESULTS' }
+        ];
 
-            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+        await sendButtons(sock, chatId, {
+            title: '🎧 MUSIC DOWNLOADER',
+            text: playText,
+            footer: 'Mickey Glitch Tech',
+            image: { url: vid.thumbnail },
+            buttons: playButtons
+        }, { quoted: message });
 
-        } catch (downloadErr) {
-            console.error("DOWNLOAD ERROR:", downloadErr.message);
-            await sock.sendMessage(chatId, { 
-                text: `❌ *Download Failed:* The server is currently busy. Please try again later.\n\nTitle: ${vid.title}` 
-            }, { quoted: message });
-        }
+        // Hii sasa iko ndani ya function vizuri
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error("SYSTEM ERROR:", err.message);
-        await sock.sendMessage(chatId, { text: '🚨 *An error occurred!* Please try again.' }, { quoted: message });
+        console.error("PLAY ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' }, { quoted: message });
     }
 }
 
