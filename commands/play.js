@@ -40,26 +40,33 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
                         }, { quoted: message });
                     }
 
-                    // ←←← HAPA NDIO MAGIC - Tumia converter yako
-                    const convertedAudio = await toAudio(audioBuffer, 'webm');  // webm au m4a inaweza kuja
+                    try {
+                        // ←←← HAPA NDIO MAGIC - Tumia converter yako
+                        const convertedAudio = await toAudio(audioBuffer, 'webm');  // webm au m4a inaweza kuja
 
-                    await sock.sendMessage(chatId, {
-                        audio: convertedAudio,
-                        mimetype: 'audio/mpeg',
-                        fileName: `${videoId}.mp3`,
-                        ptt: false,
-                        contextInfo: {
-                            externalAdReply: {
-                                title: "Now Playing",
-                                body: "Mickey Glitch Tech",
-                                mediaType: 2,
-                                thumbnailUrl: "https://i.ibb.co/0jZ8Y7s/music.jpg",
-                                sourceUrl: url,
+                        await sock.sendMessage(chatId, {
+                            audio: convertedAudio,
+                            mimetype: 'audio/mpeg',
+                            fileName: `${videoId}.mp3`,
+                            ptt: false,
+                            contextInfo: {
+                                externalAdReply: {
+                                    title: "Now Playing",
+                                    body: "Mickey Glitch Tech",
+                                    mediaType: 2,
+                                    thumbnailUrl: "https://i.ibb.co/0jZ8Y7s/music.jpg",
+                                    sourceUrl: url,
+                                }
                             }
-                        }
-                    }, { quoted: message });
+                        }, { quoted: message });
 
-                    await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+                        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+                    } catch (conversionError) {
+                        console.error("Audio conversion error:", conversionError);
+                        await sock.sendMessage(chatId, { 
+                            text: '❌ *Audio conversion imeshindwa. Jaribu tena*' 
+                        }, { quoted: message });
+                    }
                 });
 
                 stream.on('error', (err) => {
