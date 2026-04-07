@@ -31,7 +31,7 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
                     await sock.sendMessage(chatId, {
                         audio: audioBuffer,
                         mimetype: 'audio/mp4',
-                        fileName: `Mickey_Music.mp3`,
+                        fileName: `Mickey_Music.m4a`,
                         ptt: false,   // Muhimu ili iwe Music si Voice Note
                     }, { quoted: message });
 
