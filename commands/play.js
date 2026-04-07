@@ -1,6 +1,5 @@
 const axios = require('axios');
 const yts = require('yt-search');
-const { sendButtons } = require('gifted-btns');
 
 async function songCommand(sock, chatId, message) {
     if (!sock) return;
@@ -9,54 +8,45 @@ async function songCommand(sock, chatId, message) {
     const query = textBody.split(" ").slice(1).join(" ");
 
     if (!query) {
-        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\nExample: .play Adele Hello' }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '🎵 *Please provide a song name!*\nExample: .play Adele Hello' }, { quoted: message });
     }
 
     try {
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
         const { videos } = await yts(query);
-        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Song not found!*' });
 
         const vid = videos[0];
         const url = vid.url;
 
-        // --- SEHEMU YA KUREKEBISHA TATIZO LA KUTOPLAY ---
-        // Tunatumia API kupata direct link ya audio inayokubalika na WA
+        // --- FIXED AUDIO DOWNLOAD LOGIC ---
         try {
-            const downloadRes = await axios.get(`https://api.giftedtech.my.id/api/download/dl?url=${encodeURIComponent(url)}`);
-            const dlData = downloadRes.data;
+            // Using a reliable API to get the direct MP3 link
+            const res = await axios.get(`https://api.dreaded.site/api/ytdl/video?url=${encodeURIComponent(url)}`);
+            
+            // Extract the download URL from the specific API response structure
+            const downloadUrl = res.data.result.downloadUrl || res.data.result;
 
-            if (dlData.success) {
-                const audioUrl = dlData.result.download_url;
+            await sock.sendMessage(chatId, { 
+                audio: { url: downloadUrl }, 
+                mimetype: 'audio/mpeg', // CRITICAL: This fixes the "File Error" on WhatsApp
+                fileName: `${vid.title}.mp3`,
+                ptt: false 
+            }, { quoted: message });
 
-                // Tuma audio ikiwa na mimetype sahihi (audio/mpeg) ili icheze
-                await sock.sendMessage(chatId, { 
-                    audio: { url: audioUrl }, 
-                    mimetype: 'audio/mpeg', 
-                    fileName: `${vid.title}.mp3`,
-                    ptt: false // Hii inafanya iwe wimbo unaopitika (playable)
-                }, { quoted: message });
-
-                await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-            } else {
-                throw new Error("Failed to get download link");
-            }
+            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
         } catch (downloadErr) {
             console.error("DOWNLOAD ERROR:", downloadErr.message);
-            // Kama ikishindika kutuma moja kwa moja, tuma angalau taarifa za wimbo na buttons
-            const playText = `🎵 *Wimbo Umepatikana lakini kuna tatizo la kupakua.*\n📝 *Title:* ${vid.title}`;
-            
             await sock.sendMessage(chatId, { 
-                image: { url: vid.thumbnail }, 
-                caption: playText 
+                text: `❌ *Download Failed:* The server is currently busy. Please try again later.\n\nTitle: ${vid.title}` 
             }, { quoted: message });
         }
 
     } catch (err) {
-        console.error("PLAY ERROR:", err.message);
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' }, { quoted: message });
+        console.error("SYSTEM ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *An error occurred!* Please try again.' }, { quoted: message });
     }
 }
 
