@@ -61,15 +61,16 @@ async function updateCommand(sock, chatId, message) {
         }
 
         // 6. Maliza na Restart
-        await sock.sendMessage(chatId, { text: "✅ *Update Successful!*\n\nBot is restarting to apply changes. Wait 30 seconds." });
+        await sock.sendMessage(chatId, { text: "✅ *Update Successful!*\n\nBot is restarting to apply changes... 🔄" });
         
         // Futa takataka za update
         fs.removeSync(tmpDir);
 
-        // Zima bot (Panel yako itaiwasha yenyewe ikiwa na kodi mpya)
+        // Zima bot (Panel yako itaiwasha yenyewe ikiwa na kodi mpya) - Auto-restart after 4 seconds
         setTimeout(() => {
+            console.log('[AutoRestart] Process restarting...');
             process.exit(0);
-        }, 3000);
+        }, 4000);
 
     } catch (err) {
         console.error(err);

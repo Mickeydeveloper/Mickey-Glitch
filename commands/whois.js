@@ -59,6 +59,7 @@ async function whoisCommand(sock, chatId, message, args) {
     } catch (err) {
         console.error("WHOIS ERROR:", err);
         // Hatuwezi kutuma error kama sock imekufa, ila hapa tunahakikisha bot haizimi
+        await sock.sendMessage(chatId, { text: '❌ *Error:* Could not fetch user information.' }, { quoted: message });
     }
 }
 

@@ -512,7 +512,15 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await playCommand(sock, chatId, message);
                 break;
             case lowerUserMessage.startsWith('.video'):
-                await videoCommand(sock, chatId, message);
+                const videoArgs = lowerUserMessage.split(' ').slice(1);
+                await videoCommand(sock, chatId, message, videoArgs);
+                break;
+            case lowerUserMessage.startsWith('.shazam'):
+                await shazamCommand(sock, chatId, message);
+                break;
+            case lowerUserMessage.startsWith('.whois'):
+                const whoisArgs = lowerUserMessage.split(' ').slice(1);
+                await whoisCommand(sock, chatId, message, whoisArgs);
                 break;
             case lowerUserMessage.startsWith('.tiktok') || lowerUserMessage.startsWith('.tt'):
                 await tiktokCommand(sock, chatId, message);

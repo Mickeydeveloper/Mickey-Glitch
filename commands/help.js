@@ -21,11 +21,35 @@ function getAutomaticCommands() {
 const categoryMap = {
     '.gemini': '🤖 AI & Chat',
     '.ai': '🤖 AI & Chat',
+    '.chatbot': '🤖 AI & Chat',
+    '.imagine': '🎨 Image Generation',
     '.mode': '⚙️ Settings & Admin',
     '.settings': '⚙️ Settings & Admin',
-    '.owner': '👑 Owner Only',
+    '.owner': '👑 Owner Commands',
     '.help': '🔧 Utilities',
-    '.ping': '🚀 System Stats'
+    '.ping': '🚀 System',
+    '.alive': '🔧 Utilities',
+    '.halotel': '💰 Data Services',
+    '.play': '🎵 Music & Audio',
+    '.video': '🎬 Video & Media',
+    '.download': '📥 Downloads',
+    '.instagram': '📥 Downloads',
+    '.tiktok': '📥 Downloads',
+    '.facebook': '📥 Downloads',
+    '.youtube': '📥 Downloads',
+    '.shazam': '🎵 Music & Audio',
+    '.ban': '⚔️ Group Management',
+    '.kick': '⚔️ Group Management',
+    '.mute': '⚔️ Group Management',
+    '.promote': '⚔️ Group Management',
+    '.demote': '⚔️ Group Management',
+    '.groupmanage': '⚔️ Group Management',
+    '.whois': '👤 User Info',
+    '.pp': '👤 User Info',
+    '.sticker': '🎭 Media Tools',
+    '.meme': '😂 Fun & Games',
+    '.weather': '🌍 Info Services',
+    '.lyrics': '🎵 Music & Audio'
 };
 
 function categorizeCommands(commands) {
@@ -56,54 +80,39 @@ const aliveCommand = async (conn, chatId, msg) => {
         const categorized = categorizeCommands(allCommands);
         const totalCommands = allCommands.length;
 
-        // --- VISUAL HEADER ---
-        let finalText = `
-╭━━━〔 *${botName}* 〕━━━┈⊷
-┃ 👋 *Welcome back!*
-┃ 👤 *User:* ${senderName}
+        // --- MAIN MENU WITH GIFTED BUTTONS ---
+        const menuText = `
+╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃ 🤖 *${botName} COMMAND CENTER*
+┃ 
+┃ 👋 *Welcome:* ${senderName}
 ┃ 🕒 *Time:* ${timeStr}
 ┃ 📅 *Date:* ${dateStr}
 ┃ ⏳ *Uptime:* ${runtimeStr}
-┃ 📦 *Total:* ${totalCommands} Cmds
-╰━━━━━━━━━━━━━━━━━━┈⊷`.trim();
+┃ 📦 *Commands:* ${totalCommands}
+┃ 📍 *Status:* ✅ Online
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        // --- COMMAND LIST (Hapa ndipo commands zinarudi) ---
-        Object.entries(categorized).forEach(([category, list]) => {
-            finalText += `\n\n*${category.toUpperCase()}*`;
-            finalText += `\n└  ` + list.map(cmd => `\`${cmd}\``).join(', ');
-        });
+*SELECT CATEGORY BELOW TO VIEW:* 👇`;
 
-        finalText += `\n\n*©2026 Mickey Glitch Labs™*`;
+        // Create category buttons
+        const categoryButtons = Object.keys(categorized).map(category => ({
+            id: `help_category_${encodeURIComponent(category)}`,
+            text: category
+        }));
 
-        // --- INTERACTIVE LIST SECTIONS ---
-        const sections = [
-            {
-                title: "⚡ QUICK ACTIONS",
-                rows: [
-                    { title: "Main Menu", rowId: ".help", description: "Refresh command list" },
-                    { title: "Bot Status", rowId: ".alive", description: "Check system health" },
-                    { title: "Buy Data", rowId: ".halotel", description: "Order Halotel bundles" }
-                ]
-            }
-        ];
+        // Limit buttons to 5 per message
+        const displayButtons = categoryButtons.slice(0, 5);
+        if (categoryButtons.length > 5) {
+            displayButtons.push({ id: 'help_more', text: '📋 MORE CATEGORIES' });
+        }
 
-        // Tuma ujumbe wenye Text (Commands) na List Button kwa pamoja
-        await conn.sendMessage(chatId, {
-            text: finalText,
-            footer: "Select a quick action below",
-            title: `*${botName} COMMAND CENTER*`,
-            buttonText: "Open Shortcut Menu",
-            sections: sections,
-            contextInfo: {
-                externalAdReply: {
-                    title: `${botName} V3 — Active`,
-                    body: `Systems operational, ${senderName}!`,
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
-                    sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
-                }
-            }
+        return await sendButtons(conn, chatId, {
+            title: `🎮 ${botName} MAIN MENU`,
+            text: menuText,
+            footer: '© 2026 Mickey Glitch Labs™',
+            image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
+            buttons: displayButtons
         }, { quoted: msg });
 
     } catch (e) {
