@@ -1,138 +1,143 @@
+
 const fs = require('fs');
 const path = require('path');
-const { fetchBuffer } = require('../lib/myfunc');
+const { fetchBuffer } = require('../lib/myfunc'); // Change path if needed
 
-// Hifadhi data ya asili (original profile)
-const originalProfile = {
+const dataPath = path.join(__dirname, '../data/original_profile.json');
+
+let originalProfile = {
     profilePicture: null,
     status: null,
     isCloned: false
 };
 
-// Path ya kuhifadhi original data (ili isipotee hata ukirestart bot)
-const dataPath = path.join(__dirname, '../data/original_profile.json');
-
- // Load original data kama ipo
+// Load original profile data if it exists
 if (fs.existsSync(dataPath)) {
     try {
         const saved = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-        originalProfile.profilePicture = saved.profilePicture ? Buffer.from(saved.profilePicture, 'base64') : null;
         originalProfile.status = saved.status;
         originalProfile.isCloned = saved.isCloned || false;
+        if (saved.profilePicture) {
+            originalProfile.profilePicture = Buffer.from(saved.profilePicture, 'base64');
+        }
     } catch (e) {}
 }
 
 async function cloneCommand(sock, chatId, message) {
     try {
-        const text = message.message?.conversation || 
-                    message.message?.extendedTextMessage?.text || '';
-        
+        const text = (message.message?.conversation || 
+                     message.message?.extendedTextMessage?.text || "").toLowerCase().trim();
+
         const isUnclone = text.startsWith('.unclone');
 
         // ===================== UNCLONE =====================
         if (isUnclone) {
             if (!originalProfile.isCloned) {
-                return await sock.sendMessage(chatId, { 
-                    text: "❌ *Bot haijaclone bado! Hakuna cha kurudisha.*" 
+                return sock.sendMessage(chatId, { 
+                    text: "❌ *Bot is not cloned yet. Nothing to restore.*" 
                 }, { quoted: message });
             }
 
             await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
-            await sock.sendMessage(chatId, { text: '🔄 *Inarudisha profile ya asili...*' }, { quoted: message });
 
-            // Rudisha Status
+            // Restore Status
             if (originalProfile.status) {
-                await sock.updateProfileStatus(originalProfile.status);
+                await sock.updateProfileStatus(originalProfile.status).catch(() => {});
             }
 
-            // Rudisha Profile Picture
+            // Restore Profile Picture
             if (originalProfile.profilePicture) {
-                await sock.updateProfilePicture(sock.user.id.split(':')[0] + '@s.whatsapp.net', originalProfile.profilePicture);
+                await sock.updateProfilePicture(sock.user.id, originalProfile.profilePicture).catch(() => {});
             }
 
             originalProfile.isCloned = false;
 
-            await sock.sendMessage(chatId, {
-                text: `✅ *UNCLONE IMEFANIKIWA!*\n\nBot imerudi kwenye hali yake ya asili.`
+            return sock.sendMessage(chatId, {
+                text: `✅ *UNCLONE SUCCESSFUL*\n\nBot has been restored to its original identity.`
             }, { quoted: message });
-
-            return;
         }
 
         // ===================== CLONE =====================
-        // Pata target
-        let targetJid;
+        let targetJid = null;
         const context = message.message?.extendedTextMessage?.contextInfo;
 
         if (context?.mentionedJid?.length > 0) {
             targetJid = context.mentionedJid[0];
         } else if (context?.quotedMessage) {
             targetJid = context.participant || message.key.remoteJid;
-        } else {
-            return await sock.sendMessage(chatId, {
-                text: "❌ *Usage:*\nReply kwenye ujumbe au tag mtu\n\n`.clone @user` au `.unclone`"
+        }
+
+        if (!targetJid) {
+            return sock.sendMessage(chatId, {
+                text: "❌ *Usage:*\nReply to someone's message or tag a user\n\nExample: `.clone @2557xxxxxxxx`"
             }, { quoted: message });
         }
 
         await sock.sendMessage(chatId, { react: { text: '👥', key: message.key } });
-        await sock.sendMessage(chatId, { text: '👥 *Inaclone identity...*' }, { quoted: message });
+        await sock.sendMessage(chatId, { text: '👥 *Cloning identity... Please wait*' }, { quoted: message });
 
-        // Hifadhi original profile (mara ya kwanza tu)
+        // Save original profile (only once)
         if (!originalProfile.isCloned) {
             try {
-                originalProfile.status = await sock.fetchStatus(sock.user.id.split(':')[0] + '@s.whatsapp.net');
-                originalProfile.status = originalProfile.status[0]?.status || "Powered by Mickey Glitch Tech";
+                const myStatus = await sock.fetchStatus(sock.user.id);
+                originalProfile.status = myStatus[0]?.status || "Powered by Mickey Glitch Tech";
             } catch (e) {}
 
             try {
-                const ppUrl = await sock.profilePictureUrl(sock.user.id.split(':')[0] + '@s.whatsapp.net', 'image');
-                originalProfile.profilePicture = await fetchBuffer(ppUrl);
+                const myPpUrl = await sock.profilePictureUrl(sock.user.id, 'image');
+                originalProfile.profilePicture = await fetchBuffer(myPpUrl);
             } catch (e) {
-                console.log("No original PP found");
+                console.log("Original profile picture not found");
             }
 
             originalProfile.isCloned = true;
 
             // Save to file
             fs.writeFileSync(dataPath, JSON.stringify({
-                profilePicture: originalProfile.profilePicture ? originalProfile.profilePicture.toString('base64') : null,
                 status: originalProfile.status,
+                profilePicture: originalProfile.profilePicture ? originalProfile.profilePicture.toString('base64') : null,
                 isCloned: true
-            }));
+            }, null, 2));
         }
 
-        // Pata Profile Picture ya mtu
+        // Get target's profile picture
         let ppUrl;
         try {
             ppUrl = await sock.profilePictureUrl(targetJid, 'image');
         } catch (e) {
-            ppUrl = 'https://i.ibb.co/vzVv8Yp/mickey.jpg';
+            return sock.sendMessage(chatId, { 
+                text: "❌ *This user has no profile picture or it is hidden.*" 
+            }, { quoted: message });
         }
 
-        // Pata jina
+        const buffer = await fetchBuffer(ppUrl);
+
+        if (!buffer) {
+            throw new Error("Failed to download profile picture");
+        }
+
+        // Update Bot's Profile Picture
+        const myJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+        await sock.updateProfilePicture(myJid, buffer);
+
+        // Get target's name
         let name = "Unknown User";
         try {
             const contact = await sock.onWhatsApp(targetJid);
-            name = contact[0]?.notify || contact[0]?.name || name;
-        } catch (e) {}
+            name = contact[0]?.notify || name;
+        } catch {}
 
         // Update Status
-        await sock.updateProfileStatus(`Cloned from ${name} | Powered by Mickey Glitch Tech`);
-
-        // Update Profile Picture
-        const buffer = await fetchBuffer(ppUrl);
-        if (buffer) {
-            await sock.updateProfilePicture(sock.user.id.split(':')[0] + '@s.whatsapp.net', buffer);
-        }
+        await sock.updateProfileStatus(`Cloned from ${name} | Mickey Glitch Tech`);
 
         await sock.sendMessage(chatId, {
-            text: `✅ *CLONE IMEFANIKIWA!*\n\n👤 *Cloned from:* ${name}\n📸 *Profile Picture:* Imebadilishwa\n\nTumia *.unclone* kurudisha hali ya asili.`
+            text: `✅ *CLONE SUCCESSFUL!*\n\n👤 *Cloned from:* ${name}\n📸 *Profile Picture:* Updated\n\nUse *.unclone* to restore original identity.`
         }, { quoted: message });
 
     } catch (err) {
         console.error("Clone Error:", err.message);
         await sock.sendMessage(chatId, {
-            text: "❌ *Operesheni imeshindwa!*\nJaribu tena au angalia ruhusa za bot."
+            text: `❌ *Clone Failed!*\n\nPossible reasons:\n• Target user has hidden their profile picture\n• Bot doesn't have permission to change profile\n• Hosting platform blocks profile update\n\nTry again later or use a different hosting.`
         }, { quoted: message });
     }
 }
