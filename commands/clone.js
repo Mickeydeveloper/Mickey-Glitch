@@ -1,7 +1,6 @@
-
 const fs = require('fs');
 const path = require('path');
-const { fetchBuffer } = require('../lib/myfunc'); // Change path if needed
+const { fetchBuffer } = require('../lib/myfunc'); 
 
 const dataPath = path.join(__dirname, '../data/original_profile.json');
 
@@ -11,7 +10,7 @@ let originalProfile = {
     isCloned: false
 };
 
-// Load original profile data if it exists
+// Load saved original profile
 if (fs.existsSync(dataPath)) {
     try {
         const saved = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
@@ -40,12 +39,10 @@ async function cloneCommand(sock, chatId, message) {
 
             await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
-            // Restore Status
             if (originalProfile.status) {
                 await sock.updateProfileStatus(originalProfile.status).catch(() => {});
             }
 
-            // Restore Profile Picture
             if (originalProfile.profilePicture) {
                 await sock.updateProfilePicture(sock.user.id, originalProfile.profilePicture).catch(() => {});
             }
@@ -53,7 +50,7 @@ async function cloneCommand(sock, chatId, message) {
             originalProfile.isCloned = false;
 
             return sock.sendMessage(chatId, {
-                text: `✅ *UNCLONE SUCCESSFUL*\n\nBot has been restored to its original identity.`
+                text: `✅ *UNCLONE SUCCESSFUL*\n\nBot has been restored to original identity.`
             }, { quoted: message });
         }
 
@@ -69,30 +66,27 @@ async function cloneCommand(sock, chatId, message) {
 
         if (!targetJid) {
             return sock.sendMessage(chatId, {
-                text: "❌ *Usage:*\nReply to someone's message or tag a user\n\nExample: `.clone @2557xxxxxxxx`"
+                text: "❌ *Usage:*\n• Reply to someone's message\n• Or tag a user\n\nExample: `.clone @255712345678`"
             }, { quoted: message });
         }
 
         await sock.sendMessage(chatId, { react: { text: '👥', key: message.key } });
-        await sock.sendMessage(chatId, { text: '👥 *Cloning identity... Please wait*' }, { quoted: message });
+        await sock.sendMessage(chatId, { text: '👥 *Cloning profile... Please wait*' }, { quoted: message });
 
-        // Save original profile (only once)
+        // Save original profile (only first time)
         if (!originalProfile.isCloned) {
             try {
                 const myStatus = await sock.fetchStatus(sock.user.id);
                 originalProfile.status = myStatus[0]?.status || "Powered by Mickey Glitch Tech";
-            } catch (e) {}
+            } catch {}
 
             try {
                 const myPpUrl = await sock.profilePictureUrl(sock.user.id, 'image');
                 originalProfile.profilePicture = await fetchBuffer(myPpUrl);
-            } catch (e) {
-                console.log("Original profile picture not found");
-            }
+            } catch {}
 
             originalProfile.isCloned = true;
 
-            // Save to file
             fs.writeFileSync(dataPath, JSON.stringify({
                 status: originalProfile.status,
                 profilePicture: originalProfile.profilePicture ? originalProfile.profilePicture.toString('base64') : null,
@@ -100,45 +94,53 @@ async function cloneCommand(sock, chatId, message) {
             }, null, 2));
         }
 
-        // Get target's profile picture
+        // Get target profile picture
         let ppUrl;
         try {
             ppUrl = await sock.profilePictureUrl(targetJid, 'image');
         } catch (e) {
             return sock.sendMessage(chatId, { 
-                text: "❌ *This user has no profile picture or it is hidden.*" 
+                text: "❌ *Target user has hidden their profile picture or it is not available.*" 
             }, { quoted: message });
         }
 
         const buffer = await fetchBuffer(ppUrl);
+        if (!buffer) throw new Error("Failed to download image");
 
-        if (!buffer) {
-            throw new Error("Failed to download profile picture");
-        }
-
-        // Update Bot's Profile Picture
+        // Update Profile Picture (Fixed version)
         const myJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+        
         await sock.updateProfilePicture(myJid, buffer);
 
-        // Get target's name
+        // Get name
         let name = "Unknown User";
         try {
             const contact = await sock.onWhatsApp(targetJid);
             name = contact[0]?.notify || name;
         } catch {}
 
-        // Update Status
         await sock.updateProfileStatus(`Cloned from ${name} | Mickey Glitch Tech`);
 
         await sock.sendMessage(chatId, {
-            text: `✅ *CLONE SUCCESSFUL!*\n\n👤 *Cloned from:* ${name}\n📸 *Profile Picture:* Updated\n\nUse *.unclone* to restore original identity.`
+            text: `✅ *CLONE SUCCESSFUL!*\n\n👤 *Cloned from:* ${name}\n📸 *Profile Picture:* Changed successfully\n\nUse *.unclone* to restore original.`
         }, { quoted: message });
 
     } catch (err) {
         console.error("Clone Error:", err.message);
-        await sock.sendMessage(chatId, {
-            text: `❌ *Clone Failed!*\n\nPossible reasons:\n• Target user has hidden their profile picture\n• Bot doesn't have permission to change profile\n• Hosting platform blocks profile update\n\nTry again later or use a different hosting.`
-        }, { quoted: message });
+        
+        let errorMsg = "❌ *Clone Failed!*";
+
+        if (err.message?.includes("unauthorized") || err.message?.includes("forbidden")) {
+            errorMsg += "\n\nBot does not have permission to change profile picture.";
+        } else if (err.message?.includes("bad request") || err.message?.includes("image")) {
+            errorMsg += "\n\nImage processing failed. Make sure 'jimp' is installed.";
+        } else {
+            errorMsg += "\n\nThis feature is often blocked by WhatsApp or your hosting provider (Railway, Render, etc.).";
+        }
+
+        errorMsg += "\n\nTry on Termux or a VPS for better success rate.";
+
+        await sock.sendMessage(chatId, { text: errorMsg }, { quoted: message });
     }
 }
 
