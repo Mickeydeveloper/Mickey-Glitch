@@ -130,7 +130,7 @@ const videoCommand = require('./commands/video');
 const sudoCommand = require('./commands/sudo');
 const stickercropCommand = require('./commands/stickercrop');
 const updateCommand = require('./commands/update');
-const checkUpdatesCommand = require('./commands/checkupdates');
+const repoCommand = require('./commands/checkupdates');
 const { igsCommand } = require('./commands/igs');
 const cloneCommand = require('./commands/clone');
 
@@ -210,6 +210,18 @@ async function handleMessages(sock, messageUpdate, printLog) {
             // Decode ytvideo button: ytvideo_Title -> .ytvideo Title
             const title = decodeURIComponent(buttonId.replace('ytvideo_', ''));
             decodedButtonId = `.ytvideo ${title}`;
+        } else if (buttonId && buttonId.startsWith('run_cmd_')) {
+            decodedButtonId = buttonId.replace('run_cmd_', '');
+        } else if (buttonId === 'repo_download_zip') {
+            // Handle repo download zip button
+            const { downloadZipCommand } = require('./commands/checkupdates');
+            await downloadZipCommand(sock, chatId, message);
+            return;
+        } else if (buttonId === 'repo_copy_link') {
+            // Handle repo copy link button
+            const { copyLinkCommand } = require('./commands/checkupdates');
+            await copyLinkCommand(sock, chatId, message);
+            return;
         }
 
         const chatIdEarly = message.key.remoteJid;
@@ -484,6 +496,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 else await pinCommand(sock, chatId, message, pArgs);
                 commandExecuted = true;
                 break;
+            case lowerUserMessage === '.downloadmenu':
+                await helpCommand(sock, chatId, message, `help_cat_${encodeURIComponent('📥 DOWNLOADS')}`);
+                commandExecuted = true;
+                break;
             case lowerUserMessage === '.help' || lowerUserMessage === '.menu' || lowerUserMessage === '.list':
                 await helpCommand(sock, chatId, message, lowerUserMessage);
                 commandExecuted = true;
@@ -659,8 +675,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await updateCommand(sock, chatId, message, rawText.trim().split(/\s+/)[1] || '');
                 commandExecuted = true;
                 break;
-            case lowerUserMessage.startsWith('.checkupdates'):
-                await checkUpdatesCommand(sock, chatId, message, lowerUserMessage.split(' ').slice(1));
+            case lowerUserMessage.startsWith('.repo'):
+                await repoCommand(sock, chatId, message, lowerUserMessage.split(' ').slice(1));
                 commandExecuted = true;
                 break;
             case lowerUserMessage === '.sendzip':

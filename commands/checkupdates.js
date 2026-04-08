@@ -1,53 +1,49 @@
 /**
- * COMMAND: .checkupdates
- * DESIGN: 3 Pro Buttons + English Change Log
+ * COMMAND: .repo
+ * DESIGN: Professional Repo Info with Download & Copy Buttons
  * SPEED: Ultra-Fast Response
  */
 
-async function checkUpdatesCommand(sock, chatId, message) {
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+async function repoCommand(sock, chatId, message) {
     try {
         // 1. Quick reaction
-        await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
+        await sock.sendMessage(chatId, { react: { text: '📦', key: message.key } });
 
-        // 2. English Change Log Only
-        const changelog = `
-*LATEST SYSTEM UPDATES:*
-• Improved button response architecture.
-• Optimized ". Menu" command recognition.
-• Enhanced auto-temp cleanup for hosting.
-• Fixed stability issues in media downloads.`;
+        // 2. Repo Information
+        const repoInfo = `
+🗂️ *REPOSITORY INFORMATION*
+━━━━━━━━━━━━━━━━━━━━━━
+📁 *Name:* Mickey-Glitch
+👤 *Owner:* Mickeydeveloper
+📝 *Language:* JavaScript
+🔄 *Last Update:* April 2026
+━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
+*© 2026 Mickey Glitch Tech*`;
 
-        const caption = `
-🚀 *MICKEY GLITCH V5.2.0 INFO*
-━━━━━━━━━━━━━━━━━━━━━━
-👤 *Dev:* Mickey Tech
-🔧 *Status:* Online & Stable
-🛰️ *Build:* 2026 Edition
-━━━━━━━━━━━━━━━━━━━━━━
-${changelog}
-━━━━━━━━━━━━━━━━━━━━━━
-*© 2026 Mickey Infor Technology*`;
-
-        // 3. Tuma ujumbe wenye Button 3 pekee
+        // 3. Professional Buttons
         const buttons = [
-            { buttonId: '.update', buttonText: { displayText: '📥 UPDATE NOW' }, type: 1 },
-            { buttonId: '.sendzip', buttonText: { displayText: '💾 DOWNLOAD' }, type: 1 },
-            { buttonId: '.owner', buttonText: { displayText: '📢 JOIN MY CHANNEL' }, type: 1 }
+            { buttonId: 'repo_download_zip', buttonText: { displayText: '📥 DOWNLOAD ZIP' }, type: 1 },
+            { buttonId: 'repo_copy_link', buttonText: { displayText: '📋 COPY REPO LINK' }, type: 1 }
         ];
 
         const buttonMessage = {
-            text: caption,
-            footer: 'Select an option below',
+            text: repoInfo,
+            footer: 'Choose an option below',
             buttons: buttons,
             headerType: 1,
             contextInfo: {
                 externalAdReply: {
-                    title: "MICKEY GLITCH UPDATES",
-                    body: "System is running on latest version.",
+                    title: "MICKEY GLITCH REPO",
+                    body: "Open Source WhatsApp Bot",
                     thumbnailUrl: "https://i.ibb.co/vzVv8Yp/mickey.jpg",
-                    sourceUrl: "https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610", // Link ya channel yako
+                    sourceUrl: "https://github.com/Mickeydeveloper/Mickey-Glitch",
                     mediaType: 1,
-                    renderLargerThumbnail: false
+                    renderLargerThumbnail: true
                 }
             }
         };
@@ -55,9 +51,57 @@ ${changelog}
         await sock.sendMessage(chatId, buttonMessage, { quoted: message });
 
     } catch (err) {
-        console.error("Update Check Error:", err.message);
-        await sock.sendMessage(chatId, { text: "❌ *System Error:* Try again." });
+        console.error("Repo Info Error:", err.message);
+        await sock.sendMessage(chatId, { text: "❌ *Error loading repo info:* Try again." });
     }
 }
 
-module.exports = checkUpdatesCommand;
+// Download ZIP function
+async function downloadZipCommand(sock, chatId, message) {
+    try {
+        await sock.sendMessage(chatId, { react: { text: '⬇️', key: message.key } });
+
+        const repoUrl = 'https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip';
+        const response = await axios.get(repoUrl, { responseType: 'arraybuffer' });
+
+        const zipPath = path.join(__dirname, '../temp', 'Mickey-Glitch-main.zip');
+        fs.writeFileSync(zipPath, response.data);
+
+        await sock.sendMessage(chatId, {
+            document: fs.readFileSync(zipPath),
+            mimetype: 'application/zip',
+            fileName: 'Mickey-Glitch-main.zip',
+            caption: '📦 *Mickey Glitch Bot Repository*\n\nDownloaded successfully!'
+        }, { quoted: message });
+
+        // Cleanup
+        setTimeout(() => {
+            try { fs.unlinkSync(zipPath); } catch (e) {}
+        }, 30000);
+
+    } catch (err) {
+        console.error("Download ZIP Error:", err.message);
+        await sock.sendMessage(chatId, { text: "❌ *Download failed:* Try again." });
+    }
+}
+
+// Copy Link function
+async function copyLinkCommand(sock, chatId, message) {
+    try {
+        await sock.sendMessage(chatId, { react: { text: '📋', key: message.key } });
+
+        const repoLink = 'https://github.com/Mickeydeveloper/Mickey-Glitch';
+
+        await sock.sendMessage(chatId, {
+            text: `📋 *Repository Link Copied!*\n\n${repoLink}\n\n_Paste this link in your browser to access the repository._`
+        }, { quoted: message });
+
+    } catch (err) {
+        console.error("Copy Link Error:", err.message);
+        await sock.sendMessage(chatId, { text: "❌ *Error copying link:* Try again." });
+    }
+}
+
+module.exports = repoCommand;
+module.exports.downloadZipCommand = downloadZipCommand;
+module.exports.copyLinkCommand = copyLinkCommand;
