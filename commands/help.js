@@ -41,7 +41,77 @@ const categoryMap = {
     '.play': '🎵 MUSIC & AUDIO', '.video': '🎬 VIDEO & MEDIA',
     '.download': '📥 DOWNLOADS', '.instagram': '📥 DOWNLOADS', '.tiktok': '📥 DOWNLOADS',
     '.kick': '⚔️ GROUP MANAGE', '.promote': '⚔️ GROUP MANAGE',
-    '.sticker': '🎭 MEDIA TOOLS', '.weather': '🌍 INFO SERVICES'
+    '.sticker': '🎭 MEDIA TOOLS', '.weather': '🌍 INFO SERVICES',
+    '.alive': '⚙️ SETTINGS',
+    '.anime': '🎨 IMAGE GEN',
+    '.antibadword': '⚔️ GROUP MANAGE',
+    '.anticall': '⚔️ GROUP MANAGE',
+    '.antidelete': '⚔️ GROUP MANAGE',
+    '.antilink': '⚔️ GROUP MANAGE',
+    '.antistatusmention': '⚔️ GROUP MANAGE',
+    '.antitag': '⚔️ GROUP MANAGE',
+    '.autobio': '⚙️ SETTINGS',
+    '.autoread': '⚙️ SETTINGS',
+    '.autostatus': '⚙️ SETTINGS',
+    '.autotyping': '⚙️ SETTINGS',
+    '.ban': '⚔️ GROUP MANAGE',
+    '.character': '🎭 MEDIA TOOLS',
+    '.chart': '🎵 MUSIC & AUDIO',
+    '.chatbot': '🤖 AI & CHAT',
+    '.checkupdates': '⚙️ SETTINGS',
+    '.clear': '⚙️ SETTINGS',
+    '.clearsession': '⚙️ SETTINGS',
+    '.cleartmp': '⚙️ SETTINGS',
+    '.clone': '🎭 MEDIA TOOLS',
+    '.compliment': '🤖 AI & CHAT',
+    '.delete': '⚔️ GROUP MANAGE',
+    '.demote': '⚔️ GROUP MANAGE',
+    '.emojimix': '🎭 MEDIA TOOLS',
+    '.facebook': '📥 DOWNLOADS',
+    '.getpp': '🎭 MEDIA TOOLS',
+    '.ghost': '⚙️ SETTINGS',
+    '.groupmanage': '⚔️ GROUP MANAGE',
+    '.halotel': '📂 OTHER SERVICES',
+    '.hidetag': '⚔️ GROUP MANAGE',
+    '.igs': '📥 DOWNLOADS',
+    '.img-blur': '🎨 IMAGE GEN',
+    '.lyrics': '🎵 MUSIC & AUDIO',
+    '.mention': '⚔️ GROUP MANAGE',
+    '.misc': '📂 OTHER SERVICES',
+    '.owner': '⚙️ SETTINGS',
+    '.pair': '⚙️ SETTINGS',
+    '.pin': '⚔️ GROUP MANAGE',
+    '.ping': '⚙️ SETTINGS',
+    '.pmblocker': '⚔️ GROUP MANAGE',
+    '.pp': '🎭 MEDIA TOOLS',
+    '.report': '⚔️ GROUP MANAGE',
+    '.resetlink': '⚙️ SETTINGS',
+    '.setpp': '🎭 MEDIA TOOLS',
+    '.shazam': '🎵 MUSIC & AUDIO',
+    '.songid': '🎵 MUSIC & AUDIO',
+    '.staff': '⚙️ SETTINGS',
+    '.statusforward': '⚔️ GROUP MANAGE',
+    '.sticker-alt': '🎭 MEDIA TOOLS',
+    '.stickercrop': '🎭 MEDIA TOOLS',
+    '.stickertelegram': '🎭 MEDIA TOOLS',
+    '.sudo': '⚙️ SETTINGS',
+    '.tag': '⚔️ GROUP MANAGE',
+    '.tagall': '⚔️ GROUP MANAGE',
+    '.tagnotadmin': '⚔️ GROUP MANAGE',
+    '.take': '🎭 MEDIA TOOLS',
+    '.textmaker': '🎨 IMAGE GEN',
+    '.topmembers': '🌍 INFO SERVICES',
+    '.translate': '🌍 INFO SERVICES',
+    '.tts': '🎵 MUSIC & AUDIO',
+    '.unban': '⚔️ GROUP MANAGE',
+    '.unmute': '⚔️ GROUP MANAGE',
+    '.update': '⚙️ SETTINGS',
+    '.url': '📥 DOWNLOADS',
+    '.viewonce': '🎭 MEDIA TOOLS',
+    '.warn': '⚔️ GROUP MANAGE',
+    '.warnings': '⚔️ GROUP MANAGE',
+    '.wasted': '🎨 IMAGE GEN',
+    '.whois': '🌍 INFO SERVICES'
 };
 
 // Category aliases for easier access
@@ -153,7 +223,7 @@ ${commandsList}
 
 *Tap any command button to execute it instantly!*`;
 
-            const commandButtons = cmds.slice(0, 2).map(cmd => ({ id: `run_cmd_${cmd}`, text: cmd }));
+            const commandButtons = cmds.slice(0, 5).map(cmd => ({ id: cmd, text: cmd }));
             commandButtons.push({ id: '.help', text: '⬅️ BACK TO MENU' });
 
             return await sendButtons(conn, chatId, {
@@ -187,7 +257,7 @@ ${commandsList}
 *Choose a category below to explore commands:*`;
 
         // Only show 5 categories to keep it fast - WhatsApp limit anyway
-        const buttons = categoryKeys.slice(0, 5).map(cat => ({
+        const buttons = categoryKeys.map(cat => ({
             id: `help_cat_${encodeURIComponent(cat)}`,
             text: cat
         }));
