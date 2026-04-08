@@ -1,18 +1,8 @@
 const axios = require('axios');
 const { sendButtons } = require('gifted-btns');
 
-// Owner IDs
-const owners = ["255612130873", "255612130873"]; // Replace with actual owner IDs
-
 async function checkupdatesCommand(sock, chatId, message) {
     if (!sock) return;
-
-    const sender = message.key.participant || message.key.remoteJid;
-    const senderId = sender.split('@')[0];
-
-    if (!owners.includes(senderId)) {
-        return sock.sendMessage(chatId, { text: '❌ *This command is only for owners!*' }, { quoted: message });
-    }
 
     const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
     const command = textBody.trim();
