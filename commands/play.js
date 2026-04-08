@@ -41,8 +41,12 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
                     }
 
                     try {
-                        // ←←← HAPA NDIO MAGIC - Tumia converter yako
-                        const convertedAudio = await toAudio(audioBuffer, 'webm');  // webm au m4a inaweza kuja
+                        console.log(`[PLAY] Converting audio buffer (size: ${audioBuffer.length} bytes)`);
+                        
+                        // Try m4a format (most common from ytdl-core)
+                        const convertedAudio = await toAudio(audioBuffer, 'm4a');
+
+                        console.log(`[PLAY] Audio converted successfully (${convertedAudio.length} bytes)`);
 
                         await sock.sendMessage(chatId, {
                             audio: convertedAudio,
@@ -64,7 +68,7 @@ async function songCommand(sock, chatId, message, buttonResponse = null) {
                     } catch (conversionError) {
                         console.error("Audio conversion error:", conversionError);
                         await sock.sendMessage(chatId, { 
-                            text: '❌ *Audio conversion imeshindwa. Jaribu tena*' 
+                            text: '❌ *Audio conversion imeshindwa. Jaribu tena*\n\n*Error:* ' + conversionError.message 
                         }, { quoted: message });
                     }
                 });
