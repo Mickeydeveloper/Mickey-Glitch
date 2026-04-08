@@ -1,191 +1,60 @@
+const axios = require('axios');
 const yts = require('yt-search');
-const ytdl = require('ytdl-core');
-const { toAudio } = require('../lib/converter');  // ← Badilisha path kama inahitajika
-const { sendButtons } = require('gifted-btns');
 
-async function songCommand(sock, chatId, message, buttonResponse = null) {
+async function songCommand(sock, chatId, message) {
     if (!sock) return;
 
-    // ==================== BUTTON HANDLER ====================
-    if (buttonResponse) {
-        const buttonId = buttonResponse;
-
-        // ==================== AUDIO HANDLER ====================
-        if (buttonId.startsWith('play_audio_')) {
-            const videoId = buttonId.replace('play_audio_', '');
-            const url = `https://www.youtube.com/watch?v=${videoId}`;
-
-            await sock.sendMessage(chatId, { react: { text: '⬇️', key: message.key } });
-            await sock.sendMessage(chatId, { text: '⬇️ *Inapakuliwa Audio... Subiri kidogo*' }, { quoted: message });
-
-            try {
-                const stream = ytdl(url, {
-                    filter: 'audioonly',
-                    quality: 'highestaudio',
-                    highWaterMark: 1 << 25,
-                });
-
-                const buffers = [];
-
-                stream.on('data', (chunk) => {
-                    buffers.push(chunk);
-                });
-
-                stream.on('end', async () => {
-                    const audioBuffer = Buffer.concat(buffers);
-
-                    if (audioBuffer.length < 10000) {
-                        return sock.sendMessage(chatId, { 
-                            text: '❌ *Audio file ni tupu au ndogo sana*' 
-                        }, { quoted: message });
-                    }
-
-                    try {
-                        console.log(`[PLAY] Converting audio buffer (size: ${audioBuffer.length} bytes)`);
-                        
-                        // Try m4a format (most common from ytdl-core)
-                        const convertedAudio = await toAudio(audioBuffer, 'm4a');
-
-                        console.log(`[PLAY] Audio converted successfully (${convertedAudio.length} bytes)`);
-
-                        await sock.sendMessage(chatId, {
-                            audio: convertedAudio,
-                            mimetype: 'audio/mpeg',
-                            fileName: `${videoId}.mp3`,
-                            ptt: false,
-                            contextInfo: {
-                                externalAdReply: {
-                                    title: "Now Playing",
-                                    body: "Mickey Glitch Tech",
-                                    mediaType: 2,
-                                    thumbnailUrl: "https://i.ibb.co/0jZ8Y7s/music.jpg",
-                                    sourceUrl: url,
-                                }
-                            }
-                        }, { quoted: message });
-
-                        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-                    } catch (conversionError) {
-                        console.error("Audio conversion error:", conversionError);
-                        await sock.sendMessage(chatId, { 
-                            text: '❌ *Audio conversion imeshindwa. Jaribu tena*\n\n*Error:* ' + conversionError.message 
-                        }, { quoted: message });
-                    }
-                });
-
-                stream.on('error', (err) => {
-                    console.error("Stream Error:", err);
-                    sock.sendMessage(chatId, { text: '❌ *Stream error while downloading*' }, { quoted: message });
-                });
-
-            } catch (err) {
-                console.error("Audio Error:", err);
-                await sock.sendMessage(chatId, { text: '❌ *Download imeshindwa!*' }, { quoted: message });
-            }
-            return;
-        }
-
-        // ==================== VIDEO HANDLER ====================
-        if (buttonId.startsWith('play_video_')) {
-            const videoId = buttonId.replace('play_video_', '');
-            const url = `https://www.youtube.com/watch?v=${videoId}`;
-
-            await sock.sendMessage(chatId, { react: { text: '⬇️', key: message.key } });
-            await sock.sendMessage(chatId, { text: '⬇️ *Inapakuliwa Video... Subiri kidogo*' }, { quoted: message });
-
-            try {
-                const stream = ytdl(url, {
-                    filter: 'audioandvideo',
-                    quality: 'highest',
-                    highWaterMark: 1 << 25,
-                });
-
-                const buffers = [];
-
-                stream.on('data', (chunk) => buffers.push(chunk));
-                stream.on('end', async () => {
-                    const videoBuffer = Buffer.concat(buffers);
-
-                    await sock.sendMessage(chatId, {
-                        video: videoBuffer,
-                        mimetype: 'video/mp4',
-                        fileName: `${videoId}.mp4`,
-                        caption: '✅ Video imepakuliwa na Mickey Glitch Tech',
-                        contextInfo: {
-                            externalAdReply: {
-                                title: "Video Downloaded",
-                                body: "Mickey Glitch Tech",
-                                mediaType: 1,
-                                thumbnailUrl: "https://i.ibb.co/0jZ8Y7s/music.jpg",
-                                sourceUrl: url,
-                            }
-                        }
-                    }, { quoted: message });
-
-                    await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-                });
-
-                stream.on('error', (err) => {
-                    console.error("Video Error:", err);
-                    sock.sendMessage(chatId, { text: '❌ *Video download imeshindwa*' }, { quoted: message });
-                });
-
-            } catch (err) {
-                console.error("Video Error:", err);
-                await sock.sendMessage(chatId, { text: '❌ *Video download imeshindwa!*' }, { quoted: message });
-            }
-            return;
-        }
-    }
-
-    // ==================== .play COMMAND ====================
-    const textBody = message.message?.conversation || 
-                    message.message?.extendedTextMessage?.text || '';
-    const query = textBody.split(" ").slice(1).join(" ").trim();
+    const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
+    const query = textBody.split(" ").slice(1).join(" ");
 
     if (!query) {
-        return sock.sendMessage(chatId, { 
-            text: '🎵 *Andika jina la wimbo!*\nMfano: `.play Adele Hello`' 
-        }, { quoted: message });
+        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\nMfano: .play Adele Hello' }, { quoted: message });
     }
 
     try {
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
         const { videos } = await yts(query);
-        if (!videos || videos.length === 0) {
-            return sock.sendMessage(chatId, { text: '❌ *Wimbo haukupatikana!*' }, { quoted: message });
-        }
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
 
         const vid = videos[0];
+        const api = `https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(vid.url)}`;
 
-        const playText = `
-🎵 *SONG FOUND*
-━━━━━━━━━━━━━━━━━━━━━━
-📝 *Title:* ${vid.title}
-👤 *Channel:* ${vid.author.name}
-⏱️ *Duration:* ${vid.timestamp}
-👁️ *Views:* ${vid.views.toLocaleString()}
-📅 *Uploaded:* ${vid.ago}
-━━━━━━━━━━━━━━━━━━━━━━
-*Chagua format:*`;
+        // 1. Pata data kutoka API
+        const res = await axios.get(api);
+        const dlUrl = res.data?.data?.video || res.data?.data?.audio;
+        if (!dlUrl) return sock.sendMessage(chatId, { text: '❌ *API Error!*' });
 
-        const playButtons = [
-            { id: `play_audio_${vid.videoId}`, text: '🎵 AUDIO (MP3)' },
-            { id: `play_video_${vid.videoId}`, text: '🎥 VIDEO (MP4)' }
-        ];
+        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        await sendButtons(sock, chatId, {
-            title: '🎧 Mickey Music Downloader',
-            text: playText,
-            footer: 'Mickey Glitch Tech',
-            image: { url: vid.thumbnail },
-            buttons: playButtons
-        }, { quoted: message });
+        // 2. Stream audio directly to WhatsApp (avoid full buffer)
+        try {
+            await sock.sendMessage(chatId, {
+                audio: { url: dlUrl },
+                mimetype: 'audio/mp4',
+                fileName: `${vid.title}.mp3`,
+                ptt: false,
+                contextInfo: {
+                    externalAdReply: {
+                        title: vid.title,
+                        body: `Mickey Infor Tech | ${vid.timestamp}`,
+                        thumbnailUrl: vid.thumbnail,
+                        sourceUrl: vid.url,
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
+            }, { quoted: message });
+        } catch (err) {
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Jaribu tena baadae.' });
+            return;
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error("Song Command Error:", err);
-        await sock.sendMessage(chatId, { text: '❌ *Search imeshindwa!*' }, { quoted: message });
+        console.error("PLAY ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' });
     }
 }
 
