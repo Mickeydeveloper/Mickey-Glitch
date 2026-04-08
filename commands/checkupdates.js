@@ -53,17 +53,24 @@ async function checkupdatesCommand(sock, chatId, message) {
 *Choose an action:*`;
 
         const buttons = [
-            { type: 'cta_copy', text: '📋 COPY REPO URL', data: repo.html_url },
+            {
+                name: "cta_copy",
+                buttonParamsJson: JSON.stringify({
+                    display_text: "📋 COPY REPO URL",
+                    copy_code: repo.html_url
+                })
+            },
             { id: 'download_zip', text: '📥 DOWNLOAD ZIP' },
-            { type: 'cta_url', text: '🌐 VISIT REPO', url: repo.html_url }
+            {
+                name: "cta_url",
+                buttonParamsJson: JSON.stringify({
+                    display_text: "🌐 VISIT REPO",
+                    url: repo.html_url
+                })
+            }
         ];
 
-        await sendButtons(sock, chatId, {
-            title: '🔄 REPO SYNC & INFO',
-            text: repoText,
-            footer: 'Mickey Glitch Tech',
-            buttons: buttons
-        }, { quoted: message });
+       
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
