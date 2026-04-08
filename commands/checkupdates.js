@@ -1,50 +1,73 @@
 /**
  * COMMAND: .repo
- * DESIGN: Loft-Quantum Style with Interactive Buttons
- * SPEED: Ultra-Fast Response
+ * DESIGN: Updated to Template Buttons for "Copy" feel
  */
 
-const axios = require('axios');
-const { sendButtons } = require('gifted-btns'); // Hakikisha library hii ipo
+const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 async function repoCommand(sock, chatId, message) {
     try {
-        // 1. Quick reaction
         await sock.sendMessage(chatId, { react: { text: '📦', key: message.key } });
 
-        // 2. Repo Information (Kama ilivyo kwenye picha)
-        const repoText = `Hello *Mickey Dady*,
-This is *LOFT-QUANTUM v4.9.9*, A Whatsapp Bot Built by *MR LOFT*, Enhanced with Amazing Features to Make Your Whatsapp Communication and Interaction Experience Amazing
+        const repoText = `Hello 
+This is *Mickey Glitch*, A Whatsapp Bot Built by *Mickey*.
 
-[❏] *NAME:* LOFT-QUANTUM
-[❏] *STARS:* 28
-[❏] *FORKS:* 72
-[❏] *CREATED ON:* 12/3/2025
-[❏] *LAST UPDATED:* 3/30/2026
+[❏] *NAME:* MICKEY GLITCH 
+|  This is officiall whatsapp bot from Mickey and Quantum Team bot `;
 
-| *POWERED BY LOFT*`;
-
-        // 3. Professional Buttons (Muundo wa picha)
-        const repoButtons = [
-            { id: '.copyrepo', text: '📋 Copy Link' },
-            { id: '.visitrepo', text: '🔗 Visit Repo' },
-            { id: '.downloadzip', text: '📥 Download Zip' }
-        ];
-
-        // 4. Send Message with Image & Buttons
-        await sendButtons(sock, chatId, {
-            title: 'LOFT-QUANTUM REPO',
-            text: repoText,
-            footer: 'Mickey Glitch Tech',
-            image: { url: "https://i.ibb.co/vzVv8Yp/mickey.jpg" }, // Weka link ya picha yako
-            buttons: repoButtons
+        // Kuandaa picha
+        const msg = generateWAMessageFromContent(chatId, {
+            viewOnceMessage: {
+                message: {
+                    interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+                        body: proto.Message.InteractiveMessage.Body.fromObject({
+                            text: repoText
+                        }),
+                        footer: proto.Message.InteractiveMessage.Footer.fromObject({
+                            text: "© 2026 Mickey Glitch Tech"
+                        }),
+                        header: proto.Message.InteractiveMessage.Header.fromObject({
+                            title: "MICKEY GLITCH REPO",
+                            hasMediaAttachment: true,
+                            ...(await prepareWAMessageMedia({ url: "https://i.ibb.co/vzVv8Yp/mickey.jpg" }, { upload: sock.waUploadToServer }))
+                        }),
+                        nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+                            buttons: [
+                                // Hii itafanya kazi ya COPY moja kwa moja (kama bot inasupport)
+                                {
+                                    "name": "cta_copy",
+                                    "buttonParamsJson": JSON.stringify({
+                                        "display_text": "📋 Copy Link",
+                                        "id": "https://github.com/Mickeydeveloper/Mickey-Glitch",
+                                        "copy_code": "https://github.com/Mickeydeveloper/Mickey-Glitch"
+                                    })
+                                },
+                                {
+                                    "name": "cta_url",
+                                    "buttonParamsJson": JSON.stringify({
+                                        "display_text": "🔗 Visit Repo",
+                                        "url": "https://github.com/Mickeydeveloper/Mickey-Glitch"
+                                    })
+                                },
+                                {
+                                    "name": "quick_reply",
+                                    "buttonParamsJson": JSON.stringify({
+                                        "display_text": "📥 Download Zip",
+                                        "id": ".downloadzip"
+                                    })
+                                }
+                            ],
+                        })
+                    })
+                }
+            }
         }, { quoted: message });
 
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+        await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
 
     } catch (err) {
         console.error("Repo Error:", err.message);
-        await sock.sendMessage(chatId, { text: "❌ *Error loading repo:* Try again." });
+        await sock.sendMessage(chatId, { text: "❌ *Error:* Tumia .repo tena." });
     }
 }
 
