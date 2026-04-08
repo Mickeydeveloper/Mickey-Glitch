@@ -38,8 +38,8 @@ async function pingCommand(sock, chatId, message) {
 *© 2026 Mickey Glitch Labs™*`;
 
         const buttons = [
-            { id: 'ping', text: '🔄 REFRESH' },
-            { id: 'ping_detailed', text: '📊 DETAILED INFO' },
+            { id: '.ping', text: '🔄 REFRESH' },
+            { id: '.repo', text: '📊 DETAILED INFO' },
             { id: 'help', text: '❓ HELP' }
         ];
 
