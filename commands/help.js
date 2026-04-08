@@ -59,6 +59,7 @@ const categoryMap = {
     '.chart': '🎵 MUSIC & AUDIO',
     '.chatbot': '🤖 AI & CHAT',
     '.checkupdates': '⚙️ SETTINGS',
+    '.sync': '⚙️ SETTINGS',
     '.clear': '⚙️ SETTINGS',
     '.clearsession': '⚙️ SETTINGS',
     '.cleartmp': '⚙️ SETTINGS',
@@ -168,7 +169,7 @@ const helpCommand = async (conn, chatId, msg, userMessage = '.help') => {
         // Use cached commands - much faster second time
         const allCommands = getAutomaticCommands();
         const categorized = categorizeCommands(allCommands);
-        const categoryKeys = Object.keys(categorized);
+        const categoryKeys = Object.keys(categorized).sort();
         
         // Safisha input - FAST string operations only
         let input = userMessage.trim();
@@ -213,28 +214,29 @@ const helpCommand = async (conn, chatId, msg, userMessage = '.help') => {
         // Show category view if matched - FAST RETURN
         if (selectedCat) {
             const cmds = categorized[selectedCat];
-            const commandsList = cmds.map(c => `  ◦ ${c}`).join('\n');
+            const totalCmds = cmds.length;
 
             const catText = `╔══════════════════════════════════════════════╗
 ║              📂 CATEGORY: ${selectedCat}              ║
 ╚══════════════════════════════════════════════╝
 
-${commandsList}
+📋 *Commands:* ${totalCmds} available
 
-*Tap any command button to execute it instantly!*`;
+*Tap any command button below to execute it instantly!*`;
 
-            const commandButtons = cmds.slice(0, 5).map(cmd => ({ id: cmd, text: cmd }));
+            // Show all commands as buttons (no limit)
+            const commandButtons = cmds.map(cmd => ({ id: cmd, text: cmd }));
             commandButtons.push({ id: '.help', text: '⬅️ BACK TO MENU' });
 
             return await sendButtons(conn, chatId, {
-                title: `[ ${selectedCat} ]`,
+                title: `[ ${selectedCat} - ${totalCmds} Commands ]`,
                 text: catText,
                 footer: '© 2026 Mickey Glitch Technology - All Rights Reserved',
                 buttons: commandButtons
             }, { quoted: msg });
         }
 
-        // 2. RENDER MAIN MENU (Default)
+        // 2. RENDER MAIN MENU (Default) - Auto-synced
         const mainMenuText = `
 ╔══════════════════════════════════════════════╗
 ║              ＭＩＣＫＥＹ ＧＬＩＴＣＨ Ｖ３              ║
@@ -242,8 +244,9 @@ ${commandsList}
 ║  👋 *Hello,* ${senderName}!                    ║
 ║  🕒 *Time:* ${timeStr}                         ║
 ║  ⏳ *Uptime:* ${runtimeStr}                     ║
-║  📦 *Commands:* ${allCommands.length} Available ║
-║  🔄 *Status:* Online & Stable                  ║
+║  🔄 *Commands:* ${allCommands.length} Synced   ║
+║  📁 *Categories:* ${categoryKeys.length}       ║
+║  ✅ *Status:* Auto-Symced & Active             ║
 ║  📊 *Version:* 5.2.0                           ║
 ║                                              ║
 ║  ════════════════════════════════════════════  ║
@@ -254,18 +257,18 @@ ${commandsList}
 ║  🌍 *Multi-Language Support*                 ║
 ╚══════════════════════════════════════════════╝
 
-*Choose a category below to explore commands:*`;
+*Select a category below:*`;
 
-        // Only show 5 categories to keep it fast - WhatsApp limit anyway
+        // Show all categories
         const buttons = categoryKeys.map(cat => ({
             id: `help_cat_${encodeURIComponent(cat)}`,
             text: cat
         }));
 
         return await sendButtons(conn, chatId, {
-            title: `🚀 ＭＩＣＫＥＹ ＧＬＩＴＣＨ Ｖ３ - COMMAND CENTER`,
+            title: `� AUTO-SYNCED COMMAND CENTER`,
             text: mainMenuText,
-            footer: '🚀 Powered by Mickey Glitch Technology - 2026',
+            footer: '🔄 Auto-Syncing from commands folder - 2026',
             image: { url: 'https://i.ibb.co/vzVv8Yp/mickey.jpg' },
             buttons: buttons
         }, { quoted: msg });
