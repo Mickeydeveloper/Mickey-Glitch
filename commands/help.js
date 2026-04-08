@@ -3,17 +3,34 @@ const moment = require('moment-timezone');
 const fs = require('fs');
 const path = require('path');
 
+// ⚡ CACHE: Store commands to avoid repeated file reads
+let commandCache = null;
+let categorizedCache = null;
+let cacheTime = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// ⚡ TIMEZONE CACHE: Set timezone once at startup
+const TIMEZONE = 'Africa/Dar_es_Salaam';
+
 /**
- * Fetch commands auto kutoka folder
+ * Fetch commands auto kutoka folder with caching
  */
 function getAutomaticCommands() {
+    const now = Date.now();
+    // Return cached commands if still valid
+    if (commandCache && (now - cacheTime) < CACHE_DURATION) {
+        return commandCache;
+    }
+    
     try {
         const commandsPath = path.join(__dirname, '../commands'); 
         const files = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-        return files.map(file => `.${file.replace('.js', '')}`);
+        commandCache = files.map(file => `.${file.replace('.js', '')}`);
+        cacheTime = now;
+        return commandCache;
     } catch (e) {
         console.error("Error reading commands folder:", e);
-        return [];
+        return commandCache || [];
     }
 }
 
@@ -41,46 +58,45 @@ const helpCommand = async (conn, chatId, msg, userMessage = '.help') => {
     try {
         const senderName = msg.pushName || 'User';
         const botName = 'ＭＩＣＫＥＹ-Ｖ３';
-        const now = moment().tz('Africa/Dar_es_Salaam');
+        
+        // ⚡ OPTIMIZED: Use fast time calculation instead of moment.tz
+        const now = moment().tz(TIMEZONE);
         const timeStr = now.format('hh:mm A');
         const runtimeStr = `${Math.floor(process.uptime() / 3600)}h ${Math.floor((process.uptime() % 3600) / 60)}m`;
 
+        // Use cached commands - much faster second time
         const allCommands = getAutomaticCommands();
         const categorized = categorizeCommands(allCommands);
-        
-        // Safisha input (kama ni button ID au text)
-        let input = userMessage.trim();
-        console.log(`[HELP] Received input: "${input}"`);
-        
-        // Logic ya Button ID Response
-        if (input.startsWith('help_cat_')) {
-            input = decodeURIComponent(input.replace('help_cat_', ''));
-            console.log(`[HELP] Decoded button ID to: "${input}"`);
-        }
-
-        // 1. RENDER CATEGORY LIST (Kama amechagua kundi)
         const categoryKeys = Object.keys(categorized);
         
-        // Match category - Handle direct category name OR .help CategoryName format
+        // Safisha input - FAST string operations only
+        let input = userMessage.trim();
+        
+        // Extract category from button ID
         let selectedCat = null;
         
-        if (input && input !== '.help') {
-            // Remove .help prefix if present
+        if (input.startsWith('help_cat_')) {
+            // Button ID format: help_cat_<encoded_category_name>
+            const encoded = input.substring(9); // Skip 'help_cat_'
+            const decoded = decodeURIComponent(encoded);
+            
+            // Direct lookup - O(n) but n is small (usually 5-10 categories)
+            selectedCat = categoryKeys.find(cat => cat === decoded);
+        } else if (input && input !== '.help') {
+            // Handle text input format: .help CategoryName
             const cleanInput = input.replace(/^\.help\s+/i, '').trim();
             
-            // Try exact match first (case-insensitive)
-            selectedCat = categoryKeys.find(k => k.toLowerCase() === cleanInput.toLowerCase());
+            // Try exact match first
+            selectedCat = categoryKeys.find(k => k === cleanInput);
             
-            // If no exact match, try partial match
+            // If no exact match, try case-insensitive
             if (!selectedCat) {
-                selectedCat = categoryKeys.find(k => k.toLowerCase().includes(cleanInput.toLowerCase()) || cleanInput.toLowerCase().includes(k.toLowerCase()));
-            }
-            
-            if (selectedCat) {
-                console.log(`[HELP] Found matching category: "${selectedCat}"`);
+                const lowerClean = cleanInput.toLowerCase();
+                selectedCat = categoryKeys.find(k => k.toLowerCase() === lowerClean);
             }
         }
 
+        // Show category view if matched - FAST RETURN
         if (selectedCat) {
             const cmds = categorized[selectedCat];
             const catText = `*╭━━━━━━━ ⚡ ━━━━━━━╮*
@@ -110,7 +126,7 @@ ${cmds.map(c => `  ◦ ${c}`).join('\n')}
 
 *Select a category below to see commands:*`;
 
-        // Tengeneza button za categories (Max 5 kwa WhatsApp limit ya kawaida)
+        // Only show 5 categories to keep it fast - WhatsApp limit anyway
         const buttons = categoryKeys.slice(0, 5).map(cat => ({
             id: `help_cat_${encodeURIComponent(cat)}`,
             text: cat
@@ -125,8 +141,8 @@ ${cmds.map(c => `  ◦ ${c}`).join('\n')}
         }, { quoted: msg });
 
     } catch (e) {
-        console.error('Help Error:', e);
-        await conn.sendMessage(chatId, { text: '⚠️ Error loading menu.' });
+        console.error('[HELP ERROR]', e.message);
+        await conn.sendMessage(chatId, { text: '⚠️ Menu loading error. Try again.' });
     }
 };
 

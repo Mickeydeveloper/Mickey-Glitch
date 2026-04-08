@@ -396,7 +396,17 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }, { quoted: message });
                 commandExecuted = true;
             }
+        } else if (buttonId && buttonId.startsWith('help_cat_')) {
+            // Pass button ID directly without re-encoding
+            console.log(`[MAIN] Help category button clicked: ${buttonId}`);
+            await helpCommand(sock, chatId, message, buttonId);
+            commandExecuted = true;
+        } else if (buttonId === '.help') {
+            console.log(`[MAIN] Help back button clicked`);
+            await helpCommand(sock, chatId, message, '.help');
+            commandExecuted = true;
         } else if (buttonId && buttonId.startsWith('help_')) {
+            // Other help button types (older format)
             if (buttonId.startsWith('help_category_')) {
                 const category = decodeURIComponent(buttonId.replace('help_category_', ''));
                 await helpCommand(sock, chatId, message, `.help ${category}`);
@@ -405,14 +415,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await helpCommand(sock, chatId, message, '.help');
                 commandExecuted = true;
             }
-        } else if (buttonId && buttonId.startsWith('help_cat_')) {
-            const category = decodeURIComponent(buttonId.replace('help_cat_', ''));
-            // Pass the button ID directly so help command can identify it as a button response
-            await helpCommand(sock, chatId, message, `help_cat_${encodeURIComponent(category)}`);
-            commandExecuted = true;
-        } else if (buttonId === '.help') {
-            await helpCommand(sock, chatId, message, '.help');
-            commandExecuted = true;
         } else if (buttonId && buttonId.startsWith('halotel_')) {
             await halotelCommand(sock, chatId, message, buttonId);
             commandExecuted = true;
