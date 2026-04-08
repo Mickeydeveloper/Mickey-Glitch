@@ -96,7 +96,7 @@ _Bonyeza button hapa chini kupata wimbo huu._`;
                 text: caption,
                 footer: 'Mickey Glitch Tech',
                 buttons: [
-                    { id: `play_${encodeURIComponent(artist)}_${encodeURIComponent(title)}`, text: '📥 DOWNLOAD MP3' }
+                    { id: `.play_${encodeURIComponent(artist)}_${encodeURIComponent(title)}`, text: '📥 DOWNLOAD MP3' }
                 ]
             }, { quoted: message });
 
