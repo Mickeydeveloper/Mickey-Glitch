@@ -40,7 +40,7 @@ async function pingCommand(sock, chatId, message) {
         const buttons = [
             { id: '.ping', text: '🔄 REFRESH' },
             { id: '.repo', text: '📊 DETAILED INFO' },
-            { id: 'help', text: '❓ HELP' }
+            { id: '.help', text: '❓ HELP' }
         ];
 
         await sendButtons(sock, chatId, {
