@@ -1,126 +1,59 @@
-/**
- * COMMAND: .repo
- * DESIGN: Ultra-Modern Native Flow (Loft Style)
- * FUNCTION: Auto-Sync GitHub Data + ZIP Downloader
- */
-
 const axios = require('axios');
-const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
+const yts = require('yt-search');
+const { sendButtons } = require('gifted-btns');
 
-async function repoCommand(sock, chatId, message) {
-    const repoOwner = "Mickeydeveloper";
-    const repoName = "Mickey-Glitch";
-    const githubUrl = `https://github.com/${repoOwner}/${repoName}`;
+async function songCommand(sock, chatId, message) {
+    if (!sock) return;
+
+    // 1. Kupata jina la mtumiaji na query
     const pushName = message.pushName || 'User';
+    const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
+    const query = textBody.split(" ").slice(1).join(" ");
+
+    if (!query) {
+        return sock.sendMessage(chatId, { text: `Hello *${pushName}*, 🎵 *Andika jina la wimbo!*\nExample: .play Adele Hello` }, { quoted: message });
+    }
 
     try {
-        await sock.sendMessage(chatId, { react: { text: '📂', key: message.key } });
+        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
-        // 1. Fetch live data from GitHub API
-        const { data } = await axios.get(`https://api.github.com/repos/${repoOwner}/${repoName}`);
-        
-        const info = {
-            stars: data.stargazers_count,
-            forks: data.forks_count,
-            created: new Date(data.created_at).toLocaleDateString('en-GB'),
-            updated: new Date(data.updated_at).toLocaleDateString('en-GB'),
-            descr: data.description || "No description available"
-        };
+        const { videos } = await yts(query);
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
 
-        const repoText = `Hello *${pushName}*, 
+        const vid = videos[0];
 
-This is *${repoName.toUpperCase()}* 🚀
-A powerful WhatsApp bot built for speed and stability.
+        const playText = `
+🎵 *SONG FOUND*
+━━━━━━━━━━━━━━━━━━━━━━
+📝 *Title:* ${vid.title}
+👤 *Channel:* ${vid.author.name}
+⏱️ *Duration:* ${vid.timestamp}
+👁️ *Views:* ${vid.views}
+📅 *Uploaded:* ${vid.ago}
+━━━━━━━━━━━━━━━━━━━━━━
+*Chagua format ya kudownload:*`;
 
-[❏] *Stars:* ${info.stars}
-[❏] *Forks:* ${info.forks}
-[❏] *Created:* ${info.created}
-[❏] *Last Update:* ${info.updated}
+        const playButtons = [
+            { id: `.audio ${vid.url}`, text: '🎵 AUDIO (MP3)' },
+            { id: `.video ${vid.url}`, text: '🎥 VIDEO (MP4)' },
+            { id: `.repo`, text: '📦 BOT REPO' }
+        ];
 
-*Description:* ${info.descr}
-
-_Powered by Mickey & Quantum_`;
-
-        // 2. Prepare high-quality header image
-        const media = await prepareWAMessageMedia(
-            { url: "https://i.ibb.co/vzVv8Yp/mickey.jpg" }, 
-            { upload: sock.waUploadToServer }
-        );
-
-        // 3. Modern Native Flow Appearance
-        const msg = generateWAMessageFromContent(chatId, {
-            viewOnceMessage: {
-                message: {
-                    interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-                        body: proto.Message.InteractiveMessage.Body.fromObject({ text: repoText }),
-                        footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: "MICKEY GLITCH TECH © 2026" }),
-                        header: proto.Message.InteractiveMessage.Header.fromObject({
-                            title: "SYSTEM REPOSITORY INFO",
-                            hasMediaAttachment: true,
-                            imageMessage: media.imageMessage
-                        }),
-                        nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
-                            buttons: [
-                                {
-                                    "name": "cta_copy",
-                                    "buttonParamsJson": JSON.stringify({
-                                        "display_text": "📋 Copy Repo Link",
-                                        "id": githubUrl,
-                                        "copy_code": githubUrl
-                                    })
-                                },
-                                {
-                                    "name": "cta_url",
-                                    "buttonParamsJson": JSON.stringify({
-                                        "display_text": "🔗 Visit GitHub",
-                                        "url": githubUrl
-                                    })
-                                },
-                                {
-                                    "name": "quick_reply",
-                                    "buttonParamsJson": JSON.stringify({
-                                        "display_text": "📥 Download Source (ZIP)",
-                                        "id": "download_repo_zip"
-                                    })
-                                }
-                            ],
-                        })
-                    })
-                }
-            }
+        await sendButtons(sock, chatId, {
+            title: '🎧 MUSIC DOWNLOADER',
+            text: playText,
+            footer: 'Mickey Glitch Tech',
+            image: { url: vid.thumbnail },
+            buttons: playButtons
         }, { quoted: message });
 
-        await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error("REPO_ERROR:", err);
-        await sock.sendMessage(chatId, { text: "⚠️ *System Error:* Failed to fetch repo info." });
+        console.error("PLAY ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' }, { quoted: message });
     }
 }
 
-/**
- * FUNCTION: handleZipDownload
- * Triggered when button ID 'download_repo_zip' is pressed
- */
-async function handleZipDownload(sock, chatId, message) {
-    const zipUrl = `https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip`;
-
-    try {
-        await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
-
-        await sock.sendMessage(chatId, {
-            document: { url: zipUrl },
-            mimetype: 'application/zip',
-            fileName: 'Mickey-Glitch-Main.zip',
-            caption: '✅ *Repo Zip File Ready!*\n\nExtract and enjoy coding.'
-        }, { quoted: message });
-
-        await sock.sendMessage(chatId, { react: { text: '📦', key: message.key } });
-
-    } catch (e) {
-        await sock.sendMessage(chatId, { text: "❌ *Download Failed:* Link is currently unavailable." });
-    }
-}
-
-module.exports = { repoCommand, handleZipDownload };
+// Hii ndio sehemu muhimu iliyorekebishwa ili bot isilete error
+module.exports = songCommand;
