@@ -8,6 +8,26 @@ async function checkupdatesCommand(sock, chatId, message) {
     const command = textBody.trim();
 
     try {
+        // Handle copy URL button
+        if (command === 'copy_repo_url') {
+            const cachedData = global.repoUrlCache?.[chatId];
+            const url = cachedData?.url || 'https://github.com/Mickeydeveloper/Mickey-Glitch';
+            await sock.sendMessage(chatId, { 
+                text: `📋 *Repo URL:*\n${url}\n\n_Copy this link to access the repository_` 
+            }, { quoted: message });
+            return;
+        }
+
+        // Handle visit repo button
+        if (command === 'visit_repo') {
+            const cachedData = global.repoUrlCache?.[chatId];
+            const url = cachedData?.url || 'https://github.com/Mickeydeveloper/Mickey-Glitch';
+            await sock.sendMessage(chatId, { 
+                text: `🌐 *Visit Repository:*\n${url}` 
+            }, { quoted: message });
+            return;
+        }
+
         if (command === 'download_zip') {
             // Handle ZIP download
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
@@ -53,18 +73,25 @@ async function checkupdatesCommand(sock, chatId, message) {
 *Choose an action:*`;
 
         const buttons = [
-            { type: 'cta_copy', text: '📋 COPY REPO URL', data: repo.html_url },
+            { id: 'copy_repo_url', text: '📋 COPY REPO URL' },
             { id: 'download_zip', text: '📥 DOWNLOAD ZIP' },
-            { type: 'cta_url', text: 'VISIT MY REPO', url: repo.html_url }
+            { id: 'visit_repo', text: '🌐 VISIT REPO' }
         ];
 
+        // Send message with repo info first
+        await sock.sendMessage(chatId, { text: repoText }, { quoted: message });
+
+        // Then send buttons separately
         await sendButtons(sock, chatId, {
             title: '🔄 REPO SYNC & INFO',
-            text: repoText,
+            text: '*Choose an action:*',
             footer: 'Mickey Glitch Tech',
-            image: { url: repo.owner.avatar_url },
             buttons: buttons
         }, { quoted: message });
+
+        // Store repo URL for button handling
+        if (!global.repoUrlCache) global.repoUrlCache = {};
+        global.repoUrlCache[chatId] = { url: repo.html_url, title: repo.name };
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
