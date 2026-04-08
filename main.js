@@ -407,7 +407,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
         } else if (buttonId && buttonId.startsWith('help_cat_')) {
             const category = decodeURIComponent(buttonId.replace('help_cat_', ''));
-            await helpCommand(sock, chatId, message, category);
+            // Pass the button ID directly so help command can identify it as a button response
+            await helpCommand(sock, chatId, message, `help_cat_${encodeURIComponent(category)}`);
             commandExecuted = true;
         } else if (buttonId === '.help') {
             await helpCommand(sock, chatId, message, '.help');

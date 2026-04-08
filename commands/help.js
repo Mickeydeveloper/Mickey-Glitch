@@ -50,15 +50,36 @@ const helpCommand = async (conn, chatId, msg, userMessage = '.help') => {
         
         // Safisha input (kama ni button ID au text)
         let input = userMessage.trim();
+        console.log(`[HELP] Received input: "${input}"`);
         
         // Logic ya Button ID Response
         if (input.startsWith('help_cat_')) {
             input = decodeURIComponent(input.replace('help_cat_', ''));
+            console.log(`[HELP] Decoded button ID to: "${input}"`);
         }
 
         // 1. RENDER CATEGORY LIST (Kama amechagua kundi)
         const categoryKeys = Object.keys(categorized);
-        const selectedCat = categoryKeys.find(k => k.toLowerCase() === input.toLowerCase() || input.includes(k));
+        
+        // Match category - Handle direct category name OR .help CategoryName format
+        let selectedCat = null;
+        
+        if (input && input !== '.help') {
+            // Remove .help prefix if present
+            const cleanInput = input.replace(/^\.help\s+/i, '').trim();
+            
+            // Try exact match first (case-insensitive)
+            selectedCat = categoryKeys.find(k => k.toLowerCase() === cleanInput.toLowerCase());
+            
+            // If no exact match, try partial match
+            if (!selectedCat) {
+                selectedCat = categoryKeys.find(k => k.toLowerCase().includes(cleanInput.toLowerCase()) || cleanInput.toLowerCase().includes(k.toLowerCase()));
+            }
+            
+            if (selectedCat) {
+                console.log(`[HELP] Found matching category: "${selectedCat}"`);
+            }
+        }
 
         if (selectedCat) {
             const cmds = categorized[selectedCat];
