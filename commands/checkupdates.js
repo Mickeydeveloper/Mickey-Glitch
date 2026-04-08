@@ -2,7 +2,7 @@ const axios = require('axios');
 const { sendButtons } = require('gifted-btns');
 
 // Owner IDs
-const owners = ["910000000000", "917023951514"];
+const owners = ["255612130873", "255612130873"]; // Replace with actual owner IDs
 
 async function checkupdatesCommand(sock, chatId, message) {
     if (!sock) return;
