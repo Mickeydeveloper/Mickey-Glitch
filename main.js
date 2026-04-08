@@ -434,6 +434,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
         }
 
+        if (commandExecuted) return;
+
         const allowWithoutPin = lowerUserMessage.startsWith('.pin') || isBasicCommand;
         if (!allowWithoutPin) {
             try {
