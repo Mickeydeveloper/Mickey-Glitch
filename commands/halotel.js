@@ -1,4 +1,4 @@
-const { sendInteractiveMessage } = require('gifted-btns'); // Hakikisha unatumia export sahihi
+const { sendInteractiveMessage } = require('gifted-btns');
 const settings = require('../settings');
 
 // ────────────────────────────────────────────────
@@ -7,30 +7,28 @@ const settings = require('../settings');
 const CONFIG = {
     PRICE_PER_GB: 1000,
     SELLER_NUMBER: '255615944741',
-    SELLER_NAME: 'MICKDADI HAMZA SALIM',
-    BANNER: 'https://files.catbox.moe/ljabyq.png',
+    BANNER: 'https://files.catbox.moe/ljabyq.png', // Picha kubwa ya tangazo
     FOOTER: '🚀 Powered by Mickey Glitch Tech',
 };
 
-const formatCurrency = (n) => `TSh ${n.toLocaleString()}`;
-
 const PACKAGES = [
-    { gb: 1, price: 1000, emoji: '⭐', label: 'Starter' },
-    { gb: 5, price: 5000, emoji: '🚀', label: 'Light Pack' },
-    { gb: 10, price: 10000, emoji: '💎', label: 'Standard' },
-    { gb: 20, price: 20000, emoji: '👑', label: 'Premium' }
+    { gb: 1, price: 1000, label: 'Starter Pack', id: 'h_pkg_1' },
+    { gb: 5, price: 5000, label: 'Light Pack', id: 'h_pkg_5' },
+    { gb: 10, price: 10000, label: 'Standard Pack', id: 'h_pkg_10' },
+    { gb: 20, price: 20000, label: 'Premium Pack', id: 'h_pkg_20' },
+    { gb: 50, price: 50000, label: 'Ultra Pack', id: 'h_pkg_50' }
 ];
 
 // ────────────────────────────────────────────────
-// HALOTEL COMMAND (Fully Optimized)
+// HALOTEL COMMAND LOGIC
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
     try {
         const jid = chatId;
-        const fullText = (userMessage || '').trim().toLowerCase().replace(/^\./, '');
+        const budy = (userMessage || '').trim().toLowerCase().replace(/^\./, '');
 
-        // ==================== MAIN MENU (BIG AD STYLE) ====================
-        if (fullText === 'halotel' || fullText === 'halotel_menu') {
+        // ==================== 1. MAIN MENU (LIST PICKER) ====================
+        if (budy === 'halotel' || budy === 'halotel_menu') {
             const adText = `🌟 *HALOTEL INTERNET MANAGER* 🌟
 ________________________________
 
@@ -38,36 +36,47 @@ ________________________________
 🔥 *SPECIAL OFFER:* GB 1 = TSh 1,000
 ⚡ 24/7 Instant Activation (Fasta)
 
-*CHAGUA KIFURUSHI CHAKO (CHOOSE PKG):* 👇`;
+*BONYEZA BUTTON CHINI KUCHAGUA:* 👇`;
 
-            const buttons = PACKAGES.map(pkg => ({
-                name: 'cta_url',
-                buttonParamsJson: JSON.stringify({
-                    display_text: `${pkg.emoji} ${pkg.gb}GB - ${formatCurrency(pkg.price)}`,
-                    url: `https://wa.me/${CONFIG.SELLER_NUMBER}?text=Nahitaji_GB_${pkg.gb}_Kiasi_${pkg.price}`
-                })
+            const rows = PACKAGES.map(pkg => ({
+                header: `OFFER: ${pkg.gb}GB`,
+                title: `${pkg.label}`,
+                description: `Kiasi: TSh ${pkg.price.toLocaleString()}/=`,
+                id: pkg.id
             }));
 
-            // Big Ad Image Support
             return await sendInteractiveMessage(sock, jid, {
-                image: { url: CONFIG.BANNER },
+                image: { url: CONFIG.BANNER }, // Big Ad Header
                 text: adText,
                 footer: CONFIG.FOOTER,
-                interactiveButtons: buttons
+                interactiveButtons: [
+                    {
+                        name: 'single_select',
+                        buttonParamsJson: JSON.stringify({
+                            title: '📦 CHAGUA KIFURUSHI',
+                            sections: [
+                                {
+                                    title: 'VIFURUSHI VYA DATA (DATA PKGS)',
+                                    rows: rows
+                                }
+                            ]
+                        })
+                    }
+                ]
             }, { quoted: message });
         }
 
-        // ==================== PAYMENT LOGIC (AUTO-COPY) ====================
-        if (fullText.includes('nahitaji_gb')) {
-            const kiasi = fullText.split('_kiasi_')[1];
-            const gb = fullText.split('_')[2];
-            
-            const payMsg = `✅ *ULIYOCHAGUA:* GB ${gb}
-💰 *KIASI CHA KULIPA:* TSh ${kiasi}/=
+        // ==================== 2. PAYMENT LOGIC (SINGLE SELECT HANDLER) ====================
+        if (budy.startsWith('h_pkg_')) {
+            const selectedGB = budy.replace('h_pkg_', '');
+            const kiasi = parseInt(selectedGB) * CONFIG.PRICE_PER_GB;
+
+            const payMsg = `✅ *ULIYOCHAGUA:* GB ${selectedGB}
+💰 *KIASI CHA KULIPA:* TSh ${kiasi.toLocaleString()}/=
 ________________________________
 
 *BONYEZA BUTTON CHINI KU-COPY NAMBA:*
-_Copy namba kisha lipa na utume screenshot (ss)._`;
+_Copy namba kisha lipa na utume screenshot (ss) hapa._`;
 
             const paymentButtons = [
                 {
