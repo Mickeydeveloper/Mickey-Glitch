@@ -101,7 +101,6 @@ const characterCommand = require('./commands/character');
 const wastedCommand = require('./commands/wasted');
 const resetlinkCommand = require('./commands/resetlink');
 const staffCommand = require('./commands/staff');
-const emojimixCommand = require('./commands/emojimix');
 const { handlePromotionEvent } = require('./commands/promote');
 const { handleDemotionEvent } = require('./commands/demote');
 const viewOnceCommand = require('./commands/viewonce');

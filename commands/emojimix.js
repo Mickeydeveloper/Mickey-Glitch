@@ -1,9 +1,8 @@
-const fetch = require('node-fetch');
-const fs = require('fs');
-const { exec } = require('child_process');
-const path = require('path');
+// This command has been removed from the bot
+// The import has been removed from main.js
+// File kept for reference but no longer functional
 
-async function emojimixCommand(sock, chatId, msg) {
+module.exports = null;
     try {
         // Get the text after command
         const text = msg.message?.conversation?.trim() || 
