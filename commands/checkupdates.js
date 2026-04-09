@@ -67,16 +67,14 @@ async function checkupdatesCommand(sock, chatId, message) {
         const createdDate = new Date(repo.created_at).toLocaleDateString('en-US');
         const updatedDate = new Date(repo.updated_at).toLocaleDateString('en-US');
 
-        const repoText = `Hello Mickey Dady,
-This is ${repo.name.toUpperCase()}, A Whatsapp Bot Built by MICKEYDEVELOPER,
+        const repoText = `Hello 
+This is ${repo.name.toUpperCase()}, A Whatsapp Bot Built by Mickey,
 Enhanced with Amazing Features to Make Your Whatsapp Communication and Interaction Experience Amazing
 
-[ ] NAME: ${repo.name}
-[ ] STARS: ${repo.stargazers_count}
-[ ] FORKS: ${repo.forks_count}
-[ ] CREATED ON: ${createdDate}
-[ ] LAST UPDATED: ${updatedDate}
-| POWERED BY MICKEY`;
+    NAME: ${repo.name}
+    CREATED ON: ${createdDate}
+    LAST UPDATED: ${updatedDate}
+    POWERED BY MICKEY`;
 
         const interactiveButtons = [
             { 
