@@ -44,7 +44,7 @@ async function videoCommand(sock, chatId, message, args) {
                 image: { url: v.thumbnail },
                 buttons: [
                     { id: `ytvideo_${encodeURIComponent(title)}`, text: '🎥 VIDEO (MP4)' },
-                    { id: `play_video_${encodeURIComponent(title)}`, text: '🎵 AUDIO (MP3)' }
+                    { id: `play ${encodeURIComponent(title)}`, text: '🎵 AUDIO (MP3)' }
                 ]
             }, { quoted: message });
             
