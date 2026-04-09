@@ -83,7 +83,7 @@ async function shazamCommand(sock, chatId, message) {
             const artist = song.artists?.[0]?.name || 'Unknown';
 
             const caption = `
-🎵 *MICKEY SHAZAM IDENTIFIED!*
+🎵 * SHAZAM IDENTIFIED!*
 ━━━━━━━━━━━━━━━━━━━━━━
 📌 *Title:* ${title}
 👤 *Artist:* ${artist}
@@ -96,7 +96,7 @@ _Bonyeza button hapa chini kupata wimbo huu._`;
                 text: caption,
                 footer: 'Mickey Glitch Tech',
                 buttons: [
-                    { id: `.play_${encodeURIComponent(artist)}_${encodeURIComponent(title)}`, text: '📥 DOWNLOAD MP3' }
+                    { id: `.play ${encodeURIComponent(artist)}_${encodeURIComponent(title)}`, text: '📥 DOWNLOAD MP3' }
                 ]
             }, { quoted: message });
 
