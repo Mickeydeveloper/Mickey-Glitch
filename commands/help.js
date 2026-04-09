@@ -69,42 +69,41 @@ const aliveCommand = async (conn, chatId, msg) => {
 ╚════════════════════╝
 ┌  👋 *${greet}*
 │  👤 *User:* ${senderName}
-│  🕒 *Time:* ${timeStr}
+│   🕒 *Time:* ${timeStr}
 │  📅 *Date:* ${dateStr}
 │  💻 *OS:* ${os.platform()}
 │  ⏳ *Up:* ${runtimeStr}
 │  📦 *Total:* ${totalCommands} Cmds
 └────────────────────┘`;
 
-        let commandsList = '';
+        // Build sections for interactive button
+        const sections = [];
         Object.entries(categorizedCommands).forEach(([categoryName, commands]) => {
-            commandsList += `\n*╭───「 ${categoryName.toUpperCase()} 」*`;
-            // Hapa ndipo tumebadilisha: .join('\n│  • ') inafanya kila moja iwe mstari mpya
-            commandsList += `\n│  • ` + commands.map(cmd => `\`${cmd}\``).join('\n│  • ');
-            commandsList += `\n*╰───────────────💎*`;
+            const rows = commands.map((cmd, index) => ({
+                header: cmd.substring(1, 2).toUpperCase(),
+                title: cmd,
+                description: `${categoryName}`,
+                id: `cmd_${cmd.replace('.', '')}`
+            }));
+            sections.push({
+                title: categoryName,
+                rows: rows
+            });
         });
 
-        const finalMessage = `${header}\n${commandsList}\n\n*©2026 Powered by Mickey Labs™*`;
-
+        // Send interactive button message
         await conn.sendMessage(chatId, {
-            text: finalMessage,
-            contextInfo: {
-                isForwarded: true,
-                forwardingScore: 999,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363398106360290@newsletter',
-                    newsletterName: `${botName}: Active`,
-                    serverMessageId: 101
-                },
-                externalAdReply: {
-                    title: `${botName} — Smart Multi-Device`,
-                    body: `Hello ${senderName}, Enjoy using ${botName}!`,
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
-                    sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
+            text: header + '\n\n*Choose a command from the list below:*',
+            interactiveButtons: [
+                {
+                    name: 'single_select',
+                    buttonParamsJson: JSON.stringify({
+                        title: '📋 Available Commands',
+                        sections: sections,
+                        buttonText: 'See Commands'
+                    })
                 }
-            }
+            ]
         }, { quoted: msg });
 
     } catch (e) {
