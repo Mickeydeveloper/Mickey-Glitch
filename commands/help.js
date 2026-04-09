@@ -2,7 +2,7 @@ const moment = require('moment-timezone');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { createButton } = require('gifted-btns');
+const { sendInteractiveMessage } = require('gifted-btns');
 
 /**
  * Mfumo wa kusoma commands automatic kutoka kwenye folder
@@ -43,44 +43,9 @@ function categorizeCommands(commands) {
     return categories;
 }
 
-/**
- * Create interactive button message using gifted-btns
- */
-function createInteractiveButtonMessage(title, sections, footerText = '') {
-    return {
-        text: title,
-        footer: footerText,
-        sections: sections
-    };
-}
-
-/**
- * Send interactive button using gifted-btns format
- */
-async function sendButtonMessage(conn, jid, title, sections, quotedMsg = null) {
+const aliveCommand = async (sock, chatId, message) => {
     try {
-        await conn.sendMessage(jid, {
-            text: title,
-            interactiveButtons: [
-                {
-                    name: 'single_select',
-                    buttonParamsJson: JSON.stringify({
-                        title: '📋 Select Option',
-                        sections: sections,
-                        buttonText: 'Choose'
-                    })
-                }
-            ]
-        }, { quoted: quotedMsg });
-    } catch (error) {
-        console.error('Error sending button message:', error);
-        throw error;
-    }
-}
-
-const aliveCommand = async (conn, chatId, msg) => {
-    try {
-        const senderName = msg.pushName || 'User';
+        const senderName = message.pushName || 'User';
         const botName = 'MICKEY GLITCH';
         const prefix = '.';
         
@@ -99,26 +64,27 @@ const aliveCommand = async (conn, chatId, msg) => {
         const categorizedCommands = categorizeCommands(allCommands);
         const totalCommands = allCommands.length;
 
-        // --- HEADER ---
-        const header = `╔════════════════════╗
+        const helpText = `╔════════════════════╗
   ✨ *${botName}* — *V3.0*
 ╚════════════════════╝
 ┌  👋 *${greet}*
 │  👤 *User:* ${senderName}
-│   🕒 *Time:* ${timeStr}
+│  🕒 *Time:* ${timeStr}
 │  📅 *Date:* ${dateStr}
 │  💻 *OS:* ${os.platform()}
 │  ⏳ *Up:* ${runtimeStr}
 │  📦 *Total:* ${totalCommands} Cmds
-└────────────────────┘`;
+└────────────────────┘
 
-        // Build buttons for gifted-btns
+*📋 CHAGUA AMRI CHINI:* 👇`;
+
+        // Build sections for interactive button
         const sections = [];
         Object.entries(categorizedCommands).forEach(([categoryName, commands]) => {
             const rows = commands.map((cmd) => ({
                 header: cmd.substring(1, 2).toUpperCase(),
                 title: cmd,
-                description: `${categoryName}`,
+                description: categoryName,
                 id: `cmd_${cmd.replace('.', '')}`
             }));
             sections.push({
@@ -127,18 +93,24 @@ const aliveCommand = async (conn, chatId, msg) => {
             });
         });
 
-        // Send button message using gifted-btns helper
-        await sendButtonMessage(
-            conn,
-            chatId,
-            header + '\n\n*Choose a command from the list below:*',
-            sections,
-            msg
-        );
+        // Send using gifted-btns sendInteractiveMessage (like halotel.js)
+        return await sendInteractiveMessage(sock, chatId, {
+            text: helpText,
+            footer: '©2026 Powered by Mickey Labs™',
+            interactiveButtons: [
+                {
+                    name: 'single_select',
+                    buttonParamsJson: JSON.stringify({
+                        title: '🔧 AMRI ZA MICKEY',
+                        sections: sections
+                    })
+                }
+            ]
+        }, { quoted: message });
 
     } catch (e) {
         console.error("Error in help.js:", e);
-        await conn.sendMessage(chatId, { text: "Hitilafu imetokea! (Error loading menu)" });
+        await sock.sendMessage(chatId, { text: "Hitilafu imetokea! (Error loading menu)" });
     }
 };
 
