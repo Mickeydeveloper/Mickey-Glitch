@@ -1,10 +1,9 @@
 const axios = require('axios');
-const { sendButtons } = require('gifted-btns');
+const { sendInteractiveMessage } = require('gifted-btns');   // ← Hakikisha umeimport hii
 
 async function checkupdatesCommand(sock, chatId, message) {
     if (!sock) return;
 
-    // Kusoma command kutoka kwa button au text
     const textBody = message.message?.conversation || 
                      message.message?.extendedTextMessage?.text || 
                      message.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.body?.text || '';
@@ -19,9 +18,8 @@ async function checkupdatesCommand(sock, chatId, message) {
             if (!repo) {
                 return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .checkupdates again.*' }, { quoted: message });
             }
-
-            await sock.sendMessage(chatId, {
-                text: `✅ *Link Imekopiwa!*\n\n📋 ${repo.html_url}\n\n*Long press link hapo juu kisha bonyeza Copy.*`
+            await sock.sendMessage(chatId, { 
+                text: `✅ *Link imekopiwa kwenye clipboard!*` 
             }, { quoted: message });
             return;
         }
@@ -31,18 +29,15 @@ async function checkupdatesCommand(sock, chatId, message) {
             if (!repo) {
                 return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .checkupdates again.*' }, { quoted: message });
             }
-
-            await sock.sendMessage(chatId, {
-                text: `🌐 *Repository Link:* \n\n${repo.html_url}\n\n*Bonyeza link hapo juu ili ifunguke Chrome.*`
+            await sock.sendMessage(chatId, { 
+                text: `🌐 *Repository Link*` 
             }, { quoted: message });
             return;
         }
 
         if (command === 'download_zip') {
             const repo = global.repoCache?.[chatId];
-            if (!repo) {
-                return sock.sendMessage(chatId, { text: '❌ *Session expired.*' }, { quoted: message });
-            }
+            if (!repo) return sock.sendMessage(chatId, { text: '❌ *Session expired.*' }, { quoted: message });
 
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
@@ -58,14 +53,12 @@ async function checkupdatesCommand(sock, chatId, message) {
                 document: Buffer.from(zipResponse.data),
                 mimetype: 'application/zip',
                 fileName: fileName,
-                caption: `📦 *ZIP Imepakuliwa Successfully!*\n\nRepo: ${repo.name}`
+                caption: `📦 *ZIP Imepakuliwa Successfully!*`
             }, { quoted: message });
-
-            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
             return;
         }
 
-        // ==================== MAIN MENU ====================
+        // ==================== MAIN MENU WITH CTA BUTTONS ====================
         await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
         const repoResponse = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch');
@@ -85,20 +78,38 @@ Enhanced with Amazing Features to Make Your Whatsapp Communication and Interacti
 [ ] LAST UPDATED: ${updatedDate}
 | POWERED BY MICKEY`;
 
-        const buttons = [
-            { id: 'copy_repo_url', text: '📋 Copy Link' },
-            { id: 'visit_repo_url', text: '🌐 Visit Repo' },
-            { id: 'download_zip', text: '📥 Download Zip' }
+        const interactiveButtons = [
+            { 
+                name: 'cta_copy', 
+                buttonParamsJson: JSON.stringify({ 
+                    display_text: '📋 Copy Link', 
+                    copy_code: repo.html_url 
+                }) 
+            },
+            { 
+                name: 'cta_url', 
+                buttonParamsJson: JSON.stringify({ 
+                    display_text: '🌐 Visit Repo', 
+                    url: repo.html_url,
+                    merchant_url: repo.html_url 
+                }) 
+            },
+            { 
+                name: 'quick_reply', 
+                buttonParamsJson: JSON.stringify({ 
+                    display_text: '📥 Download Zip', 
+                    id: 'download_zip' 
+                }) 
+            }
         ];
 
-        await sendButtons(sock, chatId, {
-            title: '🔄 REPO SYNC & INFO',
+        await sendInteractiveMessage(sock, chatId, {
             text: repoText,
-            footer: 'Mickey Glitch Tech • Powered by LOFT',
-            buttons: buttons
+            interactiveButtons: interactiveButtons,
+            footer: "Mickey Glitch Tech • Powered by LOFT"
         }, { quoted: message });
 
-        // Cache repo data
+        // Cache repo
         if (!global.repoCache) global.repoCache = {};
         global.repoCache[chatId] = repo;
 
