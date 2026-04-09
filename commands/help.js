@@ -2,8 +2,7 @@ const moment = require('moment-timezone');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { MessageType, Mimetype } = require('@whiskeysockets/baileys');
-const giftedBtn = require('gifted-btns');
+const { createButton } = require('gifted-btns');
 
 /**
  * Mfumo wa kusoma commands automatic kutoka kwenye folder
@@ -42,6 +41,41 @@ function categorizeCommands(commands) {
         categories[category].push(cmd);
     });
     return categories;
+}
+
+/**
+ * Create interactive button message using gifted-btns
+ */
+function createInteractiveButtonMessage(title, sections, footerText = '') {
+    return {
+        text: title,
+        footer: footerText,
+        sections: sections
+    };
+}
+
+/**
+ * Send interactive button using gifted-btns format
+ */
+async function sendButtonMessage(conn, jid, title, sections, quotedMsg = null) {
+    try {
+        await conn.sendMessage(jid, {
+            text: title,
+            interactiveButtons: [
+                {
+                    name: 'single_select',
+                    buttonParamsJson: JSON.stringify({
+                        title: '📋 Select Option',
+                        sections: sections,
+                        buttonText: 'Choose'
+                    })
+                }
+            ]
+        }, { quoted: quotedMsg });
+    } catch (error) {
+        console.error('Error sending button message:', error);
+        throw error;
+    }
 }
 
 const aliveCommand = async (conn, chatId, msg) => {
@@ -93,27 +127,14 @@ const aliveCommand = async (conn, chatId, msg) => {
             });
         });
 
-        // Create button message using gifted-btns
-        const buttonMessage = {
-            text: header + '\n\n*Choose a command from the list below:*',
-            footer: '©2026 Powered by Mickey Labs™',
-            sections: sections
-        };
-
-        // Send using gifted-btns format
-        await conn.sendMessage(chatId, {
-            text: header + '\n\n*Choose a command from the list below:*',
-            interactiveButtons: [
-                {
-                    name: 'single_select',
-                    buttonParamsJson: JSON.stringify({
-                        title: '📋 Available Commands',
-                        sections: sections,
-                        buttonText: 'See Commands'
-                    })
-                }
-            ]
-        }, { quoted: msg });
+        // Send button message using gifted-btns helper
+        await sendButtonMessage(
+            conn,
+            chatId,
+            header + '\n\n*Choose a command from the list below:*',
+            sections,
+            msg
+        );
 
     } catch (e) {
         console.error("Error in help.js:", e);
