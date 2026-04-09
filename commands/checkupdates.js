@@ -8,14 +8,38 @@ async function checkupdatesCommand(sock, chatId, message) {
     const command = textBody.trim();
 
     try {
+        // Handle button actions
+        if (command === 'copy_repo_url') {
+            const repo = global.repoCache?.[chatId];
+            if (!repo) {
+                return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .checkupdates again.*' }, { quoted: message });
+            }
+            await sock.sendMessage(chatId, { 
+                text: `📋 *Copy this URL:*\n${repo.html_url}` 
+            }, { quoted: message });
+            return;
+        }
+
+        if (command === 'visit_repo_url') {
+            const repo = global.repoCache?.[chatId];
+            if (!repo) {
+                return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .checkupdates again.*' }, { quoted: message });
+            }
+            await sock.sendMessage(chatId, { 
+                text: `🌐 *Visit Repository:*\n${repo.html_url}` 
+            }, { quoted: message });
+            return;
+        }
+
         if (command === 'download_zip') {
-            // Handle ZIP download
+            const repo = global.repoCache?.[chatId];
+            if (!repo) {
+                return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .checkupdates again.*' }, { quoted: message });
+            }
+
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-            const repoResponse = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch');
-            const repo = repoResponse.data;
             const branch = repo.default_branch || 'main';
-
             const zipUrl = `https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/${branch}.zip`;
 
             const zipResponse = await axios.get(zipUrl, { responseType: 'arraybuffer' });
@@ -26,7 +50,7 @@ async function checkupdatesCommand(sock, chatId, message) {
                 document: Buffer.from(zipResponse.data),
                 mimetype: 'application/zip',
                 fileName: fileName,
-                caption: `📦 *Downloaded ZIP:*\n${fileName}\n\n*Repository: Mickey-Glitch*\n*Branch: ${branch}*`
+                caption: `📦 *Downloaded ZIP:*\n${fileName}\n\n*Repository: ${repo.name}*\n*Branch: ${branch}*`
             }, { quoted: message });
 
             await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
@@ -53,21 +77,9 @@ async function checkupdatesCommand(sock, chatId, message) {
 *Choose an action:*`;
 
         const buttons = [
-            {
-                name: "cta_copy",
-                buttonParamsJson: JSON.stringify({
-                    display_text: "📋 COPY REPO URL",
-                    data: repo.html_url
-                })
-            },
+            { id: 'copy_repo_url', text: '📋 COPY REPO URL' },
             { id: 'download_zip', text: '📥 DOWNLOAD ZIP' },
-            {
-                name: "cta_url",
-                buttonParamsJson: JSON.stringify({
-                    display_text: "🌐 VISIT REPO",
-                    url: repo.html_url
-                })
-            }
+            { id: 'visit_repo_url', text: '🌐 VISIT REPO' }
         ];
 
         await sendButtons(sock, chatId, {
@@ -76,6 +88,10 @@ async function checkupdatesCommand(sock, chatId, message) {
             footer: 'Mickey Glitch Tech',
             buttons: buttons
         }, { quoted: message });
+
+        // Cache repo data for button handlers
+        if (!global.repoCache) global.repoCache = {};
+        global.repoCache[chatId] = repo;
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 

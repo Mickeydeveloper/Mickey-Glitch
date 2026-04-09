@@ -213,7 +213,37 @@ async function startXeonBotInc(){
             if(connection==='open'){
                 printBox("BOT CONNECTED", "✨ Online & Ready ✨", chalk.bgGreen, chalk.black)
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
-                await XeonBotInc.sendMessage(botJid,{ text: `✨ *MICKEY GLITCH BOT* ✨\n🟢 *Online & Ready*` })
+                
+                // Enhanced connection message with buttons
+                const connectText = `
+🎉 *MICKEY GLITCH BOT CONNECTED* 🎉
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🟢 *Status:* Online & Ready
+🤖 *Bot:* ${global.botname}
+👤 *Owner:* Mickey Dady
+📅 *Date:* ${new Date().toLocaleDateString()}
+⏰ *Time:* ${new Date().toLocaleTimeString()}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*Bot is now active and ready to serve!*
+*Use .help to explore commands*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+                const connectButtons = [
+                    { id: '.help', text: '📋 HELP MENU' },
+                    { id: '.ping', text: '⚡ PING TEST' },
+                    { id: '.alive', text: '❤️ ALIVE CHECK' }
+                ];
+
+                try {
+                    await XeonBotInc.sendMessage(botJid, { 
+                        text: connectText,
+                        buttons: connectButtons,
+                        headerType: 1
+                    });
+                } catch (e) {
+                    // Fallback to simple text if buttons fail
+                    await XeonBotInc.sendMessage(botJid, { text: connectText });
+                }
             }
             if(connection==='close'){
                 const reason = new Boom(lastDisconnect?.error)?.output?.statusCode
