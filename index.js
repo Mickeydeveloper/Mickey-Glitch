@@ -7,6 +7,7 @@ const path = require('path')
 const { exec } = require('child_process') // Inahitajika kwa Auto-Update
 const { handleMessages, handleStatus } = require('./main')
 const { handleAnticall } = require('./commands/anticall')
+const { sendButtons } = require('gifted-btns')
 
 const {
     default: makeWASocket,
@@ -235,10 +236,11 @@ async function startXeonBotInc(){
                 ];
 
                 try {
-                    await XeonBotInc.sendMessage(botJid, { 
+                    await sendButtons(XeonBotInc, botJid, {
+                        title: '🎉 BOT CONNECTED',
                         text: connectText,
-                        buttons: connectButtons,
-                        headerType: 1
+                        footer: 'Mickey Glitch Tech',
+                        buttons: connectButtons
                     });
                 } catch (e) {
                     // Fallback to simple text if buttons fail
