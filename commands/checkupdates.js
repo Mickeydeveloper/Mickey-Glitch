@@ -8,7 +8,7 @@ async function checkupdatesCommand(sock, chatId, message) {
     const command = textBody.trim();
 
     try {
-        // Handle button actions
+        // Handle button actions (hii ni formula ya button iliyorekebishwa ili isilete error)
         if (command === 'copy_repo_url') {
             const repo = global.repoCache?.[chatId];
             if (!repo) {
@@ -39,12 +39,14 @@ async function checkupdatesCommand(sock, chatId, message) {
 
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
+            const owner = repo.owner?.login || 'Mickeydeveloper';
+            const repoName = repo.name;
             const branch = repo.default_branch || 'main';
-            const zipUrl = `https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/${branch}.zip`;
+            const zipUrl = `https://github.com/\( {owner}/ \){repoName}/archive/refs/heads/${branch}.zip`;
 
             const zipResponse = await axios.get(zipUrl, { responseType: 'arraybuffer' });
 
-            const fileName = `Mickey-Glitch-${branch}.zip`;
+            const fileName = `\( {repoName}- \){branch}.zip`;
 
             await sock.sendMessage(chatId, {
                 document: Buffer.from(zipResponse.data),
@@ -57,29 +59,30 @@ async function checkupdatesCommand(sock, chatId, message) {
             return;
         }
 
-        // Default: Show repo info and menu
+        // Default: Show repo info exactly like LOFT-QUANTUM style in the screenshot
         await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
         const repoResponse = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch');
         const repo = repoResponse.data;
 
-        const repoText = `
-📦 *REPO INFO & SYNC*
-━━━━━━━━━━━━━━━━━━━━━━
-📝 *Name:* ${repo.name}
-📋 *Description:* ${repo.description || 'No description'}
-⭐ *Stars:* ${repo.stargazers_count}
-🍴 *Forks:* ${repo.forks_count}
-👀 *Watchers:* ${repo.watchers_count}
-📅 *Last Updated:* ${new Date(repo.updated_at).toLocaleDateString()}
-🔗 *URL:* ${repo.html_url}
-━━━━━━━━━━━━━━━━━━━━━━
-*Choose an action:*`;
+        const createdDate = new Date(repo.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+        const updatedDate = new Date(repo.updated_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+
+        const repoText = `Hello Mickey Dady,
+This is ${repo.name.toUpperCase()}, A Whatsapp Bot Built by MICKEYDEVELOPER,
+Enhanced with Amazing Features to Make Your Whatsapp Communication and Interaction Experience Amazing
+
+[ ] NAME: ${repo.name}
+[ ] STARS: ${repo.stargazers_count}
+[ ] FORKS: ${repo.forks_count}
+[ ] CREATED ON: ${createdDate}
+[ ] LAST UPDATED: ${updatedDate}
+| POWERED BY MICKEY`;
 
         const buttons = [
-            { id: 'copy_repo_url', text: '📋 COPY REPO URL' },
-            { id: 'download_zip', text: '📥 DOWNLOAD ZIP' },
-            { id: 'visit_repo_url', text: '🌐 VISIT REPO' }
+            { id: 'copy_repo_url', text: 'Copy Link' },
+            { id: 'visit_repo_url', text: 'Visit Repo' },
+            { id: 'download_zip', text: 'Download Zip' }
         ];
 
         await sendButtons(sock, chatId, {
@@ -101,5 +104,4 @@ async function checkupdatesCommand(sock, chatId, message) {
     }
 }
 
-// Hii ndio sehemu muhimu iliyorekebishwa ili bot isilete error
 module.exports = checkupdatesCommand;
