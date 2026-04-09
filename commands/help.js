@@ -43,8 +43,51 @@ function categorizeCommands(commands) {
     return categories;
 }
 
+/**
+ * Load and execute a command by name
+ */
+async function executeCommand(commandName, sock, chatId, message) {
+    try {
+        const cmdPath = path.join(__dirname, `${commandName}.js`);
+        if (!fs.existsSync(cmdPath)) {
+            return await sock.sendMessage(chatId, { 
+                text: `❌ Amri "${commandName}" haipatikani!` 
+            }, { quoted: message });
+        }
+        
+        // Clear require cache to get latest version
+        delete require.cache[require.resolve(cmdPath)];
+        const commandModule = require(cmdPath);
+        
+        // Call the command function
+        if (typeof commandModule === 'function') {
+            await commandModule(sock, chatId, message, '');
+        } else if (commandModule && typeof commandModule === 'object') {
+            // Handle exported objects with specific functions
+            const handleCommand = Object.values(commandModule).find(fn => typeof fn === 'function');
+            if (handleCommand) {
+                await handleCommand(sock, chatId, message, '');
+            }
+        }
+    } catch (error) {
+        console.error(`Error executing command ${commandName}:`, error);
+        await sock.sendMessage(chatId, { 
+            text: `❌ Hitilafu itokea wakati wa kueneza amri: ${error.message}` 
+        }, { quoted: message });
+    }
+}
+
 const aliveCommand = async (sock, chatId, message) => {
     try {
+        const msgText = (message.text || message.body || '').trim().toLowerCase();
+        
+        // ==================== HANDLE COMMAND SELECTION ====================
+        if (msgText.startsWith('cmd_')) {
+            const commandName = '.' + msgText.replace('cmd_', '');
+            return await executeCommand(commandName, sock, chatId, message);
+        }
+
+        // ==================== SHOW MENU ====================
         const senderName = message.pushName || 'User';
         const botName = 'MICKEY GLITCH';
         const prefix = '.';
