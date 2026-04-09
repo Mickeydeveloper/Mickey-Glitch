@@ -1,29 +1,48 @@
 const axios = require('axios');
+const { sendButtons } = require('gifted-btns');
 
 async function checkupdatesCommand(sock, chatId, message) {
     if (!sock) return;
 
+    // Kusoma command kutoka kwa button au text
+    const textBody = message.message?.conversation || 
+                     message.message?.extendedTextMessage?.text || 
+                     message.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.body?.text || '';
+
+    const command = textBody.trim();
+
     try {
-        // Handle button responses
-        const responseText = message.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.body?.text || 
-                           message.message?.conversation || 
-                           message.message?.extendedTextMessage?.text || '';
 
-        const command = responseText.trim();
-
-        if (command === 'copy_repo_url' || command.includes('Copy Link')) {
+        // ==================== BUTTON HANDLERS ====================
+        if (command === 'copy_repo_url') {
             const repo = global.repoCache?.[chatId];
-            if (!repo) return sock.sendMessage(chatId, { text: '❌ Session expired. Run .checkupdates again.' }, { quoted: message });
-            
-            await sock.sendMessage(chatId, { 
-                text: `✅ *Link imekopiwa kwenye clipboard!*\n\n${repo.html_url}` 
+            if (!repo) {
+                return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .checkupdates again.*' }, { quoted: message });
+            }
+
+            await sock.sendMessage(chatId, {
+                text: `✅ *Link Imekopiwa!*\n\n📋 ${repo.html_url}\n\n*Long press link hapo juu kisha bonyeza Copy.*`
+            }, { quoted: message });
+            return;
+        }
+
+        if (command === 'visit_repo_url') {
+            const repo = global.repoCache?.[chatId];
+            if (!repo) {
+                return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .checkupdates again.*' }, { quoted: message });
+            }
+
+            await sock.sendMessage(chatId, {
+                text: `🌐 *Repository Link:* \n\n${repo.html_url}\n\n*Bonyeza link hapo juu ili ifunguke Chrome.*`
             }, { quoted: message });
             return;
         }
 
         if (command === 'download_zip') {
             const repo = global.repoCache?.[chatId];
-            if (!repo) return sock.sendMessage(chatId, { text: '❌ Session expired.' }, { quoted: message });
+            if (!repo) {
+                return sock.sendMessage(chatId, { text: '❌ *Session expired.*' }, { quoted: message });
+            }
 
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
@@ -39,12 +58,14 @@ async function checkupdatesCommand(sock, chatId, message) {
                 document: Buffer.from(zipResponse.data),
                 mimetype: 'application/zip',
                 fileName: fileName,
-                caption: `📦 ZIP Imepakuliwa!\nRepository: ${repo.name}`
+                caption: `📦 *ZIP Imepakuliwa Successfully!*\n\nRepo: ${repo.name}`
             }, { quoted: message });
+
+            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
             return;
         }
 
-        // ===================== MAIN MENU =====================
+        // ==================== MAIN MENU ====================
         await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
         const repoResponse = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch');
@@ -64,37 +85,20 @@ Enhanced with Amazing Features to Make Your Whatsapp Communication and Interacti
 [ ] LAST UPDATED: ${updatedDate}
 | POWERED BY MICKEY`;
 
-        // Native Interactive Buttons (hii inafanya Copy na Visit kazi vizuri)
-        await sock.sendMessage(chatId, {
+        const buttons = [
+            { id: 'copy_repo_url', text: '📋 Copy Link' },
+            { id: 'visit_repo_url', text: '🌐 Visit Repo' },
+            { id: 'download_zip', text: '📥 Download Zip' }
+        ];
+
+        await sendButtons(sock, chatId, {
+            title: '🔄 REPO SYNC & INFO',
             text: repoText,
-            footer: "Mickey Glitch Tech • Powered by LOFT",
-            buttons: [
-                {
-                    name: "cta_copy",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "📋 Copy Link",
-                        copy_code: repo.html_url
-                    })
-                },
-                {
-                    name: "cta_url",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "🌐 Visit Repo",
-                        url: repo.html_url,
-                        merchant_url: repo.html_url
-                    })
-                },
-                {
-                    name: "quick_reply",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "📥 Download Zip",
-                        id: "download_zip"
-                    })
-                }
-            ],
-            headerType: 1
+            footer: 'Mickey Glitch Tech • Powered by LOFT',
+            buttons: buttons
         }, { quoted: message });
 
+        // Cache repo data
         if (!global.repoCache) global.repoCache = {};
         global.repoCache[chatId] = repo;
 
@@ -102,7 +106,7 @@ Enhanced with Amazing Features to Make Your Whatsapp Communication and Interacti
 
     } catch (err) {
         console.error("CHECKUPDATES ERROR:", err.message);
-        await sock.sendMessage(chatId, { text: '🚨 *Error fetching repo!*' }, { quoted: message });
+        await sock.sendMessage(chatId, { text: '🚨 *Error fetching repository!*' }, { quoted: message });
     }
 }
 
