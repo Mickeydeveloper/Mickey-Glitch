@@ -2,6 +2,8 @@ const moment = require('moment-timezone');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { MessageType, Mimetype } = require('@whiskeysockets/baileys');
+const giftedBtn = require('gifted-btns');
 
 /**
  * Mfumo wa kusoma commands automatic kutoka kwenye folder
@@ -76,10 +78,10 @@ const aliveCommand = async (conn, chatId, msg) => {
 │  📦 *Total:* ${totalCommands} Cmds
 └────────────────────┘`;
 
-        // Build sections for interactive button
+        // Build buttons for gifted-btns
         const sections = [];
         Object.entries(categorizedCommands).forEach(([categoryName, commands]) => {
-            const rows = commands.map((cmd, index) => ({
+            const rows = commands.map((cmd) => ({
                 header: cmd.substring(1, 2).toUpperCase(),
                 title: cmd,
                 description: `${categoryName}`,
@@ -91,7 +93,14 @@ const aliveCommand = async (conn, chatId, msg) => {
             });
         });
 
-        // Send interactive button message
+        // Create button message using gifted-btns
+        const buttonMessage = {
+            text: header + '\n\n*Choose a command from the list below:*',
+            footer: '©2026 Powered by Mickey Labs™',
+            sections: sections
+        };
+
+        // Send using gifted-btns format
         await conn.sendMessage(chatId, {
             text: header + '\n\n*Choose a command from the list below:*',
             interactiveButtons: [
