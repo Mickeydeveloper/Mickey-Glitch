@@ -7,150 +7,128 @@ const settings = require('../settings');
 const CONFIG = {
     PRICE_PER_GB: 1000,
     SELLER_NUMBER: '255615944741',
-    BANNER: 'https://files.catbox.moe/ljabyq.png', // Picha kubwa ya tangazo
+    BANNER: 'https://files.catbox.moe/ljabyq.png', 
     FOOTER: '🚀 Powered by Mickey Glitch Tech',
 };
 
 const PACKAGES = [
-    { gb: 1, price: 1000, label: 'Starter Pack', id: 'h_pkg_1' },
-    { gb: 5, price: 5000, label: 'Light Pack', id: 'h_pkg_5' },
-    { gb: 10, price: 10000, label: 'Standard Pack', id: 'h_pkg_10' },
-    { gb: 20, price: 20000, label: 'Premium Pack', id: 'h_pkg_20' },
-    { gb: 50, price: 50000, label: 'Ultra Pack', id: 'h_pkg_50' }
+    { gb: 1,  price: 1000,  label: 'Starter Pack',   id: 'h_pkg_1' },
+    { gb: 5,  price: 5000,  label: 'Light Pack',     id: 'h_pkg_5' },
+    { gb: 10, price: 10000, label: 'Standard Pack',  id: 'h_pkg_10' },
+    { gb: 20, price: 20000, label: 'Premium Pack',   id: 'h_pkg_20' },
+    { gb: 50, price: 50000, label: 'Ultra Pack',     id: 'h_pkg_50' }
 ];
 
 // ────────────────────────────────────────────────
-// HANDLER FOR PACKAGE SELECTION
+// HANDLE PACKAGE SELECTION + PAYMENT
 // ────────────────────────────────────────────────
 async function handlePackageSelection(sock, message, packageId, chatId) {
     try {
-        console.log(`[HALOTEL] Package selected: ${packageId}`);
-        
-        // Extract GB amount from ID
         const gbMatch = packageId.match(/h_pkg_(\d+)/);
-        if (!gbMatch) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ Error: Invalid package ID',
-                contextInfo: { quotedMessage: message.message }
-            });
-            return;
-        }
+        if (!gbMatch) return;
 
         const gb = parseInt(gbMatch[1]);
         const pkg = PACKAGES.find(p => p.gb === gb);
+        if (!pkg) return;
 
-        if (!pkg) {
-            await sock.sendMessage(chatId, { 
-                text: `❌ Error: Package not found for ${gb}GB`,
-                contextInfo: { quotedMessage: message.message }
-            });
-            return;
-        }
-
-        const payMsg = `✅ *ULIYOCHAGUA:* GB ${pkg.gb}
-💰 *KIASI CHA KULIPA:* TSh ${pkg.price.toLocaleString()}/=
-📦 *PACKAGE:* ${pkg.label}
-________________________________
-
-*BONYEZA BUTTON CHINI KU-COPY NAMBA:*
-_Copy namba kisha lipa na utume screenshot (ss) hapa._`;
+        const payMsg = `✅ *UMECHAGUA PACKAGE*\n\n` +
+                      `📦 *Package:* ${pkg.label}\n` +
+                      `💾 *GB:* ${pkg.gb} GB\n` +
+                      `💰 *Bei:* TSh ${pkg.price.toLocaleString()}/=\n\n` +
+                      `Lipa kupitia mtandao wowote kisha tuma Screenshot hapa.`;
 
         const paymentButtons = [
-            {
-                name: 'cta_copy',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '💳 HALOTEL (0615944741)',
-                    copy_code: '0615944741'
-                })
+            { 
+                name: 'cta_copy', 
+                buttonParamsJson: JSON.stringify({ 
+                    display_text: '📋 HALOTEL - 0615944741', 
+                    copy_code: '0615944741' 
+                }) 
             },
-            {
-                name: 'cta_copy',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '💳 YAS (0711765335)',
-                    copy_code: '0711765335'
-                })
+            { 
+                name: 'cta_copy', 
+                buttonParamsJson: JSON.stringify({ 
+                    display_text: '📋 YAS - 0711765335', 
+                    copy_code: '0711765335' 
+                }) 
             },
-            {
-                name: 'cta_copy',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '💳 AZAMPESA (1615944741)',
-                    copy_code: '1615944741'
-                })
+            { 
+                name: 'cta_copy', 
+                buttonParamsJson: JSON.stringify({ 
+                    display_text: '📋 AZAMPESA - 1615944741', 
+                    copy_code: '1615944741' 
+                }) 
+            },
+            { 
+                name: 'cta_call', 
+                buttonParamsJson: JSON.stringify({ 
+                    display_text: '📞 Piga Halotel', 
+                    phone_number: '0615944741' 
+                }) 
             }
         ];
 
-        return await sendInteractiveMessage(sock, chatId, {
+        await sendInteractiveMessage(sock, chatId, {
             text: payMsg,
-            footer: CONFIG.FOOTER,
-            interactiveButtons: paymentButtons
+            interactiveButtons: paymentButtons,
+            footer: CONFIG.FOOTER
         }, { quoted: message });
 
     } catch (error) {
-        console.error('[HALOTEL] Error in handlePackageSelection:', error);
-        try {
-            await sock.sendMessage(chatId, { 
-                text: `⚠️ Hitilafu imetokea! ${error.message}`,
-                contextInfo: { quotedMessage: message.message }
-            });
-        } catch (e) {
-            console.error('Could not send error message:', e);
-        }
+        console.error('[HALOTEL] Package Selection Error:', error);
+        await sock.sendMessage(chatId, { text: '❌ Hitilafu imetokea!' }, { quoted: message });
     }
 }
 
 // ────────────────────────────────────────────────
-// HALOTEL COMMAND LOGIC
+// MAIN HALOTEL COMMAND
 // ────────────────────────────────────────────────
-async function halotelCommand(sock, chatId, message, userMessage = '') {
+async function halotelCommand(sock, chatId, message) {
     try {
-        const jid = chatId;
-        const budy = (userMessage || '').trim().toLowerCase().replace(/^\./, '');
+        const adText = `🌟 *HALOTEL INTERNET MANAGER* 🌟
 
-        // ==================== 1. MAIN MENU (LIST PICKER) ====================
-        if (budy === 'halotel' || budy === 'halotel_menu') {
-            const adText = `🌟 *HALOTEL INTERNET MANAGER* 🌟
-________________________________
+✨ Premium High-Speed 4G/5G Internet
+🔥 Bei Nafuu: GB 1 = TSh 1,000 tu
+⚡ Instant Activation baada ya kulipa
 
-✨ Premium High-Speed 4G Internet ✨
-🔥 *SPECIAL OFFER:* GB 1 = TSh 1,000
-⚡ 24/7 Instant Activation (Fasta)
+Chagua package unayotaka hapa chini 👇`;
 
-*BONYEZA BUTTON CHINI KUCHAGUA:* 👇`;
+        const rows = PACKAGES.map(pkg => ({
+            header: `${pkg.gb}GB`,
+            title: pkg.label,
+            description: `TSh ${pkg.price.toLocaleString()}/=`,
+            id: pkg.id
+        }));
 
-            const rows = PACKAGES.map(pkg => ({
-                header: `OFFER: ${pkg.gb}GB`,
-                title: `${pkg.label}`,
-                description: `Kiasi: TSh ${pkg.price.toLocaleString()}/=`,
-                id: pkg.id
-            }));
+        await sendInteractiveMessage(sock, chatId, {
+            image: { url: CONFIG.BANNER },
+            text: adText,
+            footer: CONFIG.FOOTER,
+            interactiveButtons: [
+                {
+                    name: 'single_select',
+                    buttonParamsJson: JSON.stringify({
+                        title: '📦 CHAGUA PACKAGE',
+                        sections: [
+                            {
+                                title: 'VIFURUSHI VYA HALOTEL',
+                                rows: rows
+                            }
+                        ]
+                    })
+                }
+            ]
+        }, { quoted: message });
 
-            return await sendInteractiveMessage(sock, jid, {
-                image: { url: CONFIG.BANNER }, // Big Ad Header
-                text: adText,
-                footer: CONFIG.FOOTER,
-                interactiveButtons: [
-                    {
-                        name: 'single_select',
-                        buttonParamsJson: JSON.stringify({
-                            title: '📦 CHAGUA KIFURUSHI',
-                            sections: [
-                                {
-                                    title: 'VIFURUSHI VYA DATA (DATA PKGS)',
-                                    rows: rows
-                                }
-                            ]
-                        })
-                    }
-                ]
-            }, { quoted: message });
-        }
-
-    } catch (e) {
-        console.error('Halotel Error:', e);
+    } catch (error) {
+        console.error('Halotel Command Error:', error);
+        await sock.sendMessage(chatId, {
+            text: '❌ Hitilafu imetokea wakati wa kufungua menu ya Halotel.'
+        }, { quoted: message });
     }
 }
 
-module.exports = { halotelCommand, CONFIG, PACKAGES, handlePackageSelection };
-
-// Attach handler to main function
+// Attach handler
 halotelCommand.handlePackageSelection = handlePackageSelection;
+
+module.exports = halotelCommand;
