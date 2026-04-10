@@ -56,101 +56,101 @@ const aliveCommand = async (sock, chatId, message) => {
                             {
                                 title: '🤖 AI & NLP',
                                 rows: [
-                                    { header: '🤖', title: 'AI', description: 'AI assistant', id: 'cmd_ai' },
-                                    { header: '💬', title: 'Chatbot', description: 'Interactive chat', id: 'cmd_chatbot' },
-                                    { header: '🔤', title: 'Translate', description: 'Translate text', id: 'cmd_translate' },
-                                    { header: '🎯', title: 'TTS', description: 'Text to speech', id: 'cmd_tts' },
-                                    { header: '🔍', title: 'Truecaller', description: 'Lookup phone', id: 'cmd_truecaller' }
+                                    { header: '🤖', title: 'AI', description: 'AI assistant', id: '.ai' },
+                                    { header: '💬', title: 'Chatbot', description: 'Interactive chat', id: '.chatbot' },
+                                    { header: '🔤', title: 'Translate', description: 'Translate text', id: '.translate' },
+                                    { header: '🎯', title: 'TTS', description: 'Text to speech', id: '.tts' },
+                                    { header: '🔍', title: 'Truecaller', description: 'Lookup phone', id: '.truecaller' }
                                 ]
                             },
                             {
                                 title: '🎵 MEDIA',
                                 rows: [
-                                    { header: '🎵', title: 'Play', description: 'Play music', id: 'cmd_play' },
-                                    { header: '🎬', title: 'Video', description: 'Download video', id: 'cmd_video' },
-                                    { header: '🖼️', title: 'Imagine', description: 'AI image generate', id: 'cmd_imagine' },
-                                    { header: '🎭', title: 'Sticker', description: 'Create stickers', id: 'cmd_sticker' },
-                                    { header: '📸', title: 'Shazam', description: 'Identify song', id: 'cmd_shazam' }
+                                    { header: '🎵', title: 'Play', description: 'Play music', id: '.play' },
+                                    { header: '🎬', title: 'Video', description: 'Download video', id: '.video' },
+                                    { header: '🖼️', title: 'Imagine', description: 'AI image generate', id: '.imagine' },
+                                    { header: '🎭', title: 'Sticker', description: 'Create stickers', id: '.sticker' },
+                                    { header: '📸', title: 'Shazam', description: 'Identify song', id: '.shazam' }
                                 ]
                             },
                             {
                                 title: '📥 DOWNLOADS',
                                 rows: [
-                                    { header: '🎥', title: 'TikTok', description: 'Download from TikTok', id: 'cmd_tiktok' },
-                                    { header: '📷', title: 'Instagram', description: 'Download from Instagram', id: 'cmd_instagram' },
-                                    { header: '👍', title: 'Facebook', description: 'Download from Facebook', id: 'cmd_facebook' },
-                                    { header: '🔗', title: 'URL', description: 'Download from URL', id: 'cmd_url' },
-                                    { header: '🎵', title: 'SongID', description: 'Get song details', id: 'cmd_songid' }
+                                    { header: '🎥', title: 'TikTok', description: 'Download from TikTok', id: '.tiktok' },
+                                    { header: '📷', title: 'Instagram', description: 'Download from Instagram', id: '.instagram' },
+                                    { header: '👍', title: 'Facebook', description: 'Download from Facebook', id: '.facebook' },
+                                    { header: '🔗', title: 'URL', description: 'Download from URL', id: '.url' },
+                                    { header: '🎵', title: 'SongID', description: 'Get song details', id: '.songid' }
                                 ]
                             },
                             {
                                 title: '🎨 STICKERS & ART',
                                 rows: [
-                                    { header: '🎭', title: 'Sticker', description: 'Create sticker', id: 'cmd_sticker' },
-                                    { header: '✂️', title: 'StickerCrop', description: 'Crop sticker', id: 'cmd_stickercrop' },
-                                    { header: '🔄', title: 'Sticker-Alt', description: 'Alt sticker format', id: 'cmd_sticker-alt' },
-                                    { header: '✈️', title: 'StickerTelegram', description: 'Telegram sticker', id: 'cmd_stickertelegram' },
-                                    { header: '🎪', title: 'Character', description: 'Text art', id: 'cmd_character' }
+                                    { header: '🎭', title: 'Sticker', description: 'Create sticker', id: '.sticker' },
+                                    { header: '✂️', title: 'StickerCrop', description: 'Crop sticker', id: '.stickercrop' },
+                                    { header: '🔄', title: 'Sticker-Alt', description: 'Alt sticker format', id: '.sticker-alt' },
+                                    { header: '✈️', title: 'StickerTelegram', description: 'Telegram sticker', id: '.stickertelegram' },
+                                    { header: '🎪', title: 'Character', description: 'Text art', id: '.character' }
                                 ]
                             },
                             {
                                 title: '👥 GROUP MANAGE',
                                 rows: [
-                                    { header: '🔇', title: 'Mute', description: 'Mute member', id: 'cmd_mute' },
-                                    { header: '🔊', title: 'Unmute', description: 'Unmute member', id: 'cmd_unmute' },
-                                    { header: '👊', title: 'Kick', description: 'Kick member', id: 'cmd_kick' },
-                                    { header: '➕', title: 'Add', description: 'Add member', id: 'cmd_add' },
-                                    { header: '⬆️', title: 'Promote', description: 'Promote member', id: 'cmd_promote' }
+                                    { header: '🔇', title: 'Mute', description: 'Mute member', id: '.mute' },
+                                    { header: '🔊', title: 'Unmute', description: 'Unmute member', id: '.unmute' },
+                                    { header: '👊', title: 'Kick', description: 'Kick member', id: '.kick' },
+                                    { header: '➕', title: 'Add', description: 'Add member', id: '.add' },
+                                    { header: '⬆️', title: 'Promote', description: 'Promote member', id: '.promote' }
                                 ]
                             },
                             {
                                 title: '👥 GROUP MANAGE 2',
                                 rows: [
-                                    { header: '⬇️', title: 'Demote', description: 'Demote member', id: 'cmd_demote' },
-                                    { header: '🏷️', title: 'Tag', description: 'Tag members', id: 'cmd_tag' },
-                                    { header: '📢', title: 'TagAll', description: 'Tag everyone', id: 'cmd_tagall' },
-                                    { header: '🏷️❌', title: 'TagNotAdmin', description: 'Tag non-admins', id: 'cmd_tagnotadmin' },
-                                    { header: '🤐', title: 'HideTag', description: 'Hide tag mention', id: 'cmd_hidetag' }
+                                    { header: '⬇️', title: 'Demote', description: 'Demote member', id: '.demote' },
+                                    { header: '🏷️', title: 'Tag', description: 'Tag members', id: '.tag' },
+                                    { header: '📢', title: 'TagAll', description: 'Tag everyone', id: '.tagall' },
+                                    { header: '🏷️❌', title: 'TagNotAdmin', description: 'Tag non-admins', id: '.tagnotadmin' },
+                                    { header: '🤐', title: 'HideTag', description: 'Hide tag mention', id: '.hidetag' }
                                 ]
                             },
                             {
                                 title: '🛡️ PROTECTION',
                                 rows: [
-                                    { header: '🔗', title: 'AntiLink', description: 'Stop group links', id: 'cmd_antilink' },
-                                    { header: '🏷️', title: 'AntiTag', description: 'Stop tag spam', id: 'cmd_antitag' },
-                                    { header: '🚫', title: 'AntiBadword', description: 'Filter bad words', id: 'cmd_antibadword' },
-                                    { header: '📵', title: 'AntiCall', description: 'Block calls', id: 'cmd_anticall' },
-                                    { header: '🗑️', title: 'AntiDelete', description: 'Recover deleted', id: 'cmd_antidelete' }
+                                    { header: '🔗', title: 'AntiLink', description: 'Stop group links', id: '.antilink' },
+                                    { header: '🏷️', title: 'AntiTag', description: 'Stop tag spam', id: '.antitag' },
+                                    { header: '🚫', title: 'AntiBadword', description: 'Filter bad words', id: '.antibadword' },
+                                    { header: '📵', title: 'AntiCall', description: 'Block calls', id: '.anticall' },
+                                    { header: '🗑️', title: 'AntiDelete', description: 'Recover deleted', id: '.antidelete' }
                                 ]
                             },
                             {
                                 title: '🛡️ PROTECTION 2',
                                 rows: [
-                                    { header: '💬', title: 'Mention', description: 'Mention alerts', id: 'cmd_mention' },
-                                    { header: '📲', title: 'AntiStatusMention', description: 'Status mention alert', id: 'cmd_antistatusmention' },
-                                    { header: '⛔', title: 'PMBlocker', description: 'Block PMs', id: 'cmd_pmblocker' },
-                                    { header: '👻', title: 'Ghost', description: 'Ghost mode', id: 'cmd_ghost' },
-                                    { header: '⚠️', title: 'Warn', description: 'Warn member', id: 'cmd_warn' }
+                                    { header: '💬', title: 'Mention', description: 'Mention alerts', id: '.mention' },
+                                    { header: '📲', title: 'AntiStatusMention', description: 'Status mention alert', id: '.antistatusmention' },
+                                    { header: '⛔', title: 'PMBlocker', description: 'Block PMs', id: '.pmblocker' },
+                                    { header: '👻', title: 'Ghost', description: 'Ghost mode', id: '.ghost' },
+                                    { header: '⚠️', title: 'Warn', description: 'Warn member', id: '.warn' }
                                 ]
                             },
                             {
                                 title: '📊 PROFILE & AVATAR',
                                 rows: [
-                                    { header: '👤', title: 'SetPP', description: 'Set profile pic', id: 'cmd_setpp' },
-                                    { header: '👤', title: 'GetPP', description: 'Get profile pic', id: 'cmd_getpp' },
-                                    { header: '👤', title: 'PP', description: 'My profile pic', id: 'cmd_pp' },
-                                    { header: '👥', title: 'GroupManage', description: 'Group settings', id: 'cmd_groupmanage' },
-                                    { header: '📝', title: 'Whois', description: 'User info', id: 'cmd_whois' }
+                                    { header: '👤', title: 'SetPP', description: 'Set profile pic', id: '.setpp' },
+                                    { header: '👤', title: 'GetPP', description: 'Get profile pic', id: '.getpp' },
+                                    { header: '👤', title: 'PP', description: 'My profile pic', id: '.pp' },
+                                    { header: '👥', title: 'GroupManage', description: 'Group settings', id: '.groupmanage' },
+                                    { header: '📝', title: 'Whois', description: 'User info', id: '.whois' }
                                 ]
                             },
                             {
                                 title: '✨ FUN',
                                 rows: [
-                                    { header: '😂', title: 'Compliment', description: 'Get compliment', id: 'cmd_compliment' },
-                                    { header: '🏆', title: 'TopMembers', description: 'Active members', id: 'cmd_topmembers' },
-                                    { header: '🎵', title: 'Lyrics', description: 'Get lyrics', id: 'cmd_lyrics' },
-                                    { header: '⛅', title: 'Weather', description: 'Weather info', id: 'cmd_weather' },
-                                    { header: '❌', title: 'Cancel', description: 'Close menu', id: 'cmd_cancel' }
+                                    { header: '😂', title: 'Compliment', description: 'Get compliment', id: '.compliment' },
+                                    { header: '🏆', title: 'TopMembers', description: 'Active members', id: '.topmembers' },
+                                    { header: '🎵', title: 'Lyrics', description: 'Get lyrics', id: '.lyrics' },
+                                    { header: '⛅', title: 'Weather', description: 'Weather info', id: '.weather' },
+                                    { header: '❌', title: 'Cancel', description: 'Close menu', id: '.cancel' }
                                 ]
                             }
                         ]
