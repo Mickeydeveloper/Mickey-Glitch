@@ -35,13 +35,6 @@ const aliveCommand = async (sock, chatId, message) => {
                                 { title: 'Ping', id: '.ping', description: 'Speed test' },
                                 { title: 'Alive', id: '.alive', description: 'Check status' }
                             ]
-                        },
-                        {
-                            title: '📥 DOWNLOADS',
-                            rows: [
-                                { title: 'YouTube', id: '.play', description: 'Play music' },
-                                { title: 'TikTok', id: '.tiktok', description: 'DL Video' }
-                            ]
                         }
                     ]
                 })
@@ -49,7 +42,7 @@ const aliveCommand = async (sock, chatId, message) => {
             contextInfo: {
                 externalAdReply: {
                     title: 'MICKEY GLITCH',
-                    body: 'Select a command below',
+                    body: 'Mickey Tech Center 2026',
                     mediaType: 1,
                     renderLargerThumbnail: true,
                     thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
@@ -58,18 +51,18 @@ const aliveCommand = async (sock, chatId, message) => {
             }
         }, { quoted: message });
     } catch (e) {
-        console.error("Error:", e);
+        console.error("Error help menu:", e);
     }
 };
 
 /**
- * Handle Button Response - Automated
+ * Handle Button Response - Silent Execution
+ * Badala ya sendMessage, tunaita handler moja kwa moja
  */
-const handleButtonResponse = async (sock, message, buttonId, chatId) => {
+const handleButtonResponse = async (sock, message, buttonId, chatId, executeCommand) => {
     try {
         let selectedId = buttonId;
 
-        // Parse kama ni interactive response
         const response = message.message?.interactiveResponseMessage?.nativeFlowResponseMessage;
         if (response) {
             const params = JSON.parse(response.paramsJson);
@@ -78,16 +71,29 @@ const handleButtonResponse = async (sock, message, buttonId, chatId) => {
 
         if (!selectedId) return;
 
-        console.log(`[EXEC] Running: ${selectedId}`);
+        // Log kwenye console tu
+        console.log(`[SYSTEM] Button Pressed: ${selectedId} by ${message.pushName}`);
 
-        // Tuma command kama text ili bot ifunction kawaida
-        return await sock.sendMessage(chatId, {
-            text: selectedId,
-            contextInfo: { quotedMessage: message.message }
-        });
+        /**
+         * Hapa sasa: Badala ya sock.sendMessage, tunatengeneza "Fake Message" 
+         * ili command handler yako iichakate kama text ya kawaida kimyakimya.
+         */
+        const fakeMsg = {
+            ...message,
+            body: selectedId,
+            message: {
+                conversation: selectedId
+            }
+        };
+
+        // Hapa unaita ile function yako kuu ya ku-run commands (mfano: client.on au cmdHandler)
+        // Inategemea jinsi index.js yako inavyoita commands.
+        if (typeof executeCommand === 'function') {
+            await executeCommand(sock, fakeMsg); 
+        }
 
     } catch (e) {
-        console.error("Button Error:", e);
+        console.error("Silent Execution Error:", e);
     }
 };
 
