@@ -1,7 +1,7 @@
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { sendButtons } = require('gifted-btns');
 const acrcloud = require('acrcloud');
-const fs = require('fs-extra'); // Tumia fs-extra kwa usalama zaidi
+const fs = require('fs-extra');
 const path = require('path');
 const settings = require('../settings');
 const { exec } = require('child_process');
@@ -10,22 +10,20 @@ const execAsync = util.promisify(exec);
 
 async function shazamCommand(sock, chatId, message) {
     try {
-        // 1. Get Quoted Message safely
         const ctxInfo = message.message?.extendedTextMessage?.contextInfo;
         const quotedMsg = ctxInfo?.quotedMessage;
 
         if (!quotedMsg) {
-            return sock.sendMessage(chatId, { text: '❌ *Please reply to Audio or Video using .shazam*' }, { quoted: message });
+            return sock.sendMessage(chatId, { text: '❌ *Tafadhali reply audio au video kwa kutumia .shazam*' }, { quoted: message });
         }
 
         const mediaMessage = quotedMsg.audioMessage || quotedMsg.videoMessage;
         if (!mediaMessage) {
-            return sock.sendMessage(chatId, { text: '❌ *Reply to Audio or Video only!*' }, { quoted: message });
+            return sock.sendMessage(chatId, { text: '❌ *Reply audio au video pekee!*' }, { quoted: message });
         }
 
         await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
 
-        // 2. Download Media
         const targetMessage = {
             key: {
                 remoteJid: chatId,
@@ -42,24 +40,20 @@ async function shazamCommand(sock, chatId, message) {
 
         if (!mediaBuffer) throw new Error("Media download failed");
 
-        // 3. File Preparations
         const tempDir = path.join(process.cwd(), 'tmp');
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
-        
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
         const tempInput = path.join(tempDir, `shazam_in_${Date.now()}`);
         const tempAudio = path.join(tempDir, `shazam_out_${Date.now()}.wav`);
 
         fs.writeFileSync(tempInput, mediaBuffer);
 
-        // 4. FFmpeg Conversion (Tunakata sekunde 15 tu kwa haraka)
         try {
             await execAsync(`ffmpeg -i "${tempInput}" -vn -acodec pcm_s16le -ar 44100 -ac 2 -t 15 "${tempAudio}" -y`);
         } catch (e) {
-            console.log("FFmpeg missing or failed, trying direct identification...");
-            fs.copySync(tempInput, tempAudio); // Jaribu kutumia original kama ffmpeg imefeli
+            fs.copySync(tempInput, tempAudio);
         }
 
-        // 5. ACRCloud Identification
         if (!settings.acrcloud || !settings.acrcloud.access_key) {
             return sock.sendMessage(chatId, { text: '❌ *ACRCloud API haijawekwa kwenye settings.js!*' });
         }
@@ -72,43 +66,43 @@ async function shazamCommand(sock, chatId, message) {
 
         const result = await acr.identify(fs.readFileSync(tempAudio));
 
-        // Cleanup haraka
         if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
         if (fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
 
-        // 6. Response Logic
         if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
             const song = result.metadata.music[0];
             const title = song.title || 'Unknown';
             const artist = song.artists?.[0]?.name || 'Unknown';
 
-            const caption = `
-🎵 * SHAZAM IDENTIFIED!*
-━━━━━━━━━━━━━━━━━━━━━━
-📌 *Title:* ${title}
-👤 *Artist:* ${artist}
-💿 *Album:* ${song.album?.name || 'N/A'}
-━━━━━━━━━━━━━━━━━━━━━━
-_Bonyeza button hapa chini kupata wimbo huu._`;
+            const caption = `🎵 *SHAZAM IDENTIFIED!*\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `📌 *Title:* ${title}\n` +
+                `👤 *Artist:* ${artist}\n` +
+                `💿 *Album:* ${song.album?.name || 'N/A'}\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `_Bonyeza button kupata wimbo huu._`;
+
+            // --- FIXED BUTTON LOGIC ---
+            // Tunatuma ID kama '.play Artist Title' ili index.js iisome kama command kamili
+            const playCommandId = `.play ${artist} ${title}`;
 
             await sendButtons(sock, chatId, {
                 title: '🎧 SONG FINDER',
                 text: caption,
-                footer: 'Mickey Glitch Tech',
+                footer: 'MICKEY GLITCH V3.0',
                 buttons: [
-                    { id: `.play ${encodeURIComponent(artist)}_${encodeURIComponent(title)}`, text: '📥 DOWNLOAD MP3' }
+                    { id: playCommandId, text: '📥 DOWNLOAD MP3' }
                 ]
             }, { quoted: message });
 
         } else {
-            await sock.sendMessage(chatId, { text: '❌ *Wimbo haukutambulika. Jaribu sehemu yenye sauti safi.*' });
+            await sock.sendMessage(chatId, { text: '❌ *Wimbo haukutambulika.*' });
         }
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
         console.error("SHAZAM ERROR:", err);
-        // Usitume error ndefu kwa user, mpe tu ishara kuwa imefeli
     }
 }
 
