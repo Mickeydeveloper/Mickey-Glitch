@@ -1,8 +1,8 @@
-const settings = require('../settings');
+const { sendInteractiveMessage } = require('gifted-btns');
 
 /**
- * Halotel Command - Payment Numbers (Copy + Call)
- * Muundo sawa na ownerCommand
+ * Halotel Command - Payment Numbers (Copy Buttons)
+ * Inatumia gifted-btns sendInteractiveMessage
  */
 async function halotelCommand(sock, chatId, message) {
     try {
@@ -10,7 +10,7 @@ async function halotelCommand(sock, chatId, message) {
 
 Chagua mtandao wa kulipa. Namba itakopiwa moja kwa moja ukibonyeza button.`;
 
-        await sock.sendMessage(chatId, {
+        await sendInteractiveMessage(sock, chatId, {
             text: paymentText,
             interactiveButtons: [
                 { 
