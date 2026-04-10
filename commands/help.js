@@ -47,10 +47,10 @@ const aliveCommand = async (sock, chatId, message) => {
                                 title: '🎮 COMMANDS',
                                 rows: [
                                     { header: '📋', title: 'Menu', description: 'View all commands', id: 'cmd_menu' },
-                                    { header: '⚡', title: 'Ping', description: 'Speed test', id: 'cmd_ping' },
-                                    { header: '👑', title: 'Owner', description: 'Owner info', id: 'cmd_owner' },
-                                    { header: '❤️', title: 'Alive', description: 'Bot status check', id: 'cmd_alive' },
-                                    { header: '⚙️', title: 'Settings', description: 'Bot configuration', id: 'cmd_settings' }
+                                    { header: '⚡', title: 'Ping', description: 'Speed test', id: '.ping' },
+                                    { header: '👑', title: 'Owner', description: 'Owner info', id: '.owner' },
+                                    { header: '❤️', title: 'Alive', description: 'Bot status check', id: '.alive' },
+                                    { header: '⚙️', title: 'Settings', description: 'Bot configuration', id: '.settings' }
                                 ]
                             },
                             {
