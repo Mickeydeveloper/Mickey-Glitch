@@ -407,6 +407,14 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }, { quoted: message });
                 commandExecuted = true;
             }
+        } else if (buttonId && buttonId.startsWith('cmd_')) {
+            // Handle interactive message button responses from help.js
+            try {
+                await helpCommand.handleButtonResponse(sock, message, buttonId, chatId);
+            } catch (e) {
+                console.error('Error handling cmd_ button:', e);
+            }
+            commandExecuted = true;
         } else if (buttonId && buttonId.startsWith('help_cat_')) {
             // Pass button ID directly without re-encoding
             console.log(`[MAIN] Help category button clicked: ${buttonId}`);
