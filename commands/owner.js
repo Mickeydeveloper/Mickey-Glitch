@@ -1,48 +1,56 @@
 const settings = require('../settings');
 
 /**
- * Handles the Owner Information Command
- * Improvements: Better UI, centralized error handling, and streamlined flow.
+ * Halotel Command - Payment Numbers (Copy + Call)
+ * Muundo sawa na ownerCommand
  */
-async function ownerCommand(sock, chatId, message) {
+async function halotelCommand(sock, chatId, message) {
     try {
-        const ownerNumberRaw = settings.ownerNumber || '255615944741';
-        const waLink = `https://wa.me/${ownerNumberRaw}`;
-        const channelLink = 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610';
+        const paymentText = `💰 *MICKEY GLITCH - LIPIA BOT*
+
+Chagua mtandao wa kulipa. Namba itakopiwa moja kwa moja ukibonyeza button.`;
 
         await sock.sendMessage(chatId, {
-            text: `*👑 ${settings.botOwner}\n\n📱 Contact: +${ownerNumberRaw}\n💼 Developer of ${settings.botName}*`,
+            text: paymentText,
             interactiveButtons: [
+                { 
+                    name: 'cta_copy', 
+                    buttonParamsJson: JSON.stringify({ 
+                        display_text: '📋 HALOTEL', 
+                        copy_code: '0615944741' 
+                    }) 
+                },
+                { 
+                    name: 'cta_copy', 
+                    buttonParamsJson: JSON.stringify({ 
+                        display_text: '📋 YAS', 
+                        copy_code: '0711765335' 
+                    }) 
+                },
+                { 
+                    name: 'cta_copy', 
+                    buttonParamsJson: JSON.stringify({ 
+                        display_text: '📋 AZAMPESA', 
+                        copy_code: '1615944741' 
+                    }) 
+                },
                 { 
                     name: 'cta_call', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📞 Call Owner', 
-                        phone_number: ownerNumberRaw 
-                    }) 
-                },
-                { 
-                    name: 'cta_url', 
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '💬 Send Message', 
-                        url: waLink 
-                    }) 
-                },
-                { 
-                    name: 'cta_url', 
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '📺 Join Channel', 
-                        url: channelLink 
+                        display_text: '📞 Piga Halotel', 
+                        phone_number: '0615944741' 
                     }) 
                 }
-            ]
+            ],
+            footer: "Mickey Glitch Tech • Powered by LOFT"
         }, { quoted: message });
 
     } catch (error) {
-        console.error('Owner Command Error:', error);
+        console.error('Halotel Command Error:', error);
         await sock.sendMessage(chatId, {
-            text: '❌ *Error:* Failed to retrieve owner details. Please contact support.'
+            text: '❌ *Hitilafu imetokea wakati wa kufungua menu ya malipo.*'
         }, { quoted: message });
     }
 }
 
-module.exports = ownerCommand;
+module.exports = halotelCommand;
