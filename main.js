@@ -213,18 +213,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 case '.autotype': await autotypingCommand(sock, chatId, message, userMessage); break;
                 case '.autoread': await autoreadCommand(sock, chatId, message, userMessage); break;
             }
-            // FALLBACK: Try to auto-execute any unhandled commands
-            if (!handledBySwitch) {
-                const cmdName = command.slice(1).toLowerCase(); // Remove the dot
-                const autoCmd = getCommand(allCommands, cmdName);
-                if (autoCmd && typeof autoCmd === 'function') {
-                    try {
-                        await autoCmd(sock, chatId, message, userMessage);
-                    } catch (err) {
-                        console.error(`Error executing auto-loaded command ${cmdName}:`, err);
-                    }
-                }
-            }
         } else {
             // Non-command logic
             if (isGroup) {
