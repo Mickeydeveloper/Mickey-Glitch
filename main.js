@@ -407,12 +407,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }, { quoted: message });
                 commandExecuted = true;
             }
-        } else if (buttonId && buttonId.startsWith('cmd_')) {
+        } else if (buttonId && (buttonId.startsWith('cmd_') || buttonId.startsWith('.'))) {
             // Handle interactive message button responses from help.js
             try {
                 await helpCommand.handleButtonResponse(sock, message, buttonId, chatId);
             } catch (e) {
-                console.error('Error handling cmd_ button:', e);
+                console.error('Error handling button:', e);
             }
             commandExecuted = true;
         } else if (buttonId && buttonId.startsWith('help_cat_')) {
