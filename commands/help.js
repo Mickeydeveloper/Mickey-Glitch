@@ -46,7 +46,7 @@ const aliveCommand = async (sock, chatId, message) => {
                             {
                                 title: '🎮 COMMANDS',
                                 rows: [
-                                    { header: '📋', title: 'Menu', description: 'View all commands', id: 'cmd_menu' },
+                                    { header: '📋', title: 'Menu', description: 'View all commands', id: '.help' },
                                     { header: '⚡', title: 'Ping', description: 'Speed test', id: '.ping' },
                                     { header: '👑', title: 'Owner', description: 'Owner info', id: '.owner' },
                                     { header: '❤️', title: 'Alive', description: 'Bot status check', id: '.alive' },
@@ -201,82 +201,82 @@ const handleButtonResponse = async (sock, message, buttonId, chatId) => {
         // Comprehensive command mapping with all commands
         const commandMap = {
             // Main Commands
-            'cmd_menu': 'cmd_menu',
-            'cmd_ping': 'cmd_ping',
-            'cmd_owner': 'cmd_owner',
-            'cmd_alive': 'cmd_alive',
-            'cmd_settings': 'cmd_settings',
+            '.help': '.help',
+            '.ping': '.ping',
+            '.owner': '.owner',
+            '.alive': '.alive',
+            '.settings': '.settings',
 
             // AI & NLP
-            'cmd_ai': 'cmd_ai',
-            'cmd_chatbot': 'cmd_chatbot',
-            'cmd_translate': 'cmd_translate',
-            'cmd_tts': 'cmd_tts',
-            'cmd_truecaller': 'cmd_truecaller',
+            '.ai': '.ai',
+            '.chatbot': '.chatbot',
+            '.translate': '.translate',
+            '.tts': '.tts',
+            '.truecaller': '.truecaller',
 
             // Media
-            'cmd_play': 'cmd_play',
-            'cmd_video': 'cmd_video',
-            'cmd_imagine': 'cmd_imagine',
-            'cmd_sticker': 'cmd_sticker',
-            'cmd_shazam': 'cmd_shazam',
+            '.play': '.play',
+            '.video': '.video',
+            '.imagine': '.imagine',
+            '.sticker': '.sticker',
+            '.shazam': '.shazam',
 
             // Downloads
-            'cmd_tiktok': 'cmd_tiktok',
-            'cmd_instagram': 'cmd_instagram',
-            'cmd_facebook': 'cmd_facebook',
-            'cmd_url': 'cmd_url',
-            'cmd_songid': 'cmd_songid',
+            '.tiktok': '.tiktok',
+            '.instagram': '.instagram',
+            '.facebook': '.facebook',
+            '.url': '.url',
+            '.songid': '.songid',
 
             // Stickers & Art
-            'cmd_stickercrop': 'cmd_stickercrop',
-            'cmd_sticker-alt': 'cmd_sticker-alt',
-            'cmd_stickertelegram': 'cmd_stickertelegram',
-            'cmd_character': 'cmd_character',
+            '.stickercrop': '.stickercrop',
+            '.sticker-alt': '.sticker-alt',
+            '.stickertelegram': '.stickertelegram',
+            '.character': '.character',
 
             // Group Management
-            'cmd_mute': 'cmd_mute',
-            'cmd_unmute': 'cmd_unmute',
-            'cmd_kick': 'cmd_kick',
-            'cmd_add': 'cmd_add',
-            'cmd_promote': 'cmd_promote',
-            'cmd_demote': 'cmd_demote',
-            'cmd_tag': 'cmd_tag',
-            'cmd_tagall': 'cmd_tagall',
-            'cmd_tagnotadmin': 'cmd_tagnotadmin',
-            'cmd_hidetag': 'cmd_hidetag',
+            '.mute': '.mute',
+            '.unmute': '.unmute',
+            '.kick': '.kick',
+            '.add': '.add',
+            '.promote': '.promote',
+            '.demote': '.demote',
+            '.tag': '.tag',
+            '.tagall': '.tagall',
+            '.tagnotadmin': '.tagnotadmin',
+            '.hidetag': '.hidetag',
 
             // Protection
-            'cmd_antilink': 'cmd_antilink',
-            'cmd_antitag': 'cmd_antitag',
-            'cmd_antibadword': 'cmd_antibadword',
-            'cmd_anticall': 'cmd_anticall',
-            'cmd_antidelete': 'cmd_antidelete',
-            'cmd_mention': 'cmd_mention',
-            'cmd_antistatusmention': 'cmd_antistatusmention',
-            'cmd_pmblocker': 'cmd_pmblocker',
-            'cmd_ghost': 'cmd_ghost',
-            'cmd_warn': 'cmd_warn',
+            '.antilink': '.antilink',
+            '.antitag': '.antitag',
+            '.antibadword': '.antibadword',
+            '.anticall': '.anticall',
+            '.antidelete': '.antidelete',
+            '.mention': '.mention',
+            '.antistatusmention': '.antistatusmention',
+            '.pmblocker': '.pmblocker',
+            '.ghost': '.ghost',
+            '.warn': '.warn',
 
             // Profile & Avatar
-            'cmd_setpp': 'cmd_setpp',
-            'cmd_getpp': 'cmd_getpp',
-            'cmd_pp': 'cmd_pp',
-            'cmd_groupmanage': 'cmd_groupmanage',
-            'cmd_whois': 'cmd_whois',
+            '.setpp': '.setpp',
+            '.getpp': '.getpp',
+            '.pp': '.pp',
+            '.groupmanage': '.groupmanage',
+            '.whois': '.whois',
 
             // Fun
-            'cmd_compliment': 'cmd_compliment',
-            'cmd_topmembers': 'cmd_topmembers',
-            'cmd_lyrics': 'cmd_lyrics',
-            'cmd_weather': 'cmd_weather',
+            '.compliment': '.compliment',
+            '.topmembers': '.topmembers',
+            '.lyrics': '.lyrics',
+            '.weather': '.weather',
 
             // Cancel
-            'cmd_cancel': null
+            '.cancel': null
         };
 
         // Handle cancel option
-        if (selectedId === 'cmd_cancel') {
+        if (selectedId === '.cancel') {
             await sock.sendMessage(chatId, { 
                 text: '✅ *Menu Closed*\n\nType *.help* anytime to open menu again',
                 contextInfo: { quotedMessage: message.message }

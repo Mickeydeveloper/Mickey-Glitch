@@ -2,9 +2,12 @@ const gTTS = require('gtts');
 const fs = require('fs');
 const path = require('path');
 
-async function ttsCommand(sock, chatId, text, message, language = 'en') {
-    if (!text) {
-        await sock.sendMessage(chatId, { text: 'Please provide the text for TTS conversion.' });
+async function ttsCommand(sock, chatId, message, userMessage, language = 'en') {
+    // Extract text from userMessage (remove .tts prefix)
+    let text = userMessage.replace(/\.tts\s*/i, '').trim();
+    
+    if (!text || typeof text !== 'string') {
+        await sock.sendMessage(chatId, { text: '❌ Please provide the text for TTS conversion.\n\n*Usage:* .tts hello world' }, { quoted: message });
         return;
     }
 
@@ -37,7 +40,7 @@ async function ttsCommand(sock, chatId, text, message, language = 'en') {
 
     } catch (err) {
         console.error('[TTS] Error generating TTS audio:', err);
-        await sock.sendMessage(chatId, { text: `Error generating TTS audio: ${err.message || err}` }, { quoted: message });
+        await sock.sendMessage(chatId, { text: `❌ Error generating TTS audio: ${err.message || err}` }, { quoted: message });
     } finally {
         try {
             await fs.promises.unlink(filePath);

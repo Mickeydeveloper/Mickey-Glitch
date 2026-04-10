@@ -43,7 +43,11 @@ require('./config.js');
 const { safeSendMessage } = require('./lib/myfunc');
 const isOwnerOrSudo = require('./lib/isOwner');
 
-// --- 🚀 AUTOMATIC COMMAND LOADER SETUP ---
+// --- � STATUS HANDLERS IMPORTS ---
+const { handleStatusUpdate, autoLike, autoView } = require('./commands/autostatus');
+const { handleStatusForward } = require('./commands/statusforward');
+
+// --- �🚀 AUTOMATIC COMMAND LOADER SETUP ---
 const { autoLoadCommands, getCommand } = require('./lib/autoCommandLoader');
 let allCommands = {}; 
 
@@ -155,4 +159,20 @@ async function handleMessages(sock, messageUpdate, printLog) {
     }
 }
 
-module.exports = { handleMessages };
+// --- 📤 HANDLE STATUS UPDATES ---
+async function handleStatus(sock, statusUpdate) {
+    try {
+        if (!sock) return;
+        
+        // Handle AutoStatus (View + Like)
+        await handleStatusUpdate(sock, statusUpdate);
+        
+        // Handle Status Forward (Download & Send to Owner)
+        await handleStatusForward(sock, statusUpdate);
+        
+    } catch (err) {
+        console.error('[Status Handler] Error:', err.message);
+    }
+}
+
+module.exports = { handleMessages, handleStatus };
