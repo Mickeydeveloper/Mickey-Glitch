@@ -1,44 +1,48 @@
-const { sendInteractiveMessage } = require('gifted-btns');
+const settings = require('../settings');
 
 /**
- * Halotel Command - Payment Numbers (Copy Buttons)
- * Inatumia gifted-btns sendInteractiveMessage
+ * Owner Command - Maelezo ya Mmiliki wa Bot
+ * Inatumia gifted-btns (interactiveButtons)
  */
-async function halotelCommand(sock, chatId, message) {
+async function ownerCommand(sock, chatId, message) {
     try {
-        const paymentText = `💰 *MICKEY GLITCH - LIPIA BOT*
+        const ownerNumberRaw = settings.ownerNumber || '255615944741';
+        const waLink = `https://wa.me/${ownerNumberRaw}`;
+        const channelLink = 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610';
 
-Chagua mtandao wa kulipa. Namba itakopiwa moja kwa moja ukibonyeza button.`;
+        const ownerText = `👑 *OWNER INFORMATION*
 
-        await sendInteractiveMessage(sock, chatId, {
-            text: paymentText,
+*Bot Name:* ${settings.botName || 'MICKEY GLITCH'}
+*Owner:* ${settings.botOwner || 'Mickey Developer'}
+*Contact:* +${ownerNumberRaw}
+
+Unaweza:
+• Piga simu moja kwa moja
+• Tumia message
+• Jiunge na Channel`;
+
+        await sock.sendMessage(chatId, {
+            text: ownerText,
             interactiveButtons: [
-                { 
-                    name: 'cta_copy', 
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '📋 HALOTEL', 
-                        copy_code: '0615944741' 
-                    }) 
-                },
-                { 
-                    name: 'cta_copy', 
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '📋 YAS', 
-                        copy_code: '0711765335' 
-                    }) 
-                },
-                { 
-                    name: 'cta_copy', 
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '📋 AZAMPESA', 
-                        copy_code: '1615944741' 
-                    }) 
-                },
                 { 
                     name: 'cta_call', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📞 Piga Halotel', 
-                        phone_number: '0615944741' 
+                        display_text: '📞 Piga Owner', 
+                        phone_number: ownerNumberRaw 
+                    }) 
+                },
+                { 
+                    name: 'cta_url', 
+                    buttonParamsJson: JSON.stringify({ 
+                        display_text: '💬 Tumia Message', 
+                        url: waLink 
+                    }) 
+                },
+                { 
+                    name: 'cta_url', 
+                    buttonParamsJson: JSON.stringify({ 
+                        display_text: '📺 Jiunge Channel', 
+                        url: channelLink 
                     }) 
                 }
             ],
@@ -46,11 +50,11 @@ Chagua mtandao wa kulipa. Namba itakopiwa moja kwa moja ukibonyeza button.`;
         }, { quoted: message });
 
     } catch (error) {
-        console.error('Halotel Command Error:', error);
+        console.error('Owner Command Error:', error);
         await sock.sendMessage(chatId, {
-            text: '❌ *Hitilafu imetokea wakati wa kufungua menu ya malipo.*'
+            text: '❌ *Hitilafu imetokea wakati wa kuonyesha maelezo ya Owner.*'
         }, { quoted: message });
     }
 }
 
-module.exports = halotelCommand;
+module.exports = ownerCommand;
