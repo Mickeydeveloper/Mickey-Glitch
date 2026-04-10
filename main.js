@@ -47,6 +47,9 @@ const os = require('os');
 const { sendButtons } = require('gifted-btns');
 const { isSudo } = require('./lib/index');
 const isOwnerOrSudo = require('./lib/isOwner');
+// --- AUTOMATIC COMMAND LOADER ---
+const { autoLoadCommands, getCommand, getCommandExports } = require('./lib/autoCommandLoader');
+let allCommands = {}; // Will be populated at startup
 const { autotypingCommand, handleAutotypingForMessage } = require('./commands/autotyping');
 const { autoreadCommand, handleAutoread } = require('./commands/autoread');
 const { autoBioCommand } = require('./commands/autobio');
@@ -100,6 +103,10 @@ const repoCommand = require('./commands/checkupdates');
 
 global.packname = settings.packname;
 global.author = settings.author;
+
+// 🚀 AUTO-LOAD ALL COMMANDS AT STARTUP
+allCommands = autoLoadCommands();
+console.log(`✅ Auto-loaded ${Object.keys(allCommands).length} commands from commands folder`);
 
 // --- 🛠️ FIXED HANDLER ---
 async function handleMessages(sock, messageUpdate, printLog) {
@@ -192,7 +199,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 case '.tagall': if (isGroup) await tagAllCommand(sock, chatId, message, userMessage); break;
                 case '.mute': if (isGroup) await muteCommand(sock, chatId, message); break;
                 case '.unmute': if (isGroup) await unmuteCommand(sock, chatId, message); break;
-                case '.kick': if (isGroup) await kickCommand(sock, chatId, message, userMessage); break;
+                case '.kick': if (isGroup) {
+                    const kickCmd = getCommand(allCommands, 'kick', 'kickCommand') || getCommand(allCommands, 'kick');
+                    if (kickCmd) await kickCmd(sock, chatId, message, userMessage);
+                    else console.warn('❌ kick command not found');
+                } break;
                 case '.promote': if (isGroup) await promoteCommand(sock, chatId, message, userMessage); break;
                 case '.demote': if (isGroup) await demoteCommand(sock, chatId, message, userMessage); break;
                 case '.ban': if (isGroup) await banCommand(sock, chatId, message, userMessage); break;
@@ -201,6 +212,18 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 case '.setpp': if (isOwnerOrSudoCheck) await setProfilePicture(sock, chatId, message); break;
                 case '.autotype': await autotypingCommand(sock, chatId, message, userMessage); break;
                 case '.autoread': await autoreadCommand(sock, chatId, message, userMessage); break;
+            }
+            // FALLBACK: Try to auto-execute any unhandled commands
+            if (!handledBySwitch) {
+                const cmdName = command.slice(1).toLowerCase(); // Remove the dot
+                const autoCmd = getCommand(allCommands, cmdName);
+                if (autoCmd && typeof autoCmd === 'function') {
+                    try {
+                        await autoCmd(sock, chatId, message, userMessage);
+                    } catch (err) {
+                        console.error(`Error executing auto-loaded command ${cmdName}:`, err);
+                    }
+                }
             }
         } else {
             // Non-command logic

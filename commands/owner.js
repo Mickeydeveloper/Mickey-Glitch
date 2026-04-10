@@ -12,15 +12,12 @@ async function ownerCommand(sock, chatId, message) {
         const ownerNumberRaw = settings.ownerNumber || '255615944741';
         const waLink = `https://wa.me/${ownerNumberRaw}`;
         
-        // 1. Generate QR Buffer & Fetch Thumbnail in Parallel for Speed
-        const [qrBuffer, thumbnailBuffer] = await Promise.all([
-            QRCode.toBuffer(waLink, { 
-                width: 600, 
-                margin: 2, 
-                color: { dark: '#000000', light: '#ffffff' } 
-            }),
-            getBuffer(settings.ownerImage || 'https://water-billing-292n.onrender.com/1761205727440.png').catch(() => null)
-        ]);
+        // 1. Generate QR Buffer
+        const qrBuffer = await QRCode.toBuffer(waLink, { 
+            width: 600, 
+            margin: 2, 
+            color: { dark: '#000000', light: '#ffffff' } 
+        });
 
         // 2. Construct Professional vCard
         const vcard = 'BEGIN:VCARD\n' +
@@ -33,69 +30,31 @@ async function ownerCommand(sock, chatId, message) {
                       `NOTE:Secure Bot Owner Contact\n` +
                       'END:VCARD';
 
-        // 3. Send Main Identity Message (Ad + Contact Card)
+        // 3. Send Main Identity Message (Contact Card)
         await sock.sendMessage(chatId, {
             contacts: {
                 displayName: settings.botOwner,
                 contacts: [{ vcard }]
-            },
-            contextInfo: {
-                externalAdReply: {
-                    title: `Contact ${settings.botOwner}`,
-                    body: `Official Developer of ${settings.botName}`,
-                    mediaType: 1,
-                    sourceUrl: waLink,
-                    thumbnail: thumbnailBuffer,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: true
-                }
             }
         }, { quoted: message });
 
         // 4. Send Scannable QR Code
         await sock.sendMessage(chatId, {
             image: qrBuffer,
-            caption: `*─「 OWNER PROFILE 」─*\n\n` +
-                     `👤 *Name:* ${settings.botOwner}\n` +
-                     `📱 *Contact:* +${ownerNumberRaw}\n` +
-                     `🔗 *Link:* ${waLink}\n\n` +
-                     `_Scan the code above to start a direct chat._`
+            caption: `*👤 ${settings.botOwner}*\n📱 +${ownerNumberRaw}\n\n_Scan to chat_`
         }, { quoted: message });
 
         // 5. Send Interactive Contact Options
-        const contactText = `
-📞 *CONTACT OWNER*
-━━━━━━━━━━━━━━━━━━━━━━
-👨‍💻 *Developer:* ${settings.botOwner}
-📱 *WhatsApp:* +${ownerNumberRaw}
-🌐 *Channel:* https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610
-
-*Choose how to contact:*
-━━━━━━━━━━━━━━━━━━━━━━`;
-
         const contactButtons = [
-            {
-                name: "cta_call",
-                buttonParamsJson: JSON.stringify({
-                    display_text: `📞 CALL OWNER`,
-                    phoneNumber: ownerNumberRaw
-                })
-            },
-            {
-                name: "cta_url",
-                buttonParamsJson: JSON.stringify({
-                    display_text: "💬 SEND MESSAGE",
-                    url: waLink
-                })
-            },
-            { id: 'owner_channel', text: '📺 JOIN CHANNEL' }
+            { id: '1', text: '📞 Call Owner', url: `tel:+${ownerNumberRaw}` },
+            { id: '2', text: '💬 Send Message', url: waLink },
+            { id: '3', text: '📺 Join Channel', url: 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610' }
         ];
 
         await sendButtons(sock, chatId, {
-            title: '👑 OWNER CONTACT',
-            text: contactText,
-            footer: 'Mickey Glitch Tech',
-            image: { url: settings.ownerImage || 'https://water-billing-292n.onrender.com/1761205727440.png' },
+            title: `👑 ${settings.botOwner}`,
+            text: `📱 *Contact:* +${ownerNumberRaw}\n*Developer of ${settings.botName}*`,
+            footer: 'Mickey Glitch',
             buttons: contactButtons
         }, { quoted: message });
 
