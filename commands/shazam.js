@@ -74,6 +74,13 @@ async function shazamCommand(sock, chatId, message) {
             const title = song.title || 'Unknown';
             const artist = song.artists?.[0]?.name || 'Unknown';
 
+            // 🛠️ FIXED: Tunasafisha jina la wimbo na msanii ili lisiwe na alama zinazovuruga button ID
+            const cleanArtist = artist.replace(/[^\w\s]/gi, '');
+            const cleanTitle = title.replace(/[^\w\s]/gi, '');
+            
+            // Hapa tunatengeneza ID bila kutumia backticks ndani ya variable kama mwanzo
+            const playCmd = ".play " + cleanArtist + " " + cleanTitle;
+
             const caption = `🎵 *SHAZAM IDENTIFIED!*\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `📌 *Title:* ${title}\n` +
@@ -82,16 +89,12 @@ async function shazamCommand(sock, chatId, message) {
                 `━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `_Bonyeza button kupata wimbo huu._`;
 
-            // --- FIXED BUTTON LOGIC ---
-            // Tunatuma ID kama '.play Artist Title' ili index.js iisome kama command kamili
-            const playCommandId = `.play ${artist} ${title}`;
-
             await sendButtons(sock, chatId, {
                 title: '🎧 SONG FINDER',
                 text: caption,
                 footer: 'MICKEY GLITCH V3.0',
                 buttons: [
-                    { id: playCommandId, text: '📥 DOWNLOAD MP3' }
+                    { id: playCmd, text: '📥 DOWNLOAD MP3' }
                 ]
             }, { quoted: message });
 
