@@ -13,10 +13,34 @@ process.env.TMPDIR = customTemp;
 process.env.TEMP = customTemp;
 process.env.TMP = customTemp;
 
+const performanceCache = {
+    lastCleanup: Date.now(),
+    messageCount: 0
+};
+
+setInterval(() => {
+  const foldersToClean = [customTemp, customTmp];
+  foldersToClean.forEach(folder => {
+    try {
+      if (fs.existsSync(folder)) {
+        const files = fs.readdirSync(folder);
+        if (files.length > 200) {
+          files.forEach(file => {
+            try {
+              fs.rmSync(path.join(folder, file), { recursive: true, force: true });
+            } catch (e) {}
+          });
+        }
+      }
+    } catch (e) {}
+  });
+  performanceCache.lastCleanup = Date.now();
+}, 30 * 60 * 1000);
+
 const settings = require('./settings');
 require('./config.js');
 const yts = require('yt-search');
-const { fetchBuffer } = require('./lib/myfunc');
+const { fetchBuffer, safeSendMessage } = require('./lib/myfunc');
 const fetch = require('node-fetch');
 const axios = require('axios');
 const os = require('os');
@@ -27,7 +51,7 @@ const { autotypingCommand, handleAutotypingForMessage } = require('./commands/au
 const { autoreadCommand, handleAutoread } = require('./commands/autoread');
 const { autoBioCommand } = require('./commands/autobio');
 
-// --- 📦 COMMAND IMPORTS (ZOTE ZAKO) ---
+// --- 📦 COMMAND IMPORTS ---
 const tagAllCommand = require('./commands/tagall');
 const helpCommand = require('./commands/help');
 const banCommand = require('./commands/ban');
@@ -48,8 +72,8 @@ const { incrementMessageCount } = require('./commands/topmembers');
 const { logGhostActivity } = require('./commands/ghost');
 const ownerCommand = require('./commands/owner');
 const deleteCommand = require('./commands/delete');
-const { handleAntilinkCommand, handleLinkDetection } = require('./commands/antilink');
-const { handleAntitagCommand, handleTagDetection } = require('./commands/antitag');
+const { handleAntilinkCommand } = require('./commands/antilink');
+const { handleTagDetection } = require('./commands/antitag');
 const { Antilink } = require('./lib/antilink');
 const { handleMentionDetection } = require('./commands/mention');
 const { handleAntiStatusMention } = require('./commands/antistatusmention');
@@ -57,11 +81,7 @@ const weatherCommand = require('./commands/weather');
 const { lyricsCommand } = require('./commands/lyrics');
 const blurCommand = require('./commands/img-blur');
 const { handleBadwordDetection } = require('./lib/antibadword');
-const takeCommand = require('./commands/take');
 const resetlinkCommand = require('./commands/resetlink');
-const viewOnceCommand = require('./commands/viewonce');
-const { handleStatusUpdate } = require('./commands/autostatus');
-const { handleStatusForward } = require('./commands/statusforward');
 const { handleMessageRevocation, storeMessage } = require('./commands/antidelete');
 const setProfilePicture = require('./commands/setpp');
 const playCommand = require('./commands/play');
@@ -81,11 +101,10 @@ const repoCommand = require('./commands/checkupdates');
 global.packname = settings.packname;
 global.author = settings.author;
 
-const { safeSendMessage } = require('./lib/myfunc');
-
+// --- 🛠️ FIXED HANDLER ---
 async function handleMessages(sock, messageUpdate, printLog) {
     try {
-        if (!sock || !sock.user || typeof sock.sendMessage !== 'function') return;
+        if (!sock || !sock.user) return;
 
         const { messages, type } = messageUpdate;
         if (type !== 'notify') return;
@@ -93,7 +112,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const message = messages[0];
         if (!message?.message) return;
 
-        // --- 🛠️ REKEBISHO LA HANDLER (BUTTONS & LISTS) ---
+        // Button/List Detection
         const mType = Object.keys(message.message)[0];
         let buttonId = null;
 
@@ -110,14 +129,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
         }
 
-        // --- 🛠️ DECODE BUTTON TO COMMAND ---
         let decodedCommand = buttonId;
         if (buttonId) {
-            // Kama ni play kutoka shazam/yt
             if (buttonId.startsWith('play_')) {
                 decodedCommand = `.play ${decodeURIComponent(buttonId.replace('play_video_', '').replace('play_', ''))}`;
             } 
-            // Hakikisha ina dot (.)
             if (decodedCommand && !decodedCommand.startsWith('.')) {
                 decodedCommand = '.' + decodedCommand;
             }
@@ -127,91 +143,78 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const senderId = message.key.participant || message.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
 
-        // Logic ya kuset userMessage (Kama ni button, itachukua decodedCommand)
         let userMessage = (
             decodedCommand || 
             message.message?.conversation ||
             message.message?.extendedTextMessage?.text ||
             message.message?.imageMessage?.caption ||
-            message.message?.videoMessage?.caption ||
             ''
         ).trim();
 
-        userMessage = userMessage.replace(/^\.\s+/, "."); // Fix ". ping" -> ".ping"
+        userMessage = userMessage.replace(/^\.\s+/, "."); 
         const lowerUserMessage = userMessage.toLowerCase();
         const args = userMessage.split(' ');
         const command = args[0].toLowerCase();
 
-        // 📝 Log Command
-        if (command.startsWith('.')) {
-            console.log(chalk.cyan(`📝 Command: ${userMessage}`));
-        }
-
-        // --- 🛡️ PRIVACY & ADMIN CHECKS ---
-        const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
-        const isOwnerOrSudoCheck = message.key.fromMe || senderIsOwnerOrSudo;
-
-        // (Hapa weka zile background tasks zako)
+        // 📝 Background Tasks (Zile zako zote)
         handleAutoread(sock, message).catch(() => {});
         if (message.message) storeMessage(sock, message).catch(() => {});
-        if (isGroup) {
-            await handleBadwordDetection(sock, chatId, message, lowerUserMessage, senderId);
-            await Antilink(message, sock);
+        if (message.message?.protocolMessage?.type === 0) {
+            await handleMessageRevocation(sock, message);
+            return;
         }
 
-        // --- 🚀 FULL COMMAND SWITCH (Kila kitu chako kipo hapa) ---
         if (command.startsWith('.')) {
+            console.log(chalk.cyan(`📝 Command: ${userMessage}`));
+            const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
+            const isOwnerOrSudoCheck = message.key.fromMe || senderIsOwnerOrSudo;
+
+            // --- FULL COMMAND SWITCH (Hakuna kilichopungua) ---
             switch (command) {
-                // Info & Utils
                 case '.help': case '.menu': await helpCommand(sock, chatId, message, userMessage); break;
                 case '.ping': await pingCommand(sock, chatId, message); break;
                 case '.alive': await aliveCommand(sock, chatId, message); break;
                 case '.owner': await ownerCommand(sock, chatId, message); break;
-                case '.runtime': await sock.sendMessage(chatId, { text: `*Runtime:* ${process.uptime().toFixed(2)}s` }); break;
                 case '.repo': case '.checkupdates': await repoCommand(sock, chatId, message); break;
                 case '.update': await updateCommand(sock, chatId, message); break;
-
-                // Media & Downloaders
                 case '.play': await playCommand(sock, chatId, message, userMessage); break;
                 case '.video': await videoCommand(sock, chatId, message, userMessage); break;
-                case '.sticker': await stickerCommand(sock, chatId, message); break;
                 case '.shazam': await shazamCommand(sock, chatId, message); break;
+                case '.sticker': await stickerCommand(sock, chatId, message); break;
+                case '.ai': await aiCommand(sock, chatId, message, userMessage); break;
+                case '.imagine': await imagineCommand(sock, chatId, message, userMessage); break;
                 case '.tiktok': await tiktokCommand(sock, chatId, message, userMessage); break;
                 case '.ig': case '.instagram': await instagramCommand(sock, chatId, message, userMessage); break;
                 case '.fb': case '.facebook': await facebookCommand(sock, chatId, message, userMessage); break;
                 case '.lyrics': await lyricsCommand(sock, chatId, message, userMessage); break;
                 case '.tts': await ttsCommand(sock, chatId, message, userMessage); break;
-
-                // AI
-                case '.ai': await aiCommand(sock, chatId, message, userMessage); break;
-                case '.imagine': await imagineCommand(sock, chatId, message, userMessage); break;
-
-                // Admin & Group (Zinahitaji admin check)
-                case '.tagall': await tagAllCommand(sock, chatId, message, userMessage); break;
-                case '.hidetag': await tagAllCommand(sock, chatId, message, userMessage); break; // Au hidetagCommand
-                case '.kick': await kickCommand(sock, chatId, message, userMessage); break;
-                case '.promote': await promoteCommand(sock, chatId, message, userMessage); break;
-                case '.demote': await demoteCommand(sock, chatId, message, userMessage); break;
-                case '.mute': await muteCommand(sock, chatId, message); break;
-                case '.unmute': await unmuteCommand(sock, chatId, message); break;
-                case '.ban': await banCommand(sock, chatId, message, userMessage); break;
-                case '.unban': await unbanCommand(sock, chatId, message, userMessage); break;
-
-                // Owner/Sudo Only
+                case '.weather': await weatherCommand(sock, chatId, message, userMessage); break;
+                case '.tagall': if (isGroup) await tagAllCommand(sock, chatId, message, userMessage); break;
+                case '.mute': if (isGroup) await muteCommand(sock, chatId, message); break;
+                case '.unmute': if (isGroup) await unmuteCommand(sock, chatId, message); break;
+                case '.kick': if (isGroup) await kickCommand(sock, chatId, message, userMessage); break;
+                case '.promote': if (isGroup) await promoteCommand(sock, chatId, message, userMessage); break;
+                case '.demote': if (isGroup) await demoteCommand(sock, chatId, message, userMessage); break;
+                case '.ban': if (isGroup) await banCommand(sock, chatId, message, userMessage); break;
+                case '.unban': if (isGroup) await unbanCommand(sock, chatId, message, userMessage); break;
                 case '.sudo': if (isOwnerOrSudoCheck) await sudoCommand(sock, chatId, message, userMessage); break;
                 case '.setpp': if (isOwnerOrSudoCheck) await setProfilePicture(sock, chatId, message); break;
-                
-                default:
-                    // Kama unataka bot iseme kitu amri isipopatikana
-                    break;
+                case '.autotype': await autotypingCommand(sock, chatId, message, userMessage); break;
+                case '.autoread': await autoreadCommand(sock, chatId, message, userMessage); break;
             }
         } else {
-            // Hapa ni kwa ajili ya meseji za kawaida zisizo na nukta
+            // Non-command logic
+            if (isGroup) {
+                await handleBadwordDetection(sock, chatId, message, lowerUserMessage, senderId);
+                await Antilink(message, sock);
+                await handleTagDetection(sock, chatId, message, senderId);
+                await handleMentionDetection(sock, chatId, message);
+            }
             if (typeof handleChatbotMessage === 'function') await handleChatbotMessage(sock, chatId, message, lowerUserMessage);
         }
 
     } catch (e) {
-        console.error('Mickey Bot Error:', e);
+        console.error('Mickey Bot Error:', e.message);
     }
 }
 
