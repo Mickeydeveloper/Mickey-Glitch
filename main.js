@@ -434,6 +434,14 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await helpCommand(sock, chatId, message, '.help');
                 commandExecuted = true;
             }
+        } else if (buttonId && buttonId.startsWith('h_pkg_')) {
+            // Handle Halotel package selection
+            try {
+                await halotelCommand.handlePackageSelection(sock, message, buttonId, chatId);
+            } catch (e) {
+                console.error('Error handling halotel package:', e);
+            }
+            commandExecuted = true;
         } else if (buttonId && buttonId.startsWith('halotel_')) {
             await halotelCommand(sock, chatId, message, buttonId);
             commandExecuted = true;

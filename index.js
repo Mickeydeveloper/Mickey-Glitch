@@ -215,19 +215,14 @@ async function startXeonBotInc(){
                 printBox("BOT CONNECTED", "✨ Online & Ready ✨", chalk.bgGreen, chalk.black)
                 const botJid = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net'
                 
-                // Enhanced connection message with buttons
-                const connectText = `
-🎉 *MICKEY GLITCH BOT CONNECTED* 🎉
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🟢 *Status:* Online & Ready
+                // Compact connection message
+                const connectText = `🎉 *MICKEY GLITCH ONLINE* 🎉
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🟢 *Status:* Ready
 🤖 *Bot:* ${global.botname}
-👤 *Owner:* Mickey Dady
 📅 *Date:* ${new Date().toLocaleDateString()}
-⏰ *Time:* ${new Date().toLocaleTimeString()}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-*Bot is now active and ready to serve!*
-*Use .help to explore commands*
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*Use .help to explore commands*`;
 
                 const connectButtons = [
                     { id: '.help', text: '📋 HELP MENU' },
@@ -236,14 +231,24 @@ async function startXeonBotInc(){
                 ];
 
                 try {
-                    await sendButtons(XeonBotInc, botJid, {
-                        title: '🎉 BOT CONNECTED',
-                        text: connectText,
-                        footer: 'Mickey Glitch Tech',
-                        buttons: connectButtons
+                    // Send with image as big ad
+                    await XeonBotInc.sendMessage(botJid, {
+                        image: { url: 'https://water-billing-292n.onrender.com/1761205727440.jpg' },
+                        caption: connectText,
+                        contextInfo: {
+                            externalAdReply: {
+                                title: '🎉 BOT CONNECTED',
+                                body: 'Mickey Glitch Tech',
+                                mediaUrl: 'https://water-billing-292n.onrender.com/1761205727440.jpg',
+                                mediaType: 1,
+                                renderLargerThumbnail: true,
+                                sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
+                            }
+                        }
                     });
                 } catch (e) {
-                    // Fallback to simple text if buttons fail
+                    // Fallback to simple text if image fails
+                    console.log('Image send failed, using text fallback:', e.message);
                     await XeonBotInc.sendMessage(botJid, { text: connectText });
                 }
             }

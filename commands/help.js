@@ -35,6 +35,29 @@ const aliveCommand = async (sock, chatId, message) => {
 │  ⏳ *Up:* ${runtimeStr}
 └────────────────────┘`;
 
+        // Send big ad image first
+        try {
+            await sock.sendMessage(chatId, {
+                image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
+                caption: '🎉 **MICKEY GLITCH - COMMAND MENU** 🎉',
+                contextInfo: {
+                    externalAdReply: {
+                        title: '📋 HELP MENU',
+                        body: 'Click buttons below to explore commands',
+                        mediaUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
+                        mediaType: 1,
+                        renderLargerThumbnail: true,
+                        sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
+                    }
+                }
+            });
+        } catch (imgErr) {
+            console.log('Image ad failed:', imgErr.message);
+        }
+
+        // Then send interactive menu
+        await new Promise(r => setTimeout(r, 500));
+
         return await sendInteractiveMessage(sock, chatId, {
             text: helpText,
             interactiveButtons: [

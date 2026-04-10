@@ -20,6 +20,85 @@ const PACKAGES = [
 ];
 
 // ────────────────────────────────────────────────
+// HANDLER FOR PACKAGE SELECTION
+// ────────────────────────────────────────────────
+async function handlePackageSelection(sock, message, packageId, chatId) {
+    try {
+        console.log(`[HALOTEL] Package selected: ${packageId}`);
+        
+        // Extract GB amount from ID
+        const gbMatch = packageId.match(/h_pkg_(\d+)/);
+        if (!gbMatch) {
+            await sock.sendMessage(chatId, { 
+                text: '❌ Error: Invalid package ID',
+                contextInfo: { quotedMessage: message.message }
+            });
+            return;
+        }
+
+        const gb = parseInt(gbMatch[1]);
+        const pkg = PACKAGES.find(p => p.gb === gb);
+
+        if (!pkg) {
+            await sock.sendMessage(chatId, { 
+                text: `❌ Error: Package not found for ${gb}GB`,
+                contextInfo: { quotedMessage: message.message }
+            });
+            return;
+        }
+
+        const payMsg = `✅ *ULIYOCHAGUA:* GB ${pkg.gb}
+💰 *KIASI CHA KULIPA:* TSh ${pkg.price.toLocaleString()}/=
+📦 *PACKAGE:* ${pkg.label}
+________________________________
+
+*BONYEZA BUTTON CHINI KU-COPY NAMBA:*
+_Copy namba kisha lipa na utume screenshot (ss) hapa._`;
+
+        const paymentButtons = [
+            {
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '💳 HALOTEL (0615944741)',
+                    copy_code: '0615944741'
+                })
+            },
+            {
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '💳 YAS (0711765335)',
+                    copy_code: '0711765335'
+                })
+            },
+            {
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '💳 AZAMPESA (1615944741)',
+                    copy_code: '1615944741'
+                })
+            }
+        ];
+
+        return await sendInteractiveMessage(sock, chatId, {
+            text: payMsg,
+            footer: CONFIG.FOOTER,
+            interactiveButtons: paymentButtons
+        }, { quoted: message });
+
+    } catch (error) {
+        console.error('[HALOTEL] Error in handlePackageSelection:', error);
+        try {
+            await sock.sendMessage(chatId, { 
+                text: `⚠️ Hitilafu imetokea! ${error.message}`,
+                contextInfo: { quotedMessage: message.message }
+            });
+        } catch (e) {
+            console.error('Could not send error message:', e);
+        }
+    }
+}
+
+// ────────────────────────────────────────────────
 // HALOTEL COMMAND LOGIC
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, userMessage = '') {
@@ -66,52 +145,12 @@ ________________________________
             }, { quoted: message });
         }
 
-        // ==================== 2. PAYMENT LOGIC (SINGLE SELECT HANDLER) ====================
-        if (budy.startsWith('h_pkg_')) {
-            const selectedGB = budy.replace('h_pkg_', '');
-            const kiasi = parseInt(selectedGB) * CONFIG.PRICE_PER_GB;
-
-            const payMsg = `✅ *ULIYOCHAGUA:* GB ${selectedGB}
-💰 *KIASI CHA KULIPA:* TSh ${kiasi.toLocaleString()}/=
-________________________________
-
-*BONYEZA BUTTON CHINI KU-COPY NAMBA:*
-_Copy namba kisha lipa na utume screenshot (ss) hapa._`;
-
-            const paymentButtons = [
-                {
-                    name: 'cta_copy',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '💳 HALOTEL (0615944741)',
-                        copy_code: '0615944741'
-                    })
-                },
-                {
-                    name: 'cta_copy',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '💳 YAS (0711765335)',
-                        copy_code: '0711765335'
-                    })
-                },
-                {
-                    name: 'cta_copy',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '💳 AZAMPESA (1615944741)',
-                        copy_code: '1615944741'
-                    })
-                }
-            ];
-
-            return await sendInteractiveMessage(sock, jid, {
-                text: payMsg,
-                footer: CONFIG.FOOTER,
-                interactiveButtons: paymentButtons
-            }, { quoted: message });
-        }
-
     } catch (e) {
         console.error('Halotel Error:', e);
     }
 }
 
-module.exports = { halotelCommand, CONFIG, PACKAGES };
+module.exports = { halotelCommand, CONFIG, PACKAGES, handlePackageSelection };
+
+// Attach handler to main function
+halotelCommand.handlePackageSelection = handlePackageSelection;
