@@ -35,29 +35,6 @@ const aliveCommand = async (sock, chatId, message) => {
 │  ⏳ *Up:* ${runtimeStr}
 └────────────────────┘`;
 
-        // Send big ad image first
-        try {
-            await sock.sendMessage(chatId, {
-                image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
-                caption: '🎉 **MICKEY GLITCH - COMMAND MENU** 🎉',
-                contextInfo: {
-                    externalAdReply: {
-                        title: '📋 HELP MENU',
-                        body: 'Click buttons below to explore commands',
-                        mediaUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
-                        mediaType: 1,
-                        renderLargerThumbnail: true,
-                        sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
-                    }
-                }
-            });
-        } catch (imgErr) {
-            console.log('Image ad failed:', imgErr.message);
-        }
-
-        // Then send interactive menu
-        await new Promise(r => setTimeout(r, 500));
-
         return await sendInteractiveMessage(sock, chatId, {
             text: helpText,
             interactiveButtons: [
@@ -69,117 +46,128 @@ const aliveCommand = async (sock, chatId, message) => {
                             {
                                 title: '🎮 COMMANDS',
                                 rows: [
-                                    { header: '📋', title: 'Menu', description: 'View all commands', id: '.menu' },
-                                    { header: '⚡', title: 'Ping', description: 'Speed test', id: '.ping' },
-                                    { header: '👑', title: 'Owner', description: 'Owner info', id: '.owner' },
-                                    { header: '❤️', title: 'Alive', description: 'Bot status check', id: '.alive' },
-                                    { header: '⚙️', title: 'Settings', description: 'Bot configuration', id: '.settings' }
+                                    { header: '📋', title: 'Menu', description: 'View all commands', id: 'cmd_menu' },
+                                    { header: '⚡', title: 'Ping', description: 'Speed test', id: 'cmd_ping' },
+                                    { header: '👑', title: 'Owner', description: 'Owner info', id: 'cmd_owner' },
+                                    { header: '❤️', title: 'Alive', description: 'Bot status check', id: 'cmd_alive' },
+                                    { header: '⚙️', title: 'Settings', description: 'Bot configuration', id: 'cmd_settings' }
                                 ]
                             },
                             {
                                 title: '🤖 AI & NLP',
                                 rows: [
-                                    { header: '🤖', title: 'AI', description: 'AI assistant', id: '.ai' },
-                                    { header: '💬', title: 'Chatbot', description: 'Interactive chat', id: '.chatbot' },
-                                    { header: '🔤', title: 'Translate', description: 'Translate text', id: '.translate' },
-                                    { header: '🎯', title: 'TTS', description: 'Text to speech', id: '.tts' },
-                                    { header: '🔍', title: 'Truecaller', description: 'Lookup phone', id: '.truecaller' }
+                                    { header: '🤖', title: 'AI', description: 'AI assistant', id: 'cmd_ai' },
+                                    { header: '💬', title: 'Chatbot', description: 'Interactive chat', id: 'cmd_chatbot' },
+                                    { header: '🔤', title: 'Translate', description: 'Translate text', id: 'cmd_translate' },
+                                    { header: '🎯', title: 'TTS', description: 'Text to speech', id: 'cmd_tts' },
+                                    { header: '🔍', title: 'Truecaller', description: 'Lookup phone', id: 'cmd_truecaller' }
                                 ]
                             },
                             {
                                 title: '🎵 MEDIA',
                                 rows: [
-                                    { header: '🎵', title: 'Play', description: 'Play music', id: '.play' },
-                                    { header: '🎬', title: 'Video', description: 'Download video', id: '.video' },
-                                    { header: '🖼️', title: 'Imagine', description: 'AI image generate', id: '.imagine' },
-                                    { header: '🎭', title: 'Sticker', description: 'Create stickers', id: '.sticker' },
-                                    { header: '📸', title: 'Shazam', description: 'Identify song', id: '.shazam' }
+                                    { header: '🎵', title: 'Play', description: 'Play music', id: 'cmd_play' },
+                                    { header: '🎬', title: 'Video', description: 'Download video', id: 'cmd_video' },
+                                    { header: '🖼️', title: 'Imagine', description: 'AI image generate', id: 'cmd_imagine' },
+                                    { header: '🎭', title: 'Sticker', description: 'Create stickers', id: 'cmd_sticker' },
+                                    { header: '📸', title: 'Shazam', description: 'Identify song', id: 'cmd_shazam' }
                                 ]
                             },
                             {
                                 title: '📥 DOWNLOADS',
                                 rows: [
-                                    { header: '🎥', title: 'TikTok', description: 'Download from TikTok', id: '.tiktok' },
-                                    { header: '📷', title: 'Instagram', description: 'Download from Instagram', id: '.instagram' },
-                                    { header: '👍', title: 'Facebook', description: 'Download from Facebook', id: '.facebook' },
-                                    { header: '🔗', title: 'URL', description: 'Download from URL', id: '.url' },
-                                    { header: '🎵', title: 'SongID', description: 'Get song details', id: '.songid' }
+                                    { header: '🎥', title: 'TikTok', description: 'Download from TikTok', id: 'cmd_tiktok' },
+                                    { header: '📷', title: 'Instagram', description: 'Download from Instagram', id: 'cmd_instagram' },
+                                    { header: '👍', title: 'Facebook', description: 'Download from Facebook', id: 'cmd_facebook' },
+                                    { header: '🔗', title: 'URL', description: 'Download from URL', id: 'cmd_url' },
+                                    { header: '🎵', title: 'SongID', description: 'Get song details', id: 'cmd_songid' }
                                 ]
                             },
                             {
                                 title: '🎨 STICKERS & ART',
                                 rows: [
-                                    { header: '🎭', title: 'Sticker', description: 'Create sticker', id: '.sticker' },
-                                    { header: '✂️', title: 'StickerCrop', description: 'Crop sticker', id: '.stickercrop' },
-                                    { header: '🔄', title: 'Sticker-Alt', description: 'Alt sticker format', id: '.sticker-alt' },
-                                    { header: '✈️', title: 'StickerTelegram', description: 'Telegram sticker', id: '.stickertelegram' },
-                                    { header: '🎪', title: 'Character', description: 'Text art', id: '.character' }
+                                    { header: '🎭', title: 'Sticker', description: 'Create sticker', id: 'cmd_sticker' },
+                                    { header: '✂️', title: 'StickerCrop', description: 'Crop sticker', id: 'cmd_stickercrop' },
+                                    { header: '🔄', title: 'Sticker-Alt', description: 'Alt sticker format', id: 'cmd_sticker-alt' },
+                                    { header: '✈️', title: 'StickerTelegram', description: 'Telegram sticker', id: 'cmd_stickertelegram' },
+                                    { header: '🎪', title: 'Character', description: 'Text art', id: 'cmd_character' }
                                 ]
                             },
                             {
                                 title: '👥 GROUP MANAGE',
                                 rows: [
-                                    { header: '🔇', title: 'Mute', description: 'Mute member', id: '.mute' },
-                                    { header: '🔊', title: 'Unmute', description: 'Unmute member', id: '.unmute' },
-                                    { header: '👊', title: 'Kick', description: 'Kick member', id: '.kick' },
-                                    { header: '➕', title: 'Add', description: 'Add member', id: '.add' },
-                                    { header: '⬆️', title: 'Promote', description: 'Promote member', id: '.promote' }
+                                    { header: '🔇', title: 'Mute', description: 'Mute member', id: 'cmd_mute' },
+                                    { header: '🔊', title: 'Unmute', description: 'Unmute member', id: 'cmd_unmute' },
+                                    { header: '👊', title: 'Kick', description: 'Kick member', id: 'cmd_kick' },
+                                    { header: '➕', title: 'Add', description: 'Add member', id: 'cmd_add' },
+                                    { header: '⬆️', title: 'Promote', description: 'Promote member', id: 'cmd_promote' }
                                 ]
                             },
                             {
                                 title: '👥 GROUP MANAGE 2',
                                 rows: [
-                                    { header: '⬇️', title: 'Demote', description: 'Demote member', id: '.demote' },
-                                    { header: '🏷️', title: 'Tag', description: 'Tag members', id: '.tag' },
-                                    { header: '📢', title: 'TagAll', description: 'Tag everyone', id: '.tagall' },
-                                    { header: '🏷️❌', title: 'TagNotAdmin', description: 'Tag non-admins', id: '.tagnotadmin' },
-                                    { header: '🤐', title: 'HideTag', description: 'Hide tag mention', id: '.hidetag' }
+                                    { header: '⬇️', title: 'Demote', description: 'Demote member', id: 'cmd_demote' },
+                                    { header: '🏷️', title: 'Tag', description: 'Tag members', id: 'cmd_tag' },
+                                    { header: '📢', title: 'TagAll', description: 'Tag everyone', id: 'cmd_tagall' },
+                                    { header: '🏷️❌', title: 'TagNotAdmin', description: 'Tag non-admins', id: 'cmd_tagnotadmin' },
+                                    { header: '🤐', title: 'HideTag', description: 'Hide tag mention', id: 'cmd_hidetag' }
                                 ]
                             },
                             {
                                 title: '🛡️ PROTECTION',
                                 rows: [
-                                    { header: '🔗', title: 'AntiLink', description: 'Stop group links', id: '.antilink' },
-                                    { header: '🏷️', title: 'AntiTag', description: 'Stop tag spam', id: '.antitag' },
-                                    { header: '🚫', title: 'AntiBadword', description: 'Filter bad words', id: '.antibadword' },
-                                    { header: '📵', title: 'AntiCall', description: 'Block calls', id: '.anticall' },
-                                    { header: '🗑️', title: 'AntiDelete', description: 'Recover deleted', id: '.antidelete' }
+                                    { header: '🔗', title: 'AntiLink', description: 'Stop group links', id: 'cmd_antilink' },
+                                    { header: '🏷️', title: 'AntiTag', description: 'Stop tag spam', id: 'cmd_antitag' },
+                                    { header: '🚫', title: 'AntiBadword', description: 'Filter bad words', id: 'cmd_antibadword' },
+                                    { header: '📵', title: 'AntiCall', description: 'Block calls', id: 'cmd_anticall' },
+                                    { header: '🗑️', title: 'AntiDelete', description: 'Recover deleted', id: 'cmd_antidelete' }
                                 ]
                             },
                             {
                                 title: '🛡️ PROTECTION 2',
                                 rows: [
-                                    { header: '💬', title: 'Mention', description: 'Mention alerts', id: '.mention' },
-                                    { header: '📲', title: 'AntiStatusMention', description: 'Status mention alert', id: '.antistatusmention' },
-                                    { header: '⛔', title: 'PMBlocker', description: 'Block PMs', id: '.pmblocker' },
-                                    { header: '👻', title: 'Ghost', description: 'Ghost mode', id: '.ghost' },
-                                    { header: '⚠️', title: 'Warn', description: 'Warn member', id: '.warn' }
+                                    { header: '💬', title: 'Mention', description: 'Mention alerts', id: 'cmd_mention' },
+                                    { header: '📲', title: 'AntiStatusMention', description: 'Status mention alert', id: 'cmd_antistatusmention' },
+                                    { header: '⛔', title: 'PMBlocker', description: 'Block PMs', id: 'cmd_pmblocker' },
+                                    { header: '👻', title: 'Ghost', description: 'Ghost mode', id: 'cmd_ghost' },
+                                    { header: '⚠️', title: 'Warn', description: 'Warn member', id: 'cmd_warn' }
                                 ]
                             },
                             {
                                 title: '📊 PROFILE & AVATAR',
                                 rows: [
-                                    { header: '👤', title: 'SetPP', description: 'Set profile pic', id: '.setpp' },
-                                    { header: '👤', title: 'GetPP', description: 'Get profile pic', id: '.getpp' },
-                                    { header: '👤', title: 'PP', description: 'My profile pic', id: '.pp' },
-                                    { header: '👥', title: 'GroupManage', description: 'Group settings', id: '.groupmanage' },
-                                    { header: '📝', title: 'Whois', description: 'User info', id: '.whois' }
+                                    { header: '👤', title: 'SetPP', description: 'Set profile pic', id: 'cmd_setpp' },
+                                    { header: '👤', title: 'GetPP', description: 'Get profile pic', id: 'cmd_getpp' },
+                                    { header: '👤', title: 'PP', description: 'My profile pic', id: 'cmd_pp' },
+                                    { header: '👥', title: 'GroupManage', description: 'Group settings', id: 'cmd_groupmanage' },
+                                    { header: '📝', title: 'Whois', description: 'User info', id: 'cmd_whois' }
                                 ]
                             },
                             {
                                 title: '✨ FUN',
                                 rows: [
-                                    { header: '😂', title: 'Compliment', description: 'Get compliment', id: '.compliment' },
-                                    { header: '🏆', title: 'TopMembers', description: 'Active members', id: '.topmembers' },
-                                    { header: '🎵', title: 'Lyrics', description: 'Get lyrics', id: '.lyrics' },
-                                    { header: '⛅', title: 'Weather', description: 'Weather info', id: '.weather' },
-                                    { header: '❌', title: 'Cancel', description: 'Close menu', id: '.cancel' }
+                                    { header: '😂', title: 'Compliment', description: 'Get compliment', id: 'cmd_compliment' },
+                                    { header: '🏆', title: 'TopMembers', description: 'Active members', id: 'cmd_topmembers' },
+                                    { header: '🎵', title: 'Lyrics', description: 'Get lyrics', id: 'cmd_lyrics' },
+                                    { header: '⛅', title: 'Weather', description: 'Weather info', id: 'cmd_weather' },
+                                    { header: '❌', title: 'Cancel', description: 'Close menu', id: 'cmd_cancel' }
                                 ]
                             }
                         ]
                     })
                 }
-            ]
+            ],
+            contextInfo: {
+                externalAdReply: {
+                    title: '🎉 MICKEY GLITCH',
+                    body: 'COMMAND MENU - Bonyeza Button',
+                    mediaUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
+                    mediaType: 1,
+                    renderLargerThumbnail: true,
+                    thumbnail: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'),
+                    sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
+                }
+            }
         }, { quoted: message });
 
     } catch (e) {
@@ -213,82 +201,82 @@ const handleButtonResponse = async (sock, message, buttonId, chatId) => {
         // Comprehensive command mapping with all commands
         const commandMap = {
             // Main Commands
-            '.menu': '.menu',
-            '.ping': '.ping',
-            '.owner': '.owner',
-            '.alive': '.alive',
-            '.settings': '.settings',
+            'cmd_menu': 'cmd_menu',
+            'cmd_ping': 'cmd_ping',
+            'cmd_owner': 'cmd_owner',
+            'cmd_alive': 'cmd_alive',
+            'cmd_settings': 'cmd_settings',
             
             // AI & NLP
-            '.ai': '.ai',
-            '.chatbot': '.chatbot',
-            '.translate': '.translate',
-            '.tts': '.tts',
-            '.truecaller': '.truecaller',
+            'cmd_ai': 'cmd_ai',
+            'cmd_chatbot': 'cmd_chatbot',
+            'cmd_translate': 'cmd_translate',
+            'cmd_tts': 'cmd_tts',
+            'cmd_truecaller': 'cmd_truecaller',
             
             // Media
-            '.play': '.play',
-            '.video': '.video',
-            '.imagine': '.imagine',
-            '.sticker': '.sticker',
-            '.shazam': '.shazam',
+            'cmd_play': 'cmd_play',
+            'cmd_video': 'cmd_video',
+            'cmd_imagine': 'cmd_imagine',
+            'cmd_sticker': 'cmd_sticker',
+            'cmd_shazam': 'cmd_shazam',
             
             // Downloads
-            '.tiktok': '.tiktok',
-            '.instagram': '.instagram',
-            '.facebook': '.facebook',
-            '.url': '.url',
-            '.songid': '.songid',
+            'cmd_tiktok': 'cmd_tiktok',
+            'cmd_instagram': 'cmd_instagram',
+            'cmd_facebook': 'cmd_facebook',
+            'cmd_url': 'cmd_url',
+            'cmd_songid': 'cmd_songid',
             
             // Stickers & Art
-            '.stickercrop': '.stickercrop',
-            '.sticker-alt': '.sticker-alt',
-            '.stickertelegram': '.stickertelegram',
-            '.character': '.character',
+            'cmd_stickercrop': 'cmd_stickercrop',
+            'cmd_sticker-alt': 'cmd_sticker-alt',
+            'cmd_stickertelegram': 'cmd_stickertelegram',
+            'cmd_character': 'cmd_character',
             
             // Group Management
-            '.mute': '.mute',
-            '.unmute': '.unmute',
-            '.kick': '.kick',
-            '.add': '.add',
-            '.promote': '.promote',
-            '.demote': '.demote',
-            '.tag': '.tag',
-            '.tagall': '.tagall',
-            '.tagnotadmin': '.tagnotadmin',
-            '.hidetag': '.hidetag',
+            'cmd_mute': 'cmd_mute',
+            'cmd_unmute': 'cmd_unmute',
+            'cmd_kick': 'cmd_kick',
+            'cmd_add': 'cmd_add',
+            'cmd_promote': 'cmd_promote',
+            'cmd_demote': 'cmd_demote',
+            'cmd_tag': 'cmd_tag',
+            'cmd_tagall': 'cmd_tagall',
+            'cmd_tagnotadmin': 'cmd_tagnotadmin',
+            'cmd_hidetag': 'cmd_hidetag',
             
             // Protection
-            '.antilink': '.antilink',
-            '.antitag': '.antitag',
-            '.antibadword': '.antibadword',
-            '.anticall': '.anticall',
-            '.antidelete': '.antidelete',
-            '.mention': '.mention',
-            '.antistatusmention': '.antistatusmention',
-            '.pmblocker': '.pmblocker',
-            '.ghost': '.ghost',
-            '.warn': '.warn',
+            'cmd_antilink': 'cmd_antilink',
+            'cmd_antitag': 'cmd_antitag',
+            'cmd_antibadword': 'cmd_antibadword',
+            'cmd_anticall': 'cmd_anticall',
+            'cmd_antidelete': 'cmd_antidelete',
+            'cmd_mention': 'cmd_mention',
+            'cmd_antistatusmention': 'cmd_antistatusmention',
+            'cmd_pmblocker': 'cmd_pmblocker',
+            'cmd_ghost': 'cmd_ghost',
+            'cmd_warn': 'cmd_warn',
             
             // Profile & Avatar
-            '.setpp': '.setpp',
-            '.getpp': '.getpp',
-            '.pp': '.pp',
-            '.groupmanage': '.groupmanage',
-            '.whois': '.whois',
+            'cmd_setpp': 'cmd_setpp',
+            'cmd_getpp': 'cmd_getpp',
+            'cmd_pp': 'cmd_pp',
+            'cmd_groupmanage': 'cmd_groupmanage',
+            'cmd_whois': 'cmd_whois',
             
             // Fun
-            '.compliment': '.compliment',
-            '.topmembers': '.topmembers',
-            '.lyrics': '.lyrics',
-            '.weather': '.weather',
+            'cmd_compliment': 'cmd_compliment',
+            'cmd_topmembers': 'cmd_topmembers',
+            'cmd_lyrics': 'cmd_lyrics',
+            'cmd_weather': 'cmd_weather',
             
             // Cancel
-            '.cancel': null
+            'cmd_cancel': null
         };
 
         // Handle cancel option
-        if (selectedId === '.cancel') {
+        if (selectedId === 'cmd_cancel') {
             await sock.sendMessage(chatId, { 
                 text: '✅ *Menu Closed*\n\nType *.help* anytime to open menu again',
                 contextInfo: { quotedMessage: message.message }
