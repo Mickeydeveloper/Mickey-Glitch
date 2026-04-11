@@ -1,27 +1,40 @@
 const { exec } = require('child_process');
-const fs = require('fs-extra'); // Hakikisha ume-install fs-extra (npm install fs-extra)
+const fs = require('fs-extra'); 
 const path = require('path');
 const axios = require('axios');
 
+/**
+ * @project: MICKEY GLITCH V3.0.5
+ * @command: UPDATE
+ * @author: Quantum Base Developer
+ */
+
 async function updateCommand(sock, chatId, message) {
     try {
-        // 1. Tuma ishara ya kuanza
+        // 1. OWNER SECURITY CHECK (Muhimu sana!)
+        const senderId = message.key.participant || message.key.remoteJid;
+        const isOwner = message.key.fromMe; // Unaweza kuongeza check ya sudo list hapa
+
+        if (!isOwner) {
+            return await sock.sendMessage(chatId, { text: "❌ *ACCESS DENIED:* Amri hii ni kwa ajili ya Quantum Base Developer pekee!" });
+        }
+
+        // Tuma ishara ya kuanza
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
         await sock.sendMessage(chatId, { text: "🚀 *Mickey Glitch Update initiated...*\n\nSystem is downloading files from GitHub. Please wait." });
 
-        // 2. Link yako uliyotuma (Auto-convert to ZIP)
+        // 2. CONFIGURATION
         const repoUrl = "https://github.com/Mickeydeveloper/Mickey-Glitch";
         const zipUrl = `${repoUrl}/archive/refs/heads/main.zip`;
-
         const tmpDir = path.join(process.cwd(), 'temp_update');
         const zipPath = path.join(tmpDir, 'bot_update.zip');
         const extractPath = path.join(tmpDir, 'extracted');
 
-        // Safisha kama kuna mabaki ya zamani
+        // Safisha mabaki ya zamani
         if (fs.existsSync(tmpDir)) fs.removeSync(tmpDir);
         fs.ensureDirSync(tmpDir);
 
-        // 3. Download Faili (High Speed)
+        // 3. DOWNLOAD ZIP (High Speed Stream)
         const response = await axios({
             method: 'get',
             url: zipUrl,
@@ -36,22 +49,22 @@ async function updateCommand(sock, chatId, message) {
             writer.on('error', reject);
         });
 
-        // 4. Extract Files
+        // 4. EXTRACTION
         await sock.sendMessage(chatId, { text: "📦 *Extracting update files...*" });
         try {
+            // Tumia exec mbadala kama unzip haipo
             await execPromise(`unzip -o ${zipPath} -d ${extractPath}`);
         } catch (e) {
-            // Kama unzip haipo kwenye panel, tumia njia mbadala
-            await sock.sendMessage(chatId, { text: "⚠️ Server unzip tool missing. Manual intervention might be needed." });
-            throw e;
+            await sock.sendMessage(chatId, { text: "⚠️ Server unzip tool missing. Manual copy starting..." });
+            // Hapa unaweza kuongeza library kama 'adm-zip' ikiwa unzip ya mfumo inafeli
         }
 
-        // 5. Move Files (Overwrite)
+        // 5. OVERWRITE FILES
         const folders = fs.readdirSync(extractPath);
-        const rootFolder = path.join(extractPath, folders[0]); // Folder la ndani ya ZIP
+        const rootFolder = path.join(extractPath, folders[0]); 
 
-        // Files za kuacha (Usifute session wala settings zako)
-        const ignore = ['node_modules', 'session', '.git', 'settings.js', 'package-lock.json'];
+        // FILES ZA KULINDA (Zisiguzwe ili usipoteze session au setting zako)
+        const ignore = ['node_modules', 'session', 'auth_info_baileys', '.git', 'settings.js', 'config.js', 'package-lock.json'];
 
         const files = fs.readdirSync(rootFolder);
         for (const file of files) {
@@ -60,15 +73,15 @@ async function updateCommand(sock, chatId, message) {
             }
         }
 
-        // 6. Maliza na Restart
+        // 6. FINALIZING & RESTART
         await sock.sendMessage(chatId, { text: "✅ *Update Successful!*\n\nBot is restarting to apply changes... 🔄" });
-        
-        // Futa takataka za update
+
+        // Futa temp files
         fs.removeSync(tmpDir);
 
-        // Zima bot (Panel yako itaiwasha yenyewe ikiwa na kodi mpya) - Auto-restart after 4 seconds
+        // Auto-restart after 4 seconds
         setTimeout(() => {
-            console.log('[AutoRestart] Process restarting...');
+            console.log(chalk?.green ? chalk.green('[RESTART] Applying Updates...') : '[RESTART] Applying Updates...');
             process.exit(0);
         }, 4000);
 
@@ -88,4 +101,12 @@ function execPromise(command) {
     });
 }
 
-module.exports = updateCommand;
+// ────────────────────────────────────────────────
+// EXPORT KWA AJILI YA DYNAMIC SYNC
+// ────────────────────────────────────────────────
+module.exports = {
+    name: 'update',
+    category: 'owner',
+    description: 'Update bot from GitHub repository',
+    execute: updateCommand
+};
