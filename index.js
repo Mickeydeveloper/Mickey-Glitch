@@ -224,28 +224,25 @@ async function startXeonBotInc(){
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 *Use .help to explore commands*`;
 
-                const connectButtons = [
-                    { id: '.help', text: '📋 HELP MENU' },
-                    { id: '.ping', text: '⚡ PING TEST' },
-                    { id: '.alive', text: '❤️ ALIVE CHECK' }
-                ];
-
                 try {
-                    // Send with image as big ad
+                    // 📸 Send image only (clean ad)
                     await XeonBotInc.sendMessage(botJid, {
                         image: { url: 'https://water-billing-292n.onrender.com/1761205727440.jpg' },
-                        caption: connectText,
-                        contextInfo: {
-                            externalAdReply: {
-                                title: '🎉 BOT CONNECTED',
-                                body: 'Mickey Glitch Tech',
-                                mediaUrl: 'https://water-billing-292n.onrender.com/1761205727440.jpg',
-                                mediaType: 1,
-                                renderLargerThumbnail: true,
-                                sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
-                            }
-                        }
+                        caption: connectText
                     });
+
+                    // 🔘 Send buttons using gifted-btns
+                    const buttonList = [
+                        { displayText: '📋 HELP MENU', id: '.help' },
+                        { displayText: '⚡ PING TEST', id: '.ping' },
+                        { displayText: '❤️ ALIVE CHECK', id: '.alive' }
+                    ];
+
+                    await sendButtons(XeonBotInc, botJid, buttonList, {
+                        title: '🎯 QUICK COMMANDS',
+                        footer: 'Mickey Glitch Tech'
+                    });
+
                 } catch (e) {
                     // Fallback to simple text if image fails
                     console.log('Image send failed, using text fallback:', e.message);
