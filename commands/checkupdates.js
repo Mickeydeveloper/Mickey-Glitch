@@ -4,117 +4,91 @@ const { sendInteractiveMessage } = require('gifted-btns');
 async function checkupdatesCommand(sock, chatId, message) {
     if (!sock) return;
 
-    // ==================== IMPROVED COMMAND DETECTION ====================
+    // Detect Command
     let command = '';
-
-    if (message.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.body?.text) {
-        command = message.message.interactiveResponseMessage.nativeFlowResponseMessage.body.text.trim();
-    } 
-    else if (message.message?.conversation) {
-        command = message.message.conversation.trim();
-    } 
-    else if (message.message?.extendedTextMessage?.text) {
-        command = message.message.extendedTextMessage.text.trim();
+    if (message.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson) {
+        const params = JSON.parse(message.message.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson);
+        command = params.id;
+    } else {
+        command = (message.message?.conversation || 
+                   message.message?.extendedTextMessage?.text || 
+                   '').trim();
     }
 
-    console.log("DEBUG Command Received:", command); // Hii itakusaidia kuona command inakuja
-
     try {
-
         // ==================== BUTTON HANDLERS ====================
-        if (command === 'download_zip' || command.includes('Download Zip')) {
+        if (command === 'download_zip') {
             const repo = global.repoCache?.[chatId];
-            if (!repo) {
-                return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .checkupdates again.*' }, { quoted: message });
-            }
+            if (!repo) return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .repo again.*' });
 
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-            try {
-                const owner = repo.owner?.login || 'Mickeydeveloper';
-                const repoName = repo.name;
-                const branch = repo.default_branch || 'main';
-                const zipUrl = `https://github.com/\( {owner}/ \){repoName}/archive/refs/heads/${branch}.zip`;
+            const owner = repo.owner?.login || 'Mickeydeveloper';
+            const repoName = repo.name;
+            const branch = repo.default_branch || 'main';
+            const zipUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${branch}.zip`;
 
-                const zipResponse = await axios.get(zipUrl, { 
-                    responseType: 'arraybuffer',
-                    timeout: 60000 
-                });
+            const zipResponse = await axios.get(zipUrl, { responseType: 'arraybuffer', timeout: 60000 });
 
-                const fileName = `\( {repoName}- \){branch}.zip`;
+            await sock.sendMessage(chatId, {
+                document: Buffer.from(zipResponse.data),
+                mimetype: 'application/zip',
+                fileName: `${repoName}-${branch}.zip`,
+                caption: `✅ *ZIP Imepakuliwa!*\n📦 Repo: ${repoName}`
+            }, { quoted: message });
 
-                await sock.sendMessage(chatId, {
-                    document: Buffer.from(zipResponse.data),
-                    mimetype: 'application/zip',
-                    fileName: fileName,
-                    caption: `✅ *ZIP Imepakuliwa Successfully!*\n\n📦 Repository: ${repo.name}\n🔀 Branch: ${branch}`
-                }, { quoted: message });
-
-                await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-
-            } catch (downloadErr) {
-                console.error("Download Error:", downloadErr.message);
-                await sock.sendMessage(chatId, { text: '❌ *Failed to download ZIP. Repo might be too big or network issue.*' }, { quoted: message });
-            }
-            return;
+            return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         }
 
-        if (command === 'copy_repo_url' || command.includes('Copy Link')) {
-            const repo = global.repoCache?.[chatId];
-            if (!repo) return sock.sendMessage(chatId, { text: '❌ Session expired.' }, { quoted: message });
-            
-            await sock.sendMessage(chatId, { text: `✅ *Link imekopiwa kwenye clipboard!*` }, { quoted: message });
-            return;
-        }
-
-        if (command === 'visit_repo_url' || command.includes('Visit Repo')) {
-            const repo = global.repoCache?.[chatId];
-            if (!repo) return sock.sendMessage(chatId, { text: '❌ Session expired.' }, { quoted: message });
-            
-            await sock.sendMessage(chatId, { text: `🌐 *Repository Link Ready*` }, { quoted: message });
-            return;
-        }
-
-        // ==================== MAIN MENU ====================
+        // ==================== MAIN MENU (REPO INFO) ====================
         await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
         const repoResponse = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch');
         const repo = repoResponse.data;
 
-        const createdDate = new Date(repo.created_at).toLocaleDateString('en-US');
-        const updatedDate = new Date(repo.updated_at).toLocaleDateString('en-US');
+        // Cache repo for zip download
+        if (!global.repoCache) global.repoCache = {};
+        global.repoCache[chatId] = repo;
 
-        const repoText = `Hello Mickey Dady,
-This is ${repo.name.toUpperCase()}, A Whatsapp Bot Built by MICKEYDEVELOPER,
-Enhanced with Amazing Features to Make Your Whatsapp Communication and Interaction Experience Amazing
+        const repoText = `✨ *${repo.name.toUpperCase()} INFO* ✨
 
-[ ] NAME: ${repo.name}
-[ ] STARS: ${repo.stargazers_count}
-[ ] FORKS: ${repo.forks_count}
-[ ] CREATED ON: ${createdDate}
-[ ] LAST UPDATED: ${updatedDate}
-| POWERED BY MICKEY`;
+👤 *Owner:* ${repo.owner.login}
+⭐ *Stars:* ${repo.stargazers_count}
+🍴 *Forks:* ${repo.forks_count}
+📅 *Created:* ${new Date(repo.created_at).toLocaleDateString()}
+🔄 *Updated:* ${new Date(repo.updated_at).toLocaleDateString()}
+
+*MICKEY GLITCH V3.0.5*`;
 
         const interactiveButtons = [
-            { name: 'cta_copy', buttonParamsJson: JSON.stringify({ display_text: '📋 Copy Link', copy_code: repo.html_url }) },
+            { name: 'cta_copy', buttonParamsJson: JSON.stringify({ display_text: '📋 Copy Repo Link', copy_code: repo.html_url }) },
             { name: 'cta_url',  buttonParamsJson: JSON.stringify({ display_text: '🌐 Visit Repo', url: repo.html_url, merchant_url: repo.html_url }) },
             { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '📥 Download Zip', id: 'download_zip' }) }
         ];
 
+        // FIX: Hakikisha contextInfo haina picha mbovu (Invalid Media Type)
         await sendInteractiveMessage(sock, chatId, {
             text: repoText,
             interactiveButtons: interactiveButtons,
-            footer: "Mickey Glitch Tech • Powered by LOFT"
+            footer: "Quantum Base Dev • Mickey Glitch",
+            contextInfo: {
+                externalAdReply: {
+                    title: "MICKEY GLITCH REPO",
+                    body: "Download or Visit Repository",
+                    mediaType: 1, // 1 ni text/image
+                    // Ikiwa huna thumbnail ya uhakika, ni bora usiiweke kabisa kuzuia Error
+                    thumbnailUrl: "https://water-billing-292n.onrender.com/1761205727440.png",
+                    sourceUrl: repo.html_url,
+                    renderLargerThumbnail: true
+                }
+            }
         }, { quoted: message });
-
-        if (!global.repoCache) global.repoCache = {};
-        global.repoCache[chatId] = repo;
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error("CHECKUPDATES ERROR:", err.message);
-        await sock.sendMessage(chatId, { text: '🚨 *Error fetching repository!*' }, { quoted: message });
+        console.error("REPO ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Error fetching repository! Check network.*' });
     }
 }
 
