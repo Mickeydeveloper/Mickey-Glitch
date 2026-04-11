@@ -23,12 +23,12 @@ let allCommands = {};
 
 try {
     allCommands = autoLoadCommands();
-    console.log(chalk.green(`✅ MICKEY GLITCH: Loaded ${Object.keys(allCommands).length} commands from /commands/`));
+    console.log(chalk.green(`✅ MICKEY GLITCH: Loaded ${Object.keys(allCommands).length} commands`));
 } catch (e) {
     console.error(chalk.red('❌ Failed to load commands:'), e);
 }
 
-// Static Imports (Kama bado unazihitaji manually)
+// Static Import for Help
 const helpFunc = require('./commands/help');
 
 async function handleMessages(sock, messageUpdate) {
@@ -52,24 +52,18 @@ async function handleMessages(sock, messageUpdate) {
                 try {
                     const parsed = JSON.parse(paramsJson);
                     buttonId = parsed.id || parsed.selectedRowId;
-                } catch (e) { console.log("JSON Parse Error on button"); }
+                } catch (e) { console.log("JSON Parse Error"); }
             }
         } else if (mType === 'buttonsResponseMessage') {
             buttonId = m.message.buttonsResponseMessage.selectedButtonId;
-        } else if (mType === 'templateButtonReplyMessage') {
-            buttonId = m.message.templateButtonReplyMessage.selectedId;
-        } else if (mType === 'listResponseMessage') {
-            buttonId = m.message.listResponseMessage.singleSelectReply?.selectedRowId;
         }
 
-        // --- 📝 MESSAGE PARSING (Mchanganyiko wa Text & Buttons) ---
-        // Ikiwa ni button, tunaipa prefix (.) kama haina
-        let body = '';
+        // --- 📝 MESSAGE PARSING ---
+        let rawBody = '';
         if (buttonId) {
-            body = buttonId.startsWith('.') ? buttonId : '.' + buttonId;
-            console.log(chalk.yellow(`🔘 Button Clicked: ${body}`));
+            rawBody = buttonId.startsWith('.') ? buttonId : '.' + buttonId;
         } else {
-            body = (
+            rawBody = (
                 m.message?.conversation ||
                 m.message?.extendedTextMessage?.text ||
                 m.message?.imageMessage?.caption ||
@@ -78,21 +72,27 @@ async function handleMessages(sock, messageUpdate) {
             ).trim();
         }
 
-        // Ikiwa ujumbe hauna prefix (nukta), usiendelee (Ignored)
-        if (!body.startsWith('.')) return;
+        // 1. Check if it starts with prefix (.)
+        if (!rawBody.startsWith('.')) return;
 
-        const args = body.split(' ');
-        const cmdName = args[0].toLowerCase().slice(1); // Toa nukta
-        const fullCmd = args[0].toLowerCase();
+        // 2. FIX: Handle ". menu" by removing space after dot
+        // Hii inafanya ". menu" iwe ".menu"
+        const cleanBody = rawBody.startsWith('. ') 
+            ? '.' + rawBody.slice(1).trim() 
+            : rawBody.trim();
+
+        const args = cleanBody.split(' ');
+        const cmdName = args[0].toLowerCase().slice(1); // Mfano: "menu"
+        const fullCmd = args[0].toLowerCase(); // Mfano: ".menu"
 
         const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
         const isOwnerCheck = m.key.fromMe || senderIsOwnerOrSudo;
 
         // --- 🚀 EXECUTION ENGINE ---
-        
-        // 1. Static Case kwa Help/Menu (Inasoma file lako jipya)
-        if (fullCmd === '.help' || fullCmd === '.menu') {
-            // Kama ume-export kama { execute: func }
+
+        // Case 1: Help/Menu (Inakubali .menu na . menu)
+        if (cmdName === 'help' || cmdName === 'menu') {
+            console.log(chalk.cyan(`🚀 Executing Menu: ${cleanBody}`));
             if (helpFunc.execute) {
                 return await helpFunc.execute(sock, chatId, m);
             } else {
@@ -100,23 +100,24 @@ async function handleMessages(sock, messageUpdate) {
             }
         }
 
-        // 2. Dynamic Handle (Inasink na Folder la Commands)
+        // Case 2: Dynamic Commands from /commands/ folder
         const selectedCommand = getCommand(allCommands, cmdName);
 
         if (selectedCommand) {
             // Sudo Restriction
             const sudoOnly = ['setpp', 'update', 'broadcast', 'cleartmp'];
             if (sudoOnly.includes(cmdName) && !isOwnerCheck) {
-                return await sock.sendMessage(chatId, { text: "❌ *ACCESS DENIED:* Amri hii ni kwa Owner tu!" });
+                return await sock.sendMessage(chatId, { 
+                    text: "❌ *ACCESS DENIED (HURUHUSIWI):* Amri hii ni kwa Owner tu!" 
+                }, { quoted: m });
             }
 
-            console.log(chalk.cyan(`🚀 Executing: ${fullCmd}`));
-            
-            // Execute command (Inategemea kama ume-export command.execute au command pekee)
+            console.log(chalk.cyan(`🚀 Executing Dynamic: ${fullCmd}`));
+
             if (typeof selectedCommand === 'function') {
-                await selectedCommand(sock, chatId, m, body);
+                await selectedCommand(sock, chatId, m, cleanBody);
             } else if (selectedCommand.execute) {
-                await selectedCommand.execute(sock, chatId, m, body);
+                await selectedCommand.execute(sock, chatId, m, cleanBody);
             }
         }
 
