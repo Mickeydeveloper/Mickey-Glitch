@@ -1,89 +1,128 @@
-// --- 🔘 UNIVERSAL BUTTON/LIST HANDLE ---
-const mType = Object.keys(message.message)[0];
-let buttonId = null;
-let isButtonResponse = false;
+// 🧹 Fix for ENOSPC / temp overflow
+const fs = require('fs');
+const path = require('path');
+const chalk = require('chalk');
 
-if (mType === 'buttonsResponseMessage') {
-    buttonId = message.message.buttonsResponseMessage.selectedButtonId;
-    isButtonResponse = true;
-} else if (mType === 'templateButtonReplyMessage') {
-    buttonId = message.message.templateButtonReplyMessage.selectedId;
-    isButtonResponse = true;
-} else if (mType === 'listResponseMessage') {
-    buttonId = message.message.listResponseMessage.singleSelectReply?.selectedRowId || message.message.listResponseMessage.selectedRowId;
-    isButtonResponse = true;
-} else if (mType === 'interactiveResponseMessage') {
-    const paramsJson = message.message.interactiveResponseMessage.nativeFlowResponseMessage?.paramsJson;
-    if (paramsJson) {
-        try { 
-            const parsed = JSON.parse(paramsJson);
-            buttonId = parsed.id || parsed.selectedRowId; 
-            isButtonResponse = true;
-        } catch (e) { 
-            buttonId = null; 
-            isButtonResponse = false;
+const customTemp = path.join(process.cwd(), 'temp');
+const customTmp = path.join(process.cwd(), 'tmp');
+if (!fs.existsSync(customTemp)) fs.mkdirSync(customTemp, { recursive: true });
+if (!fs.existsSync(customTmp)) fs.mkdirSync(customTmp, { recursive: true });
+
+process.env.TMPDIR = customTemp;
+process.env.TEMP = customTemp;
+process.env.TMP = customTemp;
+
+const settings = require('./settings');
+require('./config.js');
+const { safeSendMessage } = require('./lib/myfunc');
+const isOwnerOrSudo = require('./lib/isOwner');
+
+// --- 🚀 AUTOMATIC COMMAND LOADER ---
+const { autoLoadCommands, getCommand } = require('./lib/autoCommandLoader');
+let allCommands = {}; 
+
+try {
+    allCommands = autoLoadCommands();
+    console.log(chalk.green(`✅ MICKEY GLITCH: Loaded ${Object.keys(allCommands).length} commands from /commands/`));
+} catch (e) {
+    console.error(chalk.red('❌ Failed to load commands:'), e);
+}
+
+// Static Imports (Kama bado unazihitaji manually)
+const helpFunc = require('./commands/help');
+
+async function handleMessages(sock, messageUpdate) {
+    try {
+        if (!sock || !sock.user) return;
+        const { messages, type } = messageUpdate;
+        if (type !== 'notify') return;
+
+        const m = messages[0];
+        if (!m?.message) return;
+
+        const chatId = m.key.remoteJid;
+        const senderId = m.key.participant || m.key.remoteJid;
+        const mType = Object.keys(m.message)[0];
+
+        // --- 🔘 INTERACTIVE BUTTONS DECODER ---
+        let buttonId = null;
+        if (mType === 'interactiveResponseMessage') {
+            const paramsJson = m.message.interactiveResponseMessage.nativeFlowResponseMessage?.paramsJson;
+            if (paramsJson) {
+                try {
+                    const parsed = JSON.parse(paramsJson);
+                    buttonId = parsed.id || parsed.selectedRowId;
+                } catch (e) { console.log("JSON Parse Error on button"); }
+            }
+        } else if (mType === 'buttonsResponseMessage') {
+            buttonId = m.message.buttonsResponseMessage.selectedButtonId;
+        } else if (mType === 'templateButtonReplyMessage') {
+            buttonId = m.message.templateButtonReplyMessage.selectedId;
+        } else if (mType === 'listResponseMessage') {
+            buttonId = m.message.listResponseMessage.singleSelectReply?.selectedRowId;
         }
+
+        // --- 📝 MESSAGE PARSING (Mchanganyiko wa Text & Buttons) ---
+        // Ikiwa ni button, tunaipa prefix (.) kama haina
+        let body = '';
+        if (buttonId) {
+            body = buttonId.startsWith('.') ? buttonId : '.' + buttonId;
+            console.log(chalk.yellow(`🔘 Button Clicked: ${body}`));
+        } else {
+            body = (
+                m.message?.conversation ||
+                m.message?.extendedTextMessage?.text ||
+                m.message?.imageMessage?.caption ||
+                m.message?.videoMessage?.caption ||
+                ''
+            ).trim();
+        }
+
+        // Ikiwa ujumbe hauna prefix (nukta), usiendelee (Ignored)
+        if (!body.startsWith('.')) return;
+
+        const args = body.split(' ');
+        const cmdName = args[0].toLowerCase().slice(1); // Toa nukta
+        const fullCmd = args[0].toLowerCase();
+
+        const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
+        const isOwnerCheck = m.key.fromMe || senderIsOwnerOrSudo;
+
+        // --- 🚀 EXECUTION ENGINE ---
+        
+        // 1. Static Case kwa Help/Menu (Inasoma file lako jipya)
+        if (fullCmd === '.help' || fullCmd === '.menu') {
+            // Kama ume-export kama { execute: func }
+            if (helpFunc.execute) {
+                return await helpFunc.execute(sock, chatId, m);
+            } else {
+                return await helpFunc(sock, chatId, m);
+            }
+        }
+
+        // 2. Dynamic Handle (Inasink na Folder la Commands)
+        const selectedCommand = getCommand(allCommands, cmdName);
+
+        if (selectedCommand) {
+            // Sudo Restriction
+            const sudoOnly = ['setpp', 'update', 'broadcast', 'cleartmp'];
+            if (sudoOnly.includes(cmdName) && !isOwnerCheck) {
+                return await sock.sendMessage(chatId, { text: "❌ *ACCESS DENIED:* Amri hii ni kwa Owner tu!" });
+            }
+
+            console.log(chalk.cyan(`🚀 Executing: ${fullCmd}`));
+            
+            // Execute command (Inategemea kama ume-export command.execute au command pekee)
+            if (typeof selectedCommand === 'function') {
+                await selectedCommand(sock, chatId, m, body);
+            } else if (selectedCommand.execute) {
+                await selectedCommand.execute(sock, chatId, m, body);
+            }
+        }
+
+    } catch (e) {
+        console.error(chalk.red('Mickey Bot Error:'), e);
     }
 }
 
-const chatId = message.key.remoteJid;
-const senderId = message.key.participant || message.key.remoteJid;
-
-// --- 🔘 BUTTON TO COMMAND CONVERTER ---
-// Hapa ndipo tunageuza button kuwa command inayosomeka na bot
-let decodedCmd = '';
-if (isButtonResponse && buttonId) {
-    // Kama button haina nukta mwanzo, tunaiongeza ili mfumo uione kama command
-    decodedCmd = buttonId.startsWith('.') ? buttonId : '.' + buttonId;
-    console.log(chalk.yellow(`🔘 Button Clicked: ${decodedCmd}`));
-}
-
-// --- 📝 MESSAGE PARSING ---
-let userMessage = (
-    decodedCmd || 
-    message.message?.conversation ||
-    message.message?.extendedTextMessage?.text ||
-    message.message?.imageMessage?.caption ||
-    message.message?.videoMessage?.caption ||
-    ''
-).trim();
-
-// Ikiwa ujumbe hauna prefix, usiendelee
-if (!userMessage.startsWith('.')) return; 
-
-userMessage = userMessage.replace(/^\.\s+/, "."); 
-const args = userMessage.split(' ');
-const cmdName = args[0].toLowerCase().slice(1); // Toa dot (.)
-const fullCmd = args[0].toLowerCase();
-
-console.log(chalk.cyan(`📝 Processing: ${fullCmd}`));
-
-const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
-const isOwnerOrSudoCheck = message.key.fromMe || senderIsOwnerOrSudo;
-
-// --- 🚀 DYNAMIC & STATIC COMMAND EXECUTION ---
-
-// 1. Angalia kwanza kwenye Switch Case (Static)
-switch (fullCmd) {
-    case '.help': 
-    case '.menu': 
-        return await helpCommand.helpCommand(sock, chatId, message);
-    case '.ping': 
-        return await pingCommand(sock, chatId, message);
-    case '.alive': 
-        return await aliveCommand(sock, chatId, message);
-}
-
-// 2. Kama haipo kwenye switch, itafute automatic kwenye folder la commands (Dynamic Sync)
-const dynamicCommand = getCommand(allCommands, cmdName);
-
-if (dynamicCommand) {
-    // Check kama ni sudo command
-    const sudoOnlyCmds = ['sudo', 'setpp', 'update', 'cleartmp'];
-    if (sudoOnlyCmds.includes(cmdName) && !isOwnerOrSudoCheck) {
-        return await sock.sendMessage(chatId, { text: "❌ Amri hii ni kwa Owner tu!" });
-    }
-
-    // Tekeleza command ya kwenye folder
-    await dynamicCommand(sock, chatId, message, userMessage);
-}
+module.exports = { handleMessages };
