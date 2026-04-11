@@ -24,12 +24,20 @@ const PACKAGES = [
 // ────────────────────────────────────────────────
 async function handlePackageSelection(sock, message, packageId, chatId) {
     try {
+        console.log(`[HALOTEL] Package selected: ${packageId}`);
+        
         const gbMatch = packageId.match(/h_pkg_(\d+)/);
-        if (!gbMatch) return;
+        if (!gbMatch) {
+            console.error('[HALOTEL] Invalid package ID format:', packageId);
+            return;
+        }
 
         const gb = parseInt(gbMatch[1]);
         const pkg = PACKAGES.find(p => p.gb === gb);
-        if (!pkg) return;
+        if (!pkg) {
+            console.error('[HALOTEL] Package not found for GB:', gb);
+            return;
+        }
 
         const payMsg = `✅ *UMECHAGUA PACKAGE*\n\n` +
                       `📦 *Package:* ${pkg.label}\n` +
@@ -74,6 +82,8 @@ async function handlePackageSelection(sock, message, packageId, chatId) {
             footer: CONFIG.FOOTER
         }, { quoted: message });
 
+        console.log(`[HALOTEL] Payment options sent for ${pkg.label}`);
+
     } catch (error) {
         console.error('[HALOTEL] Package Selection Error:', error);
         await sock.sendMessage(chatId, { text: '❌ Hitilafu imetokea!' }, { quoted: message });
@@ -85,6 +95,8 @@ async function handlePackageSelection(sock, message, packageId, chatId) {
 // ────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message) {
     try {
+        console.log('[HALOTEL] Command triggered');
+        
         const adText = `🌟 *HALOTEL INTERNET MANAGER* 🌟
 
 ✨ Premium High-Speed 4G/5G Internet
@@ -99,6 +111,8 @@ Chagua package unayotaka hapa chini 👇`;
             description: `TSh ${pkg.price.toLocaleString()}/=`,
             id: pkg.id
         }));
+
+        console.log('[HALOTEL] Sending menu with', rows.length, 'packages');
 
         await sendInteractiveMessage(sock, chatId, {
             image: { url: CONFIG.BANNER },
@@ -120,6 +134,8 @@ Chagua package unayotaka hapa chini 👇`;
             ]
         }, { quoted: message });
 
+        console.log('[HALOTEL] Menu sent successfully');
+
     } catch (error) {
         console.error('Halotel Command Error:', error);
         await sock.sendMessage(chatId, {
@@ -128,7 +144,7 @@ Chagua package unayotaka hapa chini 👇`;
     }
 }
 
-// Attach handler
+// Attach handlers
 halotelCommand.handlePackageSelection = handlePackageSelection;
 
 module.exports = halotelCommand;

@@ -299,18 +299,16 @@ const handleButtonResponse = async (sock, message, buttonId, chatId) => {
         console.log(`[HELP HANDLER] Executing command: ${command}`);
 
         // Send the command as a text message to trigger normal command processing
-        const commandMessage = {
-            text: command,
-            contextInfo: {
-                quotedMessage: message.message
-            }
-        };
-
-        // Send command message
-        const sentMsg = await sock.sendMessage(chatId, commandMessage);
-        console.log(`[HELP HANDLER] Command message sent: ${command}`);
-
-        return sentMsg;
+        try {
+            await sock.sendMessage(chatId, { text: command }, { quoted: message });
+            console.log(`[HELP HANDLER] Command message sent: ${command}`);
+        } catch (err) {
+            console.error('[HELP HANDLER] Failed to send command:', err.message);
+            await sock.sendMessage(chatId, { 
+                text: `⚠️ Hitilafu: ${err.message}`,
+                contextInfo: { quotedMessage: message.message }
+            });
+        }
 
     } catch (error) {
         console.error('[HELP HANDLER] Error in handleButtonResponse:', error);

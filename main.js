@@ -63,7 +63,30 @@ try {
 const helpCommand = require('./commands/help');
 const pingCommand = require('./commands/ping');
 const aliveCommand = require('./commands/alive');
+const halotelCommand = require('./commands/halotel');
 // ... (Weka zingine kama zilivyo mwanzo)
+
+// --- 🔘 BUTTON HANDLER REGISTRY ---
+const buttonHandlers = {
+    'h_pkg_': halotelCommand.handlePackageSelection,
+    '.': helpCommand.handleButtonResponse
+};
+
+async function routeButtonHandler(sock, message, buttonId, chatId) {
+    try {
+        // Check which handler should process this button
+        for (const [prefix, handler] of Object.entries(buttonHandlers)) {
+            if (buttonId.startsWith(prefix) && handler) {
+                console.log(`[Button Handler] Routing ${buttonId} to handler`);
+                await handler(sock, message, buttonId, chatId);
+                return;
+            }
+        }
+        console.log(`[Button Handler] No handler found for: ${buttonId}`);
+    } catch (err) {
+        console.error('[Button Router] Error:', err.message);
+    }
+}
 
 async function handleMessages(sock, messageUpdate, printLog) {
     try {
@@ -78,28 +101,44 @@ async function handleMessages(sock, messageUpdate, printLog) {
         // --- 🔘 UNIVERSAL BUTTON/LIST HANDLE ---
         const mType = Object.keys(message.message)[0];
         let buttonId = null;
+        let isButtonResponse = false;
 
         if (mType === 'buttonsResponseMessage') {
             buttonId = message.message.buttonsResponseMessage.selectedButtonId;
+            isButtonResponse = true;
         } else if (mType === 'templateButtonReplyMessage') {
             buttonId = message.message.templateButtonReplyMessage.selectedId;
+            isButtonResponse = true;
         } else if (mType === 'listResponseMessage') {
             buttonId = message.message.listResponseMessage.singleSelectReply?.selectedRowId || message.message.listResponseMessage.selectedRowId;
+            isButtonResponse = true;
         } else if (mType === 'interactiveResponseMessage') {
             const paramsJson = message.message.interactiveResponseMessage.nativeFlowResponseMessage?.paramsJson;
             if (paramsJson) {
                 try { 
                     const parsed = JSON.parse(paramsJson);
                     buttonId = parsed.id || parsed.selectedRowId; 
+                    isButtonResponse = true;
                 } catch (e) { 
                     buttonId = null; 
+                    isButtonResponse = false;
                 }
             }
         }
 
-        // Convert button click to command format
+        const chatId = message.key.remoteJid;
+        const senderId = message.key.participant || message.key.remoteJid;
+        const isGroup = chatId.endsWith('@g.us');
+
+        // --- 🔘 IF BUTTON CLICKED, ROUTE TO HANDLER ---
+        if (isButtonResponse && buttonId) {
+            console.log(chalk.yellow(`🔘 Button Clicked: ${buttonId}`));
+            return await routeButtonHandler(sock, message, buttonId, chatId);
+        }
+
+        // Convert button click to command format (for play buttons, etc)
         let decodedCmd = buttonId;
-        if (buttonId) {
+        if (buttonId && !isButtonResponse) {
             if (buttonId.startsWith('play_')) {
                 decodedCmd = `.play ${decodeURIComponent(buttonId.replace('play_video_', '').replace('play_', ''))}`;
             } else if (!buttonId.startsWith('.')) {
@@ -107,10 +146,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 decodedCmd = '.' + buttonId;
             }
         }
-
-        const chatId = message.key.remoteJid;
-        const senderId = message.key.participant || message.key.remoteJid;
-        const isGroup = chatId.endsWith('@g.us');
 
         // --- 📝 MESSAGE PARSING ---
         let userMessage = (
@@ -158,10 +193,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
             // Tekeleza command iliyopatikana toka folder
             await dynamicCommand(sock, chatId, message, userMessage);
-        } else if (mType === 'interactiveResponseMessage') {
-            // Fallback for interactive responses that don't match a command
-            console.log(`[DEBUG] Button clicked but command not found: ${fullCmd}`);
-            return await sock.sendMessage(chatId, { text: `❌ Amri haijassifiiwa: ${fullCmd}` });
         }
 
     } catch (e) {
