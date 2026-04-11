@@ -16,7 +16,7 @@ async function ownerCommand(sock, chatId, message) {
 *Owner:* ${settings.botOwner || 'Mickey'}
 *Contact:* +${ownerNumberRaw}
 
-Chagua moja ya vitendo hapa chini 👇`;
+Choose an action from the options below 👇`;
 
         await sendInteractiveMessage(sock, chatId, {
             text: ownerText,
@@ -24,21 +24,21 @@ Chagua moja ya vitendo hapa chini 👇`;
                 { 
                     name: 'cta_call', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📞 Piga Simu Owner', 
+                        display_text: '📞 Call Owner', 
                         phone_number: ownerNumberRaw 
                     }) 
                 },
                 { 
                     name: 'cta_url', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '💬 Tumia Message', 
+                        display_text: '💬 Send Message', 
                         url: waLink 
                     }) 
                 },
                 { 
                     name: 'cta_url', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📺 Jiunge Channel', 
+                        display_text: '📺 Join Channel', 
                         url: channelLink 
                     }) 
                 }
@@ -47,8 +47,8 @@ Chagua moja ya vitendo hapa chini 👇`;
             contextInfo: {
                 externalAdReply: {
                     title: "👑 MICKEY GLITCH OWNER",
-                    body: "Developer & Owner wa Bot",
-                    thumbnailUrl: "https://d.uguu.se/LLjViSGg.jpg",   // ← Picha uliyopea
+                    body: "Bot Developer & Owner",
+                    thumbnailUrl: "https://d.uguu.se/LLjViSGg.jpg",
                     sourceUrl: "https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610",
                     mediaType: 1,
                     renderLargerThumbnail: true,
@@ -60,7 +60,7 @@ Chagua moja ya vitendo hapa chini 👇`;
     } catch (error) {
         console.error('Owner Command Error:', error);
         await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu imetokea wakati wa kuonyesha maelezo ya Owner.*' 
+            text: '❌ *An error occurred while displaying Owner information.*' 
         }, { quoted: message });
     }
 }
