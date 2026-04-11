@@ -88,7 +88,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
         } else if (mType === 'interactiveResponseMessage') {
             const paramsJson = message.message.interactiveResponseMessage.nativeFlowResponseMessage?.paramsJson;
             if (paramsJson) {
-                try { buttonId = JSON.parse(paramsJson).id; } catch (e) { buttonId = null; }
+                try { 
+                    const parsed = JSON.parse(paramsJson);
+                    buttonId = parsed.id || parsed.selectedRowId; 
+                } catch (e) { 
+                    buttonId = null; 
+                }
             }
         }
 
@@ -97,9 +102,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
         if (buttonId) {
             if (buttonId.startsWith('play_')) {
                 decodedCmd = `.play ${decodeURIComponent(buttonId.replace('play_video_', '').replace('play_', ''))}`;
-            } 
-            if (decodedCmd && !decodedCmd.startsWith('.')) {
-                decodedCmd = '.' + decodedCmd;
+            } else if (!buttonId.startsWith('.')) {
+                // Add dot if button ID doesn't have it
+                decodedCmd = '.' + buttonId;
             }
         }
 
@@ -132,9 +137,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
         // --- 🚀 DYNAMIC & STATIC COMMAND EXECUTION ---
         // 1. Angalia kama ni Static Command (Switch case)
         switch (fullCmd) {
-            case '.help': case '.menu': return await helpCommand(sock, chatId, message, userMessage);
-            case '.ping': return await pingCommand(sock, chatId, message);
-            case '.alive': return await aliveCommand(sock, chatId, message);
+            case '.help': 
+            case '.menu': 
+                return await helpCommand(sock, chatId, message, userMessage);
+            case '.ping': 
+                return await pingCommand(sock, chatId, message);
+            case '.alive': 
+                return await aliveCommand(sock, chatId, message);
         }
 
         // 2. Kama haipo kwenye switch, itafute Automatic kwenye folder (Dynamic Handle)
@@ -149,9 +158,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
             // Tekeleza command iliyopatikana toka folder
             await dynamicCommand(sock, chatId, message, userMessage);
-        } else {
-            // Optional: Kama command haitambuliki kabisa
-            // console.log(`Command .${cmdName} not found.`);
+        } else if (mType === 'interactiveResponseMessage') {
+            // Fallback for interactive responses that don't match a command
+            console.log(`[DEBUG] Button clicked but command not found: ${fullCmd}`);
+            return await sock.sendMessage(chatId, { text: `❌ Amri haijassifiiwa: ${fullCmd}` });
         }
 
     } catch (e) {

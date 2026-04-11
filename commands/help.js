@@ -8,7 +8,7 @@ const { sendInteractiveMessage } = require('gifted-btns');
 /**
  * Main command handler - Display all available commands
  */
-const aliveCommand = async (sock, chatId, message) => {
+const helpCommand = async (sock, chatId, message) => {
     try {
         const senderName = message.pushName || 'User';
         const botName = 'MICKEY GLITCH';
@@ -326,5 +326,5 @@ const handleButtonResponse = async (sock, message, buttonId, chatId) => {
 };
 
 // Export main command as default, with handler attached
-aliveCommand.handleButtonResponse = handleButtonResponse;
-module.exports = aliveCommand;
+helpCommand.handleButtonResponse = handleButtonResponse;
+module.exports = helpCommand;
