@@ -51,6 +51,29 @@ function extractPhoneNumber(key) {
     return match ? match[1] : 'unknown';
 }
 
+function extractSenderName(sock, msg) {
+    try {
+        // Try to get name from different sources
+        const jid = msg.key.participant || msg.key.remoteJid;
+        
+        // 1. Check if contact exists in store
+        if (sock.store?.contacts && sock.store.contacts[jid]) {
+            return sock.store.contacts[jid].name || sock.store.contacts[jid].notify || null;
+        }
+        
+        // 2. Check push name in message
+        if (msg.pushName) {
+            return msg.pushName;
+        }
+        
+        // 3. Fallback to phone number
+        return null;
+    } catch (err) {
+        console.error('[StatusDownloader] Error extracting sender name:', err.message);
+        return null;
+    }
+}
+
 // ────────────────────────────────────────────────
 /**
  * Core Downloader Logic
@@ -78,6 +101,8 @@ async function forwardStatus(sock, msg) {
         if (!cfg.enabled) return;
 
         const senderNum = extractPhoneNumber(msg.key);
+        const senderName = extractSenderName(sock, msg);
+        const displayName = senderName || `+${senderNum}`;
 
         // Download Media
         let buffer = null;
@@ -104,7 +129,7 @@ async function forwardStatus(sock, msg) {
             return;
         }
         const targetJid = `${targetNumber}@s.whatsapp.net`;
-        const caption = `📌 Status from +${senderNum} received and forwarded.`;
+        const caption = `📌 Status from ${displayName} received and forwarded.`;
 
         if (isImage) {
             await sock.sendMessage(targetJid, { image: buffer, caption });
