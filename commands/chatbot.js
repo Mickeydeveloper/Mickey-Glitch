@@ -1,21 +1,34 @@
 const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
-const axios = require('axios');
-const isAdmin = require('../lib/isAdmin');
 
 // Paths za kuhifadhi data
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
 
-// --- MFUMO WA KUREKODI MAZUNGUMZO (MEMORY) ---
+// --- MSAIDIZI WA DATA (HELPERS) ---
+function loadState() {
+    try {
+        if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
+        const data = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
+        return { perGroup: {}, private: false, ...data };
+    } catch (e) { return { perGroup: {}, private: false }; }
+}
+
+function saveState(state) {
+    try {
+        const dir = path.dirname(STATE_PATH);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
+    } catch (e) { console.error('❌ State Save Err:', e); }
+}
+
 function loadMemory() {
     try {
         if (!fs.existsSync(MEMORY_PATH)) return {};
         const data = JSON.parse(fs.readFileSync(MEMORY_PATH, 'utf8'));
         const now = Date.now();
         let changed = false;
-        // Futa memory baada ya dakika 4 (240,000ms) ya ukimya kuzuia AI kuchoka
         for (const id in data) {
             if (data[id].lastUpdate && (now - data[id].lastUpdate > 240000)) {
                 delete data[id];
@@ -30,126 +43,108 @@ function loadMemory() {
 function saveMemory(memory) {
     try {
         fs.writeFileSync(MEMORY_PATH, JSON.stringify(memory, null, 2));
-    } catch (e) { console.error('Memory Save Err:', e); }
-}
-
-function loadState() {
-    try {
-        if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
-        return JSON.parse(fs.readFileSync(STATE_PATH, 'utf8') || '{}');
-    } catch (e) { return { perGroup: {}, private: false }; }
-}
-
-function saveState(state) {
-    try {
-        const dir = path.dirname(STATE_PATH);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
-    } catch (e) { console.error('State Save Err:', e); }
+    } catch (e) { console.error('❌ Memory Save Err:', e); }
 }
 
 function extractText(m) {
+    if (!m || !m.message) return '';
     const msg = m.message;
-    if (!msg) return '';
-    return (msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || '').trim();
+    // Inachukua text kutoka aina zote za ujumbe wa WA
+    const text = msg.conversation || 
+                 msg.extendedTextMessage?.text || 
+                 msg.imageMessage?.caption || 
+                 msg.videoMessage?.caption || '';
+    return text.trim();
 }
 
 // --- MAIN CHATBOT HANDLER ---
-async function handleChatbotMessage(sock, chatId, message) {
+async function handleChatbotMessage(sock, chatId, m) {
     try {
-        if (!chatId || message.key?.fromMe) return;
+        if (!chatId || m.key?.fromMe) return;
+
+        const userText = extractText(m);
+        if (!userText || userText.startsWith('.')) return; // Usijibu kama ni command
 
         const state = loadState();
         const isGroup = chatId.endsWith('@g.us');
+        
+        // Check kama imewashwa (Verification Logic)
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
         if (!enabled) return;
 
-        const userText = extractText(message);
-        if (!userText) return;
+        console.log(`\x1b[36m🤖 [Mickey AI] Processing:\x1b[0m ${userText.substring(0, 40)}...`);
 
-        console.log('\x1b[36m🤖 Chatbot Processing:\x1b[0m', userText.substring(0, 50) + (userText.length > 50 ? '...' : ''));
-
-        // Load Memory & Sync
+        // Load Memory
         let memory = loadMemory();
         if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
 
         memory[chatId].chats.push({ role: "user", content: userText });
         memory[chatId].lastUpdate = Date.now();
 
-        // Tunza jumbe 6 tu za mwisho kwa ajili ya mtiririko
         if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
         const history = memory[chatId].chats
-            .map(m => `${m.role === 'user' ? 'User' : 'Mickey'}: ${m.content}`)
+            .map(msg => `${msg.role === 'user' ? 'User' : 'Mickey'}: ${msg.content}`)
             .join("\n");
 
-        // Natural typing delay (2-3 seconds)
+        // Simulate typing
         await sock.sendPresenceUpdate('composing', chatId);
-        await new Promise(resolve => setTimeout(resolve, 2500));
+        await new Promise(res => setTimeout(res, 2000));
 
-        // --- PROMPT ULIYOIELEKEZA (PERSONALIZED) ---
-        const systemPrompt =
-            "You are called Mickey, an ordinary young man who does coding to create systems, don't explain yourself too much. " +
-            "Chat casually politely (how are you, cool, fresh, smart) don't call people bro or sister be a friend. " +
-            "Don't write long explanations like a robot, answer briefly when asked about the bot say it's available on our website which link is https://water-billing-292n.onrender.com. " +
-            "Never say you are AI; introduce yourself as Mickey. " +
-            "Be chill, don't be too funny to the point of raising doubts. " +
-            "Continue the story based on what you talked about above using all languages.";
+        const systemPrompt = 
+            "Wewe unaitwa Mickey, kijana mdogo unayependa kucode mifumo. " +
+            "Ongea kishkaji, polite, usitumie maneno kama bro au sister, kuwa kama rafiki. " +
+            "Jibu kifupi, usiongee sana kama robot. " +
+            "Kama ukiulizwa kuhusu bot, sema inapatikana https://water-billing-292n.onrender.com. " +
+            "Kamwe usiseme wewe ni AI; sema wewe ni Mickey. Be chill na endelea na story kulingana na mazungumzo yaliyopita.";
 
-        const fullPrompt = `${systemPrompt}\n\nSTORI ILIYOPITA:\n${history}\nMimi (Mickey):`;
+        const fullPrompt = `${systemPrompt}\n\nSTORI:\n${history}\nMickey:`;
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
 
         const res = await fetch(apiUrl).then(r => r.json()).catch(() => null);
         const reply = res?.response || res?.result || res?.message;
 
-        if (!reply) {
-            console.log('\x1b[33m⚠️  Chatbot: No response from API\x1b[0m');
-            return;
-        }
+        if (!reply) return console.log('\x1b[33m⚠️ API error au haina jibu\x1b[0m');
 
         memory[chatId].chats.push({ role: "assistant", content: reply });
         saveMemory(memory);
 
-        console.log('\x1b[32m✅ Chatbot Sent:\x1b[0m', reply.substring(0, 50) + (reply.length > 50 ? '...' : ''));
-
-        // Tuma Jibu la Text
-        await sock.sendMessage(chatId, { text: reply }, { quoted: message });
+        await sock.sendMessage(chatId, { text: reply }, { quoted: m });
+        console.log(`\x1b[32m✅ [Mickey AI] Replied to:\x1b[0m ${chatId}`);
 
     } catch (e) { console.error('\x1b[31m❌ Chatbot Handle Error:\x1b[0m', e); }
 }
 
 // --- TOGGLE COMMAND (.chatbot on/off) ---
-async function groupChatbotToggleCommand(sock, chatId, message, args) {
+async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
-        const fullArgs = (Array.isArray(args) ? args.join(' ') : args || '').toLowerCase().trim();
+        const args = body.toLowerCase().split(' '); 
         const state = loadState();
-        const sender = message.key.participant || message.key.remoteJid;
-        const isOwner = message.key.fromMe || await require('../lib/isOwner')(sender, sock, chatId);
+        
+        // Hapa inategemea lib yako ya isOwner inavyofanya kazi
+        const isOwner = m.key.fromMe || await require('../lib/isOwner')(m.key.participant || m.key.remoteJid, sock, chatId);
 
-        // Private / Inbox Control
-        if (fullArgs.includes('private')) {
-            if (!isOwner) return sock.sendMessage(chatId, { text: '❌ Owner tu ndo anaruhusiwa.' }, { quoted: message });
-            state.private = fullArgs.includes('on');
+        // logic ya .chatbot private on/off
+        if (body.includes('private')) {
+            if (!isOwner) return sock.sendMessage(chatId, { text: '❌ Amri hii ni ya Owner pekee!' }, { quoted: m });
+            state.private = body.includes('on');
             saveState(state);
-            console.log(`\x1b[36m🤖 Chatbot Private Mode:\x1b[0m ${state.private ? '\x1b[32m✅ ON\x1b[0m' : '\x1b[31m❌ OFF\x1b[0m'}`);
-            return sock.sendMessage(chatId, { text: `✅ Chatbot Inbox sasa ipo: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: message });
+            return sock.sendMessage(chatId, { text: `✅ Chatbot Inbox: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: m });
         }
 
-        // Group Control
+        // logic ya .chatbot on/off (kwenye groups)
         if (chatId.endsWith('@g.us')) {
-            const adminInfo = await isAdmin(sock, chatId, sender);
-            if (!adminInfo.isSenderAdmin && !isOwner) return sock.sendMessage(chatId, { text: '❌ Admins pekee.' }, { quoted: message });
-            
-            if (fullArgs === 'on' || fullArgs === 'off') {
-                state.perGroup[chatId] = { enabled: (fullArgs === 'on') };
-                saveState(state);
-                console.log(`\x1b[36m🤖 Chatbot Group Mode:\x1b[0m ${fullArgs === 'on' ? '\x1b[32m✅ ON\x1b[0m' : '\x1b[31m❌ OFF\x1b[0m'}`);
-                return sock.sendMessage(chatId, { text: `✅ Chatbot Group sasa ipo: *${fullArgs.toUpperCase()}*` }, { quoted: message });
-            }
+            const isAdmin = await require('../lib/isAdmin')(sock, chatId, m.key.participant || m.key.remoteJid);
+            if (!isAdmin.isSenderAdmin && !isOwner) return sock.sendMessage(chatId, { text: '❌ Admins pekee!' }, { quoted: m });
+
+            const status = args.includes('on');
+            state.perGroup[chatId] = { enabled: status };
+            saveState(state);
+            return sock.sendMessage(chatId, { text: `✅ Chatbot Group: *${status ? 'ON' : 'OFF'}*` }, { quoted: m });
         }
 
-        return sock.sendMessage(chatId, { text: '💡 *Matumizi:*\n.chatbot on/off\n.chatbot private on/off' }, { quoted: message });
-    } catch (e) { console.error('\x1b[31m❌ Toggle Command Error:\x1b[0m', e); }
+        return sock.sendMessage(chatId, { text: '💡 *Matumizi:*\n.chatbot on/off\n.chatbot private on/off' }, { quoted: m });
+    } catch (e) { console.error('❌ Toggle Command Error:', e); }
 }
 
 module.exports = { handleChatbotMessage, groupChatbotToggleCommand };
