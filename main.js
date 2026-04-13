@@ -34,7 +34,8 @@ try {
 
 // Static Import for Help
 const helpFunc = require('./commands/help');
-
+// --- 🤖 CHATBOT HANDLER ---
+const { handleChatbotMessage } = require('./commands/chatbot');
 async function handleMessages(sock, messageUpdate) {
     try {
         if (!sock || !sock.user) return;
@@ -47,6 +48,9 @@ async function handleMessages(sock, messageUpdate) {
         const chatId = m.key.remoteJid;
         const senderId = m.key.participant || m.key.remoteJid;
         const mType = Object.keys(m.message)[0];
+
+        // --- 🤖 HANDLE CHATBOT FOR ALL MESSAGES ---
+        await handleChatbotMessage(sock, chatId, m);
 
         // --- 🔘 INTERACTIVE BUTTONS DECODER ---
         let buttonId = null;
