@@ -12,7 +12,10 @@ function loadState() {
         if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
         const data = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
         return { perGroup: {}, private: false, ...data };
-    } catch (e) { return { perGroup: {}, private: false }; }
+    } catch (e) { 
+        console.error('❌ Load State Error:', e);
+        return { perGroup: {}, private: false }; 
+    }
 }
 
 function saveState(state) {
@@ -47,13 +50,18 @@ function saveMemory(memory) {
 }
 
 function extractText(m) {
-    if (!m || !m.message) return '';
-    const msg = m.message;
-    const text = msg.conversation || 
-                 msg.extendedTextMessage?.text || 
-                 msg.imageMessage?.caption || 
-                 msg.videoMessage?.caption || '';
-    return text.trim();
+    try {
+        if (!m || !m.message) return '';
+        const msg = m.message;
+        const text = msg.conversation || 
+                     msg.extendedTextMessage?.text || 
+                     msg.imageMessage?.caption || 
+                     msg.videoMessage?.caption || '';
+        return text.trim();
+    } catch (e) {
+        console.error('❌ Extract Text Error:', e);
+        return '';
+    }
 }
 
 // --- 1. MAIN CHATBOT HANDLER (Inaitwa kwenye handleMessages) ---
@@ -84,7 +92,12 @@ async function handleChatbotMessage(sock, chatId, m) {
             .map(msg => `${msg.role === 'user' ? 'User' : 'Mickey'}: ${msg.content}`)
             .join("\n");
 
-        await sock.sendPresenceUpdate('composing', chatId);
+        try {
+            await sock.sendPresenceUpdate('composing', chatId);
+        } catch (e) {
+            console.error('❌ Presence Update Err:', e);
+        }
+        
         await new Promise(res => setTimeout(res, 2000));
 
         const systemPrompt = 
@@ -97,10 +110,20 @@ async function handleChatbotMessage(sock, chatId, m) {
         const fullPrompt = `${systemPrompt}\n\nSTORI:\n${history}\nMickey:`;
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
 
-        const res = await fetch(apiUrl).then(r => r.json()).catch(() => null);
+        let res;
+        try {
+            res = await fetch(apiUrl).then(r => r.json()).catch(() => null);
+        } catch (fetchErr) {
+            console.error('❌ API Fetch Error:', fetchErr);
+            return await sock.sendMessage(chatId, { text: '⚠️ API connection error' }, { quoted: m });
+        }
+
         const reply = res?.response || res?.result || res?.message;
 
-        if (!reply) return;
+        if (!reply || typeof reply !== 'string') {
+            console.error('❌ No valid response from API');
+            return;
+        }
 
         memory[chatId].chats.push({ role: "assistant", content: reply });
         saveMemory(memory);
@@ -108,36 +131,65 @@ async function handleChatbotMessage(sock, chatId, m) {
         await sock.sendMessage(chatId, { text: reply }, { quoted: m });
         console.log(`\x1b[32m✅ [Mickey AI] Replied to:\x1b[0m ${chatId}`);
 
-    } catch (e) { console.error('❌ Chatbot Err:', e); }
+    } catch (e) { 
+        console.error('❌ Chatbot Err:', e); 
+    }
 }
 
 // --- 2. TOGGLE COMMAND (Inaitwa kama Dynamic Command) ---
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
         const state = loadState();
-        const text = body.toLowerCase();
+        const text = (body || '').trim().toLowerCase();
+        const args = text.split(/\s+/);
         
-        // Angalia kama ni Owner
-        const isOwner = m.key.fromMe; 
+        // Owner check (from bot sender ID config)
+        const ownerJid = process.env.OWNER_JID || m.key.remoteJid;
+        const isOwner = m.key.remoteJid === ownerJid || m.key.fromMe;
 
-        // Private/Inbox Logic
-        if (text.includes('private')) {
-            if (!isOwner) return sock.sendMessage(chatId, { text: '❌ Owner pekee!' }, { quoted: m });
-            state.private = text.includes('on');
+        // Private mode toggling: .chatbot private on/off
+        if (args[0] === 'private') {
+            if (!isOwner) return await sock.sendMessage(chatId, { text: '❌ Only owner can use this!' }, { quoted: m });
+            
+            const mode = args[1];
+            if (!['on', 'off'].includes(mode)) {
+                return await sock.sendMessage(chatId, { text: '💡 Usage: .chatbot private on/off' }, { quoted: m });
+            }
+            
+            state.private = mode === 'on';
             saveState(state);
-            return await sock.sendMessage(chatId, { text: `✅ Chatbot Private: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: m });
+            return await sock.sendMessage(chatId, { text: `✅ Chatbot Private Mode: *${state.private ? 'ON ✓' : 'OFF ✗'}*` }, { quoted: m });
         }
 
-        // Group Logic
+        // Group mode toggling: .chatbot on/off
         if (chatId.endsWith('@g.us')) {
-            state.perGroup[chatId] = { enabled: text.includes('on') };
+            const mode = args[0];
+            if (!['on', 'off'].includes(mode)) {
+                return await sock.sendMessage(chatId, { text: '💡 Usage: .chatbot on/off' }, { quoted: m });
+            }
+            
+            if (!state.perGroup) state.perGroup = {};
+            state.perGroup[chatId] = { enabled: mode === 'on' };
             saveState(state);
-            return await sock.sendMessage(chatId, { text: `✅ Chatbot Group: *${text.includes('on') ? 'ON' : 'OFF'}*` }, { quoted: m });
+            return await sock.sendMessage(chatId, { text: `✅ Chatbot Group: *${mode === 'on' ? 'ON ✓' : 'OFF ✗'}*` }, { quoted: m });
         }
 
-        return sock.sendMessage(chatId, { text: '💡 *Matumizi:*\n.chatbot on/off\n.chatbot private on/off' }, { quoted: m });
+        // Private chat (1-on-1) mode toggling: .chatbot on/off
+        if (!chatId.endsWith('@g.us')) {
+            const mode = args[0];
+            if (!['on', 'off'].includes(mode)) {
+                return await sock.sendMessage(chatId, { text: '💡 Usage: .chatbot on/off' }, { quoted: m });
+            }
+            
+            state.private = mode === 'on';
+            saveState(state);
+            return await sock.sendMessage(chatId, { text: `✅ Chatbot: *${mode === 'on' ? 'ON ✓' : 'OFF ✗'}*` }, { quoted: m });
+        }
+
+        await sock.sendMessage(chatId, { text: '💡 *Usage:*\n.chatbot on/off\n.chatbot private on/off' }, { quoted: m });
     } catch (e) { 
         console.error('❌ Toggle Error:', e); 
+        await sock.sendMessage(chatId, { text: '❌ Error occurred!' }, { quoted: m }).catch(err => console.error(err));
     }
 }
 
