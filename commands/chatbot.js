@@ -67,6 +67,8 @@ async function handleChatbotMessage(sock, chatId, message) {
         const userText = extractText(message);
         if (!userText) return;
 
+        console.log('\x1b[36m🤖 Chatbot Processing:\x1b[0m', userText.substring(0, 50) + (userText.length > 50 ? '...' : ''));
+
         // Load Memory & Sync
         let memory = loadMemory();
         if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
@@ -100,15 +102,20 @@ async function handleChatbotMessage(sock, chatId, message) {
         const res = await fetch(apiUrl).then(r => r.json()).catch(() => null);
         const reply = res?.response || res?.result || res?.message;
 
-        if (!reply) return;
+        if (!reply) {
+            console.log('\x1b[33m⚠️  Chatbot: No response from API\x1b[0m');
+            return;
+        }
 
         memory[chatId].chats.push({ role: "assistant", content: reply });
         saveMemory(memory);
 
+        console.log('\x1b[32m✅ Chatbot Sent:\x1b[0m', reply.substring(0, 50) + (reply.length > 50 ? '...' : ''));
+
         // Tuma Jibu la Text
         await sock.sendMessage(chatId, { text: reply }, { quoted: message });
 
-    } catch (e) { console.error('Chatbot Handle Error:', e); }
+    } catch (e) { console.error('\x1b[31m❌ Chatbot Handle Error:\x1b[0m', e); }
 }
 
 // --- TOGGLE COMMAND (.chatbot on/off) ---
@@ -124,6 +131,7 @@ async function groupChatbotToggleCommand(sock, chatId, message, args) {
             if (!isOwner) return sock.sendMessage(chatId, { text: '❌ Owner tu ndo anaruhusiwa.' }, { quoted: message });
             state.private = fullArgs.includes('on');
             saveState(state);
+            console.log(`\x1b[36m🤖 Chatbot Private Mode:\x1b[0m ${state.private ? '\x1b[32m✅ ON\x1b[0m' : '\x1b[31m❌ OFF\x1b[0m'}`);
             return sock.sendMessage(chatId, { text: `✅ Chatbot Inbox sasa ipo: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: message });
         }
 
@@ -135,12 +143,13 @@ async function groupChatbotToggleCommand(sock, chatId, message, args) {
             if (fullArgs === 'on' || fullArgs === 'off') {
                 state.perGroup[chatId] = { enabled: (fullArgs === 'on') };
                 saveState(state);
+                console.log(`\x1b[36m🤖 Chatbot Group Mode:\x1b[0m ${fullArgs === 'on' ? '\x1b[32m✅ ON\x1b[0m' : '\x1b[31m❌ OFF\x1b[0m'}`);
                 return sock.sendMessage(chatId, { text: `✅ Chatbot Group sasa ipo: *${fullArgs.toUpperCase()}*` }, { quoted: message });
             }
         }
 
         return sock.sendMessage(chatId, { text: '💡 *Matumizi:*\n.chatbot on/off\n.chatbot private on/off' }, { quoted: message });
-    } catch (e) { console.error('Toggle Command Error:', e); }
+    } catch (e) { console.error('\x1b[31m❌ Toggle Command Error:\x1b[0m', e); }
 }
 
 module.exports = { handleChatbotMessage, groupChatbotToggleCommand };
