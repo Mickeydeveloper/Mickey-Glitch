@@ -49,7 +49,6 @@ function saveMemory(memory) {
 function extractText(m) {
     if (!m || !m.message) return '';
     const msg = m.message;
-    // Inachukua text kutoka aina zote za ujumbe wa WA
     const text = msg.conversation || 
                  msg.extendedTextMessage?.text || 
                  msg.imageMessage?.caption || 
@@ -57,37 +56,34 @@ function extractText(m) {
     return text.trim();
 }
 
-// --- MAIN CHATBOT HANDLER ---
+// --- 1. MAIN CHATBOT HANDLER (Inaitwa kwenye handleMessages) ---
 async function handleChatbotMessage(sock, chatId, m) {
     try {
         if (!chatId || m.key?.fromMe) return;
 
         const userText = extractText(m);
-        if (!userText || userText.startsWith('.')) return; // Usijibu kama ni command
+        if (!userText || userText.startsWith('.')) return; 
 
         const state = loadState();
         const isGroup = chatId.endsWith('@g.us');
         
-        // Check kama imewashwa (Verification Logic)
+        // Check kama imewashwa
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
         if (!enabled) return;
 
-        console.log(`\x1b[36m🤖 [Mickey AI] Processing:\x1b[0m ${userText.substring(0, 40)}...`);
+        console.log(`\x1b[36m🤖 [Mickey AI] Processing:\x1b[0m ${userText.substring(0, 40)}`);
 
-        // Load Memory
         let memory = loadMemory();
         if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
 
         memory[chatId].chats.push({ role: "user", content: userText });
         memory[chatId].lastUpdate = Date.now();
-
         if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
         const history = memory[chatId].chats
             .map(msg => `${msg.role === 'user' ? 'User' : 'Mickey'}: ${msg.content}`)
             .join("\n");
 
-        // Simulate typing
         await sock.sendPresenceUpdate('composing', chatId);
         await new Promise(res => setTimeout(res, 2000));
 
@@ -96,7 +92,7 @@ async function handleChatbotMessage(sock, chatId, m) {
             "Ongea kishkaji, polite, usitumie maneno kama bro au sister, kuwa kama rafiki. " +
             "Jibu kifupi, usiongee sana kama robot. " +
             "Kama ukiulizwa kuhusu bot, sema inapatikana https://water-billing-292n.onrender.com. " +
-            "Kamwe usiseme wewe ni AI; sema wewe ni Mickey. Be chill na endelea na story kulingana na mazungumzo yaliyopita.";
+            "Kamwe usiseme wewe ni AI; sema wewe ni Mickey. Be chill na endelea na story.";
 
         const fullPrompt = `${systemPrompt}\n\nSTORI:\n${history}\nMickey:`;
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
@@ -104,7 +100,7 @@ async function handleChatbotMessage(sock, chatId, m) {
         const res = await fetch(apiUrl).then(r => r.json()).catch(() => null);
         const reply = res?.response || res?.result || res?.message;
 
-        if (!reply) return console.log('\x1b[33m⚠️ API error au haina jibu\x1b[0m');
+        if (!reply) return;
 
         memory[chatId].chats.push({ role: "assistant", content: reply });
         saveMemory(memory);
@@ -112,39 +108,42 @@ async function handleChatbotMessage(sock, chatId, m) {
         await sock.sendMessage(chatId, { text: reply }, { quoted: m });
         console.log(`\x1b[32m✅ [Mickey AI] Replied to:\x1b[0m ${chatId}`);
 
-    } catch (e) { console.error('\x1b[31m❌ Chatbot Handle Error:\x1b[0m', e); }
+    } catch (e) { console.error('❌ Chatbot Err:', e); }
 }
 
-// --- TOGGLE COMMAND (.chatbot on/off) ---
+// --- 2. TOGGLE COMMAND (Inaitwa kama Dynamic Command) ---
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
-        const args = body.toLowerCase().split(' '); 
         const state = loadState();
+        const text = body.toLowerCase();
         
-        // Hapa inategemea lib yako ya isOwner inavyofanya kazi
-        const isOwner = m.key.fromMe || await require('../lib/isOwner')(m.key.participant || m.key.remoteJid, sock, chatId);
+        // Angalia kama ni Owner
+        const isOwner = m.key.fromMe; 
 
-        // logic ya .chatbot private on/off
-        if (body.includes('private')) {
-            if (!isOwner) return sock.sendMessage(chatId, { text: '❌ Amri hii ni ya Owner pekee!' }, { quoted: m });
-            state.private = body.includes('on');
+        // Private/Inbox Logic
+        if (text.includes('private')) {
+            if (!isOwner) return sock.sendMessage(chatId, { text: '❌ Owner pekee!' }, { quoted: m });
+            state.private = text.includes('on');
             saveState(state);
-            return sock.sendMessage(chatId, { text: `✅ Chatbot Inbox: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: m });
+            return await sock.sendMessage(chatId, { text: `✅ Chatbot Private: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: m });
         }
 
-        // logic ya .chatbot on/off (kwenye groups)
+        // Group Logic
         if (chatId.endsWith('@g.us')) {
-            const isAdmin = await require('../lib/isAdmin')(sock, chatId, m.key.participant || m.key.remoteJid);
-            if (!isAdmin.isSenderAdmin && !isOwner) return sock.sendMessage(chatId, { text: '❌ Admins pekee!' }, { quoted: m });
-
-            const status = args.includes('on');
-            state.perGroup[chatId] = { enabled: status };
+            state.perGroup[chatId] = { enabled: text.includes('on') };
             saveState(state);
-            return sock.sendMessage(chatId, { text: `✅ Chatbot Group: *${status ? 'ON' : 'OFF'}*` }, { quoted: m });
+            return await sock.sendMessage(chatId, { text: `✅ Chatbot Group: *${text.includes('on') ? 'ON' : 'OFF'}*` }, { quoted: m });
         }
 
         return sock.sendMessage(chatId, { text: '💡 *Matumizi:*\n.chatbot on/off\n.chatbot private on/off' }, { quoted: m });
-    } catch (e) { console.error('❌ Toggle Command Error:', e); }
+    } catch (e) { 
+        console.error('❌ Toggle Error:', e); 
+    }
 }
 
-module.exports = { handleChatbotMessage, groupChatbotToggleCommand };
+// Hakikisha jina la execute lipo kwa ajili ya Dynamic Loader yako
+module.exports = { 
+    handleChatbotMessage, 
+    groupChatbotToggleCommand,
+    execute: groupChatbotToggleCommand // Hii inasaidia main.js ku-run kama command
+};
