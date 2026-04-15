@@ -1,23 +1,27 @@
-const os = require('os');
 const axios = require('axios');
-const { performance } = require('perf_hooks');
 const { sendButtons } = require('gifted-btns');
 
 /**
- * Water Billing System Command - FIXED VERSION
+ * Water Billing System - Smart Command Handler
  */
 const waterCommand = async (sock, chatId, msg, args) => {
     if (!sock?.sendMessage) return;
 
-    // FIX: Tunahakikisha args ni array ili .slice() isilete error
+    // 1. Tunasafisha args (hakikisha ni array)
     const safeArgs = Array.isArray(args) ? args : [];
+    
+    // 2. Tunatafuta sub-command (mfano: 'ai', 'bill', 'health')
     const subCommand = safeArgs[0]?.toLowerCase();
-    const query = safeArgs.slice(1).join(' '); // Hapa ndipo palikuwa na error
+    
+    // 3. Tunachukua maneno yaliyobaki (mfano: baada ya 'ai')
+    const query = safeArgs.slice(1).join(' '); 
     
     const BASE_URL = 'https://water-billing-292n.onrender.com';
 
     try {
-        // CASE: .water pekee (Maelekezo)
+        // --- LOGIC YA KUTAMBUA COMMAND ---
+        
+        // IKIWA NI '.water' PEKEE (Bila sub-command)
         if (!subCommand) {
             const helpMsg = `
 ╭━━〔 *ＷＡＴＥＲ-ＳＹＳＴＥＭ* 〕━━┈⊷
@@ -27,21 +31,17 @@ const waterCommand = async (sock, chatId, msg, args) => {
 
 *Zifuatazo ni command unazoweza kutumia:*
 
-💧 *.water ai [text]*
-   - Uliza chochote kuhusu maji.
-📊 *.water bill*
-   - Angalia ankara zako zote.
-💾 *.water save [data]*
-   - Format: Jina|Prev|Curr|Rate|Fixed|Date
-📡 *.water health*
-   - Angalia kama system ipo online.
+💧 *.water ai [text]* - Uliza AI
+📊 *.water bill* - Angalia ankara
+📡 *.water health* - System Status
+💾 *.water save* - Hifadhi rekodi
 
 *© 2026 Mickey Tanzanite Era*`.trim();
 
             return await sendButtons(sock, chatId, {
                 title: 'WATER BILLING MENU',
                 text: helpMsg,
-                footer: 'Quantum Base Developer',
+                footer: 'Mickdad Hamza Salim - Dev',
                 image: { url: 'https://water-billing-292n.onrender.com/1761205727440.png' },
                 buttons: [
                     { id: '.water ai Habari', text: '🤖 AI Chat' },
@@ -51,43 +51,40 @@ const waterCommand = async (sock, chatId, msg, args) => {
             }, { quoted: msg });
         }
 
-        // SWITCH KWA SUB-COMMANDS
-        switch (subCommand) {
-            case 'ai':
-                if (!query) return sock.sendMessage(chatId, { text: "❌ Weka swali! Mfano: .water ai nitalipaje?" }, { quoted: msg });
-                const aiRes = await axios.get(`${BASE_URL}/api/chat?text=${encodeURIComponent(query)}`);
-                await sock.sendMessage(chatId, { text: `🤖 *Assistant:*\n\n${aiRes.data.reply}` }, { quoted: msg });
-                break;
-
-            case 'bill':
-                const billRes = await axios.get(`${BASE_URL}/get-records`);
-                const userPhone = msg.key.remoteJid.split('@')[0];
-                const myRecords = (billRes.data.records || []).filter(r => r.phone && r.phone.includes(userPhone));
-
-                if (myRecords.length > 0) {
-                    let txt = `*📑 ANKARA ZA MAJI (${userPhone})*\n\n`;
-                    myRecords.forEach((r, i) => {
-                        txt += `*${i+1}. Tarehe:* ${r.date}\n   - Usage: ${r.usage} units\n   - Deni: TSH ${r.total.toLocaleString()}\n\n`;
-                    });
-                    await sock.sendMessage(chatId, { text: txt }, { quoted: msg });
-                } else {
-                    await sock.sendMessage(chatId, { text: "❌ Hujasajiliwa kwenye rekodi." }, { quoted: msg });
-                }
-                break;
-
-            case 'health':
-                const hRes = await axios.get(`${BASE_URL}/health`);
-                await sock.sendMessage(chatId, { text: `🌐 Server: Online\n🗄️ DB: ${hRes.data.mongodb ? 'Connected' : 'Disconnected'}` }, { quoted: msg });
-                break;
-
-            default:
-                await sock.sendMessage(chatId, { text: "❌ Command haijulikani. Tumia *.water* pekee." }, { quoted: msg });
-                break;
+        // IKIWA KUNA SUB-COMMAND (mfano .water ai)
+        if (subCommand === 'ai') {
+            if (!query) return sock.sendMessage(chatId, { text: "❌ Andika swali lako baada ya .water ai" }, { quoted: msg });
+            const aiRes = await axios.get(`${BASE_URL}/api/chat?text=${encodeURIComponent(query)}`);
+            return await sock.sendMessage(chatId, { text: `🤖 *Mickey Assistant:*\n\n${aiRes.data.reply}` }, { quoted: msg });
         }
 
+        if (subCommand === 'bill' || subCommand === 'ankara') {
+            const billRes = await axios.get(`${BASE_URL}/get-records`);
+            const userPhone = msg.key.remoteJid.split('@')[0];
+            const myRecords = (billRes.data.records || []).filter(r => r.phone && r.phone.includes(userPhone));
+
+            if (myRecords.length > 0) {
+                let txt = `*📑 ANKARA ZA MAJI (${userPhone})*\n\n`;
+                myRecords.forEach((r, i) => {
+                    txt += `*${i+1}. Tarehe:* ${r.date}\n   - Usage: ${r.usage} units\n   - Deni: TSH ${r.total.toLocaleString()}\n\n`;
+                });
+                return await sock.sendMessage(chatId, { text: txt }, { quoted: msg });
+            } else {
+                return await sock.sendMessage(chatId, { text: "❌ Hujasajiliwa kwenye rekodi za ankara." }, { quoted: msg });
+            }
+        }
+
+        if (subCommand === 'health') {
+            const hRes = await axios.get(`${BASE_URL}/health`);
+            return await sock.sendMessage(chatId, { text: `🌐 Server: Online\n🗄️ MongoDB: ${hRes.data.mongodb ? 'Connected' : 'Error'}` }, { quoted: msg });
+        }
+
+        // Ikiwa ameandika .water [kitu kisichojulikana]
+        await sock.sendMessage(chatId, { text: "❌ Sub-command hiyo haipo. Tumia *.water* kuona menu." }, { quoted: msg });
+
     } catch (error) {
-        console.error('Water API Error:', error);
-        await sock.sendMessage(chatId, { text: '⚠️ Server inapata shida au inawaka (Render Sleep). Jaribu tena.' }, { quoted: msg });
+        console.error('API Error:', error);
+        await sock.sendMessage(chatId, { text: '⚠️ Hitilafu! Server inaweza kuwa imelala. Jaribu tena baada ya muda mfupi.' }, { quoted: msg });
     }
 };
 
