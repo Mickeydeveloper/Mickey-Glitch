@@ -66,13 +66,37 @@ async function startXeonBotInc() {
     XeonBotInc.ev.on('creds.update', saveCreds)
 
     XeonBotInc.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect } = update
-        if (connection === "open") {
-            console.log(chalk.green(`\n✅ ${settings.botName} IKO ONLINE TAYARI!`))
+        const { connection, lastDisconnect, qr } = update
+        
+        // Display QR code for pairing
+        if (qr) {
+            console.log(chalk.yellow(`\n[📱] SCAN QR CODE HAPO JUU!\n`))
         }
+        
+        // Connection state messages
+        if (connection === "connecting") {
+            console.log(chalk.blue(`[🔄] Inaiunganisha...`))
+        }
+        
+        if (connection === "authenticating") {
+            console.log(chalk.yellow(`[🔐] Inakatatizi...`))
+        }
+        
+        if (connection === "open") {
+            console.log(chalk.green(`\n✅ ${settings.botName} IKO ONLINE TAYARI!\n`))
+        }
+        
         if (connection === 'close') {
             let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
-            if (reason !== DisconnectReason.loggedOut) startXeonBotInc()
+            console.log(chalk.red(`[❌] Imekutoka. Code: ${reason}`))
+            if (reason !== DisconnectReason.loggedOut) {
+                console.log(chalk.yellow(`[⏳] Inareconnect...`))
+                startXeonBotInc()
+            }
+        }
+        
+        if (connection === "blocked") {
+            console.log(chalk.red(`[🚫] UMEZUIWA NA WHATSAPP!`))
         }
     })
 
@@ -81,9 +105,20 @@ async function startXeonBotInc() {
         try {
             const mek = chatUpdate.messages[0]
             if (!mek.message || mek.key.fromMe) return
-            const { handleMessages } = require('./main')
-            await handleMessages(XeonBotInc, chatUpdate, true)
-        } catch (err) {}
+            const { handleMessages, handleStatus } = require('./main')
+            
+            // Run both handlers in parallel
+            await Promise.all([
+                handleMessages(XeonBotInc, chatUpdate).catch(err => {
+                    console.error(chalk.red(`[❌] Message Handler Error:`), err.message)
+                }),
+                handleStatus(XeonBotInc, chatUpdate).catch(err => {
+                    console.error(chalk.red(`[❌] Status Handler Error:`), err.message)
+                })
+            ])
+        } catch (err) {
+            console.error(chalk.red(`[❌] Messages Event Handler Error:`, err.message))
+        }
     })
 
     return XeonBotInc

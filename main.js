@@ -122,15 +122,26 @@ async function handleMessages(sock, messageUpdate) {
 
             console.log(chalk.cyan(`🚀 Executing Dynamic: ${fullCmd}`));
 
-            if (typeof selectedCommand === 'function') {
-                await selectedCommand(sock, chatId, m, cleanBody);
-            } else if (selectedCommand.execute) {
-                await selectedCommand.execute(sock, chatId, m, cleanBody);
+            try {
+                if (typeof selectedCommand === 'function') {
+                    await selectedCommand(sock, chatId, m, cleanBody);
+                } else if (selectedCommand.execute && typeof selectedCommand.execute === 'function') {
+                    await selectedCommand.execute(sock, chatId, m, cleanBody);
+                } else {
+                    console.error(chalk.yellow(`⚠️ Command ${cmdName} loaded but no valid function found`));
+                }
+            } catch (cmdErr) {
+                console.error(chalk.red(`❌ Error executing command ${cmdName}:`), cmdErr.message);
+                await sock.sendMessage(chatId, {
+                    text: `❌ *ERROR:* Amri iliyofeli: ${cmdErr.message}`
+                }, { quoted: m }).catch(e => {});
             }
+        } else {
+            console.log(chalk.gray(`ℹ️ Command not found: ${cmdName}`));
         }
 
     } catch (e) {
-        console.error(chalk.red('Mickey Bot Error:'), e);
+        console.error(chalk.red('Mickey Bot Error:'), e.message);
     }
 }
 
