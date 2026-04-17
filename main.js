@@ -2,6 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 const chalk = require('chalk');
+const systemMonitor = require('./lib/systemMonitor');
+const autoSystem = require('./lib/autoSystem');
 
 const customTemp = path.join(process.cwd(), 'temp');
 const customTmp = path.join(process.cwd(), 'tmp');
@@ -51,6 +53,13 @@ async function handleMessages(sock, messageUpdate) {
 
         // --- 🤖 HANDLE CHATBOT FOR ALL MESSAGES ---
         await handleChatbotMessage(sock, chatId, m);
+        
+        // Track message processing
+        systemMonitor.incrementMessage();
+        
+        // Check for auto-responses
+        const hasAutoResponse = await autoSystem.checkAutoResponse(sock, chatId, rawBody, m);
+        if (hasAutoResponse) return;
 
         // --- 🔘 INTERACTIVE BUTTONS DECODER ---
         let buttonId = null;
@@ -123,6 +132,8 @@ async function handleMessages(sock, messageUpdate) {
             console.log(chalk.cyan(`🚀 Executing Dynamic: ${fullCmd}`));
 
             try {
+                systemMonitor.incrementCommand();
+                
                 if (typeof selectedCommand === 'function') {
                     await selectedCommand(sock, chatId, m, cleanBody);
                 } else if (selectedCommand.execute && typeof selectedCommand.execute === 'function') {

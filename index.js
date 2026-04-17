@@ -5,6 +5,10 @@ const fs = require('fs')
 const chalk = require('chalk')
 const pino = require("pino")
 const path = require('path')
+const customLogger = require('./lib/silentLogger')
+const systemMonitor = require('./lib/systemMonitor')
+const sessionCleanup = require('./lib/sessionCleanup')
+const autoSystem = require('./lib/autoSystem')
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -22,13 +26,13 @@ async function startXeonBotInc() {
 
     const XeonBotInc = makeWASocket({
         version,
-        logger: pino({ level: 'silent' }),
+        logger: customLogger,
         printQRInTerminal: false,
         // TUMEBORESHA HAPA: Kutumia Chrome kwenye Linux ili WhatsApp iweze ku-trust device
         browser: ["Ubuntu", "Chrome", "20.0.04"], 
         auth: {
             creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
+            keys: makeCacheableSignalKeyStore(state.keys, customLogger),
         },
         markOnlineOnConnect: true,
         syncFullHistory: false,
@@ -66,37 +70,70 @@ async function startXeonBotInc() {
     XeonBotInc.ev.on('creds.update', saveCreds)
 
     XeonBotInc.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update
+        const { connection, lastDisconnect, qr, receivedPendingNotifications } = update
         
         // Display QR code for pairing
         if (qr) {
-            console.log(chalk.yellow(`\n[📱] SCAN QR CODE HAPO JUU!\n`))
+            console.log(chalk.yellow(`\n━━━━━━━━━━━━━━━━━━━━━━`))
+            console.log(chalk.yellow(`📱 SCAN QR CODE NA WAIT`))
+            console.log(chalk.yellow(`━━━━━━━━━━━━━━━━━━━━━━\n`))
         }
         
-        // Connection state messages
+        // Connection state messages with better formatting
         if (connection === "connecting") {
-            console.log(chalk.blue(`[🔄] Inaiunganisha...`))
+            console.log(chalk.blue(`\n[⏳] ${settings.botName}: Inaiunganisha kwenye WhatsApp...`))
         }
         
         if (connection === "authenticating") {
-            console.log(chalk.yellow(`[🔐] Inakatatizi...`))
+            console.log(chalk.cyan(`[🔐] ${settings.botName}: Inakatatizi...`))
         }
         
         if (connection === "open") {
-            console.log(chalk.green(`\n✅ ${settings.botName} IKO ONLINE TAYARI!\n`))
+            console.log(chalk.green(`\n` + `━━━━━━━━━━━━━━━━━━━━━━`))
+            console.log(chalk.green(`✅ ${settings.botName} IKO ONLINE!`))
+            console.log(chalk.green(`🤖 Bot Ready: ${new Date().toLocaleTimeString()}`))
+            console.log(chalk.green(`━━━━━━━━━━━━━━━━━━━━━━\n`))
+            
+            if (receivedPendingNotifications) {
+                console.log(chalk.yellow(`📨 Kumekuwa na messages zilizopigwa kwa wakati wa offline...`))
+            }
+
+            // Start immediate cleanup on connection
+            setTimeout(() => {
+                console.log(chalk.cyan(`🧹 Running startup cleanup...`))
+                sessionCleanup.fullCleanup()
+                console.log(chalk.green(`✅ Startup cleanup complete!\n`))
+            }, 2000)
+
+            // Start auto-cleanup scheduler (every 6 hours)
+            sessionCleanup.startAutoCleanup(6)
         }
         
         if (connection === 'close') {
             let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
-            console.log(chalk.red(`[❌] Imekutoka. Code: ${reason}`))
-            if (reason !== DisconnectReason.loggedOut) {
-                console.log(chalk.yellow(`[⏳] Inareconnect...`))
+            console.log(chalk.red(`\n[❌] CONNECTION CLOSED - Code: ${reason}`))
+            
+            if (reason === DisconnectReason.badSession) {
+                console.log(chalk.red("Session imeharibika - Uninstall and reinstall the bot"))
+            } else if (reason === DisconnectReason.connectionClosed) {
+                console.log(chalk.yellow("Connection ilifungwa - Inareconnect..."))
+            } else if (reason === DisconnectReason.connectionLost) {
+                console.log(chalk.yellow("Connection iliyotaka - Inareconnect..."))
+            } else if (reason === DisconnectReason.connectionReplaced) {
+                console.log(chalk.yellow("Connection ilibadilishwa - Uninstall and restart"))
+            } else if (reason === DisconnectReason.loggedOut) {
+                console.log(chalk.red("Umekutoka - Bot itasimama"))
+            }
+            
+            if (reason !== DisconnectReason.loggedOut && reason !== DisconnectReason.badSession) {
+                console.log(chalk.yellow(`[⏳] Inareconnect in 5 seconds...`))
+                await delay(5000)
                 startXeonBotInc()
             }
         }
         
         if (connection === "blocked") {
-            console.log(chalk.red(`[🚫] UMEZUIWA NA WHATSAPP!`))
+            console.log(chalk.red(`\n[🚫] ACCOUNT BLOCKED BY WHATSAPP!\nKamatia Support!`))
         }
     })
 
