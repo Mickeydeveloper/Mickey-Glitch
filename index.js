@@ -129,7 +129,6 @@ async function startXeonBotInc() {
             console.log(chalk.red(`Account blocked by WhatsApp!`))
             console.log(chalk.red(`Contact support.`))
         }
-        }
     })
 
     // Message handler from main.js
