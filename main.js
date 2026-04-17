@@ -28,6 +28,7 @@ let allCommands = {};
 try {
     allCommands = autoLoadCommands();
     console.log(chalk.green(`✅ Loaded ${Object.keys(allCommands).length} commands`))
+    console.log(chalk.blue(`Available commands: ${Object.keys(allCommands).slice(0, 10).join(', ')}...`))
 } catch (e) {
     console.error(chalk.red('Failed to load commands:'), e.message)
 }
@@ -99,10 +100,14 @@ async function handleMessages(sock, messageUpdate) {
         const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
         const isOwnerCheck = m.key.fromMe || senderIsOwnerOrSudo;
 
+        console.log(chalk.cyan(`📨 Message: ${cleanBody}`))
+        console.log(chalk.cyan(`   Command name: ${cmdName}`))
+
         // --- 🚀 EXECUTION ENGINE ---
 
         // Case 1: Help/Menu
         if (cmdName === 'help' || cmdName === 'menu') {
+            console.log(chalk.green(`🚀 Executing help menu...`))
             try {
                 if (helpFunc.execute) {
                     await helpFunc.execute(sock, chatId, m);
@@ -119,6 +124,8 @@ async function handleMessages(sock, messageUpdate) {
 
         // Case 2: Dynamic Commands from /commands/ folder
         const selectedCommand = getCommand(allCommands, cmdName);
+        console.log(chalk.cyan(`   Looking for command: ${cmdName}`))
+        console.log(chalk.cyan(`   Command found: ${selectedCommand ? 'YES' : 'NO'}`))
 
         if (selectedCommand) {
             // Sudo Restriction
@@ -130,22 +137,29 @@ async function handleMessages(sock, messageUpdate) {
                 return;
             }
 
+            console.log(chalk.blue(`   Executing ${cmdName}...`))
             try {
                 if (typeof selectedCommand === 'function') {
+                    console.log(chalk.blue(`   Type: Function`))
                     await selectedCommand(sock, chatId, m, cleanBody);
                 } else if (selectedCommand.execute && typeof selectedCommand.execute === 'function') {
+                    console.log(chalk.blue(`   Type: Module.execute()`))
                     await selectedCommand.execute(sock, chatId, m, cleanBody);
                 } else {
+                    console.log(chalk.yellow(`   Type: Unknown format`))
                     await sock.sendMessage(chatId, {
                         text: `❌ Command error`
                     }, { quoted: m }).catch(() => {});
                 }
+                console.log(chalk.green(`✅ Command executed`))
             } catch (cmdErr) {
-                console.error(chalk.red(`Command error: ${cmdErr.message}`));
+                console.error(chalk.red(`❌ Execution error: ${cmdErr.message}`));
                 await sock.sendMessage(chatId, {
                     text: `❌ Error: ${cmdErr.message}`
                 }, { quoted: m }).catch(() => {});
             }
+        } else {
+            console.log(chalk.yellow(`⚠️ Command not found: ${cmdName}`))
         }
 
     } catch (e) {

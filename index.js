@@ -16,6 +16,9 @@ const {
     jidNormalizedUser
 } = require("@whiskeysockets/baileys")
 
+// Import message handlers once at startup
+const { handleMessages, handleStatus } = require('./main')
+
 async function startXeonBotInc() {
     // Load WhatsApp session
     const { state, saveCreds } = await useMultiFileAuthState(`./session`)
@@ -136,7 +139,6 @@ async function startXeonBotInc() {
         try {
             const mek = chatUpdate.messages[0]
             if (!mek.message || mek.key.fromMe) return
-            const { handleMessages, handleStatus } = require('./main')
             
             await Promise.all([
                 handleMessages(XeonBotInc, chatUpdate).catch(err => {}),
