@@ -6,9 +6,6 @@ const chalk = require('chalk')
 const pino = require("pino")
 const path = require('path')
 const customLogger = require('./lib/silentLogger')
-const systemMonitor = require('./lib/systemMonitor')
-const sessionCleanup = require('./lib/sessionCleanup')
-const autoSystem = require('./lib/autoSystem')
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -20,7 +17,7 @@ const {
 } = require("@whiskeysockets/baileys")
 
 async function startXeonBotInc() {
-    // 1. Futa session ya zamani inayoweza kukwamisha pairing mpya
+    // Load WhatsApp session
     const { state, saveCreds } = await useMultiFileAuthState(`./session`)
     const { version } = await fetchLatestBaileysVersion()
 
@@ -28,7 +25,6 @@ async function startXeonBotInc() {
         version,
         logger: customLogger,
         printQRInTerminal: false,
-        // TUMEBORESHA HAPA: Kutumia Chrome kwenye Linux ili WhatsApp iweze ku-trust device
         browser: ["Ubuntu", "Chrome", "20.0.04"], 
         auth: {
             creds: state.creds,
@@ -41,29 +37,29 @@ async function startXeonBotInc() {
         keepAliveIntervalMs: 10000,
     })
 
-    // PAIRING LOGIC (Nguvu ya MICKDADY)
+    // PAIRING LOGIC (MICKDADY Power)
     if (!XeonBotInc.authState.creds.registered) {
         let phoneNumber = settings.ownerNumber.replace(/[^0-9]/g, '')
         
-        console.log(chalk.cyan(`\n[📡] System inatayarisha pairing kwa: ${phoneNumber}...`))
+        console.log(chalk.cyan(`\n[📡] System is preparing to pair with: ${phoneNumber}...`))
         
-        // MUHIMU: Subiri sekunde 15 ili socket iunganishwe kikamilifu na server za WA
+        // Important: Wait 15 seconds for socket to fully connect with WA servers
         await delay(15000) 
 
         try {
-            console.log(chalk.yellow(`[⏳] Inatengeneza Code (MICKDADY)...`))
+            console.log(chalk.yellow(`[⏳] Generating Pairing Code (MICKDADY)...`))
             
-            // HAPA: Tunatumia custom code yako
+            // Using custom code
             let code = await XeonBotInc.requestPairingCode(phoneNumber, "MICKDADY")
             code = code?.match(/.{1,4}/g)?.join("-") || code
             
             console.log(chalk.black(chalk.bgGreen(`\n  PAIRING CODE: ${code}  \n`)))
-            console.log(chalk.white("👉 Fungua WhatsApp > Linked Devices > Link with Phone Number"));
-            console.log(chalk.white(`👉 Kisha ingiza code hiyo hapo juu sasa hivi!`));
+            console.log(chalk.white("👉 Open WhatsApp > Linked Devices > Link with Phone Number"));
+            console.log(chalk.white(`👉 Then enter the code above now!`));
 
         } catch (error) {
-            console.error(chalk.red('\n❌ Pairing imefeli:'), error.message)
-            console.log(chalk.gray("Huenda WhatsApp wamekuwekea 'Cool-off period'. Subiri dk 10 jaribu tena."));
+            console.error(chalk.red('\n❌ Pairing failed:'), error.message)
+            console.log(chalk.gray("WhatsApp may have set a 'Cool-off period'. Wait 10 minutes and try again."));
         }
     }
 
@@ -72,89 +68,83 @@ async function startXeonBotInc() {
     XeonBotInc.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr, receivedPendingNotifications } = update
         
-        // Display QR code for pairing
+        // QR code for pairing
         if (qr) {
-            console.log(chalk.yellow(`\n━━━━━━━━━━━━━━━━━━━━━━`))
-            console.log(chalk.yellow(`📱 SCAN QR CODE NA WAIT`))
-            console.log(chalk.yellow(`━━━━━━━━━━━━━━━━━━━━━━\n`))
+            console.log(chalk.yellow(`📱 SCAN QR CODE AND WAIT`))
         }
         
-        // Connection state messages with better formatting
+        // Connection state messages
         if (connection === "connecting") {
-            console.log(chalk.blue(`\n[⏳] ${settings.botName}: Inaiunganisha kwenye WhatsApp...`))
+            console.log(chalk.blue(`Connecting to WhatsApp...`))
         }
         
         if (connection === "authenticating") {
-            console.log(chalk.cyan(`[🔐] ${settings.botName}: Inakatatizi...`))
+            console.log(chalk.cyan(`Authenticating...`))
         }
         
         if (connection === "open") {
-            console.log(chalk.green(`\n` + `━━━━━━━━━━━━━━━━━━━━━━`))
-            console.log(chalk.green(`✅ ${settings.botName} IKO ONLINE!`))
-            console.log(chalk.green(`🤖 Bot Ready: ${new Date().toLocaleTimeString()}`))
-            console.log(chalk.green(`━━━━━━━━━━━━━━━━━━━━━━\n`))
-            
+            console.log(chalk.green(`✅ ${settings.botName} IS ONLINE!`))
             if (receivedPendingNotifications) {
-                console.log(chalk.yellow(`📨 Kumekuwa na messages zilizopigwa kwa wakati wa offline...`))
+                console.log(chalk.yellow(`📨 Loaded pending messages`))
             }
 
-            // Start immediate cleanup on connection
-            setTimeout(() => {
-                console.log(chalk.cyan(`🧹 Running startup cleanup...`))
-                sessionCleanup.fullCleanup()
-                console.log(chalk.green(`✅ Startup cleanup complete!\n`))
-            }, 2000)
-
-            // Start auto-cleanup scheduler (every 6 hours)
-            sessionCleanup.startAutoCleanup(6)
+            // Send notification to owner
+            try {
+                const ownerJid = settings.ownerNumber.endsWith('@s.whatsapp.net') 
+                    ? settings.ownerNumber 
+                    : settings.ownerNumber.replace(/[^0-9]/g, '') + '@s.whatsapp.net'
+                
+                await XeonBotInc.sendMessage(ownerJid, {
+                    text: `✅ Bot is online!\n📱 ${new Date().toLocaleTimeString()}`
+                }).catch(() => {})
+            } catch (err) {
+                // Silent fail
+            }
         }
         
         if (connection === 'close') {
             let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
-            console.log(chalk.red(`\n[❌] CONNECTION CLOSED - Code: ${reason}`))
+            console.log(chalk.red(`❌ Connection closed (Code: ${reason})`))
             
             if (reason === DisconnectReason.badSession) {
-                console.log(chalk.red("Session imeharibika - Uninstall and reinstall the bot"))
+                console.log(chalk.red("❌ Bad session - Delete session folder and restart"))
             } else if (reason === DisconnectReason.connectionClosed) {
-                console.log(chalk.yellow("Connection ilifungwa - Inareconnect..."))
+                console.log(chalk.yellow("⏳ Connection closed, reconnecting..."))
             } else if (reason === DisconnectReason.connectionLost) {
-                console.log(chalk.yellow("Connection iliyotaka - Inareconnect..."))
+                console.log(chalk.yellow("⏳ Connection lost, reconnecting..."))
             } else if (reason === DisconnectReason.connectionReplaced) {
-                console.log(chalk.yellow("Connection ilibadilishwa - Uninstall and restart"))
+                console.log(chalk.yellow("⚠️  Connection replaced, restart bot"))
             } else if (reason === DisconnectReason.loggedOut) {
-                console.log(chalk.red("Umekutoka - Bot itasimama"))
+                console.log(chalk.red("❌ Logged out - Stopping"))
             }
             
             if (reason !== DisconnectReason.loggedOut && reason !== DisconnectReason.badSession) {
-                console.log(chalk.yellow(`[⏳] Inareconnect in 5 seconds...`))
+                console.log(chalk.yellow(`Reconnecting in 5 seconds...`))
                 await delay(5000)
                 startXeonBotInc()
             }
         }
         
         if (connection === "blocked") {
-            console.log(chalk.red(`\n[🚫] ACCOUNT BLOCKED BY WHATSAPP!\nKamatia Support!`))
+            console.log(chalk.red(`Account blocked by WhatsApp!`))
+            console.log(chalk.red(`Contact support.`))
+        }
         }
     })
 
-    // Handler ya message (main.js)
+    // Message handler from main.js
     XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
         try {
             const mek = chatUpdate.messages[0]
             if (!mek.message || mek.key.fromMe) return
             const { handleMessages, handleStatus } = require('./main')
             
-            // Run both handlers in parallel
             await Promise.all([
-                handleMessages(XeonBotInc, chatUpdate).catch(err => {
-                    console.error(chalk.red(`[❌] Message Handler Error:`), err.message)
-                }),
-                handleStatus(XeonBotInc, chatUpdate).catch(err => {
-                    console.error(chalk.red(`[❌] Status Handler Error:`), err.message)
-                })
+                handleMessages(XeonBotInc, chatUpdate).catch(err => {}),
+                handleStatus(XeonBotInc, chatUpdate).catch(err => {})
             ])
         } catch (err) {
-            console.error(chalk.red(`[❌] Messages Event Handler Error:`, err.message))
+            // Silent fail
         }
     })
 

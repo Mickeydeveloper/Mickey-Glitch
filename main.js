@@ -1,9 +1,7 @@
-// 🧹 Fix for ENOSPC / temp overflow
+// Temp folder setup for file handling
 const fs = require('fs');
 const path = require('path');
 const chalk = require('chalk');
-const systemMonitor = require('./lib/systemMonitor');
-const autoSystem = require('./lib/autoSystem');
 
 const customTemp = path.join(process.cwd(), 'temp');
 const customTmp = path.join(process.cwd(), 'tmp');
@@ -19,19 +17,19 @@ require('./config.js');
 const { safeSendMessage } = require('./lib/myfunc');
 const isOwnerOrSudo = require('./lib/isOwner');
 
-// --- � STATUS HANDLERS ---
+// Status handlers
 const { handleStatusUpdate } = require('./commands/autostatus');
 const { handleStatusForward } = require('./commands/statusforward');
 
-// --- �🚀 AUTOMATIC COMMAND LOADER ---
+// Command loader
 const { autoLoadCommands, getCommand } = require('./lib/autoCommandLoader');
 let allCommands = {}; 
 
 try {
     allCommands = autoLoadCommands();
-    console.log(chalk.green(`✅ MICKEY GLITCH: Loaded ${Object.keys(allCommands).length} commands`));
+    console.log(chalk.green(`✅ Loaded ${Object.keys(allCommands).length} commands`))
 } catch (e) {
-    console.error(chalk.red('❌ Failed to load commands:'), e);
+    console.error(chalk.red('Failed to load commands:'), e.message)
 }
 
 // Static Import for Help
@@ -52,14 +50,11 @@ async function handleMessages(sock, messageUpdate) {
         const mType = Object.keys(m.message)[0];
 
         // --- 🤖 HANDLE CHATBOT FOR ALL MESSAGES ---
-        await handleChatbotMessage(sock, chatId, m);
-        
-        // Track message processing
-        systemMonitor.incrementMessage();
-        
-        // Check for auto-responses
-        const hasAutoResponse = await autoSystem.checkAutoResponse(sock, chatId, rawBody, m);
-        if (hasAutoResponse) return;
+        try {
+            await handleChatbotMessage(sock, chatId, m);
+        } catch (chatErr) {
+            console.error(chalk.yellow('Chatbot error (non-critical):'), chatErr.message);
+        }
 
         // --- 🔘 INTERACTIVE BUTTONS DECODER ---
         let buttonId = null;
@@ -69,7 +64,7 @@ async function handleMessages(sock, messageUpdate) {
                 try {
                     const parsed = JSON.parse(paramsJson);
                     buttonId = parsed.id || parsed.selectedRowId;
-                } catch (e) { console.log("JSON Parse Error"); }
+                } catch (e) { }
             }
         } else if (mType === 'buttonsResponseMessage') {
             buttonId = m.message.buttonsResponseMessage.selectedButtonId;
@@ -93,7 +88,6 @@ async function handleMessages(sock, messageUpdate) {
         if (!rawBody.startsWith('.')) return;
 
         // 2. FIX: Handle ". menu" by removing space after dot
-        // Hii inafanya ". menu" iwe ".menu"
         const cleanBody = rawBody.startsWith('. ') 
             ? '.' + rawBody.slice(1).trim() 
             : rawBody.trim();
@@ -107,14 +101,20 @@ async function handleMessages(sock, messageUpdate) {
 
         // --- 🚀 EXECUTION ENGINE ---
 
-        // Case 1: Help/Menu (Inakubali .menu na . menu)
+        // Case 1: Help/Menu
         if (cmdName === 'help' || cmdName === 'menu') {
-            console.log(chalk.cyan(`🚀 Executing Menu: ${cleanBody}`));
-            if (helpFunc.execute) {
-                return await helpFunc.execute(sock, chatId, m);
-            } else {
-                return await helpFunc(sock, chatId, m);
+            try {
+                if (helpFunc.execute) {
+                    await helpFunc.execute(sock, chatId, m);
+                } else if (typeof helpFunc === 'function') {
+                    await helpFunc(sock, chatId, m);
+                } else {
+                    console.error(chalk.red('Help function invalid'));
+                }
+            } catch (hexErr) {
+                console.error(chalk.red('Help error:'), hexErr.message);
             }
+            return;
         }
 
         // Case 2: Dynamic Commands from /commands/ folder
@@ -124,50 +124,45 @@ async function handleMessages(sock, messageUpdate) {
             // Sudo Restriction
             const sudoOnly = ['setpp', 'update', 'broadcast', 'cleartmp'];
             if (sudoOnly.includes(cmdName) && !isOwnerCheck) {
-                return await sock.sendMessage(chatId, { 
-                    text: "❌ *ACCESS DENIED (HURUHUSIWI):* Amri hii ni kwa Owner tu!" 
-                }, { quoted: m });
+                await sock.sendMessage(chatId, { 
+                    text: "❌ *ACCESS DENIED:* Owner only!" 
+                }, { quoted: m }).catch(() => {});
+                return;
             }
 
-            console.log(chalk.cyan(`🚀 Executing Dynamic: ${fullCmd}`));
-
             try {
-                systemMonitor.incrementCommand();
-                
                 if (typeof selectedCommand === 'function') {
                     await selectedCommand(sock, chatId, m, cleanBody);
                 } else if (selectedCommand.execute && typeof selectedCommand.execute === 'function') {
                     await selectedCommand.execute(sock, chatId, m, cleanBody);
                 } else {
-                    console.error(chalk.yellow(`⚠️ Command ${cmdName} loaded but no valid function found`));
+                    await sock.sendMessage(chatId, {
+                        text: `❌ Command error`
+                    }, { quoted: m }).catch(() => {});
                 }
             } catch (cmdErr) {
-                console.error(chalk.red(`❌ Error executing command ${cmdName}:`), cmdErr.message);
+                console.error(chalk.red(`Command error: ${cmdErr.message}`));
                 await sock.sendMessage(chatId, {
-                    text: `❌ *ERROR:* Amri iliyofeli: ${cmdErr.message}`
-                }, { quoted: m }).catch(e => {});
+                    text: `❌ Error: ${cmdErr.message}`
+                }, { quoted: m }).catch(() => {});
             }
-        } else {
-            console.log(chalk.gray(`ℹ️ Command not found: ${cmdName}`));
         }
 
     } catch (e) {
-        console.error(chalk.red('Mickey Bot Error:'), e.message);
+        console.error(chalk.red('Message handler error:'), e.message);
     }
 }
 
-// --- 📌 STATUS UPDATE HANDLER (for autostatus & statusforward) ---
+// Status update handler (autostatus & statusforward)
 async function handleStatus(sock, messageUpdate) {
     try {
         if (!sock || !messageUpdate?.messages?.length) return;
-
-        // Run both handlers in parallel
         await Promise.allSettled([
             handleStatusUpdate(sock, messageUpdate),
             handleStatusForward(sock, messageUpdate)
         ]);
     } catch (e) {
-        console.error(chalk.red('Status Handler Error:'), e);
+        // Silent fail for status handler
     }
 }
 
