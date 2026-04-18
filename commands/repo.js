@@ -160,4 +160,4 @@ async function checkupdatesCommand(sock, chatId, message) {
     }
 }
 
-module.exports = checkupdatesCommand;
+module.exports = repoCommand;
