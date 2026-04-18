@@ -23,24 +23,29 @@ const menuCommand = async (sock, chatId, m) => {
             // Epuka kuorodhesha menu yenyewe ndani ya list ya commands
             if (file === 'menu.js' || file === 'help.js') continue;
 
-            const cmdFile = require(path.join(commandsDir, file));
+            try {
+                const cmdFile = require(path.join(commandsDir, file));
 
-            let cmdName = cmdFile.name || file.replace('.js', ''); 
-            cmdName = cmdName.toLowerCase().replace('command', '');
+                let cmdName = cmdFile.name || file.replace('.js', ''); 
+                cmdName = cmdName.toLowerCase().replace('command', '');
 
-            const category = (cmdFile.category || 'MENU').toUpperCase();
-            const description = cmdFile.description || `Tumia .${cmdName}`;
+                const category = (cmdFile.category || 'MENU').toUpperCase();
+                const description = cmdFile.description || `Tumia .${cmdName}`;
 
-            if (!menuSections[category]) {
-                menuSections[category] = [];
+                if (!menuSections[category]) {
+                    menuSections[category] = [];
+                }
+
+                menuSections[category].push({
+                    header: '✨',
+                    title: cmdName.charAt(0).toUpperCase() + cmdName.slice(1),
+                    description: description,
+                    id: `.${cmdName}`
+                });
+            } catch (e) {
+                console.log(`Skipping ${file} due to export error: ${e.message}`);
+                continue;
             }
-
-            menuSections[category].push({
-                header: '✨',
-                title: cmdName.charAt(0).toUpperCase() + cmdName.slice(1),
-                description: description,
-                id: `.${cmdName}`
-            });
         }
 
         const sections = Object.keys(menuSections).map(cat => ({

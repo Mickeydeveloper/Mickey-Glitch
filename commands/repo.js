@@ -85,7 +85,7 @@ async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
     return await sock.relayMessage(chatId, interactiveMsg, { messageId: quotedMsg.key.id });
 }
 
-async function checkupdatesCommand(sock, chatId, message) {
+async function repoCommand(sock, chatId, message) {
     if (!sock) return;
 
     let command = '';
