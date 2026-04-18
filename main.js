@@ -39,10 +39,8 @@ const helpFunc = require('./commands/help');
 const { handleChatbotMessage } = require('./commands/chatbot');
 async function handleMessages(sock, messageUpdate) {
     try {
-        console.log(chalk.gray(`🔍 Message update type: ${messageUpdate.type}`))
         if (!sock || !sock.user) return;
         const { messages, type } = messageUpdate;
-        console.log(chalk.gray(`📝 Message type: ${type}`))
         if (type !== 'notify') return;
 
         const m = messages[0];
@@ -51,17 +49,12 @@ async function handleMessages(sock, messageUpdate) {
         const chatId = m.key.remoteJid;
         const senderId = m.key.participant || m.key.remoteJid;
         const mType = Object.keys(m.message)[0];
-        console.log(chalk.gray(`💬 Message type: ${mType}`))
-        console.log(chalk.gray(`👤 Sender: ${senderId}`))
-        console.log(chalk.gray(`🏠 Chat: ${chatId}`))
 
         // --- 🤖 HANDLE CHATBOT FOR ALL MESSAGES ---
         try {
-            console.log(chalk.gray(`🤖 Checking chatbot...`))
             await handleChatbotMessage(sock, chatId, m);
-            console.log(chalk.gray(`🤖 Chatbot processed`))
         } catch (chatErr) {
-            console.error(chalk.yellow('Chatbot error (non-critical):'), chatErr.message);
+            // Silent chatbot error
         }
 
         // --- 🔘 INTERACTIVE BUTTONS DECODER ---
@@ -105,45 +98,31 @@ async function handleMessages(sock, messageUpdate) {
         }
 
         rawBody = rawBody.trim();
-        console.log(chalk.gray(`📄 Raw body: "${rawBody}"`))
-        console.log(chalk.gray(`🔘 Button ID: "${buttonId || 'none'}"`))
 
         // 1. Check if it starts with prefix (.)
         if (!rawBody.startsWith('.')) {
-            console.log(chalk.gray(`❌ No prefix, ignoring`))
             return;
         }
 
         // 2. FIX: Handle ". menu" by removing space after dot
-        const cleanBody = rawBody.startsWith('. ') 
-            ? '.' + rawBody.slice(1).trim() 
+        const cleanBody = rawBody.startsWith('. ')
+            ? '.' + rawBody.slice(1).trim()
             : rawBody.trim();
 
-        const args = cleanBody.split(' ');
-        const cmdName = args[0].toLowerCase().slice(1); // Mfano: "menu"
-        const fullCmd = args[0].toLowerCase(); // Mfano: ".menu"
+        console.log(chalk.cyan(`📨 Raw: "${rawBody}" → Clean: "${cleanBody}"`))
 
-        console.log(chalk.cyan(`📨 Message: ${cleanBody}`))
-        console.log(chalk.cyan(`   Command name: ${cmdName}`))
+        const args = cleanBody.split(' ');
+        const cmdName = args[0].toLowerCase().slice(1); // Extract command name
+        const fullCmd = args[0].toLowerCase(); // Full command with dot
+
+        console.log(chalk.cyan(`   Command: ${cmdName} (from ${fullCmd})`))
+
+        // Owner check
+        const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
+        const isOwnerCheck = m.key.fromMe || senderIsOwnerOrSudo; // Bot's own messages count as owner
+        console.log(chalk.cyan(`   Is owner: ${isOwnerCheck ? 'YES' : 'NO'}`))
 
         // --- 🚀 EXECUTION ENGINE ---
-
-        // Case 1: Help/Menu
-        if (cmdName === 'help' || cmdName === 'menu') {
-            console.log(chalk.green(`🚀 Executing help menu...`))
-            try {
-                if (helpFunc.execute) {
-                    await helpFunc.execute(sock, chatId, m);
-                } else if (typeof helpFunc === 'function') {
-                    await helpFunc(sock, chatId, m);
-                } else {
-                    console.error(chalk.red('Help function invalid'));
-                }
-            } catch (hexErr) {
-                console.error(chalk.red('Help error:'), hexErr.message);
-            }
-            return;
-        }
 
         // Case 2: Dynamic Commands from /commands/ folder
         const selectedCommand = getCommand(allCommands, cmdName);
@@ -153,7 +132,23 @@ async function handleMessages(sock, messageUpdate) {
         // TEMPORARY TEST: Simple response for .test command
         if (cmdName === 'test') {
             console.log(chalk.green(`🧪 TEST COMMAND: Responding with pong`))
-            await sock.sendMessage(chatId, { text: '🏓 Pong! Test successful!' }, { quoted: m }).catch(() => {})
+            await sock.sendMessage(chatId, { text: '🏓 Pong! Commands are working!' }, { quoted: m }).catch(() => {})
+            return;
+        }
+
+        // TEMPORARY TEST: Simple response for .hi command
+        if (cmdName === 'hi') {
+            console.log(chalk.green(`👋 HI COMMAND: Responding with greeting`))
+            await sock.sendMessage(chatId, { text: '👋 Hello! Bot is responding!' }, { quoted: m }).catch(() => {})
+            return;
+        }
+
+        // TEMPORARY TEST: Simple menu response
+        if (cmdName === 'menu' || cmdName === 'help') {
+            console.log(chalk.green(`📋 MENU COMMAND: Showing menu`))
+            await sock.sendMessage(chatId, { 
+                text: `📋 *MICKEY GLITCH MENU*\n\n🤖 Bot is working!\n\nAvailable commands:\n• .test - Test command\n• .hi - Greeting\n• .menu - Show this menu\n• .help - Show full help\n\nTry other commands too!` 
+            }, { quoted: m }).catch(() => {})
             return;
         }
 
