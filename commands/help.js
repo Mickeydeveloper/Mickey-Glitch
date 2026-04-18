@@ -8,7 +8,7 @@ const { sendInteractiveMessage } = require('gifted-btns');
  * @author: Quantum Base Developer (TZ)
  */
 
-const helpCommand = async (sock, chatId, m) => {
+const menuCommand = async (sock, chatId, m) => {
     try {
         const botName = 'MICKEY GLITCH';
         const now = moment().tz('Africa/Dar_es_Salaam');
@@ -20,8 +20,8 @@ const helpCommand = async (sock, chatId, m) => {
         const menuSections = {};
 
         for (const file of commandFiles) {
-            // Hii inazuia "help" na "menu" zisijionyeshe ndani ya orodha ya commands
-            if (file === 'help.js' || file === 'menu.js') continue;
+            // Epuka kuorodhesha menu yenyewe ndani ya list ya commands
+            if (file === 'menu.js' || file === 'help.js') continue;
 
             const cmdFile = require(path.join(commandsDir, file));
 
@@ -85,12 +85,9 @@ const helpCommand = async (sock, chatId, m) => {
     }
 };
 
-// Hii inahakikisha kuwa mfumo ukisoma file hili, unajua ni la 'help' NA 'menu'
+// Export kwa ajili ya .menu pekee
 module.exports = {
-    name: 'help',
-    alias: ['menu'],
+    name: 'menu',
     category: 'main',
-    execute: helpCommand,
-    // Ongeza hii hapa chini kama ziada kwa mifumo inayotumia object export
-    helpCommand 
+    execute: menuCommand
 };
