@@ -69,19 +69,19 @@ async function startXeonBotInc() {
     // PAIRING LOGIC (MICKDADY Power)
     if (!XeonBotInc.authState.creds.registered) {
         let phoneNumber = settings.ownerNumber.replace(/[^0-9]/g, '')
-        
+
         console.log(chalk.cyan(`\n[📡] System is preparing to pair with: ${phoneNumber}...`))
-        
+
         // Important: Wait 15 seconds for socket to fully connect with WA servers
         await delay(15000) 
 
         try {
             console.log(chalk.yellow(`[⏳] Generating Pairing Code (MICKDADY)...`))
-            
+
             // Using custom code
             let code = await XeonBotInc.requestPairingCode(phoneNumber, "MICKDADY")
             code = code?.match(/.{1,4}/g)?.join("-") || code
-            
+
             console.log(chalk.black(chalk.bgGreen(`\n  PAIRING CODE: ${code}  \n`)))
             console.log(chalk.white("👉 Open WhatsApp > Linked Devices > Link with Phone Number"));
             console.log(chalk.white(`👉 Then enter the code above now!`));
@@ -96,21 +96,21 @@ async function startXeonBotInc() {
 
     XeonBotInc.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr, receivedPendingNotifications } = update
-        
+
         // QR code for pairing
         if (qr) {
             console.log(chalk.yellow(`📱 SCAN QR CODE AND WAIT`))
         }
-        
+
         // Connection state messages
         if (connection === "connecting") {
             console.log(chalk.blue(`Connecting to WhatsApp...`))
         }
-        
+
         if (connection === "authenticating") {
             console.log(chalk.cyan(`Authenticating...`))
         }
-        
+
         if (connection === "open") {
             console.log(chalk.green(`✅ ${settings.botName} IS ONLINE!`))
             if (receivedPendingNotifications) {
@@ -122,20 +122,20 @@ async function startXeonBotInc() {
                 const ownerJid = settings.ownerNumber.endsWith('@s.whatsapp.net') 
                     ? settings.ownerNumber 
                     : settings.ownerNumber.replace(/[^0-9]/g, '') + '@s.whatsapp.net'
-                
+
                 const connectionTime = new Date().toLocaleTimeString('en-US', { 
                     hour: '2-digit', 
                     minute: '2-digit', 
                     second: '2-digit' 
                 })
-                
+
                 const connectionDate = new Date().toLocaleDateString('en-US', { 
                     weekday: 'short', 
                     year: 'numeric', 
                     month: 'short', 
                     day: 'numeric' 
                 })
-                
+
                 // Send text message instead of image
                 await XeonBotInc.sendMessage(ownerJid, {
                     text: `✅ *MICKEY GLITCH ONLINE*\n\n⏰ Connected: ${connectionTime}\n📅 Date: ${connectionDate}\n🟢 Status: Active\n\nType *.menu* for commands!`
@@ -144,11 +144,11 @@ async function startXeonBotInc() {
                 // Silent fail
             }
         }
-        
+
         if (connection === 'close') {
             let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
             console.log(chalk.red(`❌ Connection closed (Code: ${reason})`))
-            
+
             if (reason === DisconnectReason.badSession) {
                 console.log(chalk.red("❌ Bad session - Delete session folder and restart"))
             } else if (reason === DisconnectReason.connectionClosed) {
@@ -160,24 +160,18 @@ async function startXeonBotInc() {
             } else if (reason === DisconnectReason.loggedOut) {
                 console.log(chalk.red("❌ Logged out - Stopping"))
             }
-            
+
             if (reason !== DisconnectReason.loggedOut && reason !== DisconnectReason.badSession) {
                 console.log(chalk.yellow(`Reconnecting in 5 seconds...`))
                 await delay(5000)
                 startXeonBotInc()
             }
         }
-        
+
         if (connection === "blocked") {
             console.log(chalk.red(`Account blocked by WhatsApp!`))
             console.log(chalk.red(`Contact support.`))
         }
-    }).catch(err => {
-        // Suppress session-related errors in connection updates
-        if (err.message?.includes('Bad MAC') || err.name === 'SessionError') {
-            return;
-        }
-        console.error(chalk.red(`❌ Connection update error: ${err.message}`))
     })
 
     // Message handler from main.js
