@@ -49,7 +49,7 @@ async function startXeonBotInc() {
 
     const XeonBotInc = makeWASocket({
         version,
-        logger: logger, // Tumia logger tulioifanyia optimization
+        logger: logger,
         printQRInTerminal: false,
         browser: ["Ubuntu", "Chrome", "20.0.04"], 
         auth: {
@@ -58,7 +58,14 @@ async function startXeonBotInc() {
         },
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: true,
-        getMessage: async (key) => { return { conversation: 'Mickey Glitch' } } // Fix decryption errors
+        getMessage: async (key) => { return { conversation: 'Mickey Glitch' } },
+        shouldSyncHistoryMessage: () => false,
+        syncFullHistory: false,
+        retryRequestDelayMs: 100,
+        shouldCacheMediasFromThisJid: () => false,
+        fireInitQueries: false,
+        maxMsgsInMemory: 100,
+        emitOwnEvents: false
     })
 
     // PAIRING LOGIC

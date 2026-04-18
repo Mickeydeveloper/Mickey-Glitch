@@ -198,20 +198,26 @@ async function handleMessages(sock, messageUpdate) {
                 // Determine command type and execute with error handling
                 if (typeof selectedCommand === 'function') {
                     console.log(chalk.blue(`   Type: Function`))
-                    await selectedCommand(sock, chatId, m, cleanBody).catch(funcErr => {
+                    await Promise.race([
+                        selectedCommand(sock, chatId, m, cleanBody),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), 30000))
+                    ]).catch(funcErr => {
                         console.error(chalk.red(`❌ Function execution error: ${funcErr.message}`));
                         throw funcErr;
                     });
                 } else if (selectedCommand.execute && typeof selectedCommand.execute === 'function') {
                     console.log(chalk.blue(`   Type: Module.execute()`))
-                    await selectedCommand.execute(sock, chatId, m, cleanBody).catch(modErr => {
+                    await Promise.race([
+                        selectedCommand.execute(sock, chatId, m, cleanBody),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), 30000))
+                    ]).catch(modErr => {
                         console.error(chalk.red(`❌ Module execution error: ${modErr.message}`));
                         throw modErr;
                     });
                 } else {
                     console.log(chalk.yellow(`   Type: Unknown format`))
                     await sock.sendMessage(chatId, {
-                        text: `❌ Command error`
+                        text: `❌ *Command error*`
                     }, { quoted: m }).catch(() => {});
                 }
                 console.log(chalk.green(`✅ Command executed successfully`))

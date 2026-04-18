@@ -88,17 +88,7 @@ async function facebookCommand(sock, chatId, message) {
             await sock.sendMessage(chatId, {
                 video: { url: videoUrl },
                 mimetype: 'video/mp4',
-                caption: `✅ *Facebook Video Downloader*\n\n*Title:* ${title}`,
-                contextInfo: {
-                    externalAdReply: {
-                        title,
-                        body: 'Facebook Downloader',
-                        thumbnailUrl: thumbnail,
-                        sourceUrl: url,
-                        mediaType: 1,
-                        renderLargerThumbnail: true
-                    }
-                }
+                caption: `✅ *Facebook Video Downloader*\n\n*Title:* ${title}`
             }, { quoted: message });
         } catch (err) {
             await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Jaribu tena baadae.' });

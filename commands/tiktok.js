@@ -76,17 +76,7 @@ async function tiktokCommand(sock, chatId, message) {
             await sock.sendMessage(chatId, {
                 video: { url: tikData.url },
                 mimetype: 'video/mp4',
-                caption: `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`,
-                contextInfo: {
-                    externalAdReply: {
-                        title: 'TikTok Video Downloaded',
-                        body: tikData.nickname,
-                        thumbnailUrl: tikData.thumbnail,
-                        sourceUrl: url,
-                        mediaType: 1,
-                        renderLargerThumbnail: true
-                    }
-                }
+                caption: `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`
             }, { quoted: message });
         } catch (err) {
             console.error("Send Error:", err.message);

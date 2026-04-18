@@ -66,11 +66,16 @@ async function videoCommand(sock, chatId, message, args) {
             const res = await ruhend.ytmp4(videoUrl);
             
             if (res.status) {
-                await sock.sendMessage(chatId, {
-                    video: { url: res.video },
-                    caption: `✅ *Success:* ${res.title}`,
-                    mimetype: 'video/mp4'
-                }, { quoted: message });
+                try {
+                    await sock.sendMessage(chatId, {
+                        video: { url: res.video },
+                        caption: `✅ *Success:* ${res.title}`,
+                        mimetype: 'video/mp4'
+                    }, { quoted: message });
+                } catch (videoSendErr) {
+                    console.error('Video send error:', videoSendErr.message);
+                    await sock.sendMessage(chatId, { text: '❌ *Hitilafu kutuma video!*' }, { quoted: message }).catch(() => {});
+                }
             }
         }
 

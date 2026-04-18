@@ -32,25 +32,12 @@ async function songCommand(sock, chatId, message) {
         // 2. Reaction ya kupakua
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // 3. Tuma Audio (Marekebisho ya stabilitiy yapo hapa)
+        // 3. Tuma Audio (Optimized kwa wote)
         await sock.sendMessage(chatId, {
             audio: { url: dlUrl },
-            mimetype: 'audio/mpeg', // MPEG ni stable zaidi kwa wapokeaji wote
+            mimetype: 'audio/mpeg',
             fileName: `${vid.title}.mp3`,
-            ptt: false,
-            contextInfo: {
-                forwardingScore: 999,
-                isForwarded: true,
-                externalAdReply: {
-                    title: vid.title,
-                    body: `Mickey Info Tech | ${vid.timestamp}`,
-                    thumbnailUrl: vid.thumbnail,
-                    mediaType: 2, // Ibadilishe kuwa 2 kwa audio
-                    showAdAttribution: true,
-                    renderLargerThumbnail: true,
-                    sourceUrl: vid.url
-                }
-            }
+            ptt: false
         }, { quoted: message });
 
         // 4. Reaction ya kumaliza
