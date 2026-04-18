@@ -134,20 +134,19 @@ async function repoCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
         // Muhimu: Ongeza User-Agent na timeout
-        const [repoRes, thumbnail] = await Promise.all([
-            axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch', {
-                headers: { 
-                    'User-Agent': 'Mozilla/5.0',
-                    'Accept': 'application/vnd.github.v3+json'
-                },
-                timeout: 10000
-            }),
-            fetchThumbnail('https://github.com/Mickeydeveloper.png') // Nimetumia picha ya GitHub kwasababu onrender inachelewa
-        ]);
+        const repoRes = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch', {
+            headers: { 
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/vnd.github.v3+json'
+            },
+            timeout: 10000
+        });
 
         const repoData = repoRes.data;
         if (!global.repoCache) global.repoCache = {};
         global.repoCache[chatId] = repoData;
+
+        const thumbnail = await fetchThumbnail(repoData.owner.avatar_url);
 
         await sendRepoInteractive(sock, chatId, repoData, thumbnail, message);
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
