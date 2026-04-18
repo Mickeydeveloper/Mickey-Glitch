@@ -16,6 +16,32 @@ const {
     jidNormalizedUser
 } = require("@whiskeysockets/baileys")
 
+// Enable garbage collection for better RAM management
+if (typeof global.gc === 'function') {
+    console.log('🧠 Garbage collection enabled for optimal RAM usage');
+    // Run GC every 5 minutes
+    setInterval(() => {
+        global.gc();
+    }, 5 * 60 * 1000);
+}
+
+// Global error handler for session decryption errors
+process.on('uncaughtException', (err) => {
+    if (err.message?.includes('Bad MAC') || err.name === 'SessionError' || err.message?.includes('Failed to decrypt message')) {
+        // Silently ignore session decryption errors
+        return;
+    }
+    console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    if (reason?.message?.includes('Bad MAC') || reason?.name === 'SessionError' || reason?.message?.includes('Failed to decrypt message')) {
+        // Silently ignore session decryption errors
+        return;
+    }
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // Import message handlers once at startup
 const { handleMessages, handleStatus } = require('./main')
 
@@ -110,12 +136,9 @@ async function startXeonBotInc() {
                     day: 'numeric' 
                 })
                 
-                // Send image with caption
+                // Send text message instead of image
                 await XeonBotInc.sendMessage(ownerJid, {
-                    image: {
-                        url: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg'
-                    },
-                    caption: `✅ *MICKEY GLITCH ONLINE*\n\n⏰ Connected: ${connectionTime}\n📅 Date: ${connectionDate}\n🟢 Status: Active\n\nType *.menu* for commands!`
+                    text: `✅ *MICKEY GLITCH ONLINE*\n\n⏰ Connected: ${connectionTime}\n📅 Date: ${connectionDate}\n🟢 Status: Active\n\nType *.menu* for commands!`
                 }).catch(() => {})
             } catch (err) {
                 // Silent fail
@@ -149,6 +172,12 @@ async function startXeonBotInc() {
             console.log(chalk.red(`Account blocked by WhatsApp!`))
             console.log(chalk.red(`Contact support.`))
         }
+    }).catch(err => {
+        // Suppress session-related errors in connection updates
+        if (err.message?.includes('Bad MAC') || err.name === 'SessionError') {
+            return;
+        }
+        console.error(chalk.red(`❌ Connection update error: ${err.message}`))
     })
 
     // Message handler from main.js
@@ -169,6 +198,11 @@ async function startXeonBotInc() {
                 handleStatus(XeonBotInc, chatUpdate).catch(err => {})
             ])
         } catch (err) {
+            // Suppress Bad MAC and Session decryption errors
+            if (err.message?.includes('Bad MAC') || err.name === 'SessionError' || err.message?.includes('Failed to decrypt message')) {
+                // Silently ignore session decryption errors
+                return;
+            }
             console.error(chalk.red(`❌ Event handler error: ${err.message}`))
         }
     })
