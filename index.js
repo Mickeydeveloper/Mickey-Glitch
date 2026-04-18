@@ -136,16 +136,24 @@ async function startXeonBotInc() {
 
     // Message handler from main.js
     XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
+        console.log(chalk.magenta(`📨 MESSAGE EVENT TRIGGERED`))
         try {
             const mek = chatUpdate.messages[0]
+            console.log(chalk.gray(`📨 Raw message received: ${mek?.message ? 'HAS_MESSAGE' : 'NO_MESSAGE'}`))
+            console.log(chalk.gray(`   From me: ${mek?.key?.fromMe ? 'YES' : 'NO'}`))
+            console.log(chalk.gray(`   Chat: ${mek?.key?.remoteJid}`))
+            
             if (!mek.message || mek.key.fromMe) return
             
+            console.log(chalk.cyan(`✅ Processing message...`))
             await Promise.all([
-                handleMessages(XeonBotInc, chatUpdate).catch(err => {}),
+                handleMessages(XeonBotInc, chatUpdate).catch(err => {
+                    console.error(chalk.red(`❌ Message handler error: ${err.message}`))
+                }),
                 handleStatus(XeonBotInc, chatUpdate).catch(err => {})
             ])
         } catch (err) {
-            // Silent fail
+            console.error(chalk.red(`❌ Event handler error: ${err.message}`))
         }
     })
 

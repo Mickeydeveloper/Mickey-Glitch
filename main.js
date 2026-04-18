@@ -39,8 +39,10 @@ const helpFunc = require('./commands/help');
 const { handleChatbotMessage } = require('./commands/chatbot');
 async function handleMessages(sock, messageUpdate) {
     try {
+        console.log(chalk.gray(`🔍 Message update type: ${messageUpdate.type}`))
         if (!sock || !sock.user) return;
         const { messages, type } = messageUpdate;
+        console.log(chalk.gray(`📝 Message type: ${type}`))
         if (type !== 'notify') return;
 
         const m = messages[0];
@@ -49,10 +51,15 @@ async function handleMessages(sock, messageUpdate) {
         const chatId = m.key.remoteJid;
         const senderId = m.key.participant || m.key.remoteJid;
         const mType = Object.keys(m.message)[0];
+        console.log(chalk.gray(`💬 Message type: ${mType}`))
+        console.log(chalk.gray(`👤 Sender: ${senderId}`))
+        console.log(chalk.gray(`🏠 Chat: ${chatId}`))
 
         // --- 🤖 HANDLE CHATBOT FOR ALL MESSAGES ---
         try {
+            console.log(chalk.gray(`🤖 Checking chatbot...`))
             await handleChatbotMessage(sock, chatId, m);
+            console.log(chalk.gray(`🤖 Chatbot processed`))
         } catch (chatErr) {
             console.error(chalk.yellow('Chatbot error (non-critical):'), chatErr.message);
         }
@@ -76,17 +83,36 @@ async function handleMessages(sock, messageUpdate) {
         if (buttonId) {
             rawBody = buttonId.startsWith('.') ? buttonId : '.' + buttonId;
         } else {
-            rawBody = (
-                m.message?.conversation ||
-                m.message?.extendedTextMessage?.text ||
-                m.message?.imageMessage?.caption ||
-                m.message?.videoMessage?.caption ||
-                ''
-            ).trim();
+            // Try different message types
+            const msg = m.message;
+            if (msg.conversation) {
+                rawBody = msg.conversation;
+            } else if (msg.extendedTextMessage) {
+                rawBody = msg.extendedTextMessage.text;
+            } else if (msg.imageMessage) {
+                rawBody = msg.imageMessage.caption || '';
+            } else if (msg.videoMessage) {
+                rawBody = msg.videoMessage.caption || '';
+            } else if (msg.documentMessage) {
+                rawBody = msg.documentMessage.caption || '';
+            } else if (msg.audioMessage) {
+                rawBody = msg.audioMessage.caption || '';
+            } else if (msg.stickerMessage) {
+                rawBody = ''; // Stickers don't have text
+            } else {
+                rawBody = '';
+            }
         }
 
+        rawBody = rawBody.trim();
+        console.log(chalk.gray(`📄 Raw body: "${rawBody}"`))
+        console.log(chalk.gray(`🔘 Button ID: "${buttonId || 'none'}"`))
+
         // 1. Check if it starts with prefix (.)
-        if (!rawBody.startsWith('.')) return;
+        if (!rawBody.startsWith('.')) {
+            console.log(chalk.gray(`❌ No prefix, ignoring`))
+            return;
+        }
 
         // 2. FIX: Handle ". menu" by removing space after dot
         const cleanBody = rawBody.startsWith('. ') 
@@ -96,9 +122,6 @@ async function handleMessages(sock, messageUpdate) {
         const args = cleanBody.split(' ');
         const cmdName = args[0].toLowerCase().slice(1); // Mfano: "menu"
         const fullCmd = args[0].toLowerCase(); // Mfano: ".menu"
-
-        const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
-        const isOwnerCheck = m.key.fromMe || senderIsOwnerOrSudo;
 
         console.log(chalk.cyan(`📨 Message: ${cleanBody}`))
         console.log(chalk.cyan(`   Command name: ${cmdName}`))
@@ -126,6 +149,13 @@ async function handleMessages(sock, messageUpdate) {
         const selectedCommand = getCommand(allCommands, cmdName);
         console.log(chalk.cyan(`   Looking for command: ${cmdName}`))
         console.log(chalk.cyan(`   Command found: ${selectedCommand ? 'YES' : 'NO'}`))
+
+        // TEMPORARY TEST: Simple response for .test command
+        if (cmdName === 'test') {
+            console.log(chalk.green(`🧪 TEST COMMAND: Responding with pong`))
+            await sock.sendMessage(chatId, { text: '🏓 Pong! Test successful!' }, { quoted: m }).catch(() => {})
+            return;
+        }
 
         if (selectedCommand) {
             // Sudo Restriction
