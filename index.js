@@ -16,189 +16,98 @@ const {
     jidNormalizedUser
 } = require("@whiskeysockets/baileys")
 
-// Enable garbage collection for better RAM management
+// Boresha Logger kuzuia Buffer Timeout
+const logger = pino({ 
+    level: 'silent', // Zima logi zisizo na lazima kuzuia mzigo
+    sync: false 
+})
+
+// RAM Management - Garbage Collection
 if (typeof global.gc === 'function') {
-    console.log('🧠 Garbage collection enabled for optimal RAM usage');
-    // Run GC every 5 minutes
-    setInterval(() => {
-        global.gc();
-    }, 5 * 60 * 1000);
+    setInterval(() => { global.gc(); }, 3 * 60 * 1000); // Kila baada ya dk 3
 }
 
-// Global error handler for session decryption errors
+// Global Error Handler (Silent Mode kwa Errors za kijinga)
+const silentErrors = ['Bad MAC', 'SessionError', 'Failed to decrypt', 'status@broadcast', 'skmsg'];
+const isSilentError = (err) => silentErrors.some(msg => err?.includes(msg));
+
 process.on('uncaughtException', (err) => {
-    if (err.message?.includes('Bad MAC') || err.name === 'SessionError' || err.message?.includes('Failed to decrypt message')) {
-        // Silently ignore session decryption errors
-        return;
-    }
-    console.error('Uncaught Exception:', err);
+    if (isSilentError(err.message)) return;
+    console.error('Critical Error:', err);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    if (reason?.message?.includes('Bad MAC') || reason?.name === 'SessionError' || reason?.message?.includes('Failed to decrypt message')) {
-        // Silently ignore session decryption errors
-        return;
-    }
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (reason) => {
+    if (isSilentError(reason?.message)) return;
+    // Zuia kufurika kwa logi za [ERROR] kwenye console
 });
 
-// Import message handlers once at startup
 const { handleMessages, handleStatus } = require('./main')
 
 async function startXeonBotInc() {
-    // Load WhatsApp session
     const { state, saveCreds } = await useMultiFileAuthState(`./session`)
     const { version } = await fetchLatestBaileysVersion()
 
     const XeonBotInc = makeWASocket({
         version,
-        logger: customLogger,
+        logger: logger, // Tumia logger tulioifanyia optimization
         printQRInTerminal: false,
         browser: ["Ubuntu", "Chrome", "20.0.04"], 
         auth: {
             creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, customLogger),
+            keys: makeCacheableSignalKeyStore(state.keys, logger),
         },
         markOnlineOnConnect: true,
-        syncFullHistory: false,
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 10000,
+        generateHighQualityLinkPreview: true,
+        getMessage: async (key) => { return { conversation: 'Mickey Glitch' } } // Fix decryption errors
     })
 
-    // PAIRING LOGIC (MICKDADY Power)
+    // PAIRING LOGIC
     if (!XeonBotInc.authState.creds.registered) {
         let phoneNumber = settings.ownerNumber.replace(/[^0-9]/g, '')
-
-        console.log(chalk.cyan(`\n[📡] System is preparing to pair with: ${phoneNumber}...`))
-
-        // Important: Wait 15 seconds for socket to fully connect with WA servers
-        await delay(15000) 
-
+        await delay(10000) 
         try {
-            console.log(chalk.yellow(`[⏳] Generating Pairing Code (MICKDADY)...`))
-
-            // Using custom code
             let code = await XeonBotInc.requestPairingCode(phoneNumber, "MICKDADY")
             code = code?.match(/.{1,4}/g)?.join("-") || code
-
-            console.log(chalk.black(chalk.bgGreen(`\n  PAIRING CODE: ${code}  \n`)))
-            console.log(chalk.white("👉 Open WhatsApp > Linked Devices > Link with Phone Number"));
-            console.log(chalk.white(`👉 Then enter the code above now!`));
-
-        } catch (error) {
-            console.error(chalk.red('\n❌ Pairing failed:'), error.message)
-            console.log(chalk.gray("WhatsApp may have set a 'Cool-off period'. Wait 10 minutes and try again."));
-        }
+            console.log(chalk.black(chalk.bgGreen(`\n PAIRING CODE: ${code} \n`)))
+        } catch (e) {}
     }
 
     XeonBotInc.ev.on('creds.update', saveCreds)
 
     XeonBotInc.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr, receivedPendingNotifications } = update
-
-        // QR code for pairing
-        if (qr) {
-            console.log(chalk.yellow(`📱 SCAN QR CODE AND WAIT`))
-        }
-
-        // Connection state messages
-        if (connection === "connecting") {
-            console.log(chalk.blue(`Connecting to WhatsApp...`))
-        }
-
-        if (connection === "authenticating") {
-            console.log(chalk.cyan(`Authenticating...`))
-        }
-
+        const { connection, lastDisconnect, qr } = update
+        
+        if (qr) console.log(chalk.yellow(`📱 SCAN QR CODE`))
+        if (connection === "connecting") console.log(chalk.blue(`Connecting...`))
+        
         if (connection === "open") {
             console.log(chalk.green(`✅ ${settings.botName} IS ONLINE!`))
-            if (receivedPendingNotifications) {
-                console.log(chalk.yellow(`📨 Loaded pending messages`))
-            }
-
-            // Send notification to owner
+            // Owner Notification
             try {
-                const ownerJid = settings.ownerNumber.endsWith('@s.whatsapp.net') 
-                    ? settings.ownerNumber 
-                    : settings.ownerNumber.replace(/[^0-9]/g, '') + '@s.whatsapp.net'
-
-                const connectionTime = new Date().toLocaleTimeString('en-US', { 
-                    hour: '2-digit', 
-                    minute: '2-digit', 
-                    second: '2-digit' 
-                })
-
-                const connectionDate = new Date().toLocaleDateString('en-US', { 
-                    weekday: 'short', 
-                    year: 'numeric', 
-                    month: 'short', 
-                    day: 'numeric' 
-                })
-
-                // Send text message instead of image
-                await XeonBotInc.sendMessage(ownerJid, {
-                    text: `✅ *MICKEY GLITCH ONLINE*\n\n⏰ Connected: ${connectionTime}\n📅 Date: ${connectionDate}\n🟢 Status: Active\n\nType *.menu* for commands!`
-                }).catch(() => {})
-            } catch (err) {
-                // Silent fail
-            }
+                const ownerJid = jidNormalizedUser(XeonBotInc.user.id)
+                await XeonBotInc.sendMessage(ownerJid, { text: `🚀 *MICKEY GLITCH V3* is now Active!` })
+            } catch (e) {}
         }
 
         if (connection === 'close') {
             let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
-            console.log(chalk.red(`❌ Connection closed (Code: ${reason})`))
-
-            if (reason === DisconnectReason.badSession) {
-                console.log(chalk.red("❌ Bad session - Delete session folder and restart"))
-            } else if (reason === DisconnectReason.connectionClosed) {
-                console.log(chalk.yellow("⏳ Connection closed, reconnecting..."))
-            } else if (reason === DisconnectReason.connectionLost) {
-                console.log(chalk.yellow("⏳ Connection lost, reconnecting..."))
-            } else if (reason === DisconnectReason.connectionReplaced) {
-                console.log(chalk.yellow("⚠️  Connection replaced, restart bot"))
-            } else if (reason === DisconnectReason.loggedOut) {
-                console.log(chalk.red("❌ Logged out - Stopping"))
-            }
-
-            if (reason !== DisconnectReason.loggedOut && reason !== DisconnectReason.badSession) {
-                console.log(chalk.yellow(`Reconnecting in 5 seconds...`))
-                await delay(5000)
+            if (reason !== DisconnectReason.loggedOut) {
+                console.log(chalk.yellow(`🔄 Reconnecting...`))
                 startXeonBotInc()
             }
         }
-
-        if (connection === "blocked") {
-            console.log(chalk.red(`Account blocked by WhatsApp!`))
-            console.log(chalk.red(`Contact support.`))
-        }
     })
 
-    // Message handler from main.js
     XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
         try {
             const mek = chatUpdate.messages[0]
-            if (!mek.message) return
-
-            // Allow processing own messages for testing
-            if (mek.key.fromMe) {
-                console.log(chalk.yellow(`⚠️ Processing own message`))
-            }
+            if (!mek.message || (mek.key && mek.key.remoteJid === 'status@broadcast')) return
 
             await Promise.all([
-                handleMessages(XeonBotInc, chatUpdate).catch(err => {
-                    console.error(chalk.red(`❌ Message handler error: ${err.message}`))
-                }),
-                handleStatus(XeonBotInc, chatUpdate).catch(err => {})
-            ])
-        } catch (err) {
-            // Suppress Bad MAC and Session decryption errors
-            if (err.message?.includes('Bad MAC') || err.name === 'SessionError' || err.message?.includes('Failed to decrypt message')) {
-                // Silently ignore session decryption errors
-                return;
-            }
-            console.error(chalk.red(`❌ Event handler error: ${err.message}`))
-        }
+                handleMessages(XeonBotInc, chatUpdate),
+                handleStatus(XeonBotInc, chatUpdate)
+            ]).catch(() => {})
+        } catch (err) {}
     })
 
     return XeonBotInc
