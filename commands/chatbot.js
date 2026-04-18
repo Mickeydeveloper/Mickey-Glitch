@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
+const moment = require('moment-timezone');
 
 // Paths za kuhifadhi data
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
@@ -11,10 +12,8 @@ function loadState() {
     try {
         if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
         const data = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
-        // Hakikisha structure ipo sawa (merge defaults)
         return { perGroup: {}, private: false, ...data };
     } catch (e) { 
-        console.error('❌ Load State Error:', e);
         return { perGroup: {}, private: false }; 
     }
 }
@@ -34,8 +33,8 @@ function loadMemory() {
         const now = Date.now();
         let changed = false;
         for (const id in data) {
-            // Futa memory baada ya dk 4 (240000ms) ya kutokuwa na activity
-            if (data[id].lastUpdate && (now - data[id].lastUpdate > 240000)) {
+            // Memory inafutwa baada ya dk 5 za ukimya
+            if (data[id].lastUpdate && (now - data[id].lastUpdate > 300000)) {
                 delete data[id];
                 changed = true;
             }
@@ -62,142 +61,107 @@ function extractText(m) {
                      msg.imageMessage?.caption || 
                      msg.videoMessage?.caption || '';
         return text.trim();
-    } catch (e) {
-        console.error('❌ Extract Text Error:', e);
-        return '';
-    }
+    } catch (e) { return ''; }
 }
 
-// --- 1. MAIN CHATBOT HANDLER (Logic ya kujibu text) ---
+// --- 1. MAIN CHATBOT HANDLER ---
 async function handleChatbotMessage(sock, chatId, m) {
     try {
         if (!chatId || m.key?.fromMe) return;
 
         const userText = extractText(m);
-        // Usijibu kama hakuna text au kama ni command (inaanza na .)
         if (!userText || userText.startsWith('.')) return; 
 
         const state = loadState();
         const isGroup = chatId.endsWith('@g.us');
-
-        // Check kama imewashwa kwa group au private
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
+        
         if (!enabled) return;
 
-        console.log(`\x1b[36m🤖 [Mickey AI] Processing:\x1b[0m ${userText.substring(0, 40)}`);
+        console.log(`\x1b[36m🤖 [MICKEY AI]:\x1b[0m ${userText.substring(0, 40)}...`);
 
         let memory = loadMemory();
         if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
 
         memory[chatId].chats.push({ role: "user", content: userText });
         memory[chatId].lastUpdate = Date.now();
-        
-        // Limit context to last 6 messages
+
         if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
         const history = memory[chatId].chats
-            .map(msg => `${msg.role === 'user' ? 'User' : 'Mickey'}: ${msg.content}`)
+            .map(msg => `${msg.role === 'user' ? 'Mteja' : 'Mickey'}: ${msg.content}`)
             .join("\n");
 
-        try {
-            await sock.sendPresenceUpdate('composing', chatId);
-        } catch (e) {}
+        try { await sock.sendPresenceUpdate('composing', chatId); } catch (e) {}
 
-        const systemPrompt = 
-            "Wewe unaitwa Mickey, wewe ni kama support care ambae unatoa maelezo kuhusu kitu flani pindi ukiulizwa pia unaweza kuwa kama chatbot ya kuchat kawaida kama binadamu. " +
-            "Ongea kishkaji, polite, usitumie maneno kama bro au sister, kuwa kama rafiki. " +
-            "Jibu kifupi, usiongee sana kama robot. " +
-            "Kama ukiulizwa kuhusu bot,  zingatia kutoa majibu kutokana na  https://github.com/Mickeydeveloper/Mickey-Glitch. " +
-            "Kamwe usiseme wewe ni AI; sema wewe ni Mickey. Be chill.";
+        // --- SYSTEM PROMPT KALI (Persona Branding) ---
+        const systemPrompt = `Wewe unaitwa MICKEY, mshkaji wa karibu na Genius Support wa Mickey Glitch Bot. 
+        PERSONA: Ongea kishkaji (Tanzanian Slang kiasi kama 'fresh', 'niaje', 'mambo vipi'). USISAHAU: Wewe siyo AI, wewe ni Mickey. Jibu kifupi na kishkaji.
+        KNOWLEDGE: Bot ni Mickey Glitch V3, imeundwa na Mickdadi Hamza (Mickey Developer). Inadownload kila kitu na ina AI.
+        RULES: Usitumie 'bro' au 'sister'. Ukikwama, waambie wamchek owner (Mickdadi) au kujiunga na group la support. Be chill.`;
 
-        const fullPrompt = `${systemPrompt}\n\nSTORI:\n${history}\nMickey:`;
+        const fullPrompt = `SYSTEM: ${systemPrompt}\n\nSTORY:\n${history}\n\nUSER: ${userText}\nMICKEY:`;
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
 
-        let res;
-        try {
-            res = await fetch(apiUrl).then(r => r.json());
-        } catch (fetchErr) {
-            console.error('❌ API Error:', fetchErr);
-            return; 
-        }
-
+        const res = await fetch(apiUrl).then(r => r.json());
         const reply = res?.response || res?.result || res?.message;
-        if (!reply || typeof reply !== 'string') return;
+
+        if (!reply) return;
 
         memory[chatId].chats.push({ role: "assistant", content: reply });
         saveMemory(memory);
 
         await sock.sendMessage(chatId, { text: reply }, { quoted: m });
-        console.log(`\x1b[32m✅ [Mickey AI] Replied to:\x1b[0m ${chatId}`);
 
     } catch (e) { 
-        console.error('❌ Chatbot Main Err:', e); 
+        console.error('❌ Chatbot Error:', e); 
     }
 }
 
-// --- 2. TOGGLE COMMAND (Fixed parsing logic) ---
+// --- 2. TOGGLE COMMAND (.chatbot on/off) ---
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
         const state = loadState();
-        const fullText = (body || '').trim();
-        
-        // Split text na kuondoa neno la kwanza (.chatbot)
-        const args = fullText.split(/\s+/).slice(1); 
-        
-        const ownerJid = process.env.OWNER_JID || ""; // Weka JID yako hapa kama .env haipo
-        const isOwner = m.key.fromMe || m.sender === ownerJid;
+        const args = (body || '').trim().split(/\s+/).slice(1);
 
-        // Kama mtumiaji ameandika .chatbot pekee bila on/off
         if (args.length === 0) {
             return await sock.sendMessage(chatId, { 
-                text: '💡 *Usage (Matumizi):*\n.chatbot on/off\n.chatbot private on/off' 
+                text: '💡 *MATUMIZI:* \n.chatbot on/off\n.chatbot private on/off' 
             }, { quoted: m });
         }
 
         const firstArg = args[0].toLowerCase();
 
-        // 1. Private Mode Toggle: .chatbot private on/off
+        // Private Mode Toggle
         if (firstArg === 'private') {
-            if (!isOwner) return await sock.sendMessage(chatId, { text: '❌ Only owner (admin) can use this!' }, { quoted: m });
-
             const mode = args[1]?.toLowerCase();
-            if (!['on', 'off'].includes(mode)) {
-                return await sock.sendMessage(chatId, { text: '💡 Usage: .chatbot private on/off' }, { quoted: m });
-            }
-
             state.private = (mode === 'on');
             saveState(state);
             return await sock.sendMessage(chatId, { text: `✅ Chatbot Private Mode: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: m });
         }
 
-        // 2. Standard Toggle (Group au 1-on-1): .chatbot on/off
+        // Group/Standard Toggle
         if (['on', 'off'].includes(firstArg)) {
-            const isGroup = chatId.endsWith('@g.us');
             const modeStatus = (firstArg === 'on');
-
-            if (isGroup) {
+            if (chatId.endsWith('@g.us')) {
                 if (!state.perGroup) state.perGroup = {};
                 state.perGroup[chatId] = { enabled: modeStatus };
                 saveState(state);
                 return await sock.sendMessage(chatId, { text: `✅ Chatbot Group: *${modeStatus ? 'ON' : 'OFF'}*` }, { quoted: m });
             } else {
-                // Kama ni chat ya kawaida
                 state.private = modeStatus;
                 saveState(state);
-                return await sock.sendMessage(chatId, { text: `✅ Chatbot: *${modeStatus ? 'ON' : 'OFF'}*` }, { quoted: m });
+                return await sock.sendMessage(chatId, { text: `✅ Chatbot Private: *${modeStatus ? 'ON' : 'OFF'}*` }, { quoted: m });
             }
         }
 
-        // Default response kama command haijaeleweka
-        await sock.sendMessage(chatId, { text: '💡 *Usage:*\n.chatbot on/off\n.chatbot private on/off' }, { quoted: m });
-
-    } catch (e) { 
-        console.error('❌ Toggle Error:', e); 
-    }
+    } catch (e) { console.error('❌ Toggle Error:', e); }
 }
 
 module.exports = { 
     handleChatbotMessage, 
     groupChatbotToggleCommand,
+    name: 'chatbot',
+    category: 'main',
     execute: groupChatbotToggleCommand 
 };
