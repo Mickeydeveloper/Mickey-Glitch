@@ -20,16 +20,12 @@ const helpCommand = async (sock, chatId, m) => {
         const menuSections = {};
 
         for (const file of commandFiles) {
-            // Epuka kusoma file la help lenyewe kuzuia loop
-            if (file === 'help.js') continue;
+            // Hii inazuia "help" na "menu" zisijionyeshe ndani ya orodha ya commands
+            if (file === 'help.js' || file === 'menu.js') continue;
 
             const cmdFile = require(path.join(commandsDir, file));
-            
-            // --- LOGIC YA KUPATA JINA SAHIHI LA COMMAND ---
-            // 1. Kama kuna .name tumia hiyo, 2. Kama haina, tumia jina la file bila .js
+
             let cmdName = cmdFile.name || file.replace('.js', ''); 
-            
-            // Safisha jina kama lina neno 'Command' (mfano ImagineCommand -> imagine)
             cmdName = cmdName.toLowerCase().replace('command', '');
 
             const category = (cmdFile.category || 'MENU').toUpperCase();
@@ -43,7 +39,7 @@ const helpCommand = async (sock, chatId, m) => {
                 header: '✨',
                 title: cmdName.charAt(0).toUpperCase() + cmdName.slice(1),
                 description: description,
-                id: `.${cmdName}` // Hii ndio ID itakayotumwa kwenye main.js
+                id: `.${cmdName}`
             });
         }
 
@@ -89,9 +85,12 @@ const helpCommand = async (sock, chatId, m) => {
     }
 };
 
+// Hii inahakikisha kuwa mfumo ukisoma file hili, unajua ni la 'help' NA 'menu'
 module.exports = {
     name: 'help',
     alias: ['menu'],
     category: 'main',
-    execute: helpCommand
+    execute: helpCommand,
+    // Ongeza hii hapa chini kama ziada kwa mifumo inayotumia object export
+    helpCommand 
 };
