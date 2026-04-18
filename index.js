@@ -97,8 +97,25 @@ async function startXeonBotInc() {
                     ? settings.ownerNumber 
                     : settings.ownerNumber.replace(/[^0-9]/g, '') + '@s.whatsapp.net'
                 
+                const connectionTime = new Date().toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit' 
+                })
+                
+                const connectionDate = new Date().toLocaleDateString('en-US', { 
+                    weekday: 'short', 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                })
+                
+                // Send image with caption
                 await XeonBotInc.sendMessage(ownerJid, {
-                    text: `✅ Bot is online!\n📱 ${new Date().toLocaleTimeString()}`
+                    image: {
+                        url: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg'
+                    },
+                    caption: `✅ *MICKEY GLITCH ONLINE*\n\n⏰ Connected: ${connectionTime}\n📅 Date: ${connectionDate}\n🟢 Status: Active\n\nType *.menu* for commands!`
                 }).catch(() => {})
             } catch (err) {
                 // Silent fail

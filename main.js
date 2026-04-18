@@ -57,24 +57,72 @@ async function handleMessages(sock, messageUpdate) {
             // Silent chatbot error
         }
 
-        // --- 🔘 INTERACTIVE BUTTONS DECODER ---
+        // --- 🔘 ADVANCED BUTTON HANDLER (reads all buttons from all commands) ---
         let buttonId = null;
-        if (mType === 'interactiveResponseMessage') {
-            const paramsJson = m.message.interactiveResponseMessage.nativeFlowResponseMessage?.paramsJson;
-            if (paramsJson) {
-                try {
-                    const parsed = JSON.parse(paramsJson);
-                    buttonId = parsed.id || parsed.selectedRowId;
-                } catch (e) { }
+        let buttonSource = 'unknown';
+
+        try {
+            // Type 1: Interactive Response (List Select / Single Select)
+            if (mType === 'interactiveResponseMessage') {
+                const nativeFlow = m.message.interactiveResponseMessage.nativeFlowResponseMessage;
+                if (nativeFlow?.paramsJson) {
+                    try {
+                        const parsed = JSON.parse(nativeFlow.paramsJson);
+                        // Handle list select response
+                        if (parsed.id) {
+                            buttonId = parsed.id;
+                            buttonSource = 'interactive_list';
+                        } else if (parsed.selectedRowId) {
+                            buttonId = parsed.selectedRowId;
+                            buttonSource = 'interactive_rows';
+                        }
+                    } catch (parseErr) {
+                        console.error(chalk.yellow(`⚠️  Button JSON parse error: ${parseErr.message}`));
+                    }
+                }
             }
-        } else if (mType === 'buttonsResponseMessage') {
-            buttonId = m.message.buttonsResponseMessage.selectedButtonId;
+            
+            // Type 2: Classic Buttons Response
+            if (!buttonId && mType === 'buttonsResponseMessage') {
+                buttonId = m.message.buttonsResponseMessage.selectedButtonId;
+                buttonSource = 'button_response';
+            }
+
+            // Type 3: Template Button Response
+            if (!buttonId && mType === 'templateButtonReplyMessage') {
+                buttonId = m.message.templateButtonReplyMessage.selectedId;
+                buttonSource = 'template_button';
+            }
+
+            // Sanitize buttonId: Clean it and ensure it's safe
+            if (buttonId) {
+                buttonId = String(buttonId).trim();
+                console.log(chalk.green(`🔘 Button clicked: ${buttonId} (source: ${buttonSource})`));
+            }
+        } catch (btnErr) {
+            console.error(chalk.red(`❌ Button extraction error: ${btnErr.message}`));
         }
 
-        // --- 📝 MESSAGE PARSING ---
+        // --- 📝 MESSAGE PARSING (with robust button ID handling) ---
         let rawBody = '';
+        
         if (buttonId) {
-            rawBody = buttonId.startsWith('.') ? buttonId : '.' + buttonId;
+            // Enhanced button ID processing
+            try {
+                // Remove any non-alphanumeric characters except dot and space
+                let cleanId = buttonId.replace(/[^a-zA-Z0-9._\- ]/g, '');
+                
+                // Ensure it starts with dot
+                if (!cleanId.startsWith('.')) {
+                    cleanId = '.' + cleanId.trim();
+                }
+                
+                rawBody = cleanId.trim();
+                console.log(chalk.blue(`📌 Button ID processed: "${buttonId}" → "${rawBody}"`));
+            } catch (idErr) {
+                console.error(chalk.red(`❌ Button ID processing error: ${idErr.message}`));
+                return; // Skip this message if button ID fails
+            }
         } else {
             // Try different message types
             const msg = m.message;
@@ -117,6 +165,12 @@ async function handleMessages(sock, messageUpdate) {
 
         console.log(chalk.cyan(`   Command: ${cmdName} (from ${fullCmd})`))
 
+        // Validate command name
+        if (!cmdName || cmdName.length === 0) {
+            console.log(chalk.yellow(`⚠️  Empty command name, skipping`));
+            return;
+        }
+
         // Owner check
         const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
         const isOwnerCheck = m.key.fromMe || senderIsOwnerOrSudo; // Bot's own messages count as owner
@@ -124,33 +178,10 @@ async function handleMessages(sock, messageUpdate) {
 
         // --- 🚀 EXECUTION ENGINE ---
 
-        // Case 2: Dynamic Commands from /commands/ folder
+        // --- Load commands ONLY from /commands/ folder ---
         const selectedCommand = getCommand(allCommands, cmdName);
         console.log(chalk.cyan(`   Looking for command: ${cmdName}`))
         console.log(chalk.cyan(`   Command found: ${selectedCommand ? 'YES' : 'NO'}`))
-
-        // TEMPORARY TEST: Simple response for .test command
-        if (cmdName === 'test') {
-            console.log(chalk.green(`🧪 TEST COMMAND: Responding with pong`))
-            await sock.sendMessage(chatId, { text: '🏓 Pong! Commands are working!' }, { quoted: m }).catch(() => {})
-            return;
-        }
-
-        // TEMPORARY TEST: Simple response for .hi command
-        if (cmdName === 'hi') {
-            console.log(chalk.green(`👋 HI COMMAND: Responding with greeting`))
-            await sock.sendMessage(chatId, { text: '👋 Hello! Bot is responding!' }, { quoted: m }).catch(() => {})
-            return;
-        }
-
-        // TEMPORARY TEST: Simple menu response
-        if (cmdName === 'menu' || cmdName === 'help') {
-            console.log(chalk.green(`📋 MENU COMMAND: Showing menu`))
-            await sock.sendMessage(chatId, { 
-                text: `📋 *MICKEY GLITCH MENU*\n\n🤖 Bot is working!\n\nAvailable commands:\n• .test - Test command\n• .hi - Greeting\n• .menu - Show this menu\n• .help - Show full help\n\nTry other commands too!` 
-            }, { quoted: m }).catch(() => {})
-            return;
-        }
 
         if (selectedCommand) {
             // Sudo Restriction
@@ -164,31 +195,52 @@ async function handleMessages(sock, messageUpdate) {
 
             console.log(chalk.blue(`   Executing ${cmdName}...`))
             try {
+                // Determine command type and execute with error handling
                 if (typeof selectedCommand === 'function') {
                     console.log(chalk.blue(`   Type: Function`))
-                    await selectedCommand(sock, chatId, m, cleanBody);
+                    await selectedCommand(sock, chatId, m, cleanBody).catch(funcErr => {
+                        console.error(chalk.red(`❌ Function execution error: ${funcErr.message}`));
+                        throw funcErr;
+                    });
                 } else if (selectedCommand.execute && typeof selectedCommand.execute === 'function') {
                     console.log(chalk.blue(`   Type: Module.execute()`))
-                    await selectedCommand.execute(sock, chatId, m, cleanBody);
+                    await selectedCommand.execute(sock, chatId, m, cleanBody).catch(modErr => {
+                        console.error(chalk.red(`❌ Module execution error: ${modErr.message}`));
+                        throw modErr;
+                    });
                 } else {
                     console.log(chalk.yellow(`   Type: Unknown format`))
                     await sock.sendMessage(chatId, {
                         text: `❌ Command error`
                     }, { quoted: m }).catch(() => {});
                 }
-                console.log(chalk.green(`✅ Command executed`))
+                console.log(chalk.green(`✅ Command executed successfully`))
             } catch (cmdErr) {
-                console.error(chalk.red(`❌ Execution error: ${cmdErr.message}`));
-                await sock.sendMessage(chatId, {
-                    text: `❌ Error: ${cmdErr.message}`
-                }, { quoted: m }).catch(() => {});
+                console.error(chalk.red(`❌ Command execution error: ${cmdErr.message}`));
+                // Graceful error handling - don't crash, just log
+                try {
+                    await sock.sendMessage(chatId, {
+                        text: `❌ *Error executing ${cmdName}:*\n${cmdErr.message || 'Unknown error'}`
+                    }, { quoted: m }).catch(() => {});
+                } catch (sendErr) {
+                    console.error(chalk.red(`❌ Failed to send error message: ${sendErr.message}`));
+                }
             }
         } else {
             console.log(chalk.yellow(`⚠️ Command not found: ${cmdName}`))
+            // Optional: inform user that command doesn't exist
+            try {
+                await sock.sendMessage(chatId, {
+                    text: `❌ *Command not found:* .${cmdName}\n\nType *.menu* to see available commands`
+                }, { quoted: m }).catch(() => {});
+            } catch (notFoundErr) {
+                console.error(chalk.red(`Failed to send not found message: ${notFoundErr.message}`));
+            }
         }
 
     } catch (e) {
-        console.error(chalk.red('Message handler error:'), e.message);
+        console.error(chalk.red('❌ CRITICAL Message handler error:'), e.message);
+        console.error(chalk.red('Stack:'), e.stack);
     }
 }
 
