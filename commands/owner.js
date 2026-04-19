@@ -1,68 +1,69 @@
+
 const { sendInteractiveMessage } = require('gifted-btns');
 const settings = require('../settings');
 const axios = require('axios');
 
 async function ownerCommand(sock, chatId, message) {
     try {
-        const ownerNumberRaw = settings.ownerNumber || '255612130873';
-        const waLink = `https://wa.me/${ownerNumberRaw}`;
-        const channelLink = 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610';
+        const ownerNum = settings.ownerNumber || '255612130873';
+        const waUrl = `https://wa.me/${ownerNum}`;
+        const chnlUrl = 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610';
+        const imgUrl = 'https://d.uguu.se/LLjViSGg.jpg';
 
-        const ownerText = `👑 *OWNER INFO*
+        // Maelezo ya mmiliki (Owner info details)
+        const captionTxt = `👤 *TAARIFA ZA MMILIKI (OWNER INFO)*\n\n` +
+                           `🤖 *Jina la Bot (Bot Name):* ${settings.botName || 'MICKEY GLITCH'}\n` +
+                           `👨‍💻 *Mkurugenzi (Owner):* ${settings.botOwner || 'Mickey'}\n` +
+                           `📞 *Namba (Contact):* +${ownerNum}\n\n` +
+                           `Chagua huduma hapa (Choose an action below) 👇`;
 
-*Bot Name:* ${settings.botName || 'MICKEY GLITCH'}
-*Owner:* ${settings.botOwner || 'Mickey'}
-*Contact:* +${ownerNumberRaw}
-
-Choose an action below 👇`;
-
-        // Tuma picha na text pamoja
+        // Jaribu kutuma picha (Try sending image)
         try {
-            const imageRes = await axios.get('https://d.uguu.se/LLjViSGg.jpg', { responseType: 'arraybuffer', timeout: 10000 });
+            const res = await axios.get(imgUrl, { responseType: 'arraybuffer', timeout: 10000 });
             await sock.sendMessage(chatId, {
-                image: Buffer.from(imageRes.data),
-                caption: ownerText
+                image: Buffer.from(res.data),
+                caption: captionTxt
             }, { quoted: message });
-        } catch (err) {
-            console.error('Image fetch error:', err.message);
-            await sock.sendMessage(chatId, { text: ownerText }, { quoted: message });
+        } catch (imgErr) {
+            console.error('Picha imegoma (Image error):', imgErr.message);
+            await sock.sendMessage(chatId, { text: captionTxt }, { quoted: message });
         }
 
-        // Tuma interactive buttons bila ad reply
-        const msgOptions = {
-            text: ownerText,
-            footer: "Mickey Glitch Tech • Powered by Mickey",
+        // Setup ya buttons (Interactive buttons setup)
+        const btnOptions = {
+            text: captionTxt,
+            footer: "© Mickey Infor Technology • Dev by Mickey",
             interactiveButtons: [
                 { 
                     name: 'cta_call', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📞 Call Owner', 
-                        phone_number: ownerNumberRaw 
+                        display_text: '📞 Piga Simu (Call)', 
+                        phone_number: ownerNum 
                     }) 
                 },
                 { 
                     name: 'cta_url', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '💬 Send Message', 
-                        url: waLink 
+                        display_text: '💬 Nitumie Msg (Message)', 
+                        url: waUrl 
                     }) 
                 },
                 { 
                     name: 'cta_url', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📺 Join Channel', 
-                        url: channelLink 
+                        display_text: '📺 Jiunge Channel (Join)', 
+                        url: chnlUrl 
                     }) 
                 }
             ]
         };
 
-        await sendInteractiveMessage(sock, chatId, msgOptions, { quoted: message });
+        await sendInteractiveMessage(sock, chatId, btnOptions, { quoted: message });
 
-    } catch (e) {
-        console.error('Owner Cmd Error:', e);
+    } catch (err) {
+        console.error('Owner Cmd Err:', err);
         await sock.sendMessage(chatId, { 
-            text: '❌ *Error occurred! (Hitilafu imetokea)*' 
+            text: '❌ *Kuna tatizo limetokea! (An error occurred)*' 
         }, { quoted: message });
     }
 }
