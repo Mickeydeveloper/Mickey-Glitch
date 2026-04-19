@@ -12,13 +12,20 @@ async function fetchThumbnail(url) {
 async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
     const repoText = `✨ *${repo.name.toUpperCase()} INFO* ✨\n\n👤 *Owner:* ${repo.owner.login}\n⭐ *Stars:* ${repo.stargazers_count}\n🍴 *Forks:* ${repo.forks_count}\n📅 *Created:* ${new Date(repo.created_at).toLocaleDateString()}\n🔄 *Updated:* ${new Date(repo.updated_at).toLocaleDateString()}\n\n*MICKEY GLITCH V3.0.5*`;
 
-    // Tunasuka ujumbe wa Interactive
+    // Tuma picha kawaida kwanza
+    if (thumbnail) {
+        await sock.sendMessage(chatId, {
+            image: thumbnail,
+            caption: `🖼️ *Repository Avatar*\n${repo.name}`
+        }, { quoted: quotedMsg });
+    }
+
+    // Tuma ujumbe wa Interactive bila thumbnail/ad
     const messageContent = {
         interactiveMessage: {
             header: {
                 title: "MICKEY GLITCH REPO",
-                hasMediaAttachment: true,
-                ...(thumbnail ? { jpegThumbnail: thumbnail } : {})
+                hasMediaAttachment: false
             },
             body: { text: repoText },
             footer: { text: "Quantum Base Dev • Mickey Glitch" },
@@ -46,27 +53,11 @@ async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
                         })
                     }
                 ]
-            },
-            contextInfo: {
-                externalAdReply: {
-                    title: "MICKEY GLITCH REPO",
-                    body: "Download or Visit Repository",
-                    mediaType: 1,
-                    thumbnail: thumbnail,
-                    sourceUrl: repo.html_url,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: true
-                },
-                mentionedJid: [quotedMsg.sender || quotedMsg.key.remoteJid],
-                quotedMessage: quotedMsg.message,
-                participant: quotedMsg.sender || quotedMsg.key.participant || quotedMsg.key.remoteJid,
-                stanzaId: quotedMsg.key.id,
-                remoteJid: chatId
             }
         }
     };
 
-    // Kusimamia ujumbe wa interactive na contextInfo
+    // Kusimamia ujumbe wa interactive bila ad
     return await sock.sendMessage(chatId, messageContent, { quoted: quotedMsg });
 }
 

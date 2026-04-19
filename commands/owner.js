@@ -1,5 +1,6 @@
 const { sendInteractiveMessage } = require('gifted-btns');
 const settings = require('../settings');
+const axios = require('axios');
 
 async function ownerCommand(sock, chatId, message) {
     try {
@@ -15,21 +16,22 @@ async function ownerCommand(sock, chatId, message) {
 
 Choose an action below 👇`;
 
-        // Hakikisha unapitisha contextInfo hapa
+        // Tuma picha na text pamoja
+        try {
+            const imageRes = await axios.get('https://d.uguu.se/LLjViSGg.jpg', { responseType: 'arraybuffer', timeout: 10000 });
+            await sock.sendMessage(chatId, {
+                image: Buffer.from(imageRes.data),
+                caption: ownerText
+            }, { quoted: message });
+        } catch (err) {
+            console.error('Image fetch error:', err.message);
+            await sock.sendMessage(chatId, { text: ownerText }, { quoted: message });
+        }
+
+        // Tuma interactive buttons bila ad reply
         const msgOptions = {
             text: ownerText,
-            footer: "Mickey Glitch Tech • Powered by LOFT",
-            contextInfo: {
-                externalAdReply: {
-                    title: "👑 MICKEY GLITCH OWNER",
-                    body: "Bot Developer & Owner",
-                    thumbnailUrl: "https://d.uguu.se/LLjViSGg.jpg",
-                    sourceUrl: channelLink,
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: true
-                }
-            },
+            footer: "Mickey Glitch Tech • Powered by Mickey",
             interactiveButtons: [
                 { 
                     name: 'cta_call', 
