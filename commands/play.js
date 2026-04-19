@@ -12,7 +12,7 @@ async function songCommand(sock, chatId, message) {
     }
 
     try {
-        // 1. React kutafuta (Search react)
+        // 1. React (Tafuta)
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
         const search = await yts(query);
@@ -24,18 +24,25 @@ async function songCommand(sock, chatId, message) {
         const dlUrl = res.data?.data?.audio || res.data?.data?.video;
 
         if (!dlUrl) {
-            return sock.sendMessage(chatId, { text: '❌ *API imefeli kupata link!*' });
+            return sock.sendMessage(chatId, { text: '❌ *API imeshindwa kupata link ya audio!*' });
         }
 
-        // 2. React kupakua (Download react)
+        // 2. React (Pakua Audio kwenda kwenye Buffer)
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // 3. Tuma Audio na Preview Card (Send w/ Ad Preview)
+        // Pakua file kwanza (Buffer method)
+        const response = await axios.get(dlUrl, { 
+            responseType: 'arraybuffer',
+            headers: { 'User-Agent': 'Mozilla/5.0' } // Husaidia API zisigome
+        });
+        const audioBuffer = Buffer.from(response.data);
+
+        // 3. Tuma Audio (Using Buffer + Ad Preview)
         await sock.sendMessage(chatId, {
-            audio: { url: dlUrl },
-            mimetype: 'audio/mp4', // Bora zaidi kwa preview cards
+            audio: audioBuffer, 
+            mimetype: 'audio/mp4', // Inaplay vizuri zaidi na preview card
             ptt: false,
-            fileName: `${vid.title}`,
+            fileName: `${vid.title}.mp3`,
             contextInfo: {
                 externalAdReply: {
                     title: vid.title,
@@ -49,11 +56,11 @@ async function songCommand(sock, chatId, message) {
             }
         }, { quoted: message });
 
-        // 4. React imekamilika (Success react)
+        // 4. React (Tayari)
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error("PLAY ERR:", err.message);
+        console.error("PLAY ERROR:", err.message);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
         await sock.sendMessage(chatId, { text: `🚨 *Hitilafu:* ${err.message}` });
     }
