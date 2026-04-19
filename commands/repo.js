@@ -1,161 +1,139 @@
 const axios = require('axios');
 
-/**
- * Fetch thumbnail na kuifanya iwe Buffer kwa ajili ya AdReply
- */
 async function fetchThumbnail(url) {
     try {
         const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
         return Buffer.from(res.data);
     } catch (e) {
-        console.log("Thumbnail fetch error, using fallback...");
         return null;
     }
 }
 
-/**
- * Kutuma Interactive Message kwa kutumia relayMessage
- */
 async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
-    const repoText = `✨ *${repo.name.toUpperCase()} INFO* ✨
+    const repoText = `✨ *${repo.name.toUpperCase()} INFO* ✨\n\n👤 *Owner:* ${repo.owner.login}\n⭐ *Stars:* ${repo.stargazers_count}\n🍴 *Forks:* ${repo.forks_count}\n📅 *Created:* ${new Date(repo.created_at).toLocaleDateString()}\n🔄 *Updated:* ${new Date(repo.updated_at).toLocaleDateString()}\n\n*MICKEY GLITCH V3.0.5*`;
 
-👤 *Owner:* ${repo.owner.login}
-⭐ *Stars:* ${repo.stargazers_count}
-🍴 *Forks:* ${repo.forks_count}
-📅 *Created:* ${new Date(repo.created_at).toLocaleDateString()}
-🔄 *Updated:* ${new Date(repo.updated_at).toLocaleDateString()}
-
-*MICKEY GLITCH V3.0.5*`;
-
-    const interactiveMsg = {
-        viewOnceMessage: {
-            message: {
-                interactiveMessage: {
-                    contextInfo: {
-                        externalAdReply: {
-                            title: "MICKEY GLITCH REPO",
-                            body: "Download or Visit Repository",
-                            mediaType: 1,
-                            thumbnail: thumbnail || undefined,
-                            sourceUrl: repo.html_url,
-                            renderLargerThumbnail: true,
-                            showAdAttribution: true
-                        },
-                        // Inahakikisha quoted message ipo sahihi
-                        mentionedJid: [quotedMsg.key.participant || quotedMsg.key.remoteJid],
-                        ...(quotedMsg ? {
-                            quotedMessage: quotedMsg.message,
-                            stanzaId: quotedMsg.key.id,
-                            participant: quotedMsg.key.participant || quotedMsg.key.remoteJid,
-                            remoteJid: chatId
-                        } : {})
+    // Tunasuka ujumbe wa Interactive
+    const messageContent = {
+        interactiveMessage: {
+            header: {
+                title: "MICKEY GLITCH REPO",
+                hasMediaAttachment: true,
+                ...(thumbnail ? { jpegThumbnail: thumbnail } : {})
+            },
+            body: { text: repoText },
+            footer: { text: "Quantum Base Dev • Mickey Glitch" },
+            nativeFlowMessage: {
+                buttons: [
+                    {
+                        name: "cta_url",
+                        buttonParamsJson: JSON.stringify({
+                            display_text: "🌐 Visit Repo",
+                            url: repo.html_url
+                        })
                     },
-                    body: { text: repoText },
-                    footer: { text: "Quantum Base Dev • Mickey Glitch" },
-                    nativeFlowMessage: {
-                        buttons: [
-                            {
-                                name: "cta_copy",
-                                buttonParamsJson: JSON.stringify({
-                                    display_text: "📋 Copy Repo Link",
-                                    copy_code: repo.html_url
-                                })
-                            },
-                            {
-                                name: "cta_url",
-                                buttonParamsJson: JSON.stringify({
-                                    display_text: "🌐 Visit Repo",
-                                    url: repo.html_url
-                                })
-                            },
-                            {
-                                name: "quick_reply",
-                                buttonParamsJson: JSON.stringify({
-                                    display_text: "📥 Download ZIP",
-                                    id: "download_zip"
-                                })
-                            }
-                        ]
+                    {
+                        name: "cta_copy",
+                        buttonParamsJson: JSON.stringify({
+                            display_text: "📋 Copy Repo Link",
+                            copy_code: repo.html_url
+                        })
+                    },
+                    {
+                        name: "quick_reply",
+                        buttonParamsJson: JSON.stringify({
+                            display_text: "📥 Download ZIP",
+                            id: "download_zip"
+                        })
                     }
-                }
+                ]
+            },
+            contextInfo: {
+                externalAdReply: {
+                    title: "MICKEY GLITCH REPO",
+                    body: "Download or Visit Repository",
+                    mediaType: 1,
+                    thumbnail: thumbnail,
+                    sourceUrl: repo.html_url,
+                    renderLargerThumbnail: true,
+                    showAdAttribution: true
+                },
+                mentionedJid: [quotedMsg.sender || quotedMsg.key.remoteJid],
+                quotedMessage: quotedMsg.message,
+                participant: quotedMsg.sender || quotedMsg.key.participant || quotedMsg.key.remoteJid,
+                stanzaId: quotedMsg.key.id,
+                remoteJid: chatId
             }
         }
     };
 
-    return await sock.relayMessage(chatId, interactiveMsg, { messageId: quotedMsg.key.id });
+    // --- FIX: Ondoa messageId: quotedMsg.key.id hapa ---
+    // Acha mfumo ujitengenezee ID mpya ili tangazo lionekane
+    return await sock.relayMessage(chatId, { viewOnceMessage: { message: messageContent } }, {});
 }
 
 async function repoCommand(sock, chatId, message) {
     if (!sock) return;
 
     let command = '';
-    try {
-        const params = message.message?.interactiveResponseMessage
-            ?.nativeFlowResponseMessage?.paramsJson;
-        if (params) {
-            command = JSON.parse(params).id || '';
-        }
-    } catch { }
+    const body = message.message?.conversation || 
+                 message.message?.extendedTextMessage?.text || 
+                 message.message?.buttonsResponseMessage?.selectedButtonId || 
+                 message.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson || "";
 
-    if (!command) {
-        command = (
-            message.message?.conversation ||
-            message.message?.extendedTextMessage?.text ||
-            ''
-        ).trim().toLowerCase();
+    // Angalia kama ni kodi ya button (JSON)
+    if (body.includes('download_zip')) {
+        command = 'download_zip';
+    } else {
+        command = body.trim().toLowerCase();
     }
 
     try {
         // --- DOWNLOAD LOGIC ---
         if (command === 'download_zip' || command === '.download_zip') {
-            const repo = global.repoCache?.[chatId];
-            if (!repo) {
+            const repoData = global.repoCache?.[chatId];
+            if (!repoData) {
                 return sock.sendMessage(chatId, { text: '❌ *Session expired. Run .repo tena.*' }, { quoted: message });
             }
 
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-            const owner = repo.owner?.login || 'Mickeydeveloper';
-            const zipUrl = `https://github.com/${owner}/${repo.name}/archive/refs/heads/${repo.default_branch || 'main'}.zip`;
+            const owner = repoData.owner?.login || 'Mickeydeveloper';
+            const zipUrl = `https://github.com/${owner}/${repoData.name}/archive/refs/heads/${repoData.default_branch || 'main'}.zip`;
 
             const zipRes = await axios.get(zipUrl, { responseType: 'arraybuffer', timeout: 60000 });
 
             await sock.sendMessage(chatId, {
                 document: Buffer.from(zipRes.data),
                 mimetype: 'application/zip',
-                fileName: `${repo.name}.zip`,
-                caption: `✅ *ZIP Imepakuliwa!*\n📦 *Repo:* ${repo.name}`
+                fileName: `${repoData.name}.zip`,
+                caption: `✅ *ZIP Imepakuliwa!*\n📦 *Repo:* ${repoData.name}`
             }, { quoted: message });
 
             return sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         }
 
-        // --- FETCH REPO LOGIC ---
-        await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
+        // --- FETCH REPO LOGIC (.repo) ---
+        if (command === '.repo' || command === 'repo') {
+            await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
-        // Muhimu: Ongeza User-Agent na timeout
-        const repoRes = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch', {
-            headers: { 
-                'User-Agent': 'Mozilla/5.0',
-                'Accept': 'application/vnd.github.v3+json'
-            },
-            timeout: 10000
-        });
+            const repoRes = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch', {
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+                timeout: 10000
+            });
 
-        const repoData = repoRes.data;
-        if (!global.repoCache) global.repoCache = {};
-        global.repoCache[chatId] = repoData;
+            const repoData = repoRes.data;
+            if (!global.repoCache) global.repoCache = {};
+            global.repoCache[chatId] = repoData;
 
-        const thumbnail = await fetchThumbnail(repoData.owner.avatar_url);
+            const thumbnail = await fetchThumbnail(repoData.owner.avatar_url);
 
-        await sendRepoInteractive(sock, chatId, repoData, thumbnail, message);
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+            await sendRepoInteractive(sock, chatId, repoData, thumbnail, message);
+            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+        }
 
     } catch (err) {
-        console.error('[REPO ERR]', err.response?.data || err.message);
-        await sock.sendMessage(chatId, {
-            text: `🚨 *System Error:* Failed to fetch repo info.\n_Sababu: ${err.response?.status === 403 ? "GitHub Rate Limit" : "Network Timeout"}_`
-        }, { quoted: message });
+        console.error('[REPO ERR]', err.message);
+        await sock.sendMessage(chatId, { text: `🚨 *Error:* ${err.message}` }, { quoted: message });
     }
 }
 
