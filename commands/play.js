@@ -12,47 +12,50 @@ async function songCommand(sock, chatId, message) {
     }
 
     try {
-        // 1. Reaction ya kutafuta
+        // 1. React kutafuta (Search react)
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
-        const { videos } = await yts(query);
-        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' });
+        const search = await yts(query);
+        const vid = search.videos[0];
+        if (!vid) return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' });
 
-        const vid = videos[0];
-        const thumbnailUrl = vid.thumbnail;
-        const thumbnailResponse = await axios.get(thumbnailUrl, { responseType: 'arraybuffer' });
-        const thumbnail = Buffer.from(thumbnailResponse.data);
         const api = `https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(vid.url)}`;
-
         const res = await axios.get(api);
-        // Hakikisha tunapata audio link sahihi
         const dlUrl = res.data?.data?.audio || res.data?.data?.video;
-        
+
         if (!dlUrl) {
-            return sock.sendMessage(chatId, { text: '❌ *API imeshindwa kupata audio!*' });
+            return sock.sendMessage(chatId, { text: '❌ *API imefeli kupata link!*' });
         }
 
-        // 2. Reaction ya kupakua
+        // 2. React kupakua (Download react)
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // 3. Tuma Audio (Optimized kwa wote)
+        // 3. Tuma Audio na Preview Card (Send w/ Ad Preview)
         await sock.sendMessage(chatId, {
             audio: { url: dlUrl },
-            mimetype: 'audio/mpeg',
-            fileName: `${vid.title}.mp3`,
+            mimetype: 'audio/mp4', // Bora zaidi kwa preview cards
             ptt: false,
-            thumbnail: thumbnail,
-            caption: `*${vid.title}*\n🎵 Enjoy your song!`
+            fileName: `${vid.title}`,
+            contextInfo: {
+                externalAdReply: {
+                    title: vid.title,
+                    body: `Channel: ${vid.author.name}`,
+                    thumbnailUrl: vid.thumbnail,
+                    sourceUrl: vid.url,
+                    mediaType: 1,
+                    renderLargerThumbnail: true,
+                    showAdAttribution: true
+                }
+            }
         }, { quoted: message });
 
-        // 4. Reaction ya kumaliza
+        // 4. React imekamilika (Success react)
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error("PLAY ERROR:", err.message);
-        // Kama API ya kwanza ikifeli, unaweza kuongeza ujumbe hapa
+        console.error("PLAY ERR:", err.message);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu imetokea!* Huenda wimbo ni mkubwa sana au server ina tatizo.' });
+        await sock.sendMessage(chatId, { text: `🚨 *Hitilafu:* ${err.message}` });
     }
 }
 
