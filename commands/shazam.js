@@ -79,7 +79,7 @@ async function shazamCommand(sock, chatId, message) {
             const cleanTitle = title.replace(/[^\w\s]/gi, '');
             
             // Hapa tunatengeneza ID bila kutumia backticks ndani ya variable kama mwanzo
-            const playCmd = ".play " + cleanArtist + " " + cleanTitle;
+            const playCmd = ".play " + cleanTitle;
 
             const caption = `🎵 *SHAZAM IDENTIFIED!*\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -94,7 +94,7 @@ async function shazamCommand(sock, chatId, message) {
                 text: caption,
                 footer: 'MICKEY GLITCH V3.0',
                 buttons: [
-                    { id: playCmd, text: '📥 DOWNLOAD MP3' }
+                    { id: playCmd, text: '📥 DOWNLOAD MP3: ' + title }
                 ]
             }, { quoted: message });
 

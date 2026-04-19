@@ -66,9 +66,8 @@ async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
         }
     };
 
-    // --- FIX: Ondoa messageId: quotedMsg.key.id hapa ---
-    // Acha mfumo ujitengenezee ID mpya ili tangazo lionekane
-    return await sock.relayMessage(chatId, { viewOnceMessage: { message: messageContent } }, {});
+    // Kusimamia ujumbe wa interactive na contextInfo
+    return await sock.sendMessage(chatId, messageContent, { quoted: quotedMsg });
 }
 
 async function repoCommand(sock, chatId, message) {
