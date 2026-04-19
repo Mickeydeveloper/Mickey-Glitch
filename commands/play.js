@@ -12,57 +12,55 @@ async function songCommand(sock, chatId, message) {
     }
 
     try {
-        // 1. React (Tafuta)
         await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
-        const search = await yts(query);
-        const vid = search.videos[0];
-        if (!vid) return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' });
+        const { videos } = await yts(query);
+        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Haikupatikana!*' });
 
+        const vid = videos[0];
         const api = `https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(vid.url)}`;
+
         const res = await axios.get(api);
-        const dlUrl = res.data?.data?.audio || res.data?.data?.video;
+        const dlUrl = res.data?.data?.audio || res.data?.data?.video; // Priority iwe audio
+        
+        if (!dlUrl) return sock.sendMessage(chatId, { text: '❌ *API Error!*' });
 
-        if (!dlUrl) {
-            return sock.sendMessage(chatId, { text: '❌ *API imeshindwa kupata link ya audio!*' });
-        }
-
-        // 2. React (Pakua Audio kwenda kwenye Buffer)
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // Pakua file kwanza (Buffer method)
+        // FIX: Pakua file kwanza kuwa Buffer badala ya kutuma URL pekee
         const response = await axios.get(dlUrl, { 
             responseType: 'arraybuffer',
-            headers: { 'User-Agent': 'Mozilla/5.0' } // Husaidia API zisigome
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+            }
         });
         const audioBuffer = Buffer.from(response.data);
 
-        // 3. Tuma Audio (Using Buffer + Ad Preview)
+        // Tuma audio ikiwa imekamilika
         await sock.sendMessage(chatId, {
-            audio: audioBuffer, 
-            mimetype: 'audio/mp4', // Inaplay vizuri zaidi na preview card
+            audio: audioBuffer,
+            mimetype: 'audio/mp4', // Mp4 aac ni bora kwa preview kadi
+            fileName: `${vid.title}`,
             ptt: false,
-            fileName: `${vid.title}.mp3`,
             contextInfo: {
                 externalAdReply: {
                     title: vid.title,
-                    body: `Channel: ${vid.author.name}`,
+                    body: `Mickey Infor Tech | ${vid.timestamp}`,
                     thumbnailUrl: vid.thumbnail,
                     sourceUrl: vid.url,
                     mediaType: 1,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: true
+                    showAdAttribution: true,
+                    renderLargerThumbnail: true
                 }
             }
         }, { quoted: message });
 
-        // 4. React (Tayari)
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
         console.error("PLAY ERROR:", err.message);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-        await sock.sendMessage(chatId, { text: `🚨 *Hitilafu:* ${err.message}` });
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Server ya API ina matatizo kwa sasa.' });
     }
 }
 
