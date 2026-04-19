@@ -19,6 +19,9 @@ async function songCommand(sock, chatId, message) {
         if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' });
 
         const vid = videos[0];
+        const thumbnailUrl = vid.thumbnail;
+        const thumbnailResponse = await axios.get(thumbnailUrl, { responseType: 'arraybuffer' });
+        const thumbnail = Buffer.from(thumbnailResponse.data);
         const api = `https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(vid.url)}`;
 
         const res = await axios.get(api);
@@ -37,7 +40,9 @@ async function songCommand(sock, chatId, message) {
             audio: { url: dlUrl },
             mimetype: 'audio/mpeg',
             fileName: `${vid.title}.mp3`,
-            ptt: false
+            ptt: false,
+            thumbnail: thumbnail,
+            caption: `*${vid.title}*\n🎵 Enjoy your song!`
         }, { quoted: message });
 
         // 4. Reaction ya kumaliza
