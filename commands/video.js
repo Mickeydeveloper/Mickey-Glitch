@@ -4,36 +4,43 @@ const ruhend = require('ruhend-scraper');
 
 async function videoCommand(sock, chatId, message, args) {
     try {
-        // --- FIX: Hakikisha args ni Array ---
-        const validArgs = Array.isArray(args) ? args : [];
-        
+        // --- 1. KUPATA BODY ---
         const body = message.message?.conversation || 
                      message.message?.extendedTextMessage?.text || 
                      message.message?.buttonsResponseMessage?.selectedButtonId || "";
 
         if (!body) return;
 
-        // Tunasafisha command
-        const command = body.startsWith('.') ? body.slice(1).trim().split(/ +/).shift().toLowerCase() : "";
-        
-        // --- FIX: Tunatumia validArgs hapa ---
-        const searchQuery = validArgs.join(' ').trim();
+        // --- 2. KUPATA SEARCH QUERY ---
+        // Kama args haina kitu, tunachukua maneno yote baada ya .video
+        let searchQuery = "";
+        if (Array.isArray(args) && args.length > 0) {
+            searchQuery = args.join(' ').trim();
+        } else {
+            searchQuery = body.split(' ').slice(1).join(' ').trim();
+        }
 
-        // --- 1. BRING BUTTONS (.video [name]) ---
+        const command = body.slice(1).trim().split(/ +/).shift().toLowerCase();
+
+        // --- 3. LOGIC YA .VIDEO ---
         if (command === 'video') {
             if (!searchQuery) {
-                return await sock.sendMessage(chatId, { text: '❌ *What are you searching for?*\nExample: .video Mario oluwa' }, { quoted: message });
+                return await sock.sendMessage(chatId, { 
+                    text: '❌ *Unatafuta nini?*\n\n*Mfano:* .video Mario oluwa' 
+                }, { quoted: message });
             }
 
             await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
             const { videos } = await yts(searchQuery);
-            if (!videos || videos.length === 0) return await sock.sendMessage(chatId, { text: '❌ Not found!' });
+            if (!videos || videos.length === 0) {
+                return await sock.sendMessage(chatId, { text: '❌ Video haijapatikana!' });
+            }
 
             const v = videos[0];
             const title = v.title;
 
-            const caption = `🎥 *MICKEY MEDIA SEARCH*\n━━━━━━━━━━━━━━━━━━━━━━\n📝 *Title:* ${title}\n⏳ *Duration:* ${v.timestamp}\n━━━━━━━━━━━━━━━━━━━━━━\n*Choose what you want below:* 👇`;
+            const caption = `🎥 *MICKEY MEDIA SEARCH*\n━━━━━━━━━━━━━━━━━━━━━━\n📝 *Title:* ${title}\n⏳ *Duration:* ${v.timestamp}\n━━━━━━━━━━━━━━━━━━━━━━\n*Chagua hapo chini:* 👇`;
 
             await sendButtons(sock, chatId, {
                 title: '🎬 DOWNLOADER PANEL',
@@ -41,7 +48,6 @@ async function videoCommand(sock, chatId, message, args) {
                 footer: 'Mickey Glitch Tech',
                 image: { url: v.thumbnail },
                 buttons: [
-                    // Tunatumia .ytvideo kama command itakayokuja kwny body button ikibonyezwa
                     { id: `.ytvideo ${title}`, text: '🎥 VIDEO (MP4)' },
                     { id: `.play ${title}`, text: '🎵 AUDIO (MP3)' }
                 ]
@@ -50,7 +56,7 @@ async function videoCommand(sock, chatId, message, args) {
             return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         }
 
-        // --- 2. KUDOWNLOAD VIDEO (.ytvideo [jina]) ---
+        // --- 4. LOGIC YA .YTVIDEO (Inatokea baada ya kubonyeza button) ---
         if (command === 'ytvideo') {
             const downloadQuery = body.replace(/^\.ytvideo\s+/i, '').trim(); 
             if (!downloadQuery) return;
@@ -63,10 +69,10 @@ async function videoCommand(sock, chatId, message, args) {
             const videoUrl = videos[0].url;
             const res = await ruhend.ytmp4(videoUrl);
 
-            if (res && res.video) {
+            if (res.status) {
                 await sock.sendMessage(chatId, {
                     video: { url: res.video },
-                    caption: `✅ *Success:* ${res.title || title}`,
+                    caption: `✅ *Mickey-Stream:* ${res.title}`,
                     mimetype: 'video/mp4'
                 }, { quoted: message });
             }
