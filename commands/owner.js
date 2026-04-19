@@ -1,4 +1,3 @@
-
 const { sendInteractiveMessage } = require('gifted-btns');
 const settings = require('../settings');
 const axios = require('axios');
@@ -10,60 +9,60 @@ async function ownerCommand(sock, chatId, message) {
         const chnlUrl = 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610';
         const imgUrl = 'https://d.uguu.se/LLjViSGg.jpg';
 
-        // Maelezo ya mmiliki (Owner info details)
-        const captionTxt = `👤 *TAARIFA ZA MMILIKI (OWNER INFO)*\n\n` +
-                           `🤖 *Jina la Bot (Bot Name):* ${settings.botName || 'MICKEY GLITCH'}\n` +
-                           `👨‍💻 *Mkurugenzi (Owner):* ${settings.botOwner || 'Mickey'}\n` +
-                           `📞 *Namba (Contact):* +${ownerNum}\n\n` +
-                           `Chagua huduma hapa (Choose an action below) 👇`;
+        // Maelezo ya mmiliki (Professional details)
+        const ownerTxt = `👑 *OWNER INFO (TAARIFA ZA MMILIKI)*\n\n` +
+                         `🤖 *Bot:* ${settings.botName || 'MICKEY GLITCH'}\n` +
+                         `👨‍💻 *Owner:* ${settings.botOwner || 'Mickey'}\n` +
+                         `📞 *Contact:* +${ownerNum}\n\n` +
+                         `Choose an action below (Chagua huduma) 👇`;
 
-        // Jaribu kutuma picha (Try sending image)
+        // Pata picha kwanza (Fetch image buffer)
+        let imgBuffer;
         try {
             const res = await axios.get(imgUrl, { responseType: 'arraybuffer', timeout: 10000 });
-            await sock.sendMessage(chatId, {
-                image: Buffer.from(res.data),
-                caption: captionTxt
-            }, { quoted: message });
-        } catch (imgErr) {
-            console.error('Picha imegoma (Image error):', imgErr.message);
-            await sock.sendMessage(chatId, { text: captionTxt }, { quoted: message });
+            imgBuffer = Buffer.from(res.data);
+        } catch (e) {
+            console.error('Picha error:', e.message);
+            imgBuffer = null; // Kama picha imegoma, itatuma text pekee
         }
 
-        // Setup ya buttons (Interactive buttons setup)
-        const btnOptions = {
-            text: captionTxt,
-            footer: "© Mickey Infor Technology • Dev by Mickey",
+        // Tuma ujumbe mmoja tu wenye kila kitu (Single interactive message)
+        const msgOptions = {
+            text: ownerTxt,
+            footer: "© Mickey Infor Tech • Powered by Mickey",
+            // Ikiwa picha ipo, iwekwe hapa (Add image if available)
+            ...(imgBuffer && { image: imgBuffer }),
             interactiveButtons: [
                 { 
                     name: 'cta_call', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📞 Piga Simu (Call)', 
+                        display_text: '📞 Call Owner', 
                         phone_number: ownerNum 
                     }) 
                 },
                 { 
                     name: 'cta_url', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '💬 Nitumie Msg (Message)', 
+                        display_text: '💬 Send Message', 
                         url: waUrl 
                     }) 
                 },
                 { 
                     name: 'cta_url', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📺 Jiunge Channel (Join)', 
+                        display_text: '📺 Join Channel', 
                         url: chnlUrl 
                     }) 
                 }
             ]
         };
 
-        await sendInteractiveMessage(sock, chatId, btnOptions, { quoted: message });
+        await sendInteractiveMessage(sock, chatId, msgOptions, { quoted: message });
 
-    } catch (err) {
-        console.error('Owner Cmd Err:', err);
+    } catch (e) {
+        console.error('Owner Cmd Error:', e);
         await sock.sendMessage(chatId, { 
-            text: '❌ *Kuna tatizo limetokea! (An error occurred)*' 
+            text: '❌ *Hitilafu imetokea! (An error occurred)*' 
         }, { quoted: message });
     }
 }
