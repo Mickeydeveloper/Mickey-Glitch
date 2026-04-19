@@ -1,51 +1,44 @@
 const axios = require('axios');
 
-// Function ya kuvuta picha (thumbnail)
 async function fetchThumbnail(url) {
     if (!url) return null;
     try {
         const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 8000 });
         return Buffer.from(res.data);
     } catch (e) {
-        console.error('Thumbnail fetch failed:', e.message);
-        return null; // Rudisha null badala ya kuleta error
+        return null;
     }
 }
 
 async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
-    const repoText = `✨ *${repo.name.toUpperCase()} INFO* ✨\n\n` +
-                     `👤 *Owner:* ${repo.owner.login}\n` +
+    // Muundo wa maandishi ulioboreshwa (Stylized Text)
+    const repoText = `✨ *${repo.name.toUpperCase()}* ✨\n\n` +
+                     `📝 *Description:* ${repo.description || 'No description available'}\n` +
+                     `👤 *Author:* ${repo.owner.login}\n` +
                      `⭐ *Stars:* ${repo.stargazers_count}\n` +
                      `🍴 *Forks:* ${repo.forks_count}\n` +
                      `📅 *Created:* ${new Date(repo.created_at).toLocaleDateString()}\n` +
-                     `🔄 *Updated:* ${new Date(repo.updated_at).toLocaleDateString()}\n\n` +
-                     `*MICKEY GLITCH V3.0.5*`;
+                     `🔄 *Last Update:* ${new Date(repo.updated_at).toLocaleDateString()}\n\n` +
+                     `*POWERED BY MICKEY GLITCH V3.0.5*`;
 
-    // FIX: Tuma picha TU kama ipo (thumbnail sio null)
-    if (thumbnail) {
-        await sock.sendMessage(chatId, {
-            image: thumbnail,
-            caption: repoText // Weka text hapa ili isitoke picha tupu bila maelezo
-        }, { quoted: quotedMsg });
-    } else {
-        // Ikiwa picha imegoma, tuma text tupu bila picha
-        await sock.sendMessage(chatId, { text: repoText }, { quoted: quotedMsg });
-    }
-
-    // Tuma Interactive Buttons (Native Flow)
-    const messageContent = {
+    // Kutengeneza ujumbe wa Interactive kwa njia sahihi (Fixing Invalid Media Type)
+    const msg = {
         viewOnceMessage: {
             message: {
                 interactiveMessage: {
-                    header: { title: "MICKEY GLITCH REPO", hasMediaAttachment: false },
-                    body: { text: "Chagua kitendo hapa chini (Choose action):" },
-                    footer: { text: "Mickey Infor Tech • Quantum Base" },
+                    header: {
+                        title: "Mickey Infor Tech",
+                        hasMediaAttachment: !!thumbnail,
+                        ...(thumbnail && { imageMessage: (await sock.prepareWAMessageMedia({ image: thumbnail }, { upload: sock.waUploadToServer })).imageMessage })
+                    },
+                    body: { text: repoText },
+                    footer: { text: "Tap buttons below to explore 🚀" },
                     nativeFlowMessage: {
                         buttons: [
                             {
                                 name: "cta_url",
                                 buttonParamsJson: JSON.stringify({
-                                    display_text: "🌐 Visit Repo",
+                                    display_text: "🌐 Open Repository",
                                     url: repo.html_url
                                 })
                             },
@@ -70,7 +63,7 @@ async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
         }
     };
 
-    return await sock.sendMessage(chatId, messageContent, { quoted: quotedMsg });
+    return await sock.sendMessage(chatId, msg, { quoted: quotedMsg });
 }
 
 async function repoCommand(sock, chatId, message) {
@@ -81,17 +74,13 @@ async function repoCommand(sock, chatId, message) {
                  message.message?.buttonsResponseMessage?.selectedButtonId || 
                  message.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson || "";
 
-    // Rahisisha utambuzi wa command
     let command = body.trim().toLowerCase();
     if (body.includes('download_zip')) command = 'download_zip';
 
     try {
-        // --- DOWNLOAD ZIP LOGIC ---
         if (command === 'download_zip' || command === '.download_zip') {
             const repoData = global.repoCache?.[chatId];
-            if (!repoData) {
-                return sock.sendMessage(chatId, { text: '❌ *Session expired! (Andika .repo tena)*' }, { quoted: message });
-            }
+            if (!repoData) return sock.sendMessage(chatId, { text: '❌ *Session expired! (Andika .repo tena)*' }, { quoted: message });
 
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
@@ -102,13 +91,12 @@ async function repoCommand(sock, chatId, message) {
                 document: Buffer.from(zipRes.data),
                 mimetype: 'application/zip',
                 fileName: `${repoData.name}.zip`,
-                caption: `✅ *ZIP Tayari (Downloaded)!*\n📦 *Repo:* ${repoData.name}`
+                caption: `✅ *ZIP Downloaded Successfully!*\n📦 *Repo:* ${repoData.name}`
             }, { quoted: message });
 
             return sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         }
 
-        // --- FETCH REPO LOGIC (.repo) ---
         if (command === '.repo' || command === 'repo') {
             await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
 
@@ -121,13 +109,11 @@ async function repoCommand(sock, chatId, message) {
             if (!global.repoCache) global.repoCache = {};
             global.repoCache[chatId] = repoData;
 
-            // Vuta picha, ikifeli itakuwa null
             const thumbnail = await fetchThumbnail(repoData.owner.avatar_url);
 
             await sendRepoInteractive(sock, chatId, repoData, thumbnail, message);
             await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         }
-
     } catch (err) {
         console.error('[REPO ERR]', err.message);
         await sock.sendMessage(chatId, { text: `🚨 *Error:* ${err.message}` }, { quoted: message });
