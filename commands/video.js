@@ -1,47 +1,82 @@
+const { sendButtons } = require('gifted-btns');
 const yts = require('yt-search');
 const ruhend = require('ruhend-scraper');
 
 async function videoCommand(sock, chatId, message, args) {
     try {
-        const body = message.message?.conversation || message.message?.extendedTextMessage?.text || "";
-        let searchQuery = (args && args.length > 0) ? args.join(' ') : body.split(' ').slice(1).join(' ');
+        // --- SAFETY IMPROVEMENTS (Safety Fix) ---
+        // We ensure body exists before using it
+        const body = message.message?.conversation || 
+                     message.message?.extendedTextMessage?.text || 
+                     message.message?.buttonsResponseMessage?.selectedButtonId || "";
+        
+        if (!body) return; // If no text, don't do anything
 
-        if (!searchQuery) {
-            return await sock.sendMessage(chatId, { text: '❌ *Unatafuta nini?*\n\n*Mfano:* .video Mario - Mi Amor' }, { quoted: message });
-        }
+        const command = body.slice(1).trim().split(/ +/).shift().toLowerCase();
+        const searchQuery = args.join(' ').trim();
 
-        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
+        // --- 1. BRING BUTTONS (.video [name]) ---
+        if (command === 'video' && !body.startsWith('.ytvideo')) {
+            if (!searchQuery) {
+                return await sock.sendMessage(chatId, { text: '❌ *What are you searching for?*\nExample: .video Mario oluwa' }, { quoted: message });
+            }
 
-        const searchResult = await yts(searchQuery);
-        const video = searchResult.videos[0];
+            await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
-        if (!video) {
-            return await sock.sendMessage(chatId, { text: '❌ Video haijapatikana!' });
-        }
+            const { videos } = await yts(searchQuery);
+            if (!videos || videos.length === 0) return await sock.sendMessage(chatId, { text: '❌ Not found!' });
 
-        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+            const v = videos[0];
+            const title = v.title;
 
-        const res = await ruhend.ytmp4(video.url);
+            const caption = `
+🎥 *MICKEY MEDIA SEARCH*
+━━━━━━━━━━━━━━━━━━━━━━
+📝 *Title:* ${title}
+⏳ *Duration:* ${v.timestamp}
+━━━━━━━━━━━━━━━━━━━━━━
+*Choose what you want below:* 👇`;
 
-        if (res && res.status && res.video) {
-            await sock.sendMessage(chatId, {
-                video: { url: res.video },
-                caption: `🎥 *MICKEY VIDEO DOWNLOADER*\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-                         `📝 *Title:* ${video.title}\n` +
-                         `⏳ *Duration:* ${video.timestamp}\n` +
-                         `👤 *Channel:* ${video.author.name}\n` +
-                         `🔗 *Link:* ${video.url}\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-                         `*© Powered by Mickey Glitch*`,
-                mimetype: 'video/mp4'
+            await sendButtons(sock, chatId, {
+                title: '🎬 DOWNLOADER PANEL',
+                text: caption,
+                footer: 'Mickey Glitch Tech',
+                image: { url: v.thumbnail },
+                buttons: [
+                    { id: `ytvideo_${encodeURIComponent(title)}`, text: '🎥 VIDEO (MP4)' },
+                    { id: `play ${encodeURIComponent(title)}`, text: '🎵 AUDIO (MP3)' }
+                ]
             }, { quoted: message });
-
-            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-        } else {
-            throw new Error("Download failed");
+            
+            return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         }
+
+        // --- 2. KUDOWNLOAD VIDEO (.ytvideo [jina]) ---
+        if (command === 'ytvideo') {
+            // Hapa tunatumia jina lililotoka kwenye button search
+            const downloadQuery = body.replace(/^\.ytvideo\s+/i, ''); 
+            if (!downloadQuery) return;
+
+            await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+            
+            const { videos } = await yts(downloadQuery);
+            if (!videos || videos.length === 0) return;
+
+            const videoUrl = videos[0].url;
+            const res = await ruhend.ytmp4(videoUrl);
+            
+            if (res.status) {
+                await sock.sendMessage(chatId, {
+                    video: { url: res.video },
+                    caption: `✅ *Success:* ${res.title}`,
+                    mimetype: 'video/mp4'
+                }, { quoted: message });
+            }
+        }
+
     } catch (err) {
-        await sock.sendMessage(chatId, { text: `🚨 *Hitilafu:* Imeshindwa kupakua video hii. Jaribu nyingine au uandike jina vizuri.` }, { quoted: message });
-        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+        console.error("VIDEO ERROR:", err);
+        // Hatuwezi kutumia slice hapa tena bila hofu
     }
 }
 
