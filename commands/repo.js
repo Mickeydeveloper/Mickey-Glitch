@@ -1,3 +1,4 @@
+const { prepareWAMessageMedia } = require('@whiskeysockets/baileys'); // Fix hapa
 const axios = require('axios');
 
 async function fetchThumbnail(url) {
@@ -11,17 +12,22 @@ async function fetchThumbnail(url) {
 }
 
 async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
-    // Muundo wa maandishi ulioboreshwa (Stylized Text)
     const repoText = `✨ *${repo.name.toUpperCase()}* ✨\n\n` +
-                     `📝 *Description:* ${repo.description || 'No description available'}\n` +
+                     `📝 *Desc:* ${repo.description || 'No description'}\n` +
                      `👤 *Author:* ${repo.owner.login}\n` +
                      `⭐ *Stars:* ${repo.stargazers_count}\n` +
                      `🍴 *Forks:* ${repo.forks_count}\n` +
                      `📅 *Created:* ${new Date(repo.created_at).toLocaleDateString()}\n` +
-                     `🔄 *Last Update:* ${new Date(repo.updated_at).toLocaleDateString()}\n\n` +
+                     `🔄 *Update:* ${new Date(repo.updated_at).toLocaleDateString()}\n\n` +
                      `*POWERED BY MICKEY GLITCH V3.0.5*`;
 
-    // Kutengeneza ujumbe wa Interactive kwa njia sahihi (Fixing Invalid Media Type)
+    // Kutumia prepareWAMessageMedia moja kwa moja (Using it directly)
+    let mediaMsg = {};
+    if (thumbnail) {
+        const media = await prepareWAMessageMedia({ image: thumbnail }, { upload: sock.waUploadToServer });
+        mediaMsg = { imageMessage: media.imageMessage };
+    }
+
     const msg = {
         viewOnceMessage: {
             message: {
@@ -29,7 +35,7 @@ async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
                     header: {
                         title: "Mickey Infor Tech",
                         hasMediaAttachment: !!thumbnail,
-                        ...(thumbnail && { imageMessage: (await sock.prepareWAMessageMedia({ image: thumbnail }, { upload: sock.waUploadToServer })).imageMessage })
+                        ...mediaMsg
                     },
                     body: { text: repoText },
                     footer: { text: "Tap buttons below to explore 🚀" },
@@ -80,7 +86,7 @@ async function repoCommand(sock, chatId, message) {
     try {
         if (command === 'download_zip' || command === '.download_zip') {
             const repoData = global.repoCache?.[chatId];
-            if (!repoData) return sock.sendMessage(chatId, { text: '❌ *Session expired! (Andika .repo tena)*' }, { quoted: message });
+            if (!repoData) return sock.sendMessage(chatId, { text: '❌ *Session expired!* (Andika .repo tena)' }, { quoted: message });
 
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
