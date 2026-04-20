@@ -1,17 +1,7 @@
-const { prepareWAMessageMedia } = require('@whiskeysockets/baileys'); // Fix hapa
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 const axios = require('axios');
 
-async function fetchThumbnail(url) {
-    if (!url) return null;
-    try {
-        const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 8000 });
-        return Buffer.from(res.data);
-    } catch (e) {
-        return null;
-    }
-}
-
-async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
+async function sendRepoInteractive(sock, chatId, repo, quotedMsg) {
     const repoText = `✨ *${repo.name.toUpperCase()}* ✨\n\n` +
                      `📝 *Desc:* ${repo.description || 'No description'}\n` +
                      `👤 *Author:* ${repo.owner.login}\n` +
@@ -21,21 +11,13 @@ async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
                      `🔄 *Update:* ${new Date(repo.updated_at).toLocaleDateString()}\n\n` +
                      `*POWERED BY MICKEY GLITCH V3.0.5*`;
 
-    // Kutumia prepareWAMessageMedia moja kwa moja (Using it directly)
-    let mediaMsg = {};
-    if (thumbnail) {
-        const media = await prepareWAMessageMedia({ image: thumbnail }, { upload: sock.waUploadToServer });
-        mediaMsg = { imageMessage: media.imageMessage };
-    }
-
     const msg = {
         viewOnceMessage: {
             message: {
                 interactiveMessage: {
                     header: {
                         title: "Mickey Infor Tech",
-                        hasMediaAttachment: !!thumbnail,
-                        ...mediaMsg
+                        hasMediaAttachment: false // Tumeondoa picha hapa
                     },
                     body: { text: repoText },
                     footer: { text: "Tap buttons below to explore 🚀" },
@@ -63,13 +45,25 @@ async function sendRepoInteractive(sock, chatId, repo, thumbnail, quotedMsg) {
                                 })
                             }
                         ]
+                    },
+                    // Hii sehemu inatengeneza Link Preview ya GitHub (GitHub Link Preview)
+                    contextInfo: {
+                        externalAdReply: {
+                            title: repo.full_name,
+                            body: "Mickey Developer - GitHub Repo",
+                            thumbnailUrl: repo.owner.avatar_url,
+                            sourceUrl: repo.html_url,
+                            mediaType: 1,
+                            renderLargerThumbnail: false // Preview ndogo na ya kisasa
+                        }
                     }
                 }
             }
         }
     };
 
-    return await sock.sendMessage(chatId, msg, { quoted: quotedMsg });
+    const preparedMsg = generateWAMessageFromContent(chatId, msg, { quoted: quotedMsg });
+    return await sock.relayMessage(chatId, preparedMsg.message, { messageId: preparedMsg.key.id });
 }
 
 async function repoCommand(sock, chatId, message) {
@@ -115,9 +109,8 @@ async function repoCommand(sock, chatId, message) {
             if (!global.repoCache) global.repoCache = {};
             global.repoCache[chatId] = repoData;
 
-            const thumbnail = await fetchThumbnail(repoData.owner.avatar_url);
-
-            await sendRepoInteractive(sock, chatId, repoData, thumbnail, message);
+            // Hatuitaji tena fetchThumbnail hapa, tunatuma repoData moja kwa moja
+            await sendRepoInteractive(sock, chatId, repoData, message);
             await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         }
     } catch (err) {
