@@ -1,18 +1,14 @@
-const { sendButtons } = require('gifted-btns');
 const yts = require('yt-search');
 const ruhend = require('ruhend-scraper');
 
 async function videoCommand(sock, chatId, message, args) {
     try {
-        // --- 1. KUPATA BODY ---
         const body = message.message?.conversation || 
-                     message.message?.extendedTextMessage?.text || 
-                     message.message?.buttonsResponseMessage?.selectedButtonId || "";
+                     message.message?.extendedTextMessage?.text || "";
 
         if (!body) return;
 
-        // --- 2. KUPATA SEARCH QUERY ---
-        // Kama args haina kitu, tunachukua maneno yote baada ya .video
+        // Kupata search query
         let searchQuery = "";
         if (Array.isArray(args) && args.length > 0) {
             searchQuery = args.join(' ').trim();
@@ -22,7 +18,6 @@ async function videoCommand(sock, chatId, message, args) {
 
         const command = body.slice(1).trim().split(/ +/).shift().toLowerCase();
 
-        // --- 3. LOGIC YA .VIDEO ---
         if (command === 'video') {
             if (!searchQuery) {
                 return await sock.sendMessage(chatId, { 
@@ -30,56 +25,47 @@ async function videoCommand(sock, chatId, message, args) {
                 }, { quoted: message });
             }
 
+            // 1. Reaction ya kutafuta (Searching reaction)
             await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
+            // 2. Tafuta video YouTube
             const { videos } = await yts(searchQuery);
             if (!videos || videos.length === 0) {
                 return await sock.sendMessage(chatId, { text: '❌ Video haijapatikana!' });
             }
 
             const v = videos[0];
-            const title = v.title;
+            const videoUrl = v.url;
 
-            const caption = `🎥 *MICKEY MEDIA SEARCH*\n━━━━━━━━━━━━━━━━━━━━━━\n📝 *Title:* ${title}\n⏳ *Duration:* ${v.timestamp}\n━━━━━━━━━━━━━━━━━━━━━━\n*Chagua hapo chini:* 👇`;
-
-            await sendButtons(sock, chatId, {
-                title: '🎬 DOWNLOADER PANEL',
-                text: caption,
-                footer: 'Mickey Glitch Tech',
-                image: { url: v.thumbnail },
-                buttons: [
-                    { id: `.ytvideo ${title}`, text: '🎥 VIDEO (MP4)' },
-                    { id: `.play ${title}`, text: '🎵 AUDIO (MP3)' }
-                ]
-            }, { quoted: message });
-
-            return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-        }
-
-        // --- 4. LOGIC YA .YTVIDEO (Inatokea baada ya kubonyeza button) ---
-        if (command === 'ytvideo') {
-            const downloadQuery = body.replace(/^\.ytvideo\s+/i, '').trim(); 
-            if (!downloadQuery) return;
-
+            // 3. Reaction ya kupakua (Downloading reaction)
             await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-            const { videos } = await yts(downloadQuery);
-            if (!videos || videos.length === 0) return;
-
-            const videoUrl = videos[0].url;
+            // 4. Pakua video kutumia ruhend-scraper
             const res = await ruhend.ytmp4(videoUrl);
 
-            if (res.status) {
+            if (res.status && res.video) {
+                // 5. Tuma video moja kwa moja (Send video directly)
                 await sock.sendMessage(chatId, {
                     video: { url: res.video },
-                    caption: `✅ *Mickey-Stream:* ${res.title}`,
+                    caption: `🎥 *MICKEY VIDEO DOWNLOADER*\n\n` +
+                             `📝 *Title:* ${v.title}\n` +
+                             `⏳ *Duration:* ${v.timestamp}\n` +
+                             `🔗 *Link:* ${videoUrl}\n\n` +
+                             `*© Powered by Mickey Glitch*`,
                     mimetype: 'video/mp4'
                 }, { quoted: message });
+
+                return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+            } else {
+                throw new Error("Imeshindwa kupata video link.");
             }
         }
 
     } catch (err) {
         console.error("VIDEO ERROR:", err.message);
+        await sock.sendMessage(chatId, { 
+            text: `🚨 *Hitilafu:* Imeshindwa kupakua video. Jaribu tena baadae.` 
+        }, { quoted: message });
     }
 }
 
