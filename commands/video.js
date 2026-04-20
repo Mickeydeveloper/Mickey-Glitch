@@ -1,71 +1,87 @@
 const yts = require('yt-search');
 const ruhend = require('ruhend-scraper');
 
+/**
+ * Mickey Glitch V3 - Video Downloader (Direct)
+ * Inatafuta na kutuma video moja kwa moja bila buttons
+ */
 async function videoCommand(sock, chatId, message, args) {
     try {
+        // 1. Pata maandishi ya mtumiaji (Get message text)
         const body = message.message?.conversation || 
                      message.message?.extendedTextMessage?.text || "";
 
-        if (!body) return;
+        if (!body && (!args || args.length === 0)) return;
 
-        // Kupata search query
+        // 2. Tengeneza search query (Prepare search query)
         let searchQuery = "";
-        if (Array.isArray(args) && args.length > 0) {
+        if (args && args.length > 0) {
             searchQuery = args.join(' ').trim();
         } else {
             searchQuery = body.split(' ').slice(1).join(' ').trim();
         }
 
-        const command = body.slice(1).trim().split(/ +/).shift().toLowerCase();
+        // Hakikisha query ipo
+        if (!searchQuery || searchQuery === "") {
+            return await sock.sendMessage(chatId, { 
+                text: '❌ *Unatafuta nini?*\n\n*Mfano:* .video Mario - Mi Amor' 
+            }, { quoted: message });
+        }
 
-        if (command === 'video') {
-            if (!searchQuery) {
-                return await sock.sendMessage(chatId, { 
-                    text: '❌ *Unatafuta nini?*\n\n*Mfano:* .video Mario oluwa' 
-                }, { quoted: message });
-            }
+        // 3. Reaction ya kuanza kutafuta (Search reaction)
+        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
 
-            // 1. Reaction ya kutafuta (Searching reaction)
-            await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
+        // 4. Tafuta video YouTube (YouTube Search)
+        const searchResult = await yts(searchQuery);
+        const videos = searchResult.videos;
 
-            // 2. Tafuta video YouTube
-            const { videos } = await yts(searchQuery);
-            if (!videos || videos.length === 0) {
-                return await sock.sendMessage(chatId, { text: '❌ Video haijapatikana!' });
-            }
+        if (!videos || videos.length === 0) {
+            return await sock.sendMessage(chatId, { text: '❌ *Video haijapatikana!* (Video not found)' }, { quoted: message });
+        }
 
-            const v = videos[0];
-            const videoUrl = v.url;
+        // Tunachukua video ya kwanza (First result)
+        const selectedVideo = videos[0];
+        const videoUrl = selectedVideo.url;
 
-            // 3. Reaction ya kupakua (Downloading reaction)
-            await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+        // 5. Reaction ya kuanza kupakua (Download reaction)
+        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-            // 4. Pakua video kutumia ruhend-scraper
-            const res = await ruhend.ytmp4(videoUrl);
+        // 6. Pakua video kwa kutumia Ruhend API (Using Ruhend Scraper)
+        // Tunatumia ytmp4 kupata direct link ya video
+        const downloadData = await ruhend.ytmp4(videoUrl);
 
-            if (res.status && res.video) {
-                // 5. Tuma video moja kwa moja (Send video directly)
-                await sock.sendMessage(chatId, {
-                    video: { url: res.video },
-                    caption: `🎥 *MICKEY VIDEO DOWNLOADER*\n\n` +
-                             `📝 *Title:* ${v.title}\n` +
-                             `⏳ *Duration:* ${v.timestamp}\n` +
-                             `🔗 *Link:* ${videoUrl}\n\n` +
-                             `*© Powered by Mickey Glitch*`,
-                    mimetype: 'video/mp4'
-                }, { quoted: message });
+        if (downloadData && downloadData.status && downloadData.video) {
+            
+            // 7. Tuma video kwa mtumiaji (Send video to user)
+            await sock.sendMessage(chatId, {
+                video: { url: downloadData.video },
+                caption: `🎥 *MICKEY VIDEO DOWNLOADER*\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+                         `📝 *Title:* ${selectedVideo.title}\n` +
+                         `⏳ *Duration:* ${selectedVideo.timestamp}\n` +
+                         `👤 *Channel:* ${selectedVideo.author.name}\n` +
+                         `🔗 *Link:* ${videoUrl}\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+                         `*© Powered by Mickey Glitch*`,
+                mimetype: 'video/mp4'
+            }, { quoted: message });
 
-                return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-            } else {
-                throw new Error("Imeshindwa kupata video link.");
-            }
+            // Reaction ya kumaliza (Success reaction)
+            return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+
+        } else {
+            // Ikishindwa kupata link kutoka kwa ruhend
+            throw new Error("API failed to return a valid video link");
         }
 
     } catch (err) {
-        console.error("VIDEO ERROR:", err.message);
+        // Hapa bot itakuambia tatizo ni nini kwenye terminal (Debug log)
+        console.error("=== VIDEO DOWNLOAD ERROR ===");
+        console.error(err.message);
+        
         await sock.sendMessage(chatId, { 
-            text: `🚨 *Hitilafu:* Imeshindwa kupakua video. Jaribu tena baadae.` 
+            text: `🚨 *Hitilafu:* Samahani, nimeshindwa kupata video hiyo kwa sasa. Jaribu tena baadae au tafuta video nyingine.` 
         }, { quoted: message });
+        
+        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
     }
 }
 
