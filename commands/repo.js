@@ -1,4 +1,4 @@
-const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+lconst { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 const axios = require('axios');
 
 async function sendRepoInteractive(sock, chatId, repo, quotedMsg) {
