@@ -7,7 +7,7 @@ async function ownerCommand(sock, chatId, message) {
         const ownerNum = settings.ownerNumber || '255612130873';
         const waUrl = `https://wa.me/${ownerNum}`;
         const chnlUrl = 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610';
-        const imgUrl = 'https://d.uguu.se/LLjViSGg.jpg';
+        const imgUrl = 'https://n.uguu.se/UWtslfHq.jpg';
 
         // Maandishi (Caption)
         const ownerTxt = `👑 *OWNER INFO (TAARIFA ZA MMILIKI)*\n\n` +
