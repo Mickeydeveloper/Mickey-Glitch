@@ -1,5 +1,4 @@
 const { isAdmin } = require('../lib/isAdmin');
-
 async function demoteCommand(sock, chatId, message, text) {
     try {
         // First check if it's a group
@@ -14,6 +13,9 @@ async function demoteCommand(sock, chatId, message, text) {
         try {
             const senderId = message.key.participant || message.key.remoteJid;
             const adminStatus = await isAdmin(sock, chatId, senderId);
+            
+            console.log(`[demote] SenderId: ${senderId}`);
+            console.log(`[demote] AdminStatus:`, adminStatus);
             
             if (!adminStatus.isBotAdmin) {
                 await sock.sendMessage(chatId, { 
