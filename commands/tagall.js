@@ -1,73 +1,45 @@
-/**
- * Command: .tagall
- * Description: Inatagi washiriki wote wa group.
- * Inafanya kazi bila kutegemea lib ya nje (Independent).
- */
+const isAdmin = require('../lib/isAdmin');  // Move isAdmin to helpers
 
 async function tagAllCommand(sock, chatId, senderId, message) {
     try {
-        // 1. Pata data ya group (Fetch group metadata)
-        // Tunahitaji hii ili kupata list ya participants na vyeo vyao
-        const groupMetadata = await sock.groupMetadata(chatId);
-        const participants = groupMetadata.participants;
+        const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
+        
 
-        // 2. Tambua Bot ID (Identify Bot ID)
-        // Baileys IDs mara nyingi huwa na format ya 'namba:ad@s.whatsapp.net'
-        const botId = sock.user.id.includes(':') 
-            ? sock.user.id.split(':')[0] + '@s.whatsapp.net' 
-            : sock.user.id;
-
-        // 3. Angalia vyeo (Check admin status)
-        // Kama .admin ipo (admin au superadmin), basi ni admin. Kama ni null, ni member.
-        const isSenderAdmin = participants.find(p => p.id === senderId)?.admin !== null;
-        const isBotAdmin = participants.find(p => p.id === botId)?.admin !== null;
-
-        // 4. Masharti ya usalama (Security checks)
         if (!isBotAdmin) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ Bot lazima iwe Admin ili iweze kutagi watu wote.' 
-            }, { quoted: message });
+            await sock.sendMessage(chatId, { text: 'Please make the bot an admin first.' }, { quoted: message });
             return;
         }
 
         if (!isSenderAdmin) {
-            await sock.sendMessage(chatId, { 
-                text: '🚫 Amri hii ni kwa ajili ya ma-Admin wa group tu.' 
-            }, { quoted: message });
+            await sock.sendMessage(chatId, { text: 'Only group admins can use the .tagall command.' }, { quoted: message });
             return;
         }
+
+        // Get group metadata
+        const groupMetadata = await sock.groupMetadata(chatId);
+        const participants = groupMetadata.participants;
 
         if (!participants || participants.length === 0) {
-            await sock.sendMessage(chatId, { text: 'No participants found.' });
+            await sock.sendMessage(chatId, { text: 'No participants found in the group.' });
             return;
         }
 
-        // 5. Tengeneza ujumbe (Build message text)
-        let messageText = '🔊 *TAG ALL MEMBERS*\n\n';
-        
-        // Tunatengeneza list ya mentions (@123456)
-        const mentions = [];
-        for (let participant of participants) {
-            messageText += `@${participant.id.split('@')[0]}\n`;
-            mentions.push(participant.id);
-        }
+        // Create message with each member on a new line
+        let messageText = '🔊 *Hello Everyone:*\n\n';
+        participants.forEach(participant => {
+            messageText += `@${participant.id.split('@')[0]}\n`; // Add \n for new line
+        });
 
-        // 6. Tuma ujumbe (Send the final message)
+        // Send message with mentions
         await sock.sendMessage(chatId, {
             text: messageText,
-            mentions: mentions
-        }, { quoted: message });
+            mentions: participants.map(p => p.id)
+        });
 
     } catch (error) {
         console.error('Error in tagall command:', error);
-        // Ikitokea tatizo, mjulishe mtumiaji (Notify user if error occurs)
-        try {
-            await sock.sendMessage(chatId, { text: '⚠️ Hitilafu imetokea wakati wa kutagi washiriki.' });
-        } catch (err) {
-            console.error('Failed to send error message:', err);
-        }
+        await sock.sendMessage(chatId, { text: 'Failed to tag all members.' });
     }
 }
 
-// Export command ili iweze kutumika kwenye main file (Export for use)
-module.exports = tagAllCommand;
+module.exports = tagAllCommand;  // Export directly

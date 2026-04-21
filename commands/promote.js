@@ -37,7 +37,7 @@ async function promoteCommand(sock, chatId, mentionedJids, message) {
             `👥 *Promoted User${userToPromote.length > 1 ? 's' : ''}:*\n` +
             `${usernames.map(name => `• ${name}`).join('\n')}\n\n` +
             `👑 *Promoted By:* @${promoterJid.split('@')[0]}\n\n` +
-            `📅 *Date:* ${new Date().toLocaleString('en-US', { timeZone: 'Africa/Dar_es_Salaam', hour12: true, month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+            `📅 *Date:* ${new Date().toLocaleString()}`;
         await sock.sendMessage(chatId, { 
             text: promotionMessage,
             mentions: [...userToPromote, promoterJid]
@@ -82,7 +82,7 @@ async function handlePromotionEvent(sock, groupId, participants, author) {
             `👥 *Promoted User${participants.length > 1 ? 's' : ''}:*\n` +
             `${promotedUsernames.map(name => `• ${name}`).join('\n')}\n\n` +
             `👑 *Promoted By:* ${promotedBy}\n\n` +
-            `📅 *Date:* ${new Date().toLocaleString('en-US', { timeZone: 'Africa/Dar_es_Salaam', hour12: true, month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+            `📅 *Date:* ${new Date().toLocaleString()}`;
         
         await sock.sendMessage(groupId, {
             text: promotionMessage,
