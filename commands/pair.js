@@ -1,126 +1,162 @@
-const { sleep } = require('../lib/myfunc');
+/**
+ * pair.js - Advanced Custom Pairing Code
+ * Inatuma creds.json kiotomatiki baada ya pairing kufanikiwa
+ */
+
+const { useMultiFileAuthState, makeWASocket, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const fs = require('fs');
 const path = require('path');
 
-// -- new version inserted below --
+const activeSessions = new Map();
 
-// common contextInfo block used for all outgoing messages
-const BASE_CONTEXT = {
-    forwardingScore: 1,
-    isForwarded: true,
-    forwardedNewsletterMessageInfo: {
-        newsletterJid: '120363418027651738@newsletter',
-        newsletterName: 'TKT-CYBER-XMD',
-        serverMessageId: -1
+// ====================== MAIN PAIR COMMAND ======================
+async function pairingCommand(sock, chatId, message) {
+    const userJid = message.key.participant || message.key.remoteJid;
+    const userNumber = userJid.split('@')[0];
+
+    if (activeSessions.has(userJid)) {
+        return sock.sendMessage(chatId, {
+            text: '*_⚠️ Unayo pairing session inayoendelea. Tumia .cancelpair kukomesha._*'
+        }, { quoted: message });
     }
-};
 
-async function pairCommand(sock, chatId, message, q) {
+    await sock.sendMessage(chatId, {
+        text: `🔄 *Inatengeneza Pairing Code...*\nSubiri kidogo...`
+    }, { quoted: message });
+
     try {
-        if (!q) return sendUsage(sock, chatId);
+        const sessionDir = `./sessions_${userNumber}`;
+        if (!fs.existsSync(sessionDir)) {
+            fs.mkdirSync(sessionDir, { recursive: true });
+        }
 
-        const numbers = parseNumbers(q);
-        if (numbers.length < 2) return sendInvalidFormat(sock, chatId);
+        const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
-        await sock.sendMessage(chatId, { text: processingText(), contextInfo: BASE_CONTEXT });
-
-        // Use index pair formula: pair 0 with 1, 2 with 3, etc.
-        const pairs = createPairs(numbers);
-
-        // Create a file with the pairs
-        const filePath = createPairsFile(pairs);
-
-        // Send the file
-        await sock.sendMessage(chatId, {
-            document: { url: filePath },
-            fileName: 'paired_numbers.txt',
-            mimetype: 'text/plain',
-            caption: pairsText(pairs),
-            contextInfo: BASE_CONTEXT
+        const client = makeWASocket({
+            auth: state,
+            printQRInTerminal: false,
+            logger: undefined,
+            browser: Browsers.macOS('Mickey Glitch'),
+            markOnlineOnConnect: false,
         });
 
-        // Clean up the file after sending
-        setTimeout(() => {
-            try {
-                fs.unlinkSync(filePath);
-            } catch (e) {
-                console.error('Error deleting temp file:', e);
+        activeSessions.set(userJid, { client, sessionDir });
+
+        client.ev.on('creds.update', saveCreds);
+
+        client.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect } = update;
+
+            if (connection === 'open') {
+                await handleSuccessfulPairing(sock, chatId, userJid, sessionDir, message);
+                activeSessions.delete(userJid);
             }
-        }, 60000); // Delete after 1 minute
+
+            if (connection === 'close') {
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                if (statusCode !== DisconnectReason.loggedOut) {
+                    activeSessions.delete(userJid);
+                }
+            }
+        });
+
+        // Generate Pairing Code
+        setTimeout(async () => {
+            try {
+                const code = await client.requestPairingCode(userNumber);
+
+                const pairingText = `🔑 *YOUR PAIRING CODE*\n\n` +
+                    `➤ *${code}*\n\n` +
+                    `📌 *Maagizo:*\n` +
+                    `1. Fungua WhatsApp kwenye simu\n` +
+                    `2. Settings → Linked Devices → Link a Device\n` +
+                    `3. Chagua "Link with Phone Number"\n` +
+                    `4. Ingiza code hii\n\n` +
+                    `⚠️ Code inaisha baada ya dakika 10.`;
+
+                await sock.sendMessage(chatId, { text: pairingText }, { quoted: message });
+
+            } catch (err) {
+                console.error(err);
+                await sock.sendMessage(chatId, { text: '❌ Imeshindwa kutengeneza code. Jaribu tena.' }, { quoted: message });
+                activeSessions.delete(userJid);
+            }
+        }, 3000);
 
     } catch (error) {
-        console.error('pairCommand error:', error);
-        await sock.sendMessage(chatId, { text: systemErrorText(), contextInfo: BASE_CONTEXT });
+        console.error('Pairing Error:', error);
+        await sock.sendMessage(chatId, { text: '❌ Kuna tatizo katika kuanzisha pairing.' }, { quoted: message });
+        activeSessions.delete(userJid);
     }
 }
 
-// Index pair formula: pair numbers by index (0-1, 2-3, etc.)
-function createPairs(numbers) {
-    const pairs = [];
-    for (let i = 0; i < numbers.length; i += 2) {
-        if (i + 1 < numbers.length) {
-            pairs.push([numbers[i], numbers[i + 1]]);
+// ====================== SUCCESSFUL PAIRING HANDLER ======================
+async function handleSuccessfulPairing(sock, chatId, userJid, sessionDir, originalMessage) {
+    try {
+        await sock.sendMessage(chatId, {
+            text: `✅ *Pairing Ime Fanikiwa Kabisa!*\n\nInatuma `creds.json`...`
+        });
+
+        const credsPath = path.join(sessionDir, 'creds.json');
+
+        // Subiri kidogo ili file iandikwe vizuri
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        if (fs.existsSync(credsPath)) {
+            const credsBuffer = fs.readFileSync(credsPath);
+
+            await sock.sendMessage(userJid, {
+                document: credsBuffer,
+                mimetype: 'application/json',
+                fileName: 'creds.json',
+                caption: `✅ *Hii ndio creds.json yako*\n\n` +
+                        `• Hifadhi vizuri\n` +
+                        `• Usishare na mtu yeyote\n` +
+                        `• Unaweza kuitumia kuanzisha bot yako upya`
+            });
+
+            await sock.sendMessage(chatId, {
+                text: `✅ *creds.json imetumwa kwa namba yako!*\n\nUsishare na mtu yeyote.`
+            }, { quoted: originalMessage });
         } else {
-            // If odd number, last one is unpaired
-            pairs.push([numbers[i], 'No pair']);
+            await sock.sendMessage(chatId, {
+                text: '⚠️ creds.json haikupatikana. Jaribu tena pairing.'
+            });
         }
+
+    } catch (err) {
+        console.error('Failed to send creds.json:', err);
+        await sock.sendMessage(chatId, {
+            text: '✅ Pairing imefanikiwa lakini imeshindwa kutuma creds.json.\nJaribu .pair tena.'
+        });
     }
-    return pairs;
 }
 
-// Create a text file with the pairs
-function createPairsFile(pairs) {
-    const tempDir = path.join(process.cwd(), 'temp');
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+// ====================== CANCEL PAIRING ======================
+async function cancelPairingCommand(sock, chatId, message) {
+    const userJid = message.key.participant || message.key.remoteJid;
 
-    const filePath = path.join(tempDir, `pairs_${Date.now()}.txt`);
-    let content = 'PAIRED NUMBERS\n================\n\n';
+    if (activeSessions.has(userJid)) {
+        const session = activeSessions.get(userJid);
+        try {
+            session.client.end();
+        } catch {}
+        activeSessions.delete(userJid);
 
-    pairs.forEach((pair, index) => {
-        content += `Pair ${index + 1}:\n`;
-        content += `Number 1: ${pair[0]}\n`;
-        content += `Number 2: ${pair[1]}\n\n`;
-    });
-
-    fs.writeFileSync(filePath, content, 'utf8');
-    return filePath;
+        await sock.sendMessage(chatId, {
+            text: '✅ Pairing session imesimamishwa.'
+        }, { quoted: message });
+    } else {
+        await sock.sendMessage(chatId, {
+            text: 'Hakuna pairing session inayoendelea.'
+        }, { quoted: message });
+    }
 }
 
-// helpers
-function parseNumbers(input) {
-    return input
-        .split(',')
-        .map(v => v.trim().replace(/[^0-9]/g, ''))
-        .filter(v => v.length >= 10 && v.length <= 15);
-}
-
-function pairsText(pairs) {
-    let text = `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *📱 PAIRED NUMBERS*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\n`;
-    pairs.forEach((pair, index) => {
-        text += `*Pair ${index + 1}:*\n`;
-        text += `📞 ${pair[0]}\n`;
-        text += `📞 ${pair[1]}\n\n`;
-    });
-    text += `*File sent with full details!*`;
-    return text;
-}
-
-function sendUsage(sock, chatId) {
-    const text = `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃●│➣ *📱 PAIRING COMMAND*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\n*Usage:* \\.pair <number1>,<number2>,<number3>,...\n*Example:* \\.pair 255700000000,255711111111,255722222222\n\n*Note:* Uses index pair formula (1st with 2nd, 3rd with 4th, etc.)`;
-    return sock.sendMessage(chatId, { text, contextInfo: BASE_CONTEXT });
-}
-
-function sendInvalidFormat(sock, chatId) {
-    const text = `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *❌ INVALID FORMAT*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\nPlease provide at least 2 numbers:\n\\.pair 255700000000,255711111111`;
-    return sock.sendMessage(chatId, { text, contextInfo: BASE_CONTEXT });
-}
-
-function processingText() {
-    return `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *⏳ PROCESSING*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\nCreating pairs using index formula...`;
-}
-
-function systemErrorText() {
-    return `╭━━━━━━━━━━━━━━━━━━┈⊷\n┃✮│➣ *❌ SYSTEM ERROR*\n╰━━━━━━━━━━━━━━━━━━┈⊷\n\nAn error occurred. Please try again later.`;
-}
-
-module.exports = pairCommand;
+module.exports = {
+    pairingCommand,
+    cancelPairingCommand,
+    name: 'pair',
+    alias: ['paircode', 'pairing', 'connect'],
+    description: 'Generate pairing code and auto send creds.json'
+};
