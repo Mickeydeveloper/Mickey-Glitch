@@ -1,96 +1,69 @@
 const { isAdmin } = require('../lib/isAdmin');
 
-// Function to handle manual promotions via command
-async function promoteCommand(sock, chatId, mentionedJids, message) {
-    let userToPromote = [];
-    
-    // Check for mentioned users
-    if (mentionedJids && mentionedJids.length > 0) {
-        userToPromote = mentionedJids;
-    }
-    // Check for replied message
-    else if (message.message?.extendedTextMessage?.contextInfo?.participant) {
-        userToPromote = [message.message.extendedTextMessage.contextInfo.participant];
-    }
-    
-    // If no user found through either method
-    if (userToPromote.length === 0) {
-        await sock.sendMessage(chatId, { 
-            text: 'Please mention the user or reply to their message to promote!'
-        });
-        return;
-    }
-
+async function promoteCommand(sock, chatId, message, args = []) {
     try {
-        await sock.groupParticipantsUpdate(chatId, userToPromote, "promote");
-        
-        // Get usernames for each promoted user
-        const usernames = await Promise.all(userToPromote.map(async jid => {
-            
-            return `@${jid.split('@')[0]}`;
-        }));
+        // 1. Pata sender ID wa aliyetuma command
+        const senderId = message.key.participant || message.participant || message.key.remoteJid;
 
-        // Get promoter's name (the bot user in this case)
-        const promoterJid = sock.user.id;
-        
+        // 2. Tafuta nani anapandishwa cheo (userToPromote)
+        let userToPromote = [];
+
+        // A: Angalia Mentions (@user)
+        if (message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0) {
+            userToPromote = message.message.extendedTextMessage.contextInfo.mentionedJid;
+        } 
+        // B: Angalia Reply (kumjibu mtu)
+        else if (message.message?.extendedTextMessage?.contextInfo?.participant) {
+            userToPromote = [message.message.extendedTextMessage.contextInfo.participant];
+        } 
+        // C: Angalia Namba kwenye Args (.promote 255xxx)
+        else if (args.length > 0) {
+            let num = args[0].replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+            if (num.length > 15) userToPromote = [num];
+        }
+
+        // Kama hajapatikana kabisa
+        if (userToPromote.length === 0) {
+            return await sock.sendMessage(chatId, { 
+                text: '*_⚠️ Hitilafu! M-tag mtu, reply chat yake, au andika namba kumpandisha cheo._*' 
+            }, { quoted: message });
+        }
+
+        // 3. Tekeleza Promotion
+        await sock.groupParticipantsUpdate(chatId, userToPromote, "promote");
+
+        // 4. Andaa majina kwa ajili ya tag (@255xxx)
+        const usernames = userToPromote.map(jid => `@${jid.split('@')[0]}`);
+
         const promotionMessage = `*『 GROUP PROMOTION 』*\n\n` +
-            `👥 *Promoted User${userToPromote.length > 1 ? 's' : ''}:*\n` +
-            `${usernames.map(name => `• ${name}`).join('\n')}\n\n` +
-            `👑 *Promoted By:* @${promoterJid.split('@')[0]}\n\n` +
+            `👥 *Promoted:* ${usernames.join(', ')}\n` +
+            `👑 *By:* @${senderId.split('@')[0]}\n` +
             `📅 *Date:* ${new Date().toLocaleString()}`;
+
         await sock.sendMessage(chatId, { 
             text: promotionMessage,
-            mentions: [...userToPromote, promoterJid]
-        });
+            mentions: [...userToPromote, senderId]
+        }, { quoted: message });
+
     } catch (error) {
-        console.error('Error in promote command:', error);
-        await sock.sendMessage(chatId, { text: 'Failed to promote user(s)!'});
+        console.error('Promote Error:', error);
+        await sock.sendMessage(chatId, { text: '*_❌ Imeshindwa! Hakikisha bot ni admin._*' });
     }
 }
 
-// Function to handle automatic promotion detection
+// Keep handlePromotionEvent as it was (for auto-detecting system events)
 async function handlePromotionEvent(sock, groupId, participants, author) {
     try {
-        // Safety check for participants
-        if (!Array.isArray(participants) || participants.length === 0) {
-            return;
-        }
+        if (!participants || participants.length === 0) return;
+        const promotedUsernames = participants.map(jid => `@${jid.split('@')[0]}`);
+        const promotedBy = author ? `@${author.split('@')[0]}` : 'System';
 
-        // Get usernames for promoted participants
-        const promotedUsernames = await Promise.all(participants.map(async jid => {
-            // Handle case where jid might be an object or not a string
-            const jidString = typeof jid === 'string' ? jid : (jid.id || jid.toString());
-            return `@${jidString.split('@')[0]} `;
-        }));
+        const msg = `*『 GROUP PROMOTION 』*\n\n` +
+            `👥 *User:* ${promotedUsernames.join(', ')}\n` +
+            `👑 *Admin:* ${promotedBy}`;
 
-        let promotedBy;
-        let mentionList = participants.map(jid => {
-            // Ensure all mentions are proper JID strings
-            return typeof jid === 'string' ? jid : (jid.id || jid.toString());
-        });
-
-        if (author && author.length > 0) {
-            // Ensure author has the correct format
-            const authorJid = typeof author === 'string' ? author : (author.id || author.toString());
-            promotedBy = `@${authorJid.split('@')[0]}`;
-            mentionList.push(authorJid);
-        } else {
-            promotedBy = 'System';
-        }
-
-        const promotionMessage = `*『 GROUP PROMOTION 』*\n\n` +
-            `👥 *Promoted User${participants.length > 1 ? 's' : ''}:*\n` +
-            `${promotedUsernames.map(name => `• ${name}`).join('\n')}\n\n` +
-            `👑 *Promoted By:* ${promotedBy}\n\n` +
-            `📅 *Date:* ${new Date().toLocaleString()}`;
-        
-        await sock.sendMessage(groupId, {
-            text: promotionMessage,
-            mentions: mentionList
-        });
-    } catch (error) {
-        console.error('Error handling promotion event:', error);
-    }
+        await sock.sendMessage(groupId, { text: msg, mentions: [...participants, author].filter(Boolean) });
+    } catch (e) { console.error(e); }
 }
 
 module.exports = { promoteCommand, handlePromotionEvent };
