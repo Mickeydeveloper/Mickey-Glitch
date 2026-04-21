@@ -1,72 +1,74 @@
-const axios = require('axios');
+/**
+ * play.js - Optimized for WhatsApp Messenger
+ */
+
 const yts = require('yt-search');
+const axios = require('axios');
 
-async function songCommand(sock, chatId, message) {
-    if (!sock) return;
-
-    const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
-    const query = textBody.split(" ").slice(1).join(" ");
-
-    if (!query) {
-        return sock.sendMessage(chatId, { text: '🎵 *Andika jina la wimbo!*\nMfano: .play Diamond-Zuwena' }, { quoted: message });
+async function playCommand(sock, chatId, message, args) {
+    if (!args[0]) {
+        return sock.sendMessage(chatId, { 
+            text: '✨ *MICKEY PLAY*\n\nUsage: `.play [jina la wimbo]`\nExample: `.play calm down`' 
+        }, { quoted: message });
     }
 
+    // Reaction ya mwanzo
+    await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+
     try {
-        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
+        const query = args.join(' ');
+        const search = await yts(query);
+        const video = search.videos[0];
 
-        // Tafuta wimbo YouTube
-        const { videos } = await yts(query);
-        if (!videos || !videos.length) return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' });
+        if (!video) {
+            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+            return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' }, { quoted: message });
+        }
 
-        const vid = videos[0];
-        const api = `https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(vid.url)}`;
+        // Muonekano wa Pro kwa kutumia Image Caption
+        const caption = `🎵 *MICKEY MUSIC PLAYER*\n\n` +
+            `📝 *Title:* ${video.title}\n` +
+            `👤 *Channel:* ${video.author.name}\n` +
+            `⏳ *Duration:* ${video.timestamp}\n` +
+            `👁️ *Views:* ${video.views.toLocaleString()}\n\n` +
+            `*Tulia, audio inashushwa hivi punde...* 🎧`;
 
-        // 1. Tuma kwanza Thumbnail kama picha halisi (Sio ad preview)
-        const infoTxt = `🎵 *WIMBO UMEPATIKANA*\n\n` +
-                        `📌 *Title:* ${vid.title}\n` +
-                        `⏳ *Duration:* ${vid.timestamp}\n` +
-                        `👤 *Channel:* ${vid.author.name}\n` +
-                        `🔗 *Link:* ${vid.url}\n\n` +
-                        `*Tafadhali subiri, audio inapakuliwa...*`;
-
-        await sock.sendMessage(chatId, { 
-            image: { url: vid.thumbnail }, 
-            caption: infoTxt 
+        // Tuma picha na maelezo (Hii inatokea kwa kila mtu)
+        await sock.sendMessage(chatId, {
+            image: { url: video.thumbnail },
+            caption: caption
         }, { quoted: message });
 
-        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+        // FIX TIMEOUT: Kutumia API yenye speed
+        const apiUrl = `https://api.dreaded.site/api/ytdl/video?url=${video.url}`;
+        
+        const response = await axios({
+            method: 'get',
+            url: apiUrl,
+            timeout: 120000 // Sekunde 120 kuzuia "Command timeout"
+        });
 
-        // 2. Pata link ya kupakulia (Download link) kwa timeout ya s60
-        const res = await axios.get(api, { timeout: 60000 });
-        const dlUrl = res.data?.data?.video || res.data?.data?.audio;
+        const downloadLink = response.data.result.download_url || response.data.result.url;
 
-        if (!dlUrl) {
-            return sock.sendMessage(chatId, { text: '❌ *API imeshindwa kutoa link ya audio.*' });
-        }
+        // Tuma Audio kama File (Standard mp3)
+        await sock.sendMessage(chatId, {
+            audio: { url: downloadLink },
+            mimetype: 'audio/mp4',
+            fileName: `${video.title}.mp3`
+        }, { quoted: message });
 
-        // 3. Tuma audio (Fixing timeout error)
-        // Tunatumia try-catch hapa ndani ili kama ikileta "timeout" lakini audio imetumwa, isitume msg ya error
-        try {
-            await sock.sendMessage(chatId, {
-                audio: { url: dlUrl },
-                mimetype: 'audio/mp4',
-                fileName: `${vid.title}.mp3`,
-                ptt: false
-            }, { quoted: message });
-
-            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-        } catch (sendErr) {
-            // Kama audio imeshatumwa, usijali kuhusu timeout ya connection
-            console.error("Audio Send Warning:", sendErr.message);
-        }
+        // Malizia na reaction ya mafanikio
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error("PLAY ERROR:", err.message);
-        // Usitume error message kama ni timeout ya kawaida lakini data ilishafika
-        if (!err.message.includes('timeout')) {
-            await sock.sendMessage(chatId, { text: `🚨 *Hitilafu:* ${err.message}` }, { quoted: message });
-        }
+        console.error('Play Error:', err);
+        
+        let errMsg = '❌ *Error:* Imeshindwa kupakua audio.';
+        if (err.code === 'ECONNABORTED') errMsg = '❌ *Timeout:* Mtandao ni mdogo, jaribu tena hivi punde.';
+        
+        await sock.sendMessage(chatId, { text: errMsg }, { quoted: message });
+        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
     }
 }
 
-module.exports = songCommand;
+module.exports = { playCommand };
