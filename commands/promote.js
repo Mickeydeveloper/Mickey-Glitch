@@ -8,6 +8,8 @@ async function promoteCommand(sock, chatId, message, text) {
             return;
         }
 
+        const senderId = message.key.participant || message.key.remoteJid;
+        
         // Parse args from text
         const args = text ? text.trim().split(/\s+/).slice(1) : [];
 
