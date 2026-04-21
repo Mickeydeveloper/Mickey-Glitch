@@ -1,9 +1,9 @@
 /**
  * hidetag.js - HideTag Command (Tags only non-admins)
- * Imeboreshwa na kutumia isAdmin mpya
+ * Imeboreshwa na kutumia checkAdminPermissions mpya
  */
 
-const { isAdmin } = require('../lib/isAdmin');
+const { checkAdminPermissions } = require('../lib/adminCheck');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const fs = require('fs');
 const path = require('path');
@@ -40,25 +40,17 @@ async function downloadMediaMessage(message, mediaType) {
 
 async function hideTagCommand(sock, chatId, senderId, messageText, replyMessage, message) {
     try {
-        // === Tumia isAdmin mpya ===
-        const adminStatus = await isAdmin(sock, chatId, senderId);
+        // === Check admin permissions with owner bypass ===
+        const adminCheck = await checkAdminPermissions(sock, chatId, message);
 
-        if (!adminStatus.isGroup) {
+        if (!chatId.endsWith('@g.us')) {
             return sock.sendMessage(chatId, { 
                 text: '*_❌ Hii command inafanya kazi kwenye group pekee!_*' 
             }, { quoted: message });
         }
 
-        if (!adminStatus.isBotAdmin) {
-            return sock.sendMessage(chatId, { 
-                text: '*_❌ Bot lazima iwe Admin ili kutumia .hidetag!_\n\nNipandishe vyeo kwanza.' 
-            }, { quoted: message });
-        }
-
-        if (!adminStatus.isSenderAdmin) {
-            return sock.sendMessage(chatId, { 
-                text: '*_❌ Only group admins can use .hidetag command!_*' 
-            }, { quoted: message });
+        if (!adminCheck.canExecute) {
+            return;
         }
 
         const groupMetadata = await sock.groupMetadata(chatId);

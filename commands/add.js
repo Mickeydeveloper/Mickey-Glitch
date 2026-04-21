@@ -3,8 +3,7 @@
  * Command ya kuongeza member kwenye group
  */
 
-// FIX: Ongeza mabano { } hapa chini ili kuchukua function yenyewe
-const { isAdmin } = require('../lib/isAdmin');
+const { checkAdminPermissions } = require('../lib/adminCheck');
 
 /**
  * Add command: Invite a member to the group by phone number
@@ -18,25 +17,15 @@ async function addCommand(sock, chatId, message, text) {
             return;
         }
 
-        // Extract sender ID from message
-        const senderId = message.key.participant || message.key.remoteJid;
-
         const isGroup = chatId.endsWith('@g.us');
         if (!isGroup) {
             await sock.sendMessage(chatId, { text: '*_❌ Hii command ni ya group pekee!_*' }, { quoted: message });
             return;
         }
 
-        // Check admin status
-        const adminStatus = await isAdmin(sock, chatId, senderId);
-        
-        if (!adminStatus.isSenderAdmin) {
-            await sock.sendMessage(chatId, { text: '*_❌ Only group admins can add members!_*' }, { quoted: message });
-            return;
-        }
-
-        if (!adminStatus.isBotAdmin) {
-            await sock.sendMessage(chatId, { text: '*_❌ Bot lazima iwe Admin kwanza!_*' }, { quoted: message });
+        // Check admin permissions (includes owner bypass)
+        const adminCheck = await checkAdminPermissions(sock, chatId, message);
+        if (!adminCheck.canExecute) {
             return;
         }
 

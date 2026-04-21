@@ -1,21 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 const { channelInfo } = require('../lib/messageConfig');
-const { isAdmin } = require('../lib/isAdmin');
+const { checkAdminPermissions } = require('../lib/adminCheck');
 const { isSudo } = require('../lib/index');
 
 async function unbanCommand(sock, chatId, message) {
     // Restrict in groups to admins; in private to owner/sudo
     const isGroup = chatId.endsWith('@g.us');
     if (isGroup) {
-        const senderId = message.key.participant || message.key.remoteJid;
-        const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
-        if (!isBotAdmin) {
-            await sock.sendMessage(chatId, { text: 'Please make the bot an admin to use .unban' }, { quoted: message });
-            return;
-        }
-        if (!isSenderAdmin && !message.key.fromMe) {
-            await sock.sendMessage(chatId, { text: 'Only group admins can use .unban' }, { quoted: message });
+        // Check admin permissions for groups (includes owner bypass)
+        const adminCheck = await checkAdminPermissions(sock, chatId, message);
+        if (!adminCheck.canExecute) {
             return;
         }
     } else {

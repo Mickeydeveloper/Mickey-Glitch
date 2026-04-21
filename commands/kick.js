@@ -1,24 +1,15 @@
-const { isAdmin } = require('../lib/isAdmin');
+const { checkAdminPermissions } = require('../lib/adminCheck');
 
 async function kickCommand(sock, chatId, message, text) {
+    // Check admin permissions (includes owner bypass)
+    const adminCheck = await checkAdminPermissions(sock, chatId, message);
+    if (!adminCheck.canExecute) {
+        return;
+    }
+    
     // Extract sender ID and mentioned JIDs from message
     const senderId = message.key.participant || message.key.remoteJid;
     const mentionedJids = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-    
-    const isOwner = message.key.fromMe;
-    if (!isOwner) {
-        const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
-
-        if (!isBotAdmin) {
-            await sock.sendMessage(chatId, { text: 'Please make the bot an admin first.' }, { quoted: message });
-            return;
-        }
-
-        if (!isSenderAdmin) {
-            await sock.sendMessage(chatId, { text: 'Only group admins can use the kick command.' }, { quoted: message });
-            return;
-        }
-    }
 
     let usersToKick = [];
     

@@ -1,23 +1,11 @@
-const { isAdmin } = require('../lib/isAdmin');
+const { checkAdminPermissions } = require('../lib/adminCheck');
 
 async function promoteCommand(sock, chatId, message, text) {
     try {
-        // 1. Pata sender ID wa aliyetuma command
-        const senderId = message.key.participant || message.participant || message.key.remoteJid;
-
-        // Check admin status BEFORE attempting promotion
-        const adminStatus = await isAdmin(sock, chatId, senderId);
-        
-        if (!adminStatus.isBotAdmin) {
-            return await sock.sendMessage(chatId, { 
-                text: '*_❌ Bot lazima iwe Admin kwanza!_*' 
-            }, { quoted: message });
-        }
-
-        if (!adminStatus.isSenderAdmin) {
-            return await sock.sendMessage(chatId, { 
-                text: '*_❌ Admins tu ndio wanaweza kupandisha (Only admins can promote)!_*' 
-            }, { quoted: message });
+        // Check admin permissions (includes owner bypass)
+        const adminCheck = await checkAdminPermissions(sock, chatId, message);
+        if (!adminCheck.canExecute) {
+            return;
         }
 
         // Parse args from text

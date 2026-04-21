@@ -1,20 +1,10 @@
-const { isAdmin } = require('../lib/isAdmin');
+const { checkAdminPermissions } = require('../lib/adminCheck');
 
 async function resetlinkCommand(sock, chatId, message, text) {
     try {
-        // Extract sender ID from message
-        const senderId = message.key.participant || message.key.remoteJid;
-        
-        // Check if sender is admin using the isAdmin function
-        const adminStatus = await isAdmin(sock, chatId, senderId);
-
-        if (!adminStatus.isSenderAdmin) {
-            await sock.sendMessage(chatId, { text: '❌ Only admins can use this command!' }, { quoted: message });
-            return;
-        }
-
-        if (!adminStatus.isBotAdmin) {
-            await sock.sendMessage(chatId, { text: '❌ Bot must be admin to reset group link!' }, { quoted: message });
+        // Check admin permissions (includes owner bypass)
+        const adminCheck = await checkAdminPermissions(sock, chatId, message);
+        if (!adminCheck.canExecute) {
             return;
         }
 
