@@ -69,7 +69,7 @@ const aliveCommand = async (sock, chatId, msg) => {
             footer: 'Powered by Mickey Glitch Tech',
             image: { url: imageUrl },
             buttons: [
-                { id: '.help', text: '🆘 Menu' },
+                { id: '.menu', text: '🆘 Menu' },
                 { id: '.ping', text: '📡 Speed' },
                 { id: '.owner', text: '👑 Support' }
             ]
