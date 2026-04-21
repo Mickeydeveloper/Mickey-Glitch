@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { channelInfo } = require('../lib/messageConfig');
-const isAdmin = require('../lib/isAdmin');
+const { isAdmin } = require('../lib/isAdmin');
 const { isSudo } = require('../lib/index');
 
 async function unbanCommand(sock, chatId, message) {

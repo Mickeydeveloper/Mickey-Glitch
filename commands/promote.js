@@ -1,9 +1,27 @@
 const { isAdmin } = require('../lib/isAdmin');
 
-async function promoteCommand(sock, chatId, message, args = []) {
+async function promoteCommand(sock, chatId, message, text) {
     try {
         // 1. Pata sender ID wa aliyetuma command
         const senderId = message.key.participant || message.participant || message.key.remoteJid;
+
+        // Check admin status BEFORE attempting promotion
+        const adminStatus = await isAdmin(sock, chatId, senderId);
+        
+        if (!adminStatus.isBotAdmin) {
+            return await sock.sendMessage(chatId, { 
+                text: '*_❌ Bot lazima iwe Admin kwanza!_*' 
+            }, { quoted: message });
+        }
+
+        if (!adminStatus.isSenderAdmin) {
+            return await sock.sendMessage(chatId, { 
+                text: '*_❌ Admins tu ndio wanaweza kupandisha (Only admins can promote)!_*' 
+            }, { quoted: message });
+        }
+
+        // Parse args from text
+        const args = text ? text.trim().split(/\s+/).slice(1) : [];
 
         // 2. Tafuta nani anapandishwa cheo (userToPromote)
         let userToPromote = [];

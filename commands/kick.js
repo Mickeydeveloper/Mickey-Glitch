@@ -1,6 +1,10 @@
-const isAdmin = require('../lib/isAdmin');
+const { isAdmin } = require('../lib/isAdmin');
 
-async function kickCommand(sock, chatId, senderId, mentionedJids, message) {
+async function kickCommand(sock, chatId, message, text) {
+    // Extract sender ID and mentioned JIDs from message
+    const senderId = message.key.participant || message.key.remoteJid;
+    const mentionedJids = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+    
     const isOwner = message.key.fromMe;
     if (!isOwner) {
         const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);

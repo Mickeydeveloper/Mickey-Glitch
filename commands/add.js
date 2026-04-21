@@ -11,12 +11,15 @@ const { isAdmin } = require('../lib/isAdmin');
  * Usage: .add <phone_number>
  * Example: .add 255612130873
  */
-async function addCommand(sock, chatId, senderId, text, message) {
+async function addCommand(sock, chatId, message, text) {
     try {
         // Guard: Check if socket is ready
         if (!sock || typeof sock.sendMessage !== 'function') {
             return;
         }
+
+        // Extract sender ID from message
+        const senderId = message.key.participant || message.key.remoteJid;
 
         const isGroup = chatId.endsWith('@g.us');
         if (!isGroup) {
@@ -38,7 +41,13 @@ async function addCommand(sock, chatId, senderId, text, message) {
         }
 
         // Extract phone number from text (Safisha namba)
-        let phoneNumber = (text || '').trim().replace(/[^0-9]/g, '');
+        const textBody = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
+        let phoneNumber = (textBody || '').trim().replace(/[^0-9]/g, '');
+        
+        // If no phone number found in message text, it might be in the args
+        if (!phoneNumber && text && text.length > 4) {
+            phoneNumber = text.trim().replace(/[^0-9]/g, '');
+        }
         
         if (!phoneNumber) {
             await sock.sendMessage(chatId, { text: '*_⚠️ Usage: .add 2557xxx_*' }, { quoted: message });

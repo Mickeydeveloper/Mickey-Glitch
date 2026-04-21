@@ -1,8 +1,11 @@
-const isAdmin = require('../lib/isAdmin');
+const { isAdmin } = require('../lib/isAdmin');
 const store = require('../lib/lightweight_store');
 
-async function deleteCommand(sock, chatId, message, senderId) {
+async function deleteCommand(sock, chatId, message, text) {
     try {
+        // Extract sender ID from message
+        const senderId = message.key.participant || message.key.remoteJid;
+        
         const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
 
         // 1. Check kama bot ni admin
