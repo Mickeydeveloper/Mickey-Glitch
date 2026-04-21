@@ -1,124 +1,169 @@
-const { bots } = require('../lib/antilink');
-const { setAntilink, getAntilink, removeAntilink } = require('../lib/index');
-const isAdmin = require('../lib/isAdmin');
+/**
+ * antilink.js
+ * Antilink handler iliyoboreshwa - Inatumia isAdmin mpya
+ */
 
-async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message) {
+const { setAntilink, getAntilink, removeAntilink } = require('../lib/index');
+const { isAdmin } = require('../lib/isAdmin');   // ← Hii ni muhimu
+
+// Helper function ku-get antilink setting (kwa urahisi)
+function getAntilinkSetting(chatId) {
+    const config = getAntilink(chatId, 'on');
+    return config?.enabled ? (config.action || 'delete') : 'off';
+}
+
+async function handleAntilinkCommand(sock, chatId, userMessage, senderId, message) {
     try {
-        if (!isSenderAdmin) {
-            await sock.sendMessage(chatId, { text: '```😞ᴏɴʟʏ ꜰᴏʀ ɢʀᴏᴜᴘ ᴀᴅᴍɪɴ!```' }, { quoted: message });
+        // ←←← Tumia isAdmin iliyoboreshwa
+        const adminStatus = await isAdmin(sock, chatId, senderId);
+        
+        if (!adminStatus.isGroup) {
+            await sock.sendMessage(chatId, { 
+                text: '*_❌ Hii command inafanya kazi kwenye group pekee!_*' 
+            }, { quoted: message });
+            return;
+        }
+
+        if (!adminStatus.isSenderAdmin) {
+            await sock.sendMessage(chatId, { 
+                text: '```😞ᴏɴʟʏ ꜰᴏʀ ɢʀᴏᴜᴘ ᴀᴅᴍɪɴ!```' 
+            }, { quoted: message });
             return;
         }
 
         const prefix = '.';
-        const args = userMessage.slice(9).toLowerCase().trim().split(' ');
+        const args = userMessage.slice(9).toLowerCase().trim().split(/\s+/);
         const action = args[0];
 
         if (!action) {
-            const usage = `\`\`\`ANTILINK SETUP\n\n${prefix}antilink on\n${prefix}antilink set delete | kick | warn\n${prefix}antilink off\n\`\`\``;
+            const usage = `\`\`\`🔰 ANTILINK SETUP\n\n` +
+                         `${prefix}antilink on\n` +
+                         `${prefix}antilink set delete|kick|warn\n` +
+                         `${prefix}antilink off\n` +
+                         `${prefix}antilink get\`\`\``;
+            
             await sock.sendMessage(chatId, { text: usage }, { quoted: message });
             return;
         }
 
         switch (action) {
             case 'on':
-                const existingConfig = await getAntilink(chatId, 'on');
-                if (existingConfig?.enabled) {
-                    await sock.sendMessage(chatId, { text: '*_Antilink is already on_*' }, { quoted: message });
+                const existing = getAntilink(chatId, 'on');
+                if (existing?.enabled) {
+                    await sock.sendMessage(chatId, { 
+                        text: '*_✅ Antilink tayari imewekwa ON!_*' 
+                    }, { quoted: message });
                     return;
                 }
+
                 const result = await setAntilink(chatId, 'on', 'delete');
                 await sock.sendMessage(chatId, { 
-                    text: result ? '*_⚡ɴᴏ ᴀɴʏ ʟɪɴᴋ ᴀʟʟᴏᴡᴇᴅ ʜᴇʀᴇ_*' : '*_Failed to turn on Antilink_*' 
-                },{ quoted: message });
+                    text: result ? 
+                        '*_⚡ Antilink imewekwa ON! Hakuna link itakayoruhusiwa_*' : 
+                        '*_❌ Imeshindwa kuwasha Antilink_*' 
+                }, { quoted: message });
                 break;
 
             case 'off':
                 await removeAntilink(chatId, 'on');
-                await sock.sendMessage(chatId, { text: '*_Antilink has been turned OFF_*' }, { quoted: message });
+                await sock.sendMessage(chatId, { 
+                    text: '*_✅ Antilink imezimwa vizuri_*' 
+                }, { quoted: message });
                 break;
 
             case 'set':
                 if (args.length < 2) {
                     await sock.sendMessage(chatId, { 
-                        text: `*_Please specify an action: ${prefix}antilink set delete | kick | warn_*` 
+                        text: `*_⚠️ Tumia: ${prefix}antilink set delete | kick | warn_*` 
                     }, { quoted: message });
                     return;
                 }
-                const setAction = args[1];
-                if (!['delete', 'kick', 'warn'].includes(setAction)) {
+
+                const newAction = args[1];
+                if (!['delete', 'kick', 'warn'].includes(newAction)) {
                     await sock.sendMessage(chatId, { 
-                        text: '*_Invalid action. Choose delete, kick, or warn._*' 
+                        text: '*_❌ Action invalid! Chagua: delete, kick, au warn_*' 
                     }, { quoted: message });
                     return;
                 }
-                const setResult = await setAntilink(chatId, 'on', setAction);
+
+                const setResult = await setAntilink(chatId, 'on', newAction);
                 await sock.sendMessage(chatId, { 
-                    text: setResult ? `*_Antilink action set to ${setAction}_*` : '*_Failed to set Antilink action_*' 
+                    text: setResult ? 
+                        `*_✅ Antilink action imewekwa kuwa: ${newAction}_*` : 
+                        '*_❌ Imeshindwa kubadilisha action_*' 
                 }, { quoted: message });
                 break;
 
             case 'get':
-                const status = await getAntilink(chatId, 'on');
-                const actionConfig = await getAntilink(chatId, 'on');
-                await sock.sendMessage(chatId, { 
-                    text: `*_Antilink Configuration:_*\nStatus: ${status ? 'ON' : 'OFF'}\nAction: ${actionConfig ? actionConfig.action : 'Not set'}` 
-                }, { quoted: message });
+            case 'status':
+                const config = getAntilink(chatId, 'on');
+                const statusText = config?.enabled ? '✅ ON' : '❌ OFF';
+                const actionText = config?.enabled ? config.action : 'Hakuna';
+
+                let reply = `*📊 ANTILINK STATUS*\n\n`;
+                reply += `• Status: ${statusText}\n`;
+                reply += `• Action: ${actionText}\n`;
+                reply += `• Group: ${adminStatus.groupName || 'Unknown'}`;
+
+                await sock.sendMessage(chatId, { text: reply }, { quoted: message });
                 break;
 
             default:
-                await sock.sendMessage(chatId, { text: `*_Use ${prefix}antilink for usage._*` });
+                await sock.sendMessage(chatId, { 
+                    text: `*_❌ Command si sahihi. Tumia ${prefix}antilink kuona maelekezo_*` 
+                }, { quoted: message });
         }
+
     } catch (error) {
-        console.error('Error in antilink command:', error);
-        await sock.sendMessage(chatId, { text: '*_Error processing antilink command_*' });
+        console.error('Error in handleAntilinkCommand:', error);
+        await sock.sendMessage(chatId, { 
+            text: '*_❌ Kuna tatizo katika kutekeleza command_*' 
+        }, { quoted: message });
     }
 }
 
 async function handleLinkDetection(sock, chatId, message, userMessage, senderId) {
-    const antilinkSetting = getAntilinkSetting(chatId);
-    if (antilinkSetting === 'off') return;
+    try {
+        const antilinkSetting = getAntilinkSetting(chatId);
+        if (antilinkSetting === 'off') return;
 
-    let shouldDelete = false;
+        const linkPatterns = {
+            whatsapp: /chat\.whatsapp\.com\/[A-Za-z0-9]{20,}/i,
+            channel: /wa\.me\/channel\/[A-Za-z0-9]{20,}/i,
+            allLinks: /https?:\/\/\S+|www\.\S+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/\S*)?/i,
+        };
 
-    const linkPatterns = {
-        whatsappGroup: /chat\.whatsapp\.com\/[A-Za-z0-9]{20,}/i,
-        whatsappChannel: /wa\.me\/channel\/[A-Za-z0-9]{20,}/i,
-        telegram: /t\.me\/[A-Za-z0-9_]+/i,
-        // Matches:
-        // - Full URLs with protocol (http/https)
-        // - URLs starting with www.
-        // - Bare domains anywhere in the string, even when attached to text
-        //   e.g., "helloinstagram.comworld" or "testhttps://x.com"
-        allLinks: /https?:\/\/\S+|www\.\S+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/\S*)?/i,
-    };
+        let shouldDelete = false;
+        let reason = '';
 
-    // Detect WhatsApp Group links
-    if (antilinkSetting === 'whatsappGroup') {
-        if (linkPatterns.whatsappGroup.test(userMessage)) {
-            shouldDelete = true;
+        if (antilinkSetting === 'delete' || antilinkSetting === 'kick' || antilinkSetting === 'warn') {
+            if (linkPatterns.whatsapp.test(userMessage) || 
+                linkPatterns.channel.test(userMessage) || 
+                linkPatterns.allLinks.test(userMessage)) {
+                shouldDelete = true;
+                reason = 'Link iliyokatazwa';
+            }
         }
-    } else if (antilinkSetting === 'whatsappChannel' && linkPatterns.whatsappChannel.test(userMessage)) {
-        shouldDelete = true;
-    } else if (antilinkSetting === 'telegram' && linkPatterns.telegram.test(userMessage)) {
-        shouldDelete = true;
-    } else if (antilinkSetting === 'allLinks' && linkPatterns.allLinks.test(userMessage)) {
-        shouldDelete = true;
-    }
 
-    if (shouldDelete) {
-        const quotedMessageId = message.key.id;
-        const quotedParticipant = message.key.participant || senderId;
+        if (shouldDelete) {
+            // Delete message
+            try {
+                const msgKey = message.key;
+                await sock.sendMessage(chatId, { delete: msgKey });
+            } catch (e) {
+                console.error('Delete failed:', e.message);
+            }
 
-        try {
-            await sock.sendMessage(chatId, {
-                delete: { remoteJid: chatId, fromMe: false, id: quotedMessageId, participant: quotedParticipant },
+            // Warning message
+            const warningText = `⚠️ *@${senderId.split('@')[0]}*, Kupost link ni marufuku hapa!`;
+            await sock.sendMessage(chatId, { 
+                text: warningText, 
+                mentions: [senderId] 
             });
-        } catch (error) {
-            console.error('Antilink delete failed:', error.message);
         }
-
-        const mentionedJidList = [senderId];
-        await sock.sendMessage(chatId, { text: `Warning! @${senderId.split('@')[0]}, posting links is not allowed.`, mentions: mentionedJidList });
+    } catch (error) {
+        console.error('Error in handleLinkDetection:', error);
     }
 }
 
