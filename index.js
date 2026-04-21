@@ -8,112 +8,81 @@ const path = require('path')
 const {
     default: makeWASocket,
     useMultiFileAuthState,
-    DisconnectReason,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    delay,
-    jidNormalizedUser
+    delay
 } = require("@whiskeysockets/baileys")
 
-// Logger Config
-const logger = pino({ level: 'silent' })
-
-// RAM Management
-if (typeof global.gc === 'function') {
-    setInterval(() => { global.gc(); }, 3 * 60 * 1000);
-}
-
+// Import connection handler kutoka lib
+const { handleConnection } = require('./lib/connection')
 const { handleMessages, handleStatus } = require('./main')
 
-async function startXeonBotInc() {
-    // Hakikisha folder la session lipo
+const logger = pino({ level: 'silent' })
+
+async function startMickeyBot() {
     const { state, saveCreds } = await useMultiFileAuthState(`./session`)
     const { version } = await fetchLatestBaileysVersion()
 
-    const XeonBotInc = makeWASocket({
+    const sock = makeWASocket({
         version,
         logger: logger,
         printQRInTerminal: false,
-        // Browser lazima iwe hivi kwa ajili ya Pairing Code
         browser: ["Ubuntu", "Chrome", "20.0.04"], 
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, logger),
         },
         markOnlineOnConnect: true,
-        generateHighQualityLinkPreview: true,
-        syncFullHistory: false,
-        retryRequestDelayMs: 100,
-        connectTimeoutMs: 60000, // Ongeza muda wa kuunganisha
+        connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
+        keepAliveIntervalMs: 10000,
+        generateHighQualityLinkPreview: true,
         getMessage: async (key) => { return { conversation: 'Mickey Glitch' } }
     })
 
-    // PAIRING LOGIC (Lekebisho la kukwama "Logging")
-    if (!XeonBotInc.authState.creds.registered) {
+    // PAIRING LOGIC
+    if (!sock.authState.creds.registered) {
         let phoneNumber = settings.ownerNumber.replace(/[^0-9]/g, '')
-        
-        if (!phoneNumber) {
-            console.log(chalk.red("\n❌ ERROR: Owner number haipo kwenye settings.js!"));
-        } else {
-            console.log(chalk.cyan(`\n♻️  Jaribio la kutuma Pairing Code kwenda: ${phoneNumber}...`))
-            await delay(10000) // Subiri kidogo socket itulie
+        if (phoneNumber) {
+            console.log(chalk.cyan(`\n♻️  Pairing kodi inatumwa kwenda: ${phoneNumber}...`))
+            await delay(10000)
             try {
-                let code = await XeonBotInc.requestPairingCode(phoneNumber, "MICKDADY")
+                let code = await sock.requestPairingCode(phoneNumber, "MICKDADY")
                 code = code?.match(/.{1,4}/g)?.join("-") || code
                 console.log(chalk.black(chalk.bgGreen(`\n ✅ PAIRING CODE: ${code} \n`)))
             } catch (e) {
-                console.log(chalk.red("❌ Imeshindwa kupata kodi:"), e.message)
+                console.log(chalk.red("❌ Pairing failed:"), e.message)
             }
         }
     }
 
-    XeonBotInc.ev.on('creds.update', saveCreds)
+    sock.ev.on('creds.update', saveCreds)
 
-    XeonBotInc.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update
-
-        if (qr) console.log(chalk.yellow(`📱 SCAN QR CODE (Kama pairing imefeli)`))
-        if (connection === "connecting") console.log(chalk.blue(`⏳ Inatafuta mawasiliano... (Connecting)`))
-
-        if (connection === "open") {
-            console.log(chalk.green(`\n✅ ${settings.botName} IMEWAKA TAYARI!\n`))
-            try {
-                const ownerJid = jidNormalizedUser(XeonBotInc.user.id)
-                await XeonBotInc.sendMessage(ownerJid, { text: `🚀 *MICKEY GLITCH V3* ipo hewani sasa!` })
-            } catch (e) {}
-        }
-
-        if (connection === 'close') {
-            let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
-            if (reason !== DisconnectReason.loggedOut) {
-                console.log(chalk.yellow(`🔄 Connection imekata. Inajirudia...`))
-                startXeonBotInc()
-            } else {
-                console.log(chalk.red(`❌ Session imeisha (Logged Out). Futa folder la session uwashe upya.`))
-            }
-        }
+    // CONNECTION UPDATE (Sasa inatoka lib/connection.js)
+    sock.ev.on('connection.update', async (update) => {
+        await handleConnection(sock, update, startMickeyBot)
     })
 
-    XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
+    // MESSAGES UPSERT
+    sock.ev.on('messages.upsert', async chatUpdate => {
         try {
             const mek = chatUpdate.messages[0]
             if (!mek.message || (mek.key && mek.key.remoteJid === 'status@broadcast')) return
 
             await Promise.all([
-                handleMessages(XeonBotInc, chatUpdate),
-                handleStatus(XeonBotInc, chatUpdate)
+                handleMessages(sock, chatUpdate),
+                handleStatus(sock, chatUpdate)
             ]).catch(() => {})
         } catch (err) {}
     })
 
-    return XeonBotInc
+    return sock
 }
 
-// Shikilia errors za system zisizozuilika
+startMickeyBot()
+
+// Anti-Crash
 process.on('uncaughtException', (err) => {
     if (err.message.includes('Bad MAC') || err.message.includes('SessionError')) return
-    console.error('System Error:', err.message)
+    console.error('Critical Error:', err.message)
 })
-
-startXeonBotInc()
