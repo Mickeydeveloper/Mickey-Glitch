@@ -34,7 +34,7 @@ try {
 }
 
 // Static Import for Help
-const helpFunc = require('./commands/help');
+const helpFunc = require('./commands/menu');
 // --- 🤖 CHATBOT HANDLER ---
 const { handleChatbotMessage } = require('./commands/chatbot');
 async function handleMessages(sock, messageUpdate) {
