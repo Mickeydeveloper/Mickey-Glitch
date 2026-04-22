@@ -1,4 +1,4 @@
-const { isAdmin } = require('../lib/isAdmin');
+const { checkAdminPermissions } = require('../lib/adminCheck');
 const store = require('../lib/lightweight_store');
 
 async function deleteCommand(sock, chatId, message, text) {
