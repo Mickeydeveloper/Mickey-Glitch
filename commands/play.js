@@ -1,5 +1,5 @@
 /**
- * play.js - YouTube Music Downloader (Stylish Appearance Version)
+ * play.js - YouTube Music Downloader (Pure Buffer + Stylish)
  */
 
 const yts = require('yt-search');
@@ -7,6 +7,7 @@ const axios = require('axios');
 
 async function playCommand(sock, chatId, message, text) {
     try {
+        // Fix kwa error ya ".trim is not a function"
         const msgText = typeof text === 'string' ? text : "";
         const args = msgText.trim().split(/\s+/).slice(1);
 
@@ -17,7 +18,7 @@ async function playCommand(sock, chatId, message, text) {
             });
         }
 
-        // Loading Reaction
+        // Loading Reaction (Headphones)
         await sock.sendMessage(chatId, { react: { text: '🎧', key: message.key } }).catch(() => {});
         const query = args.join(' ');
 
@@ -26,7 +27,7 @@ async function playCommand(sock, chatId, message, text) {
         const video = search?.videos?.[0];
         if (!video) return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' });
 
-        // 2. SEND STYLISH PREVIEW
+        // 2. SEND STYLISH PREVIEW (Picha kama picha kubwa)
         const stylishCaption = 
             `╭━━━━〔 *PLAYING NOW* 〕━━━━┈⊷\n` +
             `┃\n` +
@@ -44,34 +45,32 @@ async function playCommand(sock, chatId, message, text) {
             caption: stylishCaption
         }, { quoted: message }).catch(() => {});
 
-        // 3. DOWNLOAD LOGIC
+        // 3. DOWNLOAD FROM API (Robust Nayan Only)
         const nayanApi = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(video.url)}`;
         const response = await axios.get(nayanApi, { timeout: 60000 });
         
-        let audioUrl = response.data?.data?.data?.high || response.data?.data?.data?.low || response.data?.data?.url;
+        const resData = response.data;
+        let audioUrl = null;
 
-        if (!audioUrl) throw new Error('URL missed');
+        // Tunakagua kila kona ya JSON (Deep Scrape) ili isilete Error
+        if (resData.data?.data?.high) audioUrl = resData.data.data.high;
+        else if (resData.data?.data?.low) audioUrl = resData.data.data.low;
+        else if (resData.data?.url) audioUrl = resData.data.url;
+        else if (resData.url) audioUrl = resData.url;
 
-        // 4. BUFFER & SEND
+        if (!audioUrl) throw new Error('Link missed');
+
+        // 4. CONVERT TO BUFFER & SEND AUDIO (Safely using arraybuffer)
         const audioRes = await axios.get(audioUrl, { responseType: 'arraybuffer' });
+        // Tunageuza data kuwa Buffer kama mwanzo
         const buffer = Buffer.from(audioRes.data, 'binary');
 
         await sock.sendMessage(chatId, {
             audio: buffer,
             mimetype: 'audio/mpeg',
-            fileName: `${video.title}.mp3`,
+            fileName: `${video.title.replace(/[^\w\s-]/g, '')}.mp3`,
             ptt: false,
-            contextInfo: {
-                externalAdReply: {
-                    title: video.title,
-                    body: `Artist: ${video.author.name}`,
-                    thumbnailUrl: video.thumbnail,
-                    sourceUrl: video.url,
-                    mediaType: 1,
-                    showAdAttribution: true,
-                    renderLargerThumbnail: true
-                }
-            }
+            // Nimeondoa 'contextInfo' yote hapa ili kusiwe na thumbnails ya ad
         }, { quoted: message });
 
         // Success Reaction
@@ -80,7 +79,7 @@ async function playCommand(sock, chatId, message, text) {
     } catch (err) {
         console.error('[play] Error:', err.message);
         await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu ya kiufundi imetokea wakati wa kupakua!*' 
+            text: `❌ *Fails:* ${err.message.slice(0, 80)}` 
         }, { quoted: message });
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
     }
