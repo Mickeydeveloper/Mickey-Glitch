@@ -152,36 +152,27 @@ async function handleMessages(sock, messageUpdate) {
             return;
         }
 
-        // 2. FIX: Handle ". menu" by removing space after dot
+        // 2. Handle ". menu" by removing space after dot
         const cleanBody = rawBody.startsWith('. ')
             ? '.' + rawBody.slice(1).trim()
             : rawBody.trim();
 
-        console.log(chalk.cyan(`📨 Raw: "${rawBody}" → Clean: "${cleanBody}"`))
-
         const args = cleanBody.split(' ');
         const cmdName = args[0].toLowerCase().slice(1); // Extract command name
-        const fullCmd = args[0].toLowerCase(); // Full command with dot
-
-        console.log(chalk.cyan(`   Command: ${cmdName} (from ${fullCmd})`))
-
+        
         // Validate command name
         if (!cmdName || cmdName.length === 0) {
-            console.log(chalk.yellow(`⚠️  Empty command name, skipping`));
             return;
         }
 
         // Owner check
         const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
-        const isOwnerCheck = m.key.fromMe || senderIsOwnerOrSudo; // Bot's own messages count as owner
-        console.log(chalk.cyan(`   Is owner: ${isOwnerCheck ? 'YES' : 'NO'}`))
+        const isOwnerCheck = m.key.fromMe || senderIsOwnerOrSudo;
 
         // --- 🚀 EXECUTION ENGINE ---
 
         // --- Load commands ONLY from /commands/ folder ---
         const selectedCommand = getCommand(allCommands, cmdName);
-        console.log(chalk.cyan(`   Looking for command: ${cmdName}`))
-        console.log(chalk.cyan(`   Command found: ${selectedCommand ? 'YES' : 'NO'}`))
 
         if (selectedCommand) {
             // Sudo Restriction
@@ -193,56 +184,35 @@ async function handleMessages(sock, messageUpdate) {
                 return;
             }
 
-            console.log(chalk.blue(`   Executing ${cmdName}...`))
             try {
-                // Determine command type and execute with error handling
+                // Execute command with timeout protection
+                const commandTimeout = cmdName.includes('play') || cmdName.includes('video') || cmdName.includes('download') ? 60000 : 20000;
+                
                 if (typeof selectedCommand === 'function') {
-                    console.log(chalk.blue(`   Type: Function`))
+                    // Direct function call
                     await Promise.race([
                         selectedCommand(sock, chatId, m, cleanBody),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), 30000))
-                    ]).catch(funcErr => {
-                        console.error(chalk.red(`❌ Function execution error: ${funcErr.message}`));
-                        throw funcErr;
-                    });
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), commandTimeout))
+                    ]);
                 } else if (selectedCommand.execute && typeof selectedCommand.execute === 'function') {
-                    console.log(chalk.blue(`   Type: Module.execute()`))
+                    // Module with execute method
                     await Promise.race([
                         selectedCommand.execute(sock, chatId, m, cleanBody),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), 30000))
-                    ]).catch(modErr => {
-                        console.error(chalk.red(`❌ Module execution error: ${modErr.message}`));
-                        throw modErr;
-                    });
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), commandTimeout))
+                    ]);
                 } else {
-                    console.log(chalk.yellow(`   Type: Unknown format`))
-                    await sock.sendMessage(chatId, {
-                        text: `❌ *Command error*`
-                    }, { quoted: m }).catch(() => {});
+                    // Unknown format - try calling directly
+                    await Promise.race([
+                        selectedCommand(sock, chatId, m, cleanBody),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), commandTimeout))
+                    ]);
                 }
-                console.log(chalk.green(`✅ Command executed successfully`))
             } catch (cmdErr) {
-                console.error(chalk.red(`❌ Command execution error: ${cmdErr.message}`));
-                // Graceful error handling - don't crash, just log
-                try {
-                    await sock.sendMessage(chatId, {
-                        text: `❌ *Error executing ${cmdName}:*\n${cmdErr.message || 'Unknown error'}`
-                    }, { quoted: m }).catch(() => {});
-                } catch (sendErr) {
-                    console.error(chalk.red(`❌ Failed to send error message: ${sendErr.message}`));
-                }
-            }
-        } else {
-            console.log(chalk.yellow(`⚠️ Command not found: ${cmdName}`))
-            // Optional: inform user that command doesn't exist
-            try {
-                await sock.sendMessage(chatId, {
-                    text: `❌ *Command not found:* .${cmdName}\n\nType *.menu* to see available commands`
-                }, { quoted: m }).catch(() => {});
-            } catch (notFoundErr) {
-                console.error(chalk.red(`Failed to send not found message: ${notFoundErr.message}`));
+                // Silently handle command errors - don't spam user
+                console.error(`[${cmdName}] Error:`, cmdErr.message);
             }
         }
+        // Don't send "not found" message for non-existent commands to reduce spam
 
     } catch (e) {
         console.error(chalk.red('❌ CRITICAL Message handler error:'), e.message);
