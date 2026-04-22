@@ -1,39 +1,36 @@
 const { setAntilink, getAntilink, removeAntilink } = require('../lib/index');
-const { checkAdminPermissions } = require('../lib/adminCheck');
 
 async function handleAntilinkCommand(sock, chatId, userMessage, senderId, dummy, message) {
     try {
-        /**
-         * 1. SILENT ADMIN CHECK
-         * Tunacheki u-admin wa bot kimyakimya bila kurusha error kwny chat.
-         */
+        // --- SILENT LOGIC: Tunacheki kama bot ni admin bila kutumia library ya nje ---
         let isBotAdmin = false;
         try {
-            const adminStatus = await checkAdminPermissions(sock, chatId, message);
-            isBotAdmin = adminStatus.isBotAdmin;
+            const groupMetadata = await sock.groupMetadata(chatId).catch(() => null);
+            if (groupMetadata) {
+                const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                isBotAdmin = groupMetadata.participants.some(p => 
+                    (p.id === botId || p.id === sock.user.id) && (p.admin === 'admin' || p.admin === 'superadmin')
+                );
+            }
         } catch (e) {
-            console.log("Admin check failed silently kuzuia kelele kwny chat.");
-            isBotAdmin = false;
+            isBotAdmin = false; // Ukifeli hapa bot inakaa kimya tu
         }
 
-        /**
-         * 2. BOT ADMIN VALIDATION
-         * Bot LAZIMA iwe admin ili antilink iweze kufanya kazi (kufuta links).
-         * Lakini tumeshaondoa kizuizi cha 'isSenderAdmin' ili kila mtu aitumie.
-         */
-        if (!isBotAdmin) {
-            return await sock.sendMessage(chatId, { 
-                text: '⚠️ *Bot inahitaji u-admin ili Antilink ifanye kazi (Bot needs admin power).* ' 
-            }, { quoted: message });
-        }
+        // --- FREE FOR ALL: Hatujacheki 'isSenderAdmin' kabisa ---
 
-        // Tunachukua maneno baada ya ".antilink "
-        const args = userMessage.split(/\s+/).slice(1);
+        const args = userMessage.trim().split(/\s+/).slice(1);
         const action = args[0]?.toLowerCase();
 
         if (!action) {
             return await sock.sendMessage(chatId, { 
-                text: '```ANTILINK SETUP (FREE)\n\n.antilink on\n.antilink off\n.antilink set delete | kick | warn```' 
+                text: '```ANTILINK SETUP (FREE)\n\n.antilink on\n.antilink off\n.antilink set delete | kick```' 
+            }, { quoted: message });
+        }
+
+        // Warning inatokea TU ukijaribu kuwasha (ON) wakati bot si admin
+        if (action === 'on' && !isBotAdmin) {
+            return await sock.sendMessage(chatId, { 
+                text: '⚠️ *Bot lazima iwe admin kwanza ili iweze kufuta links.*' 
             }, { quoted: message });
         }
 
@@ -41,43 +38,30 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, dummy,
             case 'on':
                 const result = await setAntilink(chatId, 'on', 'delete');
                 await sock.sendMessage(chatId, { 
-                    text: result ? '✅ *Antilink imewashwa na kila mtu (Turned ON by User)*' : '❌ *Imeshindwa kuwaka*' 
+                    text: result ? '✅ *Antilink turned ON*' : '❌ *Failed*' 
                 }, { quoted: message });
                 break;
 
             case 'off':
                 await removeAntilink(chatId, 'on');
-                await sock.sendMessage(chatId, { 
-                    text: '✅ *Antilink imezimwa (Turned OFF)*' 
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: '✅ *Antilink turned OFF*' }, { quoted: message });
                 break;
 
             case 'set':
                 const setAction = args[1]?.toLowerCase();
                 if (!['delete', 'kick', 'warn'].includes(setAction)) {
-                    return await sock.sendMessage(chatId, { 
-                        text: '*_Chagua action sahihi: delete, kick, au warn_*' 
-                    }, { quoted: message });
+                    return await sock.sendMessage(chatId, { text: '*_Choose: delete, kick, or warn_*' });
                 }
-                const setResult = await setAntilink(chatId, 'on', setAction);
-                await sock.sendMessage(chatId, { 
-                    text: setResult ? `✅ *Antilink action sasa ni: ${setAction}*` : '❌ *Imeshindwa kuset*' 
-                }, { quoted: message });
-                break;
-
-            case 'get':
-                const config = await getAntilink(chatId, 'on');
-                await sock.sendMessage(chatId, { 
-                    text: `*ANTILINK STATUS*\n\nStatus: ${config ? 'ON ✅' : 'OFF ❌'}\nAction: ${config?.action || 'delete'}` 
-                }, { quoted: message });
+                await setAntilink(chatId, 'on', setAction);
+                await sock.sendMessage(chatId, { text: `✅ *Action set to ${setAction}*` }, { quoted: message });
                 break;
 
             default:
-                await sock.sendMessage(chatId, { text: '*_Tumia .antilink on/off/set._*' });
+                await sock.sendMessage(chatId, { text: '*_Use .antilink on/off._*' });
         }
     } catch (error) {
-        // Tunazuia error zisitokee kwny WhatsApp, zinabaki kwny terminal tu
-        console.error('Antilink Command Error:', error);
+        // Hapa hakuna tena sock.sendMessage ya error, bot inatulia
+        console.error('Antilink silent error:', error.message);
     }
 }
 
