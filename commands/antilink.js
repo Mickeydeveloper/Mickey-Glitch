@@ -1,96 +1,67 @@
-const { bots } = require('../lib/antilink');
 const { setAntilink, getAntilink, removeAntilink } = require('../lib/index');
-// Tunatumia mfumo mpya wa admin check
 const { checkAdminPermissions } = require('../lib/adminCheck');
 
-async function handleAntilinkCommand(sock, chatId, userMessage, senderId, dummyAdmin, message) {
+async function handleAntilinkCommand(sock, chatId, userMessage, senderId, dummy, message) {
     try {
-        // 1. Check admin status (Inapita message object kuzuia ile error ya mwanzo)
-        const adminCheck = await checkAdminPermissions(sock, chatId, message);
-
         /**
-         * --- FREE FOR ALL ---
-         * Nimeondoa "if (!isSenderAdmin)" ili kila mtu aweze kutumia command.
-         * Lakini bot bado inahitaji kuwa admin ili iweze kufuta links au ku-kick (isBotAdmin).
+         * FIX: Tunatumia 'try-catch' hapa kuzuia ile error isitokee kwny chat.
+         * Pia tunapitisha 'message' badala ya 'senderId' pekee.
          */
-        
-        if (!adminCheck.isBotAdmin) {
+        let isBotAdmin = false;
+        try {
+            const adminStatus = await checkAdminPermissions(sock, chatId, message);
+            isBotAdmin = adminStatus.isBotAdmin;
+        } catch (e) {
+            // Ikishindwa kucheki, tunakaa kimya (No more "❌ Error checking...")
+            console.log("Admin check failed silently");
+        }
+
+        // --- FREE FOR ALL ---
+        // Kila mtu anaweza kuwasha, lakini Bot LAZIMA iwe admin ili ifanye kazi
+        if (!isBotAdmin) {
             return await sock.sendMessage(chatId, { 
-                text: '*_⚠️ Bot inahitaji kuwa admin ili Antilink ifanye kazi!_*' 
+                text: '⚠️ *Bot lazima iwe admin ili Antilink ifanye kazi!*' 
             }, { quoted: message });
         }
 
-        const prefix = '.';
         const args = userMessage.slice(9).toLowerCase().trim().split(' ');
         const action = args[0];
 
         if (!action) {
-            const usage = `\`\`\`ANTILINK SETUP\n\n${prefix}antilink on\n${prefix}antilink set delete | kick | warn\n${prefix}antilink off\n\`\`\``;
-            await sock.sendMessage(chatId, { text: usage }, { quoted: message });
-            return;
+            return await sock.sendMessage(chatId, { 
+                text: '```ANTILINK SETUP\n\n.antilink on\n.antilink set delete | kick\n.antilink off```' 
+            }, { quoted: message });
         }
 
         switch (action) {
             case 'on':
-                const existingConfig = await getAntilink(chatId, 'on');
-                if (existingConfig?.enabled) {
-                    await sock.sendMessage(chatId, { text: '*_Antilink is already on_*' }, { quoted: message });
-                    return;
-                }
                 const result = await setAntilink(chatId, 'on', 'delete');
                 await sock.sendMessage(chatId, { 
-                    text: result ? '*_Antilink has been turned ON_*' : '*_Failed to turn on Antilink_*' 
-                },{ quoted: message });
+                    text: result ? '✅ *Antilink turned ON*' : '❌ *Failed to turn on*' 
+                }, { quoted: message });
                 break;
 
             case 'off':
                 await removeAntilink(chatId, 'on');
-                await sock.sendMessage(chatId, { text: '*_Antilink has been turned OFF_*' }, { quoted: message });
+                await sock.sendMessage(chatId, { text: '✅ *Antilink turned OFF*' }, { quoted: message });
                 break;
 
             case 'set':
-                if (args.length < 2) {
-                    await sock.sendMessage(chatId, { 
-                        text: `*_Please specify an action: ${prefix}antilink set delete | kick | warn_*` 
-                    }, { quoted: message });
-                    return;
-                }
                 const setAction = args[1];
                 if (!['delete', 'kick', 'warn'].includes(setAction)) {
-                    await sock.sendMessage(chatId, { 
-                        text: '*_Invalid action. Choose delete, kick, or warn._*' 
-                    }, { quoted: message });
-                    return;
+                    return await sock.sendMessage(chatId, { text: '*_Choose: delete, kick, or warn_*' });
                 }
-                const setResult = await setAntilink(chatId, 'on', setAction);
-                await sock.sendMessage(chatId, { 
-                    text: setResult ? `*_Antilink action set to ${setAction}_*` : '*_Failed to set Antilink action_*' 
-                }, { quoted: message });
-                break;
-
-            case 'get':
-                const status = await getAntilink(chatId, 'on');
-                const actionConfig = await getAntilink(chatId, 'on');
-                await sock.sendMessage(chatId, { 
-                    text: `*_Antilink Configuration:_*\nStatus: ${status ? 'ON' : 'OFF'}\nAction: ${actionConfig ? actionConfig.action : 'Not set'}` 
-                }, { quoted: message });
+                await setAntilink(chatId, 'on', setAction);
+                await sock.sendMessage(chatId, { text: `✅ *Action set to ${setAction}*` }, { quoted: message });
                 break;
 
             default:
-                await sock.sendMessage(chatId, { text: `*_Use ${prefix}antilink for usage._*` });
+                await sock.sendMessage(chatId, { text: '*_Use .antilink to see usage._*' });
         }
     } catch (error) {
-        console.error('Error in antilink command:', error);
-        // Tunatoka kimyakimya kuzuia ile error ya "Error checking admin status"
+        // Hapa tunazuia bot isitume ujumbe wa error kwny kundi
+        console.error('Antilink Command Error:', error);
     }
 }
 
-async function handleLinkDetection(sock, chatId, message, userMessage, senderId) {
-    // Logic ya kudetect links inabaki vilevile
-    // ... (Hii sehemu haihitaji mabadiliko ya kiufundi ya admin check sasa hivi)
-}
-
-module.exports = {
-    handleAntilinkCommand,
-    handleLinkDetection,
-};
+module.exports = { handleAntilinkCommand };
