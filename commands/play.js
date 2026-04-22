@@ -4,7 +4,7 @@
 
 const yts = require('yt-search');
 const axios = require('axios');
-const { GiftedButtons } = require('gifted-bttns'); // Hakikisha: npm install gifted-bttns
+const { sendInteractiveMessage } = require('gifted-btns');
 
 async function playCommand(sock, chatId, message, text) {
     try {
