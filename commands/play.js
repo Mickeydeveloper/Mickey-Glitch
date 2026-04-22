@@ -1,5 +1,5 @@
 /**
- * play.js - YouTube Music Downloader (Fixed JSON Path + Buffer)
+ * play.js - YouTube Music Downloader (Ultimate JSON Scraper)
  */
 
 const yts = require('yt-search');
@@ -12,58 +12,62 @@ async function playCommand(sock, chatId, message, text) {
 
         if (!args.length) {
             return sock.sendMessage(chatId, { 
-                text: '✨ *MICKEY PLAY*\n\n📝 Usage: `.play [song name]`\n\n_Example: .play despacito_',
+                text: '✨ *MICKEY PLAY*\n\n📝 Usage: `.play [song name]`',
                 quoted: message 
             });
         }
 
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } }).catch(() => {});
-
         const query = args.join(' ');
 
         // 1. SEARCH YOUTUBE
         const search = await yts(query);
         const video = search?.videos?.[0];
-
-        if (!video) {
-            await sock.sendMessage(chatId, { text: `❌ *Song not found:* ${query}` }, { quoted: message });
-            return;
-        }
+        if (!video) return sock.sendMessage(chatId, { text: '❌ Wimbo haujapatikana.' });
 
         // 2. SEND PREVIEW
-        const caption = `🎵 *MICKEY PLAYER*\n\n` +
-            `📝 *Title:* ${video.title}\n` +
-            `👤 *Channel:* ${video.author.name}\n` +
-            `⏳ *Duration:* ${video.timestamp}\n\n` +
-            `*⬇️ Inapakua audio, subiri kidogo...*`;
-
         await sock.sendMessage(chatId, {
             image: { url: video.thumbnail },
-            caption: caption
+            caption: `🎵 *MICKEY PLAYER*\n\n📝 *Title:* ${video.title}\n⏳ *Duration:* ${video.timestamp}\n\n*⬇️ Inatuma audio sasa...*`
         }, { quoted: message }).catch(() => {});
 
-        // 3. DOWNLOAD FROM API (Nayan)
+        // 3. DOWNLOAD & DEEP SCRAPE JSON
         const nayanApi = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(video.url)}`;
         const response = await axios.get(nayanApi, { timeout: 60000 });
         
-        /**
-         * FIX: Kulingana na JSON uliyotuma:
-         * Link ipo ndani ya: response.data.data.data.high
-         */
-        const audioUrl = response.data?.data?.data?.high || response.data?.data?.data?.low;
+        let audioUrl = null;
+        const resData = response.data;
+
+        // --- DEEP SEARCH LOGIC ---
+        // Tunakagua kila kona ya JSON uliyotuma kupata link ya high au low
+        if (resData.data?.data?.high) audioUrl = resData.data.data.high;
+        else if (resData.data?.data?.low) audioUrl = resData.data.data.low;
+        else if (resData.data?.high) audioUrl = resData.data.high;
+        else if (resData.url) audioUrl = resData.url; 
+        else if (resData.data?.url) audioUrl = resData.data.url;
 
         if (!audioUrl) {
-            throw new Error('Audio link haikupatikana kwny JSON.');
+            // Kama bado haijapatikana, jaribu kutafuta popote penye "http" kwny inner data
+            const fallback = resData.data?.data || resData.data || {};
+            audioUrl = fallback.high || fallback.low || fallback.url;
         }
 
-        // 4. CONVERT TO BUFFER AND SEND
-        const audioRes = await axios.get(audioUrl, { responseType: 'arraybuffer' });
-        const buffer = Buffer.from(audioRes.data, 'utf-8');
+        if (!audioUrl || !audioUrl.startsWith('http')) {
+            throw new Error('Link haikupatikana (API structure changed).');
+        }
+
+        // 4. DOWNLOAD BUFFER & SEND
+        const audioRes = await axios.get(audioUrl, { 
+            responseType: 'arraybuffer',
+            headers: { 'User-Agent': 'Mozilla/5.0' } // Fake browser kuzuia block
+        });
+        
+        const buffer = Buffer.from(audioRes.data, 'binary');
 
         await sock.sendMessage(chatId, {
             audio: buffer,
             mimetype: 'audio/mpeg',
-            fileName: `${video.title.replace(/[^\w\s-]/g, '')}.mp3`,
+            fileName: `${video.title}.mp3`,
             ptt: false
         }, { quoted: message });
 
@@ -72,7 +76,7 @@ async function playCommand(sock, chatId, message, text) {
     } catch (err) {
         console.error('[play] Error:', err.message);
         await sock.sendMessage(chatId, { 
-            text: `❌ *Imefeli:* ${err.message.slice(0, 80)}` 
+            text: `❌ *Imefeli:* Link haijapatikana. (API imepata hitilafu).` 
         }, { quoted: message });
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
     }
