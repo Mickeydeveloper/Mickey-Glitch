@@ -1,5 +1,5 @@
 /**
- * play.js - YouTube Music (Fixed JSON Path & Compact)
+ * play.js - YouTube Music (Compact & Real-time Info)
  */
 
 const yts = require('yt-search');
@@ -12,7 +12,7 @@ async function playCommand(sock, chatId, message, text) {
 
         if (!args.length) {
             return sock.sendMessage(chatId, { 
-                text: '╭━━━〔 *MICKEY MUSIC* 〕━━━┈⊷\n┃ 📝 `.play [song name]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
+                text: '╭━━━━〔 *MICKEY MUSIC* 〕━━━━┈⊷\n┃ 📝 `.play [song name]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
             }, { quoted: message });
         }
 
@@ -21,7 +21,7 @@ async function playCommand(sock, chatId, message, text) {
         const v = search?.videos?.[0];
         if (!v) return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' });
 
-        // Compact Caption
+        // Compact & Stylish Caption (Real Info)
         const caption = `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
             `┃ 🎵 \`${v.title}\`\n` +
             `┃ ⏳ \`${v.timestamp}\`\n` +
@@ -29,19 +29,18 @@ async function playCommand(sock, chatId, message, text) {
 
         await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: message });
 
-        // API Request
+        // API Request (Using your JSON structure)
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
         const res = await axios.get(api);
         
-        // --- JSON PICKER (Inatafuta kwenye JSON uliyotoa) ---
+        // Deep Scrape kulingana na JSON uliyotoa
         let audioUrl = res.data?.data?.data?.high || 
                        res.data?.data?.data?.low || 
-                       res.data?.data?.high || 
                        res.data?.data?.url;
 
-        if (!audioUrl) throw new Error('Link missed');
+        if (!audioUrl) throw new Error();
 
-        // Buffer & Send
+        // Download Buffer & Send
         const audioRes = await axios.get(audioUrl, { responseType: 'arraybuffer' });
         const buffer = Buffer.from(audioRes.data, 'binary');
 
@@ -55,8 +54,7 @@ async function playCommand(sock, chatId, message, text) {
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error(err);
-        await sock.sendMessage(chatId, { text: '❌ *API imeshindwa kupata link. Jaribu tena.*' });
+        await sock.sendMessage(chatId, { text: '❌ *API imefeli. Jaribu tena.*' });
     }
 }
 
