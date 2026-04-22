@@ -3,23 +3,20 @@ const store = require('../lib/lightweight_store');
 
 async function deleteCommand(sock, chatId, message, text) {
     try {
-        // Extract sender ID from message
         const senderId = message.key.participant || message.key.remoteJid;
-        
+
+        // Bado tunahitaji hii ili kujua kama BOT ni admin (Bot lazima iwe admin ili ifute)
         const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
 
-        // 1. Check kama bot ni admin
+        // 1. Check kama bot ni admin (Hii ni lazima ibaki)
         if (!isBotAdmin) {
             return await sock.sendMessage(chatId, { text: '⚠️ Nahitaji kuwa admin ili kufuta meseji (I need to be admin).' }, { quoted: message });
         }
 
-        // 2. Check kama aliyetuma command ni admin
-        if (!isSenderAdmin) {
-            return await sock.sendMessage(chatId, { text: '❌ Admins tu ndio wanaweza kufuta (Only admins can delete).' }, { quoted: message });
-        }
+        // --- SEHEMU ILIYOONDOLEWA (Admin check kwa sender imeondolewa hapa) ---
 
         const ctxInfo = message.message?.extendedTextMessage?.contextInfo || {};
-        const repliedMsgId = ctxInfo.stanzaId; // ID ya meseji iliyoreply-wa
+        const repliedMsgId = ctxInfo.stanzaId; 
         const repliedParticipant = ctxInfo.participant;
 
         // --- SCENARIO A: UKIREPLY UJUMBE ---
@@ -33,7 +30,6 @@ async function deleteCommand(sock, chatId, message, text) {
                         participant: repliedParticipant
                     }
                 });
-                // Futa pia command yenyewe ya admin
                 return await sock.sendMessage(chatId, { delete: message.key });
             } catch (e) {
                 return await sock.sendMessage(chatId, { text: '❌ Imeshindikana kufuta (Delete failed).' }, { quoted: message });
@@ -41,8 +37,8 @@ async function deleteCommand(sock, chatId, message, text) {
         }
 
         // --- SCENARIO B: KUFUTA KWA IDADI (BULK DELETE) ---
-        const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
-        const parts = text.trim().split(/\s+/);
+        const msgText = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
+        const parts = msgText.trim().split(/\s+/);
         let countArg = parts.length > 1 ? parseInt(parts[1], 10) : null;
 
         if (!countArg || isNaN(countArg) || countArg <= 0) {
@@ -51,11 +47,10 @@ async function deleteCommand(sock, chatId, message, text) {
             }, { quoted: message });
         }
 
-        countArg = Math.min(countArg, 50); // Limit isiwe nyingi sana
+        countArg = Math.min(countArg, 50); 
         const chatMessages = Array.isArray(store.messages[chatId]) ? store.messages[chatId] : [];
         const toDelete = [];
 
-        // Tafuta meseji kuanzia ya mwisho (tuna-skip protocol msgs na command yenyewe)
         for (let i = chatMessages.length - 1; i >= 0 && toDelete.length < countArg; i--) {
             const m = chatMessages[i];
             if (!m.message?.protocolMessage && m.key.id !== message.key.id) {
@@ -64,10 +59,9 @@ async function deleteCommand(sock, chatId, message, text) {
         }
 
         if (toDelete.length === 0) {
-            return await sock.sendMessage(chatId, { text: 'Hakuna meseji za kufuta (No messages found).' }, { quoted: message });
+            return await sock.sendMessage(chatId, { text: 'Hakuna meseji za kufuta (No msg found).' }, { quoted: message });
         }
 
-        // Futa meseji moja baada ya nyingine
         for (const m of toDelete) {
             try {
                 await sock.sendMessage(chatId, {
@@ -78,11 +72,10 @@ async function deleteCommand(sock, chatId, message, text) {
                         participant: m.key.participant || m.key.remoteJid
                     }
                 });
-                await new Promise(r => setTimeout(r, 200)); // Delay kidogo kuzuia spam
+                await new Promise(r => setTimeout(r, 200)); 
             } catch (err) {}
         }
 
-        // Futa command ya admin mwishoni
         await sock.sendMessage(chatId, { delete: message.key });
 
     } catch (err) {
