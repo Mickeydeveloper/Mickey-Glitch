@@ -1,10 +1,9 @@
 /**
- * play.js - YouTube Music (Gifted Bttns + Reactions)
+ * play.js - YouTube Music (Fixed JSON Path & Compact)
  */
 
 const yts = require('yt-search');
 const axios = require('axios');
-const { sendInteractiveMessage } = require('gifted-btns');
 
 async function playCommand(sock, chatId, message, text) {
     try {
@@ -13,57 +12,36 @@ async function playCommand(sock, chatId, message, text) {
 
         if (!args.length) {
             return sock.sendMessage(chatId, { 
-                text: '╭━━━━〔 *MICKEY MUSIC* 〕━━━━┈⊷\n┃ 📝 `.play [song name]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
+                text: '╭━━━〔 *MICKEY MUSIC* 〕━━━┈⊷\n┃ 📝 `.play [song name]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
             }, { quoted: message });
         }
-
-        // 1. Reaction ya kuanza utafutaji (Search)
-        await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } }).catch(() => {});
 
         const query = args.join(' ');
         const search = await yts(query);
         const v = search?.videos?.[0];
-        if (!v) {
-            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-            return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' });
-        }
+        if (!v) return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' });
 
-        // 2. Reaction ya kupata matokeo (Found)
-        await sock.sendMessage(chatId, { react: { text: '🎧', key: message.key } }).catch(() => {});
-
+        // Compact Caption
         const caption = `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
             `┃ 🎵 \`${v.title}\`\n` +
             `┃ ⏳ \`${v.timestamp}\`\n` +
             `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-        // TUMA PREVIEW NA BUTTON YA URL
-        const buttons = new GiftedButtons();
-        buttons.addUrl('WATCHING VIA YOUTUBE', v.url);
-        
-        await sock.sendMessage(chatId, {
-            image: { url: v.thumbnail },
-            caption: caption,
-            footer: 'Mickey Tanzania Bot',
-            buttons: buttons.getButtons(),
-            headerType: 4
-        }, { quoted: message });
+        await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: message });
 
-        // 3. Reaction ya kuanza kudownload (Downloading)
-        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } }).catch(() => {});
-
-        // API Request (Robust JSON Picker)
+        // API Request
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
         const res = await axios.get(api);
         
-        // Kusoma JSON uliyotoa kwa usahihi
+        // --- JSON PICKER (Inatafuta kwenye JSON uliyotoa) ---
         let audioUrl = res.data?.data?.data?.high || 
                        res.data?.data?.data?.low || 
-                       res.data?.data?.url || 
-                       res.data?.url;
+                       res.data?.data?.high || 
+                       res.data?.data?.url;
 
-        if (!audioUrl) throw new Error();
+        if (!audioUrl) throw new Error('Link missed');
 
-        // 4. Download & Send Buffer
+        // Buffer & Send
         const audioRes = await axios.get(audioUrl, { responseType: 'arraybuffer' });
         const buffer = Buffer.from(audioRes.data, 'binary');
 
@@ -74,13 +52,11 @@ async function playCommand(sock, chatId, message, text) {
             ptt: false
         }, { quoted: message });
 
-        // 5. Reaction ya kumaliza (Success)
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
         console.error(err);
-        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-        await sock.sendMessage(chatId, { text: '❌ *Hitilafu! API huenda imezidiwa.*' });
+        await sock.sendMessage(chatId, { text: '❌ *API imeshindwa kupata link. Jaribu tena.*' });
     }
 }
 
