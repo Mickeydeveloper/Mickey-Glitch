@@ -33,11 +33,12 @@ async function startMickeyBot() {
             keys: makeCacheableSignalKeyStore(state.keys, logger),
         },
         markOnlineOnConnect: true,
-        connectTimeoutMs: 60000,
+        connectTimeoutMs: 120000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 10000,
+        keepAliveIntervalMs: 30000,
         generateHighQualityLinkPreview: true,
-        getMessage: async (key) => { return { conversation: 'Mickey Glitch' } }
+        getMessage: async (key) => { return { conversation: 'Mickey Glitch' } },
+        syncFullHistory: false
     })
 
     // PAIRING LOGIC
