@@ -94,8 +94,7 @@ async function pairingCommand(sock, chatId, message) {
 async function handleSuccessfulPairing(sock, chatId, userJid, sessionDir, originalMessage) {
     try {
         await sock.sendMessage(chatId, {
-            text: `✅ *Pairing Ime Fanikiwa Kabisa!*\n\nInatuma `creds.json`...`
-        });
+                text: `✅ *Pairing Ime Fanikiwa Kabisa!*\n\nInatuma \`creds.json\`...`
 
         const credsPath = path.join(sessionDir, 'creds.json');
 

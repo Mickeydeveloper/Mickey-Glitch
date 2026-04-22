@@ -20,7 +20,7 @@ async function handleAntilinkCommand(sock, chatId, userMessage, message) {
         // 3. LOGIC YA AMRI
         if (action === 'on') {
             await setAntilink(chatId, 'on', 'delete');
-            let resOn = `╭━━━━〔 *ANTILINK ON* 〕━━━━┈⊷\n┃\n┃ ✅ *Hali:* \`ENABLED\`\n┃ 🛡️ *Bot Admin:* ${isBotAdmin ? '`Active ✅`' : '`Missing ❌`'}\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
+            let resOn = `╭━━━━〔 *ANTILINK ON* 〕━━━━┈⊷\n┃\n┃ ✅ *Hali:* \`ENABLED\`\n┃ 🛡️ *Bot Admin:* ${isBotAdmin ? '`Active ✅`' : '`Missing ❌`'}\n┃ 📌 *Hati:* \`Delete Links\`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
             return await sock.sendMessage(chatId, { text: resOn }, { quoted: message });
         }
 
@@ -39,15 +39,17 @@ async function handleAntilinkCommand(sock, chatId, userMessage, message) {
             return await sock.sendMessage(chatId, { text: `✅ *Action imewekwa kuwa:* \`${mode.toUpperCase()}\`` });
         }
 
-        // 4. MENU (Kama hajaandika on/off)
+        // 4. EXTENDED MENU (Kama hajaandika on/off)
         const menu = 
-            `╭━━━━〔 *ANTILINK CFG* 〕━━━━┈⊷\n` +
+            `╭━━━━〔 *ANTILINK SETTINGS* 〕━━━━┈⊷\n` +
             `┃\n` +
-            `┃ 💡 *Usage:* \`.antilink on\` (Washa)\n` +
-            `┃ 💡 *Usage:* \`.antilink off\` (Zima)\n` +
-            `┃ 💡 *Usage:* \`.antilink set kick\`\n` +
+            `┃ 📌 *AMRI:*\n` +
+            `┃ • \`.antilink on\` - Washa\n` +
+            `┃ • \`.antilink off\` - Zima\n` +
+            `┃ • \`.antilink set delete\` - Futa link\n` +
+            `┃ • \`.antilink set kick\` - Tumaani sender\n` +
             `┃\n` +
-            `┃ 🛡️ *Bot Admin:* ${isBotAdmin ? '`Tayari ✅`' : '`Hajapewa ❌`'}\n` +
+            `┃ 🛡️ *Bot Admin Status:* ${isBotAdmin ? '`✅ ACTIVE`' : '`❌ MISSING`'}\n` +
             `┃\n` +
             `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
 

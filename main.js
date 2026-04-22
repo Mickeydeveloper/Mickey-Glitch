@@ -233,4 +233,26 @@ async function handleStatus(sock, messageUpdate) {
     }
 }
 
-module.exports = { handleMessages, handleStatus };
+// Function to reload commands (called after reconnection)
+function reloadCommands() {
+    try {
+        // Clear the require cache for all command modules
+        const commandsPath = path.join(process.cwd(), 'commands');
+        if (fs.existsSync(commandsPath)) {
+            const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+            for (const file of commandFiles) {
+                const filePath = path.join(commandsPath, file);
+                delete require.cache[path.resolve(filePath)];
+            }
+        }
+        
+        allCommands = autoLoadCommands();
+        console.log(chalk.cyan(`🔄 Commands reloaded: ${Object.keys(allCommands).length} commands available`));
+        return allCommands;
+    } catch (err) {
+        console.error(chalk.red('Failed to reload commands:'), err.message);
+        return allCommands;
+    }
+}
+
+module.exports = { handleMessages, handleStatus, reloadCommands };
