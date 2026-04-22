@@ -25,13 +25,24 @@ const { handleStatusForward } = require('./commands/statusforward');
 const { autoLoadCommands, getCommand } = require('./lib/autoCommandLoader');
 let allCommands = {}; 
 
-try {
-    allCommands = autoLoadCommands();
-    console.log(chalk.green(`✅ Loaded ${Object.keys(allCommands).length} commands`))
-    console.log(chalk.blue(`Available commands: ${Object.keys(allCommands).slice(0, 10).join(', ')}...`))
-} catch (e) {
-    console.error(chalk.red('Failed to load commands:'), e.message)
+// Global command cache object - persistent across calls
+global.MICKEY_COMMANDS = {};
+
+function loadAllCommandsInitial() {
+    try {
+        allCommands = autoLoadCommands();
+        global.MICKEY_COMMANDS = allCommands;
+        console.log(chalk.green(`✅ Loaded ${Object.keys(allCommands).length} commands`))
+        console.log(chalk.blue(`Available commands: ${Object.keys(allCommands).slice(0, 10).join(', ')}...`))
+        return allCommands;
+    } catch (e) {
+        console.error(chalk.red('Failed to load commands:'), e.message);
+        return {};
+    }
 }
+
+// Load commands on startup
+allCommands = loadAllCommandsInitial();
 
 // Static Import for Help
 const helpFunc = require('./commands/menu');
@@ -172,7 +183,9 @@ async function handleMessages(sock, messageUpdate) {
         // --- 🚀 EXECUTION ENGINE ---
 
         // --- Load commands ONLY from /commands/ folder ---
-        const selectedCommand = getCommand(allCommands, cmdName);
+        // Use both global cache and current allCommands
+        const commandsSource = Object.keys(global.MICKEY_COMMANDS || {}).length > 0 ? global.MICKEY_COMMANDS : allCommands;
+        const selectedCommand = getCommand(commandsSource, cmdName);
 
         if (selectedCommand) {
             // Sudo Restriction
@@ -185,31 +198,30 @@ async function handleMessages(sock, messageUpdate) {
             }
 
             try {
-                // Execute command with timeout protection
-                const commandTimeout = cmdName.includes('play') || cmdName.includes('video') || cmdName.includes('download') ? 60000 : 20000;
-                
-                if (typeof selectedCommand === 'function') {
-                    // Direct function call
-                    await Promise.race([
-                        selectedCommand(sock, chatId, m, cleanBody),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), commandTimeout))
-                    ]);
-                } else if (selectedCommand.execute && typeof selectedCommand.execute === 'function') {
-                    // Module with execute method
-                    await Promise.race([
-                        selectedCommand.execute(sock, chatId, m, cleanBody),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), commandTimeout))
-                    ]);
-                } else {
-                    // Unknown format - try calling directly
-                    await Promise.race([
-                        selectedCommand(sock, chatId, m, cleanBody),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), commandTimeout))
-                    ]);
+                // Execute command with optimized timeout protection
+                let commandTimeout = 20000; // Default 20s
+                if (cmdName.includes('play') || cmdName.includes('video') || cmdName.includes('download') || cmdName.includes('youtube')) {
+                    commandTimeout = 60000; // 60s for downloads
+                } else if (cmdName.includes('button')) {
+                    commandTimeout = 5000; // 5s for button response (fast)
                 }
+                
+                // Execute with Promise.race for timeout
+                const executePromise = typeof selectedCommand === 'function' 
+                    ? selectedCommand(sock, chatId, m, cleanBody)
+                    : selectedCommand.execute && typeof selectedCommand.execute === 'function'
+                    ? selectedCommand.execute(sock, chatId, m, cleanBody)
+                    : selectedCommand(sock, chatId, m, cleanBody);
+
+                await Promise.race([
+                    executePromise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), commandTimeout))
+                ]);
             } catch (cmdErr) {
                 // Silently handle command errors - don't spam user
-                console.error(`[${cmdName}] Error:`, cmdErr.message);
+                if (!cmdErr.message.includes('timeout')) {
+                    console.error(`[${cmdName}] Error:`, cmdErr.message);
+                }
             }
         }
         // Don't send "not found" message for non-existent commands to reduce spam
@@ -247,6 +259,7 @@ function reloadCommands() {
         }
         
         allCommands = autoLoadCommands();
+        global.MICKEY_COMMANDS = allCommands; // Update global cache
         console.log(chalk.cyan(`🔄 Commands reloaded: ${Object.keys(allCommands).length} commands available`));
         return allCommands;
     } catch (err) {

@@ -32,13 +32,51 @@ function clearDirectory(dirPath) {
     }
 }
 
+// Auto-cleanup old files (keep only recent files)
+function autoCleanupOldFiles(dirPath, maxAgeHours = 24) {
+    try {
+        if (!fs.existsSync(dirPath)) return { success: true, message: 'Directory not found', count: 0 };
+        
+        const files = fs.readdirSync(dirPath);
+        let deletedCount = 0;
+        const now = Date.now();
+        const maxAge = maxAgeHours * 60 * 60 * 1000;
+
+        for (const file of files) {
+            try {
+                const filePath = path.join(dirPath, file);
+                const stat = fs.statSync(filePath);
+                const age = now - stat.mtimeMs;
+
+                // Delete files older than specified hours
+                if (age > maxAge) {
+                    if (stat.isDirectory()) {
+                        fs.rmSync(filePath, { recursive: true, force: true });
+                    } else {
+                        fs.unlinkSync(filePath);
+                    }
+                    deletedCount++;
+                }
+            } catch (err) {
+                // Silent fail on individual files
+            }
+        }
+        return { success: true, message: `Auto-cleaned ${deletedCount} old files from ${path.basename(dirPath)}`, count: deletedCount };
+    } catch (error) {
+        return { success: false, message: `Auto-cleanup failed in ${path.basename(dirPath)}`, count: 0 };
+    }
+}
+
 // Function to clear both tmp and temp directories
 async function clearTmpDirectory() {
     const tmpDir = path.join(process.cwd(), 'tmp');
     const tempDir = path.join(process.cwd(), 'temp');
+    const sessionDir = path.join(process.cwd(), 'session');
     const results = [];
     results.push(clearDirectory(tmpDir));
     results.push(clearDirectory(tempDir));
+    // Session: only auto-cleanup old files (keep current credentials)
+    results.push(autoCleanupOldFiles(sessionDir, 24));
     // Combine results
     const success = results.every(r => r.success);
     const totalDeleted = results.reduce((sum, r) => sum + (r.count || 0), 0);
