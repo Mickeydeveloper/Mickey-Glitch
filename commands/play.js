@@ -1,5 +1,5 @@
 /**
- * play.js - YouTube Music (Compact & Buffer)
+ * play.js - YouTube Music (Fixed JSON Path & Compact)
  */
 
 const yts = require('yt-search');
@@ -21,7 +21,7 @@ async function playCommand(sock, chatId, message, text) {
         const v = search?.videos?.[0];
         if (!v) return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' });
 
-        // Stylish & Compact Caption
+        // Compact Caption
         const caption = `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
             `┃ 🎵 \`${v.title}\`\n` +
             `┃ ⏳ \`${v.timestamp}\`\n` +
@@ -29,14 +29,17 @@ async function playCommand(sock, chatId, message, text) {
 
         await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: message });
 
-        // API Request (Nayan)
+        // API Request
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
         const res = await axios.get(api);
         
-        // Exact JSON Path kutoka ulichotuma
-        const audioUrl = res.data.data.data.high || res.data.data.data.low;
+        // --- JSON PICKER (Inatafuta kwenye JSON uliyotoa) ---
+        let audioUrl = res.data?.data?.data?.high || 
+                       res.data?.data?.data?.low || 
+                       res.data?.data?.high || 
+                       res.data?.data?.url;
 
-        if (!audioUrl) throw new Error();
+        if (!audioUrl) throw new Error('Link missed');
 
         // Buffer & Send
         const audioRes = await axios.get(audioUrl, { responseType: 'arraybuffer' });
@@ -52,7 +55,8 @@ async function playCommand(sock, chatId, message, text) {
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        await sock.sendMessage(chatId, { text: '❌ *API Error! Jaribu tena.*' });
+        console.error(err);
+        await sock.sendMessage(chatId, { text: '❌ *API imeshindwa kupata link. Jaribu tena.*' });
     }
 }
 
