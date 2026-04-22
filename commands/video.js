@@ -1,82 +1,80 @@
-const { sendButtons } = require('gifted-btns');
+/**
+ * video.js - YouTube Video Downloader (Stylish & Fast)
+ */
+
 const yts = require('yt-search');
-const ruhend = require('ruhend-scraper');
+const axios = require('axios');
 
 async function videoCommand(sock, chatId, message, args) {
     try {
-        // --- SAFETY IMPROVEMENTS (Safety Fix) ---
-        // We ensure body exists before using it
-        const body = message.message?.conversation || 
-                     message.message?.extendedTextMessage?.text || 
-                     message.message?.buttonsResponseMessage?.selectedButtonId || "";
+        // Fix kwa ajili ya kupata text sahihi (Safety Fix)
+        const rawText = typeof args === 'object' ? args.join(' ') : "";
+        const searchQuery = rawText.trim();
+
+        if (!searchQuery) {
+            return await sock.sendMessage(chatId, { 
+                text: '╭━━━〔 *MICKEY VIDEO* 〕━━━┈⊷\n┃\n┃ 📝 *Usage:* `.video [video name]`\n┃ 💡 *Example:* `.video Mario oluwa`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷',
+                quoted: message 
+            });
+        }
+
+        // Loading Reaction
+        await sock.sendMessage(chatId, { react: { text: '🎬', key: message.key } }).catch(() => {});
+
+        // 1. SEARCH YOUTUBE
+        const search = await yts(searchQuery);
+        const video = search?.videos?.[0];
+
+        if (!video) {
+            await sock.sendMessage(chatId, { text: '❌ *Video haijapatikana!*' }, { quoted: message });
+            return;
+        }
+
+        // 2. SEND STYLISH PREVIEW
+        const stylishCaption = 
+            `╭━━━━〔 *VIDEO SEARCH* 〕━━━━┈⊷\n` +
+            `┃\n` +
+            `┃ 🎥 *Title:* \`${video.title}\`\n` +
+            `┃ 👤 *Channel:* \`${video.author.name}\`\n` +
+            `┃ ⏳ *Duration:* \`${video.timestamp}\`\n` +
+            `┃ 👁️ *Views:* \`${video.views.toLocaleString()}\`\n` +
+            `┃\n` +
+            `┃ 📥 *Status:* \`Downloading MP4...\`\n` +
+            `┃\n` +
+            `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
+
+        await sock.sendMessage(chatId, {
+            image: { url: video.thumbnail },
+            caption: stylishCaption
+        }, { quoted: message }).catch(() => {});
+
+        // 3. DOWNLOAD LOGIC (Using Nayan API - Moja tu kama ulivyotaka)
+        const nayanApi = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(video.url)}`;
+        const response = await axios.get(nayanApi, { timeout: 60000 });
         
-        if (!body) return; // If no text, don't do anything
+        // Tunatafuta link ya video (high au low) kwenye JSON ya Nayan
+        const resData = response.data?.data?.data || response.data?.data || response.data;
+        const downloadUrl = resData.high || resData.low || resData.url;
 
-        const command = body.slice(1).trim().split(/ +/).shift().toLowerCase();
-        const searchQuery = args.join(' ').trim();
+        if (!downloadUrl) throw new Error('Download URL missed');
 
-        // --- 1. BRING BUTTONS (.video [name]) ---
-        if (command === 'video' && !body.startsWith('.ytvideo')) {
-            if (!searchQuery) {
-                return await sock.sendMessage(chatId, { text: '❌ *What are you searching for?*\nExample: .video Mario oluwa' }, { quoted: message });
-            }
+        // 4. SEND VIDEO (Directly using URL for speed)
+        await sock.sendMessage(chatId, {
+            video: { url: downloadUrl },
+            caption: `✅ *Successfully Downloaded:* \`${video.title}\`\n\n*Mickey Tanzania Bot* 🚀`,
+            mimetype: 'video/mp4',
+            fileName: `${video.title}.mp4`
+        }, { quoted: message });
 
-            await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
-
-            const { videos } = await yts(searchQuery);
-            if (!videos || videos.length === 0) return await sock.sendMessage(chatId, { text: '❌ Not found!' });
-
-            const v = videos[0];
-            const title = v.title;
-
-            const caption = `
-🎥 *MICKEY MEDIA SEARCH*
-━━━━━━━━━━━━━━━━━━━━━━
-📝 *Title:* ${title}
-⏳ *Duration:* ${v.timestamp}
-━━━━━━━━━━━━━━━━━━━━━━
-*Choose what you want below:* 👇`;
-
-            await sendButtons(sock, chatId, {
-                title: '🎬 DOWNLOADER PANEL',
-                text: caption,
-                footer: 'Mickey Glitch Tech',
-                image: { url: v.thumbnail },
-                buttons: [
-                    { id: `ytvideo_${encodeURIComponent(title)}`, text: '🎥 VIDEO (MP4)' },
-                    { id: `play ${encodeURIComponent(title)}`, text: '🎵 AUDIO (MP3)' }
-                ]
-            }, { quoted: message });
-            
-            return await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-        }
-
-        // --- 2. KUDOWNLOAD VIDEO (.ytvideo [jina]) ---
-        if (command === 'ytvideo') {
-            // Hapa tunatumia jina lililotoka kwenye button search
-            const downloadQuery = body.replace(/^\.ytvideo\s+/i, ''); 
-            if (!downloadQuery) return;
-
-            await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
-            
-            const { videos } = await yts(downloadQuery);
-            if (!videos || videos.length === 0) return;
-
-            const videoUrl = videos[0].url;
-            const res = await ruhend.ytmp4(videoUrl);
-            
-            if (res.status) {
-                await sock.sendMessage(chatId, {
-                    video: { url: res.video },
-                    caption: `✅ *Success:* ${res.title}`,
-                    mimetype: 'video/mp4'
-                }, { quoted: message });
-            }
-        }
+        // Success Reaction
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
 
     } catch (err) {
-        console.error("VIDEO ERROR:", err);
-        // Hatuwezi kutumia slice hapa tena bila hofu
+        console.error('[video] Error:', err.message);
+        await sock.sendMessage(chatId, { 
+            text: '❌ *Hitilafu imetokea! Video hii huenda ni kubwa mno au API imechoka.*' 
+        }, { quoted: message });
+        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
     }
 }
 
