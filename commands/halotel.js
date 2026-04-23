@@ -135,10 +135,5 @@ async function halotelCommand(sock, chatId, m, body = '') {
 // ────────────────────────────────────────────────
 // EXPORT - Auto Registration
 // ────────────────────────────────────────────────
-module.exports = {
-    name: 'halotel',
-    alias: ['h_pkg_10', 'h_pkg_15', 'h_pkg_20', 'h_pkg_25', 'halopackage', 'halotelpackages'],
-    category: 'tools',
-    description: 'Halotel data bundles menu and instant selection',
-    execute: halotelCommand
-};
+
+module.exports = halotelCommand;
