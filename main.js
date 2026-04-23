@@ -4,6 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { antilink2Engine } = require('./commands/antilink2');
 const chalk = require('chalk');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -105,33 +106,18 @@ async function handleMessages(sock, messageUpdate) {
             } catch (e) {}
         }
 
-        if (!body || typeof body !== 'string') return;
-        const msgText = body.trim();
+                if (!body || typeof body !== 'string') return;
+        body = body.trim();
 
-        // ─────────────────────────────────────────────────────────────────────
-        // 🛡️ ENHANCED ANTILINK ENGINE (ZOTE: WhatsApp, Web, etc.)
-        // ─────────────────────────────────────────────────────────────────────
+        // 🛡️ ANTILINK 2 PRO ENGINE (NIMEIWEKA HAPA)
+        // Inacheki link hata kama meseji haina nukta (.)
         if (isGroup) {
-            // Tumia checkAdminPermissions helper yako
-            const adminCheck = await checkAdminPermissions(sock, chatId, m);
-            
-            // Regex ya link za aina yoyote (http, https, chat.whatsapp, etc.)
-            const linkRegex = /((https?:\/\/)|(www\.))[^\s]+/gi;
-            const hasLink = linkRegex.test(msgText) || msgText.includes('chat.whatsapp.com');
+            await antilink2Engine(sock, chatId, m, body).catch(e => console.log('Antilink2 Error:', e.message));
+        }
 
-            if (hasLink && !adminCheck.isSenderAdmin && adminCheck.isBotAdmin) {
-                const antilinkConfig = await getAntilink(chatId);
-                
-                if (antilinkConfig && antilinkConfig.status === 'on') {
-                    // Futa meseji mara moja
-                    await sock.sendMessage(chatId, { delete: m.key });
+        // Check if it's a command (starts with .)
+        if (!body.startsWith('.')) return;
 
-                    // Tekeleza adhabu kulingana na mode (kick au delete tu)
-                    if (antilinkConfig.mode === 'kick') {
-                        await sock.groupParticipantsUpdate(chatId, [senderId], 'remove');
-                        await sock.sendMessage(chatId, { text: `🚫 *Antilink System*\n\nMtumiaji ameondolewa kwa kutuma link.` });
-                    } else {
-                        // Delete pekee bila kutuma msg nyingi kuzuia spam
                     }
                 }
             }
