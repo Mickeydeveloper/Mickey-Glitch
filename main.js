@@ -192,9 +192,37 @@ async function handleMessages(sock, messageUpdate) {
                     timeout = 5000; // 5s for quick responses
                 }
 
+                // Determine how to call the command (handle both patterns)
+                let commandFn = null;
+                
+                // Pattern 1: Direct function export (e.g., module.exports = addCommand;)
+                if (typeof cmdFile === 'function') {
+                    commandFn = cmdFile;
+                } 
+                // Pattern 2: Object with execute method (e.g., module.exports = { execute, name, ... })
+                else if (cmdFile.execute && typeof cmdFile.execute === 'function') {
+                    commandFn = cmdFile.execute;
+                }
+                // Pattern 3: Object with named function matching command name
+                else {
+                    const camelCaseName = commandName + 'Command';
+                    const pascalCaseName = commandName.charAt(0).toUpperCase() + commandName.slice(1) + 'Command';
+                    
+                    if (cmdFile[camelCaseName] && typeof cmdFile[camelCaseName] === 'function') {
+                        commandFn = cmdFile[camelCaseName];
+                    } else if (cmdFile[pascalCaseName] && typeof cmdFile[pascalCaseName] === 'function') {
+                        commandFn = cmdFile[pascalCaseName];
+                    }
+                }
+
+                if (!commandFn) {
+                    console.error(chalk.red(`❌ Command [${commandName}] has no callable function`));
+                    return;
+                }
+
                 // Execute with timeout protection
                 await Promise.race([
-                    cmdFile(sock, chatId, m, textFromMessage, { 
+                    commandFn(sock, chatId, m, textFromMessage, { 
                         args, 
                         isAdmin, 
                         isOwner, 
