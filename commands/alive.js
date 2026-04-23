@@ -1,69 +1,83 @@
-const moment = require('moment-timezone');
+const os = require('os');
+const { performance } = require('perf_hooks');
+const { sendButtons } = require('gifted-btns');
 
 /**
- * Mickey Glitch Alive Command
- * Refined Minimalist Aesthetic
+ * Formats seconds into a human-readable string (d h m s)
  */
-const aliveCommand = async (conn, chatId, message) => {
-  try {
-    // 1. Data Retrieval
-    const name = message.pushName || conn.user?.name || 'User';
-    const uptime = clockString(process.uptime() * 1000);
-    const date = moment.tz('Africa/Nairobi').format('DD MMMM YYYY');
-    const time = moment.tz('Africa/Nairobi').format('HH:mm:ss');
+const formatUptime = (seconds) => {
+    const d = Math.floor(seconds / (3600 * 24));
+    const h = Math.floor((seconds % (3600 * 24)) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
 
-    // 2. Clean Typography Layout
-    const statusText = `
-*MICKEY GLITCH v2.0.1*
-_Premium Multi-Device Assistant_
+    const parts = [];
+    if (d > 0) parts.push(`${d}d`);
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0) parts.push(`${m}m`);
+    parts.push(`${s}s`);
 
-*SYSTEM STATUS*
-◈ *User:* ${name}
-◈ *Status:* Online
-◈ *Health:* 100%
-◈ *Uptime:* ${uptime}
-
-*SESSION INFO*
-◈ *Time:* ${time}
-◈ *Date:* ${date}
-◈ *Region:* Africa/Nairobi
-
-*Network active and ready for commands.*`.trim();
-
-    // 3. Execution
-    await conn.sendMessage(chatId, {
-      text: statusText,
-      contextInfo: {
-        isForwarded: true,
-        forwardedNewsletterMessageInfo: {
-          newsletterJid: '120363398106360290@newsletter',
-          newsletterName: '🅼🅸🅲🅺🅴🆈 ɢʟɪᴛᴄʜ™',
-          serverMessageId: -1
-        },
-        externalAdReply: {
-          title: `⚡ SYSTEM: OPERATIONAL`,
-          body: `Uptime: ${uptime}`,
-          thumbnailUrl: 'https://water-billimg.onrender.com/1761205727440.png',
-          sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26',
-          mediaType: 1,
-          renderLargerThumbnail: true
-        }
-      }
-    }, { quoted: message });
-
-  } catch (error) {
-    console.error('Command Error:', error.message);
-    const fallback = `*MICKEY GLITCH STATUS*\n\n🟢 Systems Online\n✅ All services functional`;
-    await conn.sendMessage(chatId, { text: fallback }, { quoted: message });
-  }
+    return parts.join(' ');
 };
 
-/** * Helper: Format Uptime */
-function clockString(ms) {
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  return `${h}h ${m}m ${s}s`;
-}
+/**
+ * Main command handler
+ */
+const aliveCommand = async (sock, chatId, msg) => {
+    if (!sock?.sendMessage) return;
+
+    const startTime = performance.now();
+
+    try {
+        // System Calculations
+        const time = new Date().toLocaleTimeString('en-US', { 
+            timeZone: 'Africa/Dar_es_Salaam', 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true
+        });
+
+        const latency = (performance.now() - startTime).toFixed(0);
+        const totalRam = os.totalmem() / Math.pow(1024, 3);
+        const usedRam = process.memoryUsage().heapUsed / Math.pow(1024, 3);
+        const ramPercent = ((usedRam / totalRam) * 100).toFixed(1);
+        const cpuModel = os.cpus()[0]?.model.split('@')[0].trim() || 'Generic CPU';
+
+        const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
+
+        // Message Template
+        const statusMessage = `
+╭━━━〔 *ＭＩＣＫＥＹ-Ｖ３* 〕━━━┈⊷
+┃ 👤 *User:* ${msg.pushName || 'Guest'}
+┃ 🕒 *Time:* ${time} EAT
+┃ 🚀 *Latency:* ${latency}ms
+╰━━━━━━━━━━━━━━━━━━┈⊷
+
+╭━━━〔 *SYSTEM STATUS* 〕━━━┈⊷
+┃ ⏳ *Uptime:* ${formatUptime(process.uptime())}
+┃ 🧠 *RAM:* ${usedRam.toFixed(2)}GB / ${totalRam.toFixed(0)}GB (${ramPercent}%)
+┃ 🔧 *CPU:* ${cpuModel}
+┃ 🟢 *Status:* Online & Stable
+╰━━━━━━━━━━━━━━━━━━┈⊷
+
+*© 2026 Mickey Glitch Technology*`.trim();
+
+        // Send interactive response directly
+        await sendButtons(sock, chatId, {
+            title: 'SYSTEM ACTIVE',
+            text: statusMessage,
+            footer: 'Powered by Mickey Glitch Tech',
+            image: { url: imageUrl },
+            buttons: [
+                { id: '.menu', text: '🆘 Menu' },
+                { id: '.ping', text: '📡 Speed' },
+                { id: '.owner', text: '👑 Support' }
+            ]
+        }, { quoted: msg });
+
+    } catch (error) {
+        console.error('Critical Error in Alive Command:', error);
+    }
+};
 
 module.exports = aliveCommand;

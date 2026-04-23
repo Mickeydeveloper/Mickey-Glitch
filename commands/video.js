@@ -1,123 +1,98 @@
-const axios = require('axios');
+/**
+ * video.js - YouTube Video Downloader (Enhanced & Stylish)
+ */
+
 const yts = require('yt-search');
+const axios = require('axios');
 
-const AXIOS_DEFAULTS = {
-    timeout: 60000,
-    headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*'
-    }
-};
-
-async function tryRequest(getter, attempts = 3) {
-    let lastError;
-    for (let attempt = 1; attempt <= attempts; attempt++) {
-        try {
-            return await getter();
-        } catch (err) {
-            lastError = err;
-            if (attempt < attempts) {
-                await new Promise(r => setTimeout(r, 1000 * attempt));
-            }
-        }
-    }
-    throw lastError;
-}
-
-async function getYupraVideoByUrl(youtubeUrl) {
-    const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/ytv?url=${encodeURIComponent(youtubeUrl)}`;
-    const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-    if (res?.data?.success && res?.data?.data?.download_url) {
-        return {
-            download: res.data.data.download_url,
-            title: res.data.data.title,
-            thumbnail: res.data.data.thumbnail
-        };
-    }
-    throw new Error('Yupra returned no download');
-}
-
-async function getOkatsuVideoByUrl(youtubeUrl) {
-    const apiUrl = `https://okatsu-rolezapiiz.vercel.app/downloader/ytmp4?url=${encodeURIComponent(youtubeUrl)}`;
-    const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-    // shape: { status, creator, url, result: { status, title, mp4 } }
-    if (res?.data?.result?.mp4) {
-        return { download: res.data.result.mp4, title: res.data.result.title };
-    }
-    throw new Error('Okatsu ytmp4 returned no mp4');
-}
-
-async function videoCommand(sock, chatId, message) {
+async function videoCommand(sock, chatId, m, text, options) {
     try {
-        const text = message.message?.conversation || message.message?.extendedTextMessage?.text;
-        const searchQuery = text.split(' ').slice(1).join(' ').trim();
+        const msgText = typeof text === 'string' ? text : "";
+        const query = msgText.trim();
 
-
-        if (!searchQuery) {
-            await sock.sendMessage(chatId, { text: 'What video do you want to download?' }, { quoted: message });
-            return;
+        if (!query) {
+            return await sock.sendMessage(chatId, { 
+                text: '╭━━━━〔 *🎬 MICKEY VIDEO* 〕━━━━┈⊷\n┃\n┃ 📝 *Usage:* `.video [video name]`\n┃ 🎥 *Example:* `.video Essence Music Video`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
+            }, { quoted: m });
         }
 
-        // Determine if input is a YouTube link
-        let videoUrl = '';
-        let videoTitle = '';
-        let videoThumbnail = '';
-        if (searchQuery.startsWith('http://') || searchQuery.startsWith('https://')) {
-            videoUrl = searchQuery;
-        } else {
-            // Search YouTube for the video
-            const { videos } = await yts(searchQuery);
-            if (!videos || videos.length === 0) {
-                await sock.sendMessage(chatId, { text: 'No videos found!' }, { quoted: message });
-                return;
-            }
-            videoUrl = videos[0].url;
-            videoTitle = videos[0].title;
-            videoThumbnail = videos[0].thumbnail;
+        // React: searching
+        await sock.sendMessage(chatId, { react: { text: '🔍', key: m.key } }).catch(() => {});
+        
+        // Show searching status
+        await sock.sendPresenceUpdate('composing', chatId).catch(() => {});
+
+        // 1. SEARCH YOUTUBE
+        const search = await yts(query);
+        const v = search?.videos?.[0];
+        if (!v) {
+            await sock.sendMessage(chatId, { react: { text: '❌', key: m.key } }).catch(() => {});
+            return sock.sendMessage(chatId, { text: '❌ *Sikuipata video hii!* 🎥' }, { quoted: m });
         }
 
-        // Send thumbnail immediately
-        try {
-            const ytId = (videoUrl.match(/(?:youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/) || [])[1];
-            const thumb = videoThumbnail || (ytId ? `https://i.ytimg.com/vi/${ytId}/sddefault.jpg` : undefined);
-            const captionTitle = videoTitle || searchQuery;
-            if (thumb) {
-                await sock.sendMessage(chatId, {
-                    image: { url: thumb },
-                    caption: `*${captionTitle}*\nDownloading...`
-                }, { quoted: message });
-            }
-        } catch (e) { console.error('[VIDEO] thumb error:', e?.message || e); }
+        // React: found
+        await sock.sendMessage(chatId, { react: { text: '✅', key: m.key } }).catch(() => {});
 
+        // Format views
+        const formatViews = (views) => {
+            if (views >= 1000000) return (views / 1000000).toFixed(1) + 'M';
+            if (views >= 1000) return (views / 1000).toFixed(1) + 'K';
+            return views.toString();
+        };
 
-        // Validate YouTube URL
-        let urls = videoUrl.match(/(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?v=|v\/|embed\/|shorts\/|playlist\?list=)?)([a-zA-Z0-9_-]{11})/gi);
-        if (!urls) {
-            await sock.sendMessage(chatId, { text: 'This is not a valid YouTube link!' }, { quoted: message });
-            return;
-        }
+        // 2. ENHANCED CAPTION
+        const caption = `╔═══════════════════════╗\n` +
+            `║  🎬 *VIDEO DOWNLOAD* 🎬  ║\n` +
+            `╚═══════════════════════╝\n\n` +
+            `🎥 *Channel:* \`${v.author.name}\`\n` +
+            `📌 *Title:* \`${v.title}\`\n` +
+            `⏱️ *Duration:* \`${v.timestamp}\`\n` +
+            `👁️ *Views:* \`${formatViews(v.views)}\`\n` +
+            `📅 *Published:* \`${v.ago}\`\n\n` +
+            `🔄 *Inakudownload...* ⬇️\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `_📺 Karibu kidogo... 📺_`;
 
-        // Get video: try Yupra first, then Okatsu fallback
-        let videoData;
-        try {
-            videoData = await getYupraVideoByUrl(videoUrl);
-        } catch (e1) {
-            videoData = await getOkatsuVideoByUrl(videoUrl);
-        }
+        await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: m });
 
-        // Send video directly using the download URL
+        // React: downloading
+        await sock.sendMessage(chatId, { react: { text: '⬇️', key: m.key } }).catch(() => {});
+
+        // 3. DOWNLOAD LOGIC (Nayan API)
+        const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
+        const res = await axios.get(api, { timeout: 60000 });
+
+        // JSON Path fix kulingana na muundo wako
+        const resData = res.data?.data?.data || res.data?.data || res.data;
+        const videoUrl = resData.high || resData.low || resData.url;
+
+        if (!videoUrl) throw new Error('Video link not found');
+
+        // 4. SEND VIDEO
         await sock.sendMessage(chatId, {
-            video: { url: videoData.download },
-            mimetype: 'video/mp4',
-            fileName: `${videoData.title || videoTitle || 'video'}.mp4`,
-            caption: `*${videoData.title || videoTitle || 'Video'}*\n\n> *Mickey Glitch*`
-        }, { quoted: message });
+            video: { url: videoUrl },
+            caption: `✅ *Karibu!* 🎬\n\n_${v.title}_`,
+            mimetype: 'video/mp4'
+        }, { quoted: m });
 
+        // React: success
+        await sock.sendMessage(chatId, { react: { text: '🎬', key: m.key } }).catch(() => {});
 
-    } catch (error) {
-        console.error('[VIDEO] Command Error:', error?.message || error);
-        await sock.sendMessage(chatId, { text: 'Download failed: ' + (error?.message || 'Unknown error') }, { quoted: message });
+    } catch (err) {
+        console.error('[VIDEO] Error:', err.message);
+        
+        // React: error
+        await sock.sendMessage(chatId, { react: { text: '⚠️', key: m.key } }).catch(() => {});
+        
+        let errorMsg = '❌ *Hitilafu! Jaribu tena baadae.*';
+        if (err.message.includes('timeout')) {
+            errorMsg = '⏱️ *API imechelewa. Jaribu tena badaaye.*';
+        } else if (err.message.includes('Video link')) {
+            errorMsg = '🔗 *Download link imeshindwa. Jaribu video nyingine.*';
+        }
+        
+        await sock.sendMessage(chatId, { text: errorMsg }, { quoted: m }).catch(() => {});
     }
 }
 
-module.exports = videoCommand; 
+module.exports = videoCommand;

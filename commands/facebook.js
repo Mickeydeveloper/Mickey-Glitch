@@ -1,75 +1,105 @@
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
+
+/**
+ * Try Hansa API for Facebook downloads
+ */
+async function tryHansaAPI(url) {
+    try {
+        const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/fbdl?url=${encodeURIComponent(url)}`;
+        const res = await axios.get(apiUrl, { timeout: 25000 });
+        const data = res.data;
+        
+        if (!data.success || !data.result) {
+            throw new Error('Hansa: No result in response');
+        }
+        
+        const videoList = data.result.result;
+        if (!Array.isArray(videoList) || videoList.length === 0) {
+            throw new Error('Hansa: No video options found');
+        }
+        
+        // Prioritize 720p HD, else take first available
+        let selectedVideo = videoList.find(v => v.quality.includes('720') || v.quality.includes('HD'));
+        if (!selectedVideo) {
+            selectedVideo = videoList[0];
+        }
+        
+        return {
+            videoUrl: selectedVideo.url,
+            title: data.result.title || "Facebook Video",
+            thumbnail: data.result.thumbnail,
+            quality: selectedVideo.quality
+        };
+    } catch (error) {
+        console.error('[FB Hansa Error]', error.message);
+        throw error;
+    }
+}
 
 async function facebookCommand(sock, chatId, message) {
     try {
         const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
         const url = text.split(' ').slice(1).join(' ').trim();
 
-        if (!url) {
-            return await sock.sendMessage(chatId, { text: 'Please provide a Facebook video URL. Example: .fb https://www.facebook.com/...' }, { quoted: message });
+        if (!url || !url.includes('facebook.com')) {
+            return await sock.sendMessage(chatId, { text: '❌ Weka link ya Facebook. Mfano: .fb https://fb.watch/xyz' }, { quoted: message });
         }
 
-        if (!url.includes('facebook.com')) {
-            return await sock.sendMessage(chatId, { text: 'That is not a Facebook link.' }, { quoted: message });
-        }
+        await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
 
-        await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
-
-        // Call a simple downloader API and pick the first plausible video URL.
-        const apiUrl = `https://api.hanggts.xyz/download/facebook?url=${encodeURIComponent(url)}`;
-        const res = await axios.get(apiUrl, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0' }, validateStatus: s => s >= 200 && s < 500 });
-        const data = res.data || {};
-
-        // Flatten possible locations for the direct video URL
-        const candidates = [];
-        if (data.result?.media?.video_hd) candidates.push(data.result.media.video_hd);
-        if (data.result?.media?.video_sd) candidates.push(data.result.media.video_sd);
-        if (data.result?.url) candidates.push(data.result.url);
-        if (data.result?.download) candidates.push(data.result.download);
-        if (data.result?.video) candidates.push(data.result.video);
-        if (data.data?.url) candidates.push(data.data.url);
-        if (Array.isArray(data.data)) candidates.push(...data.data.map(i => i.url).filter(Boolean));
-        if (data.url) candidates.push(data.url);
-        if (data.download) candidates.push(data.download);
-        if (data.video) candidates.push(typeof data.video === 'string' ? data.video : data.video?.url);
-
-        const fbvid = candidates.find(u => typeof u === 'string' && u.startsWith('http')) || null;
-        const title = data.title || data.result?.title || data.data?.title || 'Facebook Video';
-
-        if (!fbvid) {
-            return await sock.sendMessage(chatId, { text: '❌ Could not find a downloadable video URL. Try another link.' }, { quoted: message });
-        }
-
-        // Try to send by remote URL first
+        let videoData;
         try {
-            await sock.sendMessage(chatId, { video: { url: fbvid }, mimetype: 'video/mp4', caption: title ? `📝 ${title}` : '' }, { quoted: message });
-            return;
+            const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/fbdl?url=${encodeURIComponent(url)}`;
+            const res = await axios.get(apiUrl, { timeout: 25000 });
+            const data = res.data;
+
+            if (!data.status || !data.data) {
+                throw new Error('ASWIN: No status or data in response');
+            }
+            if (!data.data.high && !data.data.low) {
+                throw new Error('ASWIN: No video URLs found');
+            }
+            videoData = {
+                videoUrl: data.data.high || data.data.low,
+                title: data.data.title || "Facebook Video",
+                thumbnail: data.data.thumbnail
+            };
+        } catch (aswinError) {
+            // Fallback to Hansa API
+            try {
+                videoData = await tryHansaAPI(url);
+            } catch (hansaError) {
+                return await sock.sendMessage(chatId, { text: '❌ API zote zimeshindwa. Jaribu tena baadaye.' }, { quoted: message });
+            }
+        }
+
+        const title = videoData.title;
+        const videoUrl = videoData.videoUrl;
+        const thumbnail = videoData.thumbnail;
+
+        if (!videoUrl) {
+            return await sock.sendMessage(chatId, { text: '❌ Imeshindwa kupata link ya kupakua.' }, { quoted: message });
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+
+        // Stream video directly to WhatsApp
+        try {
+            await sock.sendMessage(chatId, {
+                video: { url: videoUrl },
+                mimetype: 'video/mp4',
+                caption: `✅ *Facebook Video Downloader*\n\n*Title:* ${title}`
+            }, { quoted: message });
         } catch (err) {
-            console.error('Sending by URL failed, falling back to download:', err.message);
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Jaribu tena baadae.' });
+            return;
         }
 
-        // Fallback: download to temp file and send
-        const tmpDir = path.join(process.cwd(), 'tmp');
-        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-        const tempFile = path.join(tmpDir, `fb_${Date.now()}.mp4`);
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
-        const videoResp = await axios.get(fbvid, { responseType: 'stream', timeout: 60000, headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.facebook.com/' } });
-        const writer = fs.createWriteStream(tempFile);
-        videoResp.data.pipe(writer);
-        await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
-
-        if (!fs.existsSync(tempFile) || fs.statSync(tempFile).size === 0) {
-            throw new Error('Downloaded file is empty');
-        }
-
-        await sock.sendMessage(chatId, { video: { url: tempFile }, mimetype: 'video/mp4', caption: title ? `📝 ${title}` : '' }, { quoted: message });
-
-        try { fs.unlinkSync(tempFile); } catch (e) { console.error('Temp cleanup failed', e.message); }
-    } catch (error) {
-        console.error('Facebook command error:', error);
-        await sock.sendMessage(chatId, { text: 'An error occurred while processing the Facebook link.' }, { quoted: message });
+    } catch (err) {
+        console.error("FB ERROR:", err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadae.' });
     }
 }
 
