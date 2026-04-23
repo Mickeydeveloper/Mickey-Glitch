@@ -161,9 +161,5 @@ Use .autostatus on|off|view on|off|like on|off`,
     }
 }
 
-module.exports = {
-    autoStatusCommand,
-    handleStatusUpdate,
-    autoLike,
-    autoView
+module.exports = autoStatusCommand; 
 };
