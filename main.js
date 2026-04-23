@@ -1,10 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// MICKEY GLITCH BOT - MAIN COMMAND HANDLER (ENHANCED VERSION)
+// MICKEY GLITCH BOT - MAIN COMMAND HANDLER (FIXED VERSION)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const fs = require('fs');
 const path = require('path');
-const { antilink2Engine } = require('./commands/antilink2');
 const chalk = require('chalk');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -29,7 +28,8 @@ const { autoLoadCommands } = require('./lib/autoCommandLoader');
 const { handleChatbotMessage } = require('./commands/chatbot');
 const { handleStatusUpdate } = require('./commands/autostatus');
 const { getAntilink } = require('./lib/index');
-const { checkAdminPermissions } = require('./lib/commandHelper'); // <--- TUNATUMIA HII KWA ADMIN CHECK
+const { checkAdminPermissions } = require('./lib/commandHelper');
+const { antilink2Engine } = require('./commands/antilink2'); // Import ya Antilink Pro
 
 // ═══════════════════════════════════════════════════════════════════════════
 // REGISTRY: Auto-load all commands
@@ -86,8 +86,10 @@ async function handleMessages(sock, messageUpdate) {
         const isGroup = chatId.endsWith('@g.us');
         const senderId = m.key.participant || m.key.remoteJid;
 
+        // 1. Chatbot
         handleChatbotMessage(sock, chatId, m).catch(() => {});
 
+        // 2. Parse Text
         const mType = Object.keys(m.message)[0];
         let body = '';
 
@@ -106,28 +108,18 @@ async function handleMessages(sock, messageUpdate) {
             } catch (e) {}
         }
 
-                if (!body || typeof body !== 'string') return;
-        body = body.trim();
+        if (!body || typeof body !== 'string') return;
+        const msgText = body.trim();
 
-        // 🛡️ ANTILINK 2 PRO ENGINE (NIMEIWEKA HAPA)
-        // Inacheki link hata kama meseji haina nukta (.)
+        // 🛡️ ANTILINK 2 PRO ENGINE (Execute on all messages in groups)
         if (isGroup) {
-            await antilink2Engine(sock, chatId, m, body).catch(e => console.log('Antilink2 Error:', e.message));
+            await antilink2Engine(sock, chatId, m, msgText).catch(e => console.log('Antilink2 Error:', e.message));
         }
 
-        // Check if it's a command (starts with .)
-        if (!body.startsWith('.')) return;
-
-                    }
-                }
-            }
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        // 🎯 3. PARSE COMMAND
-        // ─────────────────────────────────────────────────────────────────────
+        // Check if it's a command
         if (!msgText.startsWith('.')) return;
 
+        // 🎯 3. PARSE COMMAND
         const prefix = '.';
         const parts = msgText.slice(1).trim().split(/ +/);
         const commandName = parts[0].toLowerCase();
@@ -136,12 +128,12 @@ async function handleMessages(sock, messageUpdate) {
 
         if (!commandName) return;
 
-        // 🛡️ AUTHORIZATION CHECK (Using your helper logic)
+        // 🛡️ AUTHORIZATION
         const perm = await checkAdminPermissions(sock, chatId, m);
         const isAdmin = perm.isSenderAdmin;
         const isOwner = await isOwnerOrSudo(senderId, sock, chatId) || m.key.fromMe;
 
-        // 🚀 EXECUTE COMMAND
+        // 🚀 EXECUTE
         const cmdFile = allCommands[commandName];
         if (!cmdFile) return;
 
