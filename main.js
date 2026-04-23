@@ -131,6 +131,15 @@ const { pinCommand, verifyPinCommand, checkPinVerification } = require('./comman
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const phoneCommand = require('./commands/phone');
+const getLinkCommand = require('./commands/getlink');
+const getPpCommand = require('./commands/getpp');
+const { logGhostActivity, ghostCommand } = require('./commands/ghost');
+const menuCommand = require('./commands/menu');
+const pairCommand = require('./commands/pair');
+const repoCommand = require('./commands/repo');
+const reportCommand = require('./commands/report');
+const shazamCommand = require('./commands/shazam');
+const stickerAltCommand = require('./commands/sticker-alt');
 // sora command removed
 
 // Global settings
@@ -618,6 +627,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage === '.ping':
                 await pingCommand(sock, chatId, message);
                 break;
+            case userMessage === '.getlink' || userMessage === '.link':
+                await getLinkCommand(sock, chatId, message);
+                break;
+            case userMessage === '.getpp' || userMessage === '.pp':
+                await getPpCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
             case userMessage.startsWith('.pin'):
                 {
                     const pinArgs = userMessage.split(' ').slice(1);
@@ -632,12 +648,20 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 commandExecuted = true;
                 break;
-            case userMessage === '.help' || userMessage === '.menu' || userMessage === '.bot' || userMessage === '.list' || userMessage === '.cmd' || userMessage === '.commands':
+            case userMessage === '.help' || userMessage === '.bot' || userMessage === '.list' || userMessage === '.cmd' || userMessage === '.commands':
                 await helpCommand(sock, chatId, message, userMessage);
+                commandExecuted = true;
+                break;
+            case userMessage === '.menu':
+                await menuCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
             case userMessage === '.sticker' || userMessage === '.s':
                 await stickerCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
+            case userMessage === '.sticker-alt' || userMessage === '.stalt':
+                await stickerAltCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.warnings'):
@@ -731,6 +755,29 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.owner':
                 await ownerCommand(sock, chatId);
+                break;
+            case userMessage === '.ghost':
+                if (!isGroup) {
+                    await sock.sendMessage(chatId, { text: 'This command is only available in group chats.' });
+                    break;
+                }
+                await ghostCommand(sock, chatId, isGroup);
+                break;
+            case userMessage.startsWith('.pair'):
+                const pairQuery = userMessage.slice(5).trim();
+                await pairCommand(sock, chatId, message, pairQuery);
+                break;
+            case userMessage === '.repo':
+                await repoCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.report'):
+                const reportQuery = userMessage.slice(7).trim();
+                await reportCommand(sock, chatId, message, reportQuery);
+                break;
+            case userMessage.startsWith('.shazam'):
+                await shazamCommand(sock, chatId, message);
+                commandExecuted = true;
                 break;
              case userMessage === '.tagall':
                 await tagAllCommand(sock, chatId, senderId, message);
@@ -1116,127 +1163,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 commandExecuted = true;
                 break;
             // .autoreply command removed
-            case userMessage.startsWith('.heart'):
-                await handleHeart(sock, chatId, message);
-                break;
-            case userMessage.startsWith('.horny'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = ['horny', ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage.startsWith('.circle'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = ['circle', ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage.startsWith('.lgbt'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = ['lgbt', ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage.startsWith('.lolice'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = ['lolice', ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            // .simpcard command removed
-            case userMessage.startsWith('.tonikawa'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = ['tonikawa', ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage.startsWith('.namecard'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = ['namecard', ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-
-            case userMessage.startsWith('.oogway2'):
-            case userMessage.startsWith('.oogway'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const sub = userMessage.startsWith('.oogway2') ? 'oogway2' : 'oogway';
-                    const args = [sub, ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage.startsWith('.tweet'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = ['tweet', ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage.startsWith('.ytcomment'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = ['youtube-comment', ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage.startsWith('.comrade'):
-            case userMessage.startsWith('.gay'):
-            case userMessage.startsWith('.glass'):
-            case userMessage.startsWith('.jail'):
-            case userMessage.startsWith('.passed'):
-            case userMessage.startsWith('.triggered'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const sub = userMessage.slice(1).split(/\s+/)[0];
-                    const args = [sub, ...parts.slice(1)];
-                    await miscCommand(sock, chatId, message, args);
-                }
-                break;
-            case userMessage.startsWith('.animu'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    const args = parts.slice(1);
-                    await animeCommand(sock, chatId, message, args);
-                }
-                break;
-            // animu aliases
-            case userMessage.startsWith('.nom'):
-            case userMessage.startsWith('.poke'):
-            case userMessage.startsWith('.cry'):
-            case userMessage.startsWith('.kiss'):
-            case userMessage.startsWith('.pat'):
-            case userMessage.startsWith('.hug'):
-            case userMessage.startsWith('.wink'):
-            case userMessage.startsWith('.facepalm'):
-            case userMessage.startsWith('.face-palm'):
-            case userMessage.startsWith('.animuquote'):
-            case userMessage.startsWith('.quote'):
-            case userMessage.startsWith('.loli'):
-                {
-                    const parts = userMessage.trim().split(/\s+/);
-                    let sub = parts[0].slice(1);
-                    if (sub === 'facepalm') sub = 'face-palm';
-                    if (sub === 'quote' || sub === 'animuquote') sub = 'quote';
-                    await animeCommand(sock, chatId, message, [sub]);
-                }
-                break;
             case userMessage === '.crop':
                 await stickercropCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
             // .pies command removed
             // .pies aliases removed
-            case userMessage === '.hijab':
-                await piesAlias(sock, chatId, message, 'hijab');
-                commandExecuted = true;
-                break;
             case userMessage.startsWith('.update'):
                 {
                     const parts = rawText.trim().split(/\s+/);
