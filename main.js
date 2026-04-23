@@ -1,109 +1,163 @@
-// ===================== FIXED MAIN.JS ===================== // Auto-load commands, fix missing exports, handle buttons & admin checks
+require('./settings')
 
-require('./settings') const fs = require('fs') const path = require('path') const chalk = require('chalk')
+const fs = require('fs')
+const path = require('path')
+const chalk = require('chalk')
 
-// ===================== LOAD COMMANDS ===================== const commands = new Map()
-
+// ================= COMMANDS =================
+const commands = new Map()
 const commandsPath = path.join(__dirname, 'commands')
 
-function loadCommands() { const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))
+// LOAD COMMANDS (FILE NAME BASED)
+function loadCommands() {
+    const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))
 
-for (let file of files) {
-    try {
-        const filePath = path.join(commandsPath, file)
-        delete require.cache[require.resolve(filePath)]
+    for (let file of files) {
+        try {
+            const filePath = path.join(commandsPath, file)
+            delete require.cache[require.resolve(filePath)]
 
-        const cmd = require(filePath)
+            const command = require(filePath)
 
-        // skip invalid files
-        if (!cmd || !cmd.name) {
-            console.log(chalk.red(`❌ Skipped (no export): ${file}`))
-            continue
+            if (typeof command !== 'function') {
+                console.log(chalk.red(`❌ Invalid command: ${file}`))
+                continue
+            }
+
+            const name = file.replace('.js', '').toLowerCase()
+
+            commands.set(name, command)
+
+            console.log(chalk.green(`✅ Loaded: ${name}`))
+
+        } catch (err) {
+            console.log(chalk.red(`❌ Error in ${file}: ${err.message}`))
         }
-
-        commands.set(cmd.name, cmd)
-
-        // aliases
-        if (cmd.aliases && Array.isArray(cmd.aliases)) {
-            cmd.aliases.forEach(alias => commands.set(alias, cmd))
-        }
-
-        console.log(chalk.green(`✅ Loaded: ${cmd.name}`))
-    } catch (err) {
-        console.log(chalk.red(`❌ Error in ${file}: ${err.message}`))
     }
-}
 
-console.log(chalk.yellow(`\n🔥 Total Commands Loaded: ${commands.size}`))
-
+    console.log(chalk.yellow(`🔥 Total Commands: ${commands.size}`))
 }
 
 loadCommands()
 
-// ===================== ADMIN CHECK ===================== async function isAdmin(sock, chatId, senderId) { try { const metadata = await sock.groupMetadata(chatId) const participants = metadata.participants || []
+// ================= ADMIN CHECK =================
+async function isAdmin(sock, chatId, sender) {
+    try {
+        const meta = await sock.groupMetadata(chatId)
+        const participants = meta.participants || []
 
-const admins = participants.filter(p => p.admin !== null).map(p => p.id)
+        const admins = participants
+            .filter(p => p.admin !== null)
+            .map(p => p.id)
 
-    return admins.includes(senderId)
-} catch {
-    return false
-}
-
-}
-
-// ===================== MESSAGE HANDLER ===================== async function handleMessage(sock, msg) { try { if (!msg.message) return
-
-const from = msg.key.remoteJid
-    const sender = msg.key.participant || msg.key.remoteJid
-
-    const body = msg.message.conversation ||
-                 msg.message.extendedTextMessage?.text ||
-                 msg.message.buttonsResponseMessage?.selectedButtonId ||
-                 msg.message.listResponseMessage?.singleSelectReply?.selectedRowId || ''
-
-    const prefix = '.'
-    if (!body.startsWith(prefix)) return
-
-    const args = body.slice(prefix.length).trim().split(/ +/)
-    const commandName = args.shift().toLowerCase()
-
-    const command = commands.get(commandName)
-
-    if (!command) return
-
-    // ADMIN CHECK
-    if (command.admin) {
-        const admin = await isAdmin(sock, from, sender)
-        if (!admin) {
-            return sock.sendMessage(from, { text: '❌ This command is for admins only' })
-        }
+        return admins.includes(sender)
+    } catch {
+        return false
     }
-
-    // EXECUTE COMMAND
-    await command.execute({ sock, msg, args })
-
-} catch (err) {
-    console.log(chalk.red('❌ Handler Error:'), err)
 }
 
+// ================= MESSAGE HANDLER =================
+async function handleMessage(sock, msg) {
+    try {
+        if (!msg.message) return
+
+        const from = msg.key.remoteJid
+        const sender = msg.key.participant || from
+
+        const body =
+            msg.message.conversation ||
+            msg.message.extendedTextMessage?.text ||
+            msg.message.buttonsResponseMessage?.selectedButtonId ||
+            msg.message.listResponseMessage?.singleSelectReply?.selectedRowId ||
+            ''
+
+        // ================= AUTO STATUS VIEW =================
+        if (from === 'status@broadcast') {
+            try {
+                await sock.readMessages([msg.key])
+
+                // AUTO LIKE (reaction)
+                await sock.sendMessage(from, {
+                    react: { text: '❤️', key: msg.key }
+                })
+            } catch {}
+            return
+        }
+
+        const prefix = '.'
+        if (!body.startsWith(prefix)) {
+            return chatbot(sock, msg, body)
+        }
+
+        const args = body.slice(prefix.length).trim().split(/ +/)
+        const commandName = args.shift().toLowerCase()
+
+        const command = commands.get(commandName)
+
+        if (!command) return
+
+        // ================= EXECUTE =================
+        await command(sock, from, msg, args)
+
+    } catch (err) {
+        console.log(chalk.red('❌ ERROR:'), err)
+    }
 }
 
-// ===================== BUTTON HANDLER ===================== async function handleButtons(sock, msg) { try { if (!msg.message) return
+// ================= BUTTON HANDLER =================
+async function handleButtons(sock, msg) {
+    try {
+        if (!msg.message) return
 
-const from = msg.key.remoteJid
+        const from = msg.key.remoteJid
 
-    const buttonId = msg.message.buttonsResponseMessage?.selectedButtonId
-    if (!buttonId) return
+        const id = msg.message.buttonsResponseMessage?.selectedButtonId ||
+                   msg.message.listResponseMessage?.singleSelectReply?.selectedRowId
 
-    const command = commands.get(buttonId)
-    if (!command) return
+        if (!id) return
 
-    await command.execute({ sock, msg, args: [] })
+        if (!id.startsWith('.')) return
 
-} catch (err) {
-    console.log(chalk.red('❌ Button Error:'), err)
+        const commandName = id.replace('.', '').toLowerCase()
+
+        const command = commands.get(commandName)
+
+        if (!command) return
+
+        await command(sock, from, msg, [])
+
+    } catch (err) {
+        console.log(chalk.red('❌ BUTTON ERROR:'), err)
+    }
 }
 
+// ================= SIMPLE CHATBOT =================
+async function chatbot(sock, msg, text) {
+    try {
+        if (!text) return
+
+        const from = msg.key.remoteJid
+
+        const lower = text.toLowerCase()
+
+        if (lower === 'hi' || lower === 'hello') {
+            return sock.sendMessage(from, {
+                text: '👋 Hello! Type .menu to see commands'
+            }, { quoted: msg })
+        }
+
+        if (lower.includes('bot')) {
+            return sock.sendMessage(from, {
+                text: '🤖 Yes, I am alive!'
+            }, { quoted: msg })
+        }
+
+    } catch {}
 }
 
-// ===================== EXPORT ===================== module.exports = { handleMessage, handleButtons, loadCommands }
+// ================= EXPORT =================
+module.exports = {
+    handleMessage,
+    handleButtons,
+    loadCommands
+}
