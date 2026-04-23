@@ -9,7 +9,7 @@ const chalk = require('chalk'); // FIX: Nimeongeza hii hapa kuzuia error
  * @command: UPDATE (Bot-Hosting Edition)
  */
 
-async function updateCommand(sock, chatId, message) {
+async function updateCommand(sock, chatId, message, zipUrl) {
     try {
         const isOwner = message.key.fromMe;
         if (!isOwner) return await sock.sendMessage(chatId, { text: "❌ *ACCESS DENIED*" });
@@ -17,7 +17,7 @@ async function updateCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
         
         const repoUrl = "https://github.com/Mickeydeveloper/Mickey-Glitch";
-        const zipUrl = `${repoUrl}/archive/refs/heads/main.zip`;
+        const updateZipUrl = zipUrl || `${repoUrl}/archive/refs/heads/main.zip`;
         const tmpDir = path.join(process.cwd(), 'temp_update');
         const zipPath = path.join(tmpDir, 'bot_update.zip');
         const extractPath = path.join(tmpDir, 'extracted');
@@ -26,7 +26,7 @@ async function updateCommand(sock, chatId, message) {
         fs.ensureDirSync(tmpDir);
 
         // Download
-        const response = await axios({ method: 'get', url: zipUrl, responseType: 'stream' });
+        const response = await axios({ method: 'get', url: updateZipUrl, responseType: 'stream' });
         const writer = fs.createWriteStream(zipPath);
         response.data.pipe(writer);
 
@@ -74,8 +74,4 @@ async function updateCommand(sock, chatId, message) {
     }
 }
 
-module.exports = {
-    name: 'update',
-    category: 'owner',
-    execute: updateCommand
-};
+module.exports = updateCommand;
