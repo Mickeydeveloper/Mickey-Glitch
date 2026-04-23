@@ -3,12 +3,12 @@
  */
 const { setAntilink, getAntilink, removeAntilink } = require('../lib/index');
 
-async function handleAntilinkCommand(sock, chatId, userMessage, message) {
+async function handleAntilinkCommand(sock, chatId, m, text, options) {
     try {
         // 1. CLEAN MESSAGE (Fix kwa .trim error)
-        const msgText = typeof userMessage === 'string' ? userMessage : "";
+        const msgText = typeof text === 'string' ? text : "";
         const args = msgText.trim().split(/\s+/);
-        const action = args[1]?.toLowerCase();
+        const action = args[0]?.toLowerCase();
 
         // 2. CHECK BOT ADMIN STATUS
         const groupMetadata = await sock.groupMetadata(chatId).catch(() => null);
@@ -21,17 +21,17 @@ async function handleAntilinkCommand(sock, chatId, userMessage, message) {
         if (action === 'on') {
             await setAntilink(chatId, 'on', 'delete');
             let resOn = `╭━━━━〔 *ANTILINK ON* 〕━━━━┈⊷\n┃\n┃ ✅ *Hali:* \`ENABLED\`\n┃ 🛡️ *Bot Admin:* ${isBotAdmin ? '`Active ✅`' : '`Missing ❌`'}\n┃ 📌 *Hati:* \`Delete Links\`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
-            return await sock.sendMessage(chatId, { text: resOn }, { quoted: message });
+            return await sock.sendMessage(chatId, { text: resOn }, { quoted: m });
         }
 
         if (action === 'off') {
             await removeAntilink(chatId, 'on');
             let resOff = `╭━━━━〔 *ANTILINK OFF* 〕━━━━┈⊷\n┃\n┃ ✅ *Hali:* \`DISABLED\`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
-            return await sock.sendMessage(chatId, { text: resOff }, { quoted: message });
+            return await sock.sendMessage(chatId, { text: resOff }, { quoted: m });
         }
 
         if (action === 'set') {
-            const mode = args[2]?.toLowerCase();
+            const mode = args[1]?.toLowerCase();
             if (!['delete', 'kick'].includes(mode)) {
                 return await sock.sendMessage(chatId, { text: '⚠️ *Tumia:* `.antilink set delete` au `.antilink set kick`' });
             }
@@ -53,7 +53,7 @@ async function handleAntilinkCommand(sock, chatId, userMessage, message) {
             `┃\n` +
             `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-        return await sock.sendMessage(chatId, { text: menu }, { quoted: message });
+        return await sock.sendMessage(chatId, { text: menu }, { quoted: m });
 
     } catch (e) {
         console.error('Antilink Error:', e.message);

@@ -1,9 +1,9 @@
 const isAdmin = require('../lib/isAdmin');
 
-async function tagAllCommand(sock, chatId, senderId, message, userMessage) {
+async function tagAllCommand(sock, chatId, m, text, options) {
     try {
         // 1. SILENT ADMIN CHECK (Inacheki u-admin wa bot pekee)
-        const adminStatus = await isAdmin(sock, chatId, senderId);
+        const adminStatus = await isAdmin(sock, chatId, m.key?.participant || m.key?.remoteJid);
         
         // --- FREE FOR ALL ---
         // Nimeondoa "if (!isSenderAdmin)" ili kila mtu aweze kutag wote.
@@ -11,7 +11,7 @@ async function tagAllCommand(sock, chatId, senderId, message, userMessage) {
         if (!adminStatus.isBotAdmin) {
             return await sock.sendMessage(chatId, { 
                 text: '⚠️ *Bot lazima iwe admin ili iweze kutag watu wote (Tagall).* ' 
-            }, { quoted: message });
+            }, { quoted: m });
         }
 
         // 2. GET GROUP DATA
@@ -23,7 +23,7 @@ async function tagAllCommand(sock, chatId, senderId, message, userMessage) {
 
         // 3. ANDAA UJUMBE
         // Kama mtumiaji aliandika ".tagall Amkeni", bot itasoma "Amkeni"
-        const args = typeof userMessage === 'string' ? userMessage.split(/\s+/).slice(1).join(' ') : '';
+        const args = typeof text === 'string' ? text.split(/\s+/).slice(1).join(' ') : '';
         const caption = args ? args : '🔔 Amkeni wote! (Everyone wake up!)';
 
         let messageText = `📢 *『 TAG ALL MEMBERS 』*\n\n`;
@@ -39,10 +39,10 @@ async function tagAllCommand(sock, chatId, senderId, message, userMessage) {
         await sock.sendMessage(chatId, {
             text: messageText,
             mentions: participants.map(p => p.id)
-        }, { quoted: message });
+        }, { quoted: m });
 
         // 5. REACT AFTER SUCCESS
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
+        await sock.sendMessage(chatId, { react: { text: '✅', key: m.key } }).catch(() => {});
 
     } catch (error) {
         console.error('Error in tagall command:', error.message);

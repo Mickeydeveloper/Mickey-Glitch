@@ -1,38 +1,58 @@
 /**
- * play.js - YouTube Music with Interactive Buttons
+ * play.js - YouTube Music with Interactive Buttons & Better Info Card
  */
 
 const yts = require('yt-search');
 const axios = require('axios');
 
-async function playCommand(sock, chatId, message, text) {
+async function playCommand(sock, chatId, m, text, options) {
     try {
         const msgText = typeof text === 'string' ? text : "";
-        const args = msgText.trim().split(/\s+/).slice(1);
+        const args = msgText.trim().split(/\s+/);
 
         if (!args.length) {
             return sock.sendMessage(chatId, { 
-                text: '╭━━━〔 *MICKEY MUSIC* 〕━━━┈⊷\n┃ 📝 `.play [song name]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
-            }, { quoted: message });
+                text: '╭━━━〔 *🎵 MICKEY MUSIC PLAYER* 〕━━━┈⊷\n┃\n┃ 📝 *Usage:* `.play [song name]`\n┃ 🎤 *Example:* `.play Essence Wizkid`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
+            }, { quoted: m });
         }
 
         // Show "searching" status
         await sock.sendPresenceUpdate('composing', chatId).catch(() => {});
+        
+        // React: searching
+        await sock.sendMessage(chatId, { react: { text: '🔍', key: m.key } }).catch(() => {});
 
         const query = args.join(' ');
         const search = await yts(query);
         const v = search?.videos?.[0];
-        if (!v) return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' });
+        if (!v) {
+            await sock.sendMessage(chatId, { react: { text: '❌', key: m.key } }).catch(() => {});
+            return sock.sendMessage(chatId, { text: '❌ *Sikuipata nyimbo hii!* 🎵' }, { quoted: m });
+        }
 
-        // Enhanced Caption with Info
-        const caption = `╭━━━━〔 *🎵 PLAYING* 〕━━━━┈⊷\n` +
-            `┃ 🎤 *${v.title}*\n` +
-            `┃ ⏳ Duration: \`${v.timestamp}\`\n` +
-            `┃ 📺 Channel: \`${v.author.name}\`\n` +
-            `┃ 👁️ Views: \`${v.views}\`\n` +
-            `╰━━━━━━━━━━━━━━━━━━━━┈⊷\n\n🔄 Inakudownload...`;
+        // React: found
+        await sock.sendMessage(chatId, { react: { text: '✅', key: m.key } }).catch(() => {});
 
-        await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: message });
+        // PREMIUM SONG CARD - Enhanced UI
+        const formatViews = (views) => {
+            if (views >= 1000000) return (views / 1000000).toFixed(1) + 'M';
+            if (views >= 1000) return (views / 1000).toFixed(1) + 'K';
+            return views.toString();
+        };
+
+        const caption = `╔═══════════════════════╗\n` +
+            `║  🎵 *PLAYING NOW* 🎵  ║\n` +
+            `╚═══════════════════════╝\n\n` +
+            `🎤 *Artist:* \`${v.author.name}\`\n` +
+            `📌 *Title:* \`${v.title}\`\n` +
+            `⏱️ *Duration:* \`${v.timestamp}\`\n` +
+            `👁️ *Views:* \`${formatViews(v.views)}\`\n` +
+            `📅 *Published:* \`${v.ago}\`\n\n` +
+            `🔄 *Inakudownload...* ⬇️\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `_🎧 Enjoy your music! 🎧_`;
+
+        await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: m });
 
         // API Request
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
@@ -46,6 +66,9 @@ async function playCommand(sock, chatId, message, text) {
 
         if (!audioUrl) throw new Error('Audio link not found in API response');
 
+        // React: downloading
+        await sock.sendMessage(chatId, { react: { text: '⬇️', key: m.key } }).catch(() => {});
+
         // Buffer & Send
         const audioRes = await axios.get(audioUrl, { responseType: 'arraybuffer', timeout: 60000 });
         const buffer = Buffer.from(audioRes.data, 'binary');
@@ -58,22 +81,25 @@ async function playCommand(sock, chatId, message, text) {
             mimetype: 'audio/mpeg',
             fileName: fileName,
             ptt: false
-        }, { quoted: message });
+        }, { quoted: m });
 
-        // React with success
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
+        // React: success with music note
+        await sock.sendMessage(chatId, { react: { text: '🎵', key: m.key } }).catch(() => {});
 
     } catch (err) {
         console.error('[PLAY] Error:', err.message);
         
-        let errorMsg = '❌ *Kusoma imeshindwa*';
+        // React: error
+        await sock.sendMessage(chatId, { react: { text: '⚠️', key: m.key } }).catch(() => {});
+        
+        let errorMsg = '❌ *Kusoma imeshindwa*\n\n_Jaribu tena badaaye..._';
         if (err.message.includes('timeout')) {
-            errorMsg = '⏱️ *API imechelewa. Jaribu tena badaaye.*';
+            errorMsg = '⏱️ *API imechelewa.*\n\n_Jaribu nyimbo nyingine au subiri..._';
         } else if (err.message.includes('Audio link')) {
-            errorMsg = '🔗 *Imeshindwa kupata download link. Jaribu song nyingine.*';
+            errorMsg = '🔗 *Download link imeshindwa.*\n\n_Jaribu song nyingine..._';
         }
         
-        await sock.sendMessage(chatId, { text: errorMsg }, { quoted: message }).catch(() => {});
+        await sock.sendMessage(chatId, { text: errorMsg }, { quoted: m }).catch(() => {});
     }
 }
 
