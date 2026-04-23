@@ -4,59 +4,41 @@ const fs = require('fs')
 const path = require('path')
 const chalk = require('chalk')
 
-// ================= COMMANDS =================
 const commands = new Map()
 const commandsPath = path.join(__dirname, 'commands')
+const dbPath = path.join(__dirname, 'database/groups.json')
 
-// LOAD COMMANDS (FILE NAME BASED)
+// ================= LOAD DB =================
+let groupDB = {}
+if (fs.existsSync(dbPath)) {
+    groupDB = JSON.parse(fs.readFileSync(dbPath))
+}
+
+// SAVE DB
+function saveDB() {
+    fs.writeFileSync(dbPath, JSON.stringify(groupDB, null, 2))
+}
+
+// ================= LOAD COMMANDS =================
 function loadCommands() {
     const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))
 
     for (let file of files) {
         try {
-            const filePath = path.join(commandsPath, file)
-            delete require.cache[require.resolve(filePath)]
-
-            const command = require(filePath)
-
-            if (typeof command !== 'function') {
-                console.log(chalk.red(`❌ Invalid command: ${file}`))
-                continue
-            }
+            const cmd = require(path.join(commandsPath, file))
+            if (typeof cmd !== 'function') continue
 
             const name = file.replace('.js', '').toLowerCase()
+            commands.set(name, cmd)
 
-            commands.set(name, command)
-
-            console.log(chalk.green(`✅ Loaded: ${name}`))
-
-        } catch (err) {
-            console.log(chalk.red(`❌ Error in ${file}: ${err.message}`))
+        } catch (e) {
+            console.log('Error:', file)
         }
     }
-
-    console.log(chalk.yellow(`🔥 Total Commands: ${commands.size}`))
 }
-
 loadCommands()
 
-// ================= ADMIN CHECK =================
-async function isAdmin(sock, chatId, sender) {
-    try {
-        const meta = await sock.groupMetadata(chatId)
-        const participants = meta.participants || []
-
-        const admins = participants
-            .filter(p => p.admin !== null)
-            .map(p => p.id)
-
-        return admins.includes(sender)
-    } catch {
-        return false
-    }
-}
-
-// ================= MESSAGE HANDLER =================
+// ================= MESSAGE =================
 async function handleMessage(sock, msg) {
     try {
         if (!msg.message) return
@@ -71,93 +53,69 @@ async function handleMessage(sock, msg) {
             msg.message.listResponseMessage?.singleSelectReply?.selectedRowId ||
             ''
 
-        // ================= AUTO STATUS VIEW =================
+        // ================= AUTO STATUS =================
         if (from === 'status@broadcast') {
-            try {
-                await sock.readMessages([msg.key])
-
-                // AUTO LIKE (reaction)
-                await sock.sendMessage(from, {
-                    react: { text: '❤️', key: msg.key }
-                })
-            } catch {}
+            await sock.readMessages([msg.key])
+            await sock.sendMessage(from, {
+                react: { text: '❤️', key: msg.key }
+            })
             return
         }
 
-        const prefix = '.'
-        if (!body.startsWith(prefix)) {
-            return chatbot(sock, msg, body)
+        // ================= INIT GROUP =================
+        if (!groupDB[from]) {
+            groupDB[from] = {
+                antilink2: false
+            }
+            saveDB()
         }
 
-        const args = body.slice(prefix.length).trim().split(/ +/)
+        // ================= ANTILINK2 AUTO =================
+        if (groupDB[from].antilink2 && body.includes('https://chat.whatsapp.com/')) {
+            try {
+                await sock.sendMessage(from, { delete: msg.key })
+                await sock.sendMessage(from, {
+                    text: '🚫 Link detected! Message deleted.'
+                })
+            } catch {}
+        }
+
+        // ================= COMMAND =================
+        const prefix = '.'
+        if (!body.startsWith(prefix)) return
+
+        const args = body.slice(1).trim().split(/ +/)
         const commandName = args.shift().toLowerCase()
 
         const command = commands.get(commandName)
-
         if (!command) return
 
-        // ================= EXECUTE =================
-        await command(sock, from, msg, args)
+        // PASS DB TO COMMAND
+        await command(sock, from, msg, args, groupDB, saveDB)
 
     } catch (err) {
-        console.log(chalk.red('❌ ERROR:'), err)
+        console.log(err)
     }
 }
 
-// ================= BUTTON HANDLER =================
+// ================= BUTTON =================
 async function handleButtons(sock, msg) {
     try {
-        if (!msg.message) return
-
-        const from = msg.key.remoteJid
-
-        const id = msg.message.buttonsResponseMessage?.selectedButtonId ||
-                   msg.message.listResponseMessage?.singleSelectReply?.selectedRowId
-
+        const id = msg.message?.buttonsResponseMessage?.selectedButtonId
         if (!id) return
 
         if (!id.startsWith('.')) return
 
         const commandName = id.replace('.', '').toLowerCase()
-
         const command = commands.get(commandName)
-
         if (!command) return
 
-        await command(sock, from, msg, [])
-
-    } catch (err) {
-        console.log(chalk.red('❌ BUTTON ERROR:'), err)
-    }
-}
-
-// ================= SIMPLE CHATBOT =================
-async function chatbot(sock, msg, text) {
-    try {
-        if (!text) return
-
-        const from = msg.key.remoteJid
-
-        const lower = text.toLowerCase()
-
-        if (lower === 'hi' || lower === 'hello') {
-            return sock.sendMessage(from, {
-                text: '👋 Hello! Type .menu to see commands'
-            }, { quoted: msg })
-        }
-
-        if (lower.includes('bot')) {
-            return sock.sendMessage(from, {
-                text: '🤖 Yes, I am alive!'
-            }, { quoted: msg })
-        }
+        await command(sock, msg.key.remoteJid, msg, [], groupDB, saveDB)
 
     } catch {}
 }
 
-// ================= EXPORT =================
 module.exports = {
     handleMessage,
-    handleButtons,
-    loadCommands
+    handleButtons
 }
