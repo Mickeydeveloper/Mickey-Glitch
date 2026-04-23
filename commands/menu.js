@@ -91,8 +91,4 @@ const menuCommand = async (sock, chatId, m) => {
 };
 
 // Export kwa ajili ya .menu pekee
-module.exports = {
-    name: 'menu',
-    category: 'main',
-    execute: menuCommand
-};
+module.exports = menuCommand;
