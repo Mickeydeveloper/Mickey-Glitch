@@ -12,27 +12,23 @@ async function muteAllCommand(sock, chatId, m, text, options) {
             }, { quoted: m });
         }
 
-        // Check if user is group admin
-        const groupMeta = await sock.groupMetadata(chatId).catch(() => null);
-        if (!groupMeta) {
-            return await sock.sendMessage(chatId, { text: '❌ *Imeshindwa kupata taarifa za kikundi.*' }, { quoted: m });
-        }
-
-        const senderId = m.key.participant || m.key.remoteJid;
-        const userParticipant = groupMeta.participants.find(p => p.id === senderId);
-        const isAdmin = userParticipant?.admin === 'admin' || userParticipant?.admin === 'superadmin';
-        const isBot = m.key.fromMe;
-
-        if (!isAdmin && !isBot && !options?.isOwner) {
+        // CHECK IF USER IS ADMIN
+        if (!options?.isAdmin && !options?.isOwner) {
             return await sock.sendMessage(chatId, { 
                 text: '⚠️ *Wewe lazima uwe admin ili kutumia amri hii!*' 
             }, { quoted: m });
         }
 
         // Check if bot is admin
+        const groupMeta = await sock.groupMetadata(chatId).catch(() => null);
+        if (!groupMeta) {
+            return await sock.sendMessage(chatId, { text: '❌ *Imeshindwa kupata taarifa za kikundi.*' }, { quoted: m });
+        }
+
         const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-        const botParticipant = groupMeta.participants.find(p => p.id === botId || p.id === sock.user.id);
-        const isBotAdmin = botParticipant?.admin === 'admin' || botParticipant?.admin === 'superadmin';
+        const isBotAdmin = groupMeta?.participants?.some(p => 
+            (p.id === botId || p.id === sock.user.id) && (p.admin === 'admin' || p.admin === 'superadmin')
+        ) || false;
 
         if (!isBotAdmin) {
             return await sock.sendMessage(chatId, { 
@@ -40,7 +36,8 @@ async function muteAllCommand(sock, chatId, m, text, options) {
             }, { quoted: m });
         }
 
-        const args = typeof text === 'string' ? text.split(/\s+/) : [];
+        const msgText = typeof text === 'string' ? text.trim() : "";
+        const args = msgText.split(/\s+/);
         const action = args[0]?.toLowerCase();
 
         if (!action || !['on', 'off'].includes(action)) {

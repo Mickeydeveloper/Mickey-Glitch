@@ -1,30 +1,43 @@
 const isAdmin = require('../lib/isAdmin');
+const { checkAdminPermissions } = require('../lib/commandHelper');
 
 async function tagAllCommand(sock, chatId, m, text, options) {
     try {
-        // 1. SILENT ADMIN CHECK (Inacheki u-admin wa bot pekee)
-        const adminStatus = await isAdmin(sock, chatId, m.key?.participant || m.key?.remoteJid);
+        // 1. CHECK ADMIN/USER STATUS
+        const isGroup = chatId.endsWith('@g.us');
+        if (!isGroup) {
+            return await sock.sendMessage(chatId, {
+                text: '⚠️ *Amri hii ni ya makundi tu!*'
+            }, { quoted: m });
+        }
+
+        // Get bot admin status
+        const groupMetadata = await sock.groupMetadata(chatId).catch(() => null);
+        if (!groupMetadata) {
+            return await sock.sendMessage(chatId, {
+                text: '❌ *Imeshindwa kupata taarifa za kikundi.*'
+            }, { quoted: m });
+        }
+
+        const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+        const isBotAdmin = groupMetadata?.participants?.some(p => 
+            (p.id === botId || p.id === sock.user.id) && (p.admin === 'admin' || p.admin === 'superadmin')
+        ) || false;
         
-        // --- FREE FOR ALL ---
-        // Nimeondoa "if (!isSenderAdmin)" ili kila mtu aweze kutag wote.
-        
-        if (!adminStatus.isBotAdmin) {
+        if (!isBotAdmin) {
             return await sock.sendMessage(chatId, { 
-                text: '⚠️ *Bot lazima iwe admin ili iweze kutag watu wote (Tagall).* ' 
+                text: '❌ *Bot lazima iwe admin ili iweze kutag watu wote (Tagall).* ' 
             }, { quoted: m });
         }
 
         // 2. GET GROUP DATA
-        const groupMetadata = await sock.groupMetadata(chatId).catch(() => null);
-        if (!groupMetadata) return;
-
         const participants = groupMetadata.participants || [];
         const groupName = groupMetadata.subject || 'Group';
 
-        // 3. ANDAA UJUMBE
+        // 3. PREPARE MESSAGE
         // Kama mtumiaji aliandika ".tagall Amkeni", bot itasoma "Amkeni"
-        const args = typeof text === 'string' ? text.split(/\s+/).slice(1).join(' ') : '';
-        const caption = args ? args : '🔔 Amkeni wote! (Everyone wake up!)';
+        const msgText = typeof text === 'string' ? text : "";
+        const caption = msgText.trim() ? msgText.trim() : '🔔 Amkeni wote! (Everyone wake up!)';
 
         let messageText = `📢 *『 TAG ALL MEMBERS 』*\n\n`;
         messageText += `👥 *Members:* ${participants.length}\n`;
@@ -35,7 +48,7 @@ async function tagAllCommand(sock, chatId, m, text, options) {
             messageText += `${index + 1}. @${participant.id.split('@')[0]}\n`;
         });
 
-        // 4. TUMA UJUMBE
+        // 4. SEND MESSAGE
         await sock.sendMessage(chatId, {
             text: messageText,
             mentions: participants.map(p => p.id)
