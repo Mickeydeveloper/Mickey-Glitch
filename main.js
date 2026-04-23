@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// MICKEY GLITCH BOT - MAIN COMMAND HANDLER
-// Auto-loads commands, handles chatbot & autostatus automatically
+// MICKEY GLITCH BOT - MAIN COMMAND HANDLER (ENHANCED VERSION)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const fs = require('fs');
@@ -28,6 +27,8 @@ const isOwnerOrSudo = require('./lib/isOwner');
 const { autoLoadCommands } = require('./lib/autoCommandLoader');
 const { handleChatbotMessage } = require('./commands/chatbot');
 const { handleStatusUpdate } = require('./commands/autostatus');
+const { getAntilink } = require('./lib/index');
+const { checkAdminPermissions } = require('./lib/commandHelper'); // <--- TUNATUMIA HII KWA ADMIN CHECK
 
 // ═══════════════════════════════════════════════════════════════════════════
 // REGISTRY: Auto-load all commands
@@ -35,9 +36,6 @@ const { handleStatusUpdate } = require('./commands/autostatus');
 let allCommands = {};
 let commandsLoaded = 0;
 
-/**
- * Load all commands from /commands folder automatically
- */
 function loadCommandRegistry() {
     try {
         const commandsDir = path.join(process.cwd(), 'commands');
@@ -45,11 +43,8 @@ function loadCommandRegistry() {
             console.error(chalk.red('❌ Commands folder not found!'));
             return 0;
         }
-
-        // Use auto-loader to scan and load all commands
         allCommands = autoLoadCommands();
         commandsLoaded = Object.keys(allCommands).length;
-        
         console.log(chalk.green(`✅ Loaded ${commandsLoaded} commands automatically`));
         return commandsLoaded;
     } catch (e) {
@@ -58,18 +53,12 @@ function loadCommandRegistry() {
     }
 }
 
-/**
- * Reload commands after reconnection
- */
 function reloadCommands() {
     try {
         const commandsDir = path.join(process.cwd(), 'commands');
         Object.keys(require.cache).forEach(key => {
-            if (key.includes(commandsDir)) {
-                delete require.cache[key];
-            }
+            if (key.includes(commandsDir)) delete require.cache[key];
         });
-        
         const newCount = loadCommandRegistry();
         console.log(chalk.cyan(`🔄 Commands reloaded: ${newCount} available`));
         return newCount;
@@ -79,19 +68,12 @@ function reloadCommands() {
     }
 }
 
-// Initial load on startup
 loadCommandRegistry();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HANDLERS: Message processor
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Main message handler - processes incoming WhatsApp messages
- * 1. Handles chatbot automatically (async)
- * 2. Parses command text
- * 3. Executes matching commands
- */
 async function handleMessages(sock, messageUpdate) {
     try {
         if (!sock || !sock.user || messageUpdate.type !== 'notify') return;
@@ -103,18 +85,11 @@ async function handleMessages(sock, messageUpdate) {
         const isGroup = chatId.endsWith('@g.us');
         const senderId = m.key.participant || m.key.remoteJid;
 
-        // ─────────────────────────────────────────────────────────────────────
-        // 🤖 1. CHATBOT HANDLER (runs async, non-blocking)
-        // ─────────────────────────────────────────────────────────────────────
         handleChatbotMessage(sock, chatId, m).catch(() => {});
 
-        // ─────────────────────────────────────────────────────────────────────
-        // 📝 2. PARSE MESSAGE TEXT
-        // ─────────────────────────────────────────────────────────────────────
         const mType = Object.keys(m.message)[0];
         let body = '';
 
-        // Extract text from various message types
         if (mType === 'conversation') {
             body = m.message.conversation;
         } else if (mType === 'extendedTextMessage') {
@@ -128,112 +103,93 @@ async function handleMessages(sock, messageUpdate) {
                 const parsed = JSON.parse(m.message.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson);
                 body = parsed.id || parsed.selectedRowId || '';
             } catch (e) {}
-        } else {
-            return; // Ignore other message types
         }
 
         if (!body || typeof body !== 'string') return;
-        body = body.trim();
+        const msgText = body.trim();
 
-        // Check if it's a command (starts with .)
-        if (!body.startsWith('.')) return;
+        // ─────────────────────────────────────────────────────────────────────
+        // 🛡️ ENHANCED ANTILINK ENGINE (ZOTE: WhatsApp, Web, etc.)
+        // ─────────────────────────────────────────────────────────────────────
+        if (isGroup) {
+            // Tumia checkAdminPermissions helper yako
+            const adminCheck = await checkAdminPermissions(sock, chatId, m);
+            
+            // Regex ya link za aina yoyote (http, https, chat.whatsapp, etc.)
+            const linkRegex = /((https?:\/\/)|(www\.))[^\s]+/gi;
+            const hasLink = linkRegex.test(msgText) || msgText.includes('chat.whatsapp.com');
+
+            if (hasLink && !adminCheck.isSenderAdmin && adminCheck.isBotAdmin) {
+                const antilinkConfig = await getAntilink(chatId);
+                
+                if (antilinkConfig && antilinkConfig.status === 'on') {
+                    // Futa meseji mara moja
+                    await sock.sendMessage(chatId, { delete: m.key });
+
+                    // Tekeleza adhabu kulingana na mode (kick au delete tu)
+                    if (antilinkConfig.mode === 'kick') {
+                        await sock.groupParticipantsUpdate(chatId, [senderId], 'remove');
+                        await sock.sendMessage(chatId, { text: `🚫 *Antilink System*\n\nMtumiaji ameondolewa kwa kutuma link.` });
+                    } else {
+                        // Delete pekee bila kutuma msg nyingi kuzuia spam
+                    }
+                }
+            }
+        }
 
         // ─────────────────────────────────────────────────────────────────────
         // 🎯 3. PARSE COMMAND
         // ─────────────────────────────────────────────────────────────────────
+        if (!msgText.startsWith('.')) return;
+
         const prefix = '.';
-        const parts = body.slice(1).trim().split(/ +/);
+        const parts = msgText.slice(1).trim().split(/ +/);
         const commandName = parts[0].toLowerCase();
         const args = parts.slice(1);
-        const textFromMessage = body.slice(prefix.length + commandName.length).trim();
+        const textFromMessage = msgText.slice(prefix.length + commandName.length).trim();
 
         if (!commandName) return;
 
-        // ─────────────────────────────────────────────────────────────────────
-        // 🛡️ 4. AUTHORIZATION CHECK (isAdmin/isOwner)
-        // ─────────────────────────────────────────────────────────────────────
+        // 🛡️ AUTHORIZATION CHECK (Using your helper logic)
+        const perm = await checkAdminPermissions(sock, chatId, m);
+        const isAdmin = perm.isSenderAdmin;
         const isOwner = await isOwnerOrSudo(senderId, sock, chatId) || m.key.fromMe;
-        
-        let isAdmin = false;
-        if (isGroup) {
-            try {
-                const groupMetadata = await sock.groupMetadata(chatId).catch(() => ({}));
-                const participants = groupMetadata.participants || [];
-                const user = participants.find(p => p.id === senderId);
-                isAdmin = user?.admin === 'admin' || user?.admin === 'superadmin' || isOwner;
-            } catch (e) {}
-        }
 
-        // ─────────────────────────────────────────────────────────────────────
-        // 🚀 5. EXECUTE COMMAND
-        // ─────────────────────────────────────────────────────────────────────
+        // 🚀 EXECUTE COMMAND
         const cmdFile = allCommands[commandName];
+        if (!cmdFile) return;
 
-        if (!cmdFile) {
-            return; // Command not found - silent fail
-        }
-
-        // Owner-only commands restriction
         const ownerOnly = ['setpp', 'update', 'broadcast', 'cleartmp', 'admin', 'restart'];
         if (ownerOnly.includes(commandName) && !isOwner) {
-            await sock.sendMessage(chatId, { text: '❌ Owner only' }, { quoted: m }).catch(() => {});
+            await sock.sendMessage(chatId, { text: '❌ Owner tu ndio wanaweza!' }, { quoted: m }).catch(() => {});
             return;
         }
 
-        // Execute command asynchronously without blocking
         setImmediate(async () => {
             try {
-                // Determine command timeout based on type
-                let timeout = 20000; // Default 20s
-                if (commandName.includes('play') || commandName.includes('video') || 
-                    commandName.includes('download') || commandName.includes('youtube')) {
-                    timeout = 60000; // 60s for heavy downloads
-                } else if (commandName.includes('button') || commandName.includes('menu')) {
-                    timeout = 5000; // 5s for quick responses
-                }
+                let timeout = 20000;
+                if (commandName.includes('play') || commandName.includes('video')) timeout = 60000;
 
-                // Determine how to call the command (handle both patterns)
                 let commandFn = null;
-                
-                // Pattern 1: Direct function export (e.g., module.exports = addCommand;)
                 if (typeof cmdFile === 'function') {
                     commandFn = cmdFile;
-                } 
-                // Pattern 2: Object with execute method (e.g., module.exports = { execute, name, ... })
-                else if (cmdFile.execute && typeof cmdFile.execute === 'function') {
+                } else if (cmdFile.execute && typeof cmdFile.execute === 'function') {
                     commandFn = cmdFile.execute;
-                }
-                // Pattern 3: Object with named function matching command name
-                else {
+                } else {
                     const camelCaseName = commandName + 'Command';
-                    const pascalCaseName = commandName.charAt(0).toUpperCase() + commandName.slice(1) + 'Command';
-                    
                     if (cmdFile[camelCaseName] && typeof cmdFile[camelCaseName] === 'function') {
                         commandFn = cmdFile[camelCaseName];
-                    } else if (cmdFile[pascalCaseName] && typeof cmdFile[pascalCaseName] === 'function') {
-                        commandFn = cmdFile[pascalCaseName];
                     }
                 }
 
-                if (!commandFn) {
-                    console.error(chalk.red(`❌ Command [${commandName}] has no callable function`));
-                    return;
-                }
+                if (!commandFn) return;
 
-                // Execute with timeout protection
                 await Promise.race([
-                    commandFn(sock, chatId, m, textFromMessage, { 
-                        args, 
-                        isAdmin, 
-                        isOwner, 
-                        commandName 
-                    }),
-                    new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Command timeout')), timeout)
-                    )
+                    commandFn(sock, chatId, m, textFromMessage, { args, isAdmin, isOwner, commandName }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
                 ]);
             } catch (err) {
-                if (!err.message.includes('timeout')) {
+                if (!err.message.includes('Timeout')) {
                     console.error(chalk.red(`❌ Error in [${commandName}]:`), err.message);
                 }
             }
@@ -244,14 +200,9 @@ async function handleMessages(sock, messageUpdate) {
     }
 }
 
-/**
- * Status/AutoStatus handler - processes status updates
- */
 async function handleStatus(sock, messageUpdate) {
     try {
-        // Check if it's a status message
         if (messageUpdate.key?.remoteJid === 'status@broadcast' && messageUpdate?.messages?.length) {
-            // Call autostatus handler
             await handleStatusUpdate(sock, messageUpdate).catch(() => {});
         }
     } catch (e) {
@@ -259,11 +210,8 @@ async function handleStatus(sock, messageUpdate) {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// EXPORT: Make handlers available to server
-// ═══════════════════════════════════════════════════════════════════════════
 module.exports = { 
     handleMessages, 
     handleStatus,
-    reloadCommands  // Export reload function for reconnection events
+    reloadCommands 
 };
