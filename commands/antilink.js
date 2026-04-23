@@ -1,5 +1,5 @@
 /**
- * antilink.js - Monitor and delete group links (Stylish)
+ * antilink.js - Monitor and delete group links (Stylish & Fixed)
  */
 const { setAntilink, getAntilink, removeAntilink } = require('../lib/index');
 const { checkAdminPermissions, requireAdmin, requireBotAdmin } = require('../lib/commandHelper');
@@ -7,18 +7,28 @@ const { checkAdminPermissions, requireAdmin, requireBotAdmin } = require('../lib
 async function handleAntilinkCommand(sock, chatId, m, text, options) {
     try {
         // 1. CHECK ADMIN PERMISSIONS
-        const adminCheck = await checkAdminPermissions(sock, chatId, m, options);
-        
+        // Tunahakikisha anayetumia ni Admin wa group au Owner wa bot
         if (!options.isAdmin && !options.isOwner) {
             return await sock.sendMessage(chatId, {
                 text: '⚠️ *Wewe lazima uwe admin ili kutumia amri hii!*'
             }, { quoted: m });
         }
 
-        // 2. PARSE COMMAND
+        // 2. PARSE COMMAND (Marekebisho hapa)
         const msgText = typeof text === 'string' ? text.trim() : "";
-        const args = msgText.split(/\s+/);
-        const action = args[0]?.toLowerCase();
+        const args = msgText.split(/\s+/); // Inagawa maneno kwa nafasi (space)
+        
+        /* Kama main file inatuma text ikiwa na neno ".antilink", 
+           tunachukua neno linalofuata kama 'action'.
+        */
+        let action = args[0]?.toLowerCase();
+
+        // Kama action ya kwanza ni ".antilink", sogea neno la pili
+        if (action.includes('antilink') && args.length > 1) {
+            action = args[1].toLowerCase();
+        } else if (action.includes('antilink') && args.length === 1) {
+            action = "menu"; // Onyesha menu kama kaandika ".antilink" pekee
+        }
 
         // 3. CHECK BOT ADMIN STATUS
         const groupMetadata = await sock.groupMetadata(chatId).catch(() => null);
@@ -45,7 +55,9 @@ async function handleAntilinkCommand(sock, chatId, m, text, options) {
         }
 
         if (action === 'set') {
-            const mode = args[1]?.toLowerCase();
+            // Kama ni "set", angalia neno linalofuata (delete/kick)
+            let mode = args.includes('set') ? args[args.indexOf('set') + 1]?.toLowerCase() : args[1]?.toLowerCase();
+            
             if (!['delete', 'kick'].includes(mode)) {
                 return await sock.sendMessage(chatId, { text: '⚠️ *Tumia:* `.antilink set delete` au `.antilink set kick`' }, { quoted: m });
             }
@@ -55,7 +67,7 @@ async function handleAntilinkCommand(sock, chatId, m, text, options) {
             return;
         }
 
-        // 5. EXTENDED MENU (Kama hajaandika on/off)
+        // 5. EXTENDED MENU (Kama action haijaeleweka au ni ".antilink" pekee)
         const menu = 
             `╭━━━━〔 *ANTILINK SETTINGS* 〕━━━━┈⊷\n` +
             `┃\n` +
@@ -63,7 +75,7 @@ async function handleAntilinkCommand(sock, chatId, m, text, options) {
             `┃ • \`.antilink on\` - Washa\n` +
             `┃ • \`.antilink off\` - Zima\n` +
             `┃ • \`.antilink set delete\` - Futa link\n` +
-            `┃ • \`.antilink set kick\` - Tumaani sender\n` +
+            `┃ • \`.antilink set kick\` - Toa mtu\n` +
             `┃\n` +
             `┃ 🛡️ *Bot Admin Status:* ${isBotAdmin ? '`✅ ACTIVE`' : '`❌ MISSING`'}\n` +
             `┃\n` +
