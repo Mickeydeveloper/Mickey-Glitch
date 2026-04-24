@@ -1,86 +1,100 @@
 /**
- * commands/video.js - Mickey Video Downloader
- * Export format: module.exports = videoCommand;
+ * playvideo.js - NAYAN VIDEO PLAYER
+ * Uses: /alldown API (high quality video)
  */
 
 const yts = require('yt-search');
 const axios = require('axios');
 
-async function videoCommand(sock, chatId, m, text) {
+async function playVideoCommand(sock, chatId, message, args) {
+    const query = Array.isArray(args) ? args.join(' ') : args;
+
+    // ❌ No input
+    if (!query) {
+        return sock.sendMessage(chatId, {
+            text: '╭━━━━〔 *MICKEY VIDEO* 〕━━━━┈⊷\n┃ 📝 `.video [jina la wimbo]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷'
+        }, { quoted: message });
+    }
+
+    // 🔍 Searching
+    await sock.sendMessage(chatId, {
+        react: { text: '🔍', key: message.key }
+    }).catch(() => {});
+
     try {
-        const msgText = typeof text === 'string' ? text : "";
-
-        // Tunakata neno la kwanza (.video) na kuchukua jina la video lilobaki
-        const args = msgText.trim().split(/\s+/).slice(1);
-        const query = args.join(' ');
-
-        if (!query) {
-            return await sock.sendMessage(chatId, { 
-                text: '╭━━━━〔 *🎬 MICKEY VIDEO* 〕━━━━┈⊷\n┃\n┃ 📝 *Usage:* `.video [jina la video]`\n┃ 🎥 *Example:* `.video kofia`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
-            }, { quoted: m });
-        }
-
-        // 1. Reaction ya kuanza utafutaji (Search)
-        await sock.sendMessage(chatId, { react: { text: '🔍', key: m.key } }).catch(() => {});
-
+        // 🔎 YouTube search
         const search = await yts(query);
         const v = search?.videos?.[0];
 
         if (!v) {
-            await sock.sendMessage(chatId, { react: { text: '❌', key: m.key } }).catch(() => {});
-            return sock.sendMessage(chatId, { text: '❌ *Sikuipata video hii!* 🎥' }, { quoted: m });
+            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+            return sock.sendMessage(chatId, {
+                text: '❌ *Sikuipata video!*'
+            }, { quoted: message });
         }
 
-        // 2. Reaction ya kupata matokeo (Found)
-        await sock.sendMessage(chatId, { react: { text: '✅', key: m.key } }).catch(() => {});
+        // 🎧 Found
+        await sock.sendMessage(chatId, {
+            react: { text: '🎬', key: message.key }
+        }).catch(() => {});
 
-        const formatViews = (views) => {
-            if (views >= 1000000) return (views / 1000000).toFixed(1) + 'M';
-            if (views >= 1000) return (views / 1000).toFixed(1) + 'K';
-            return views.toString();
-        };
+        // 🖼️ Info
+        await sock.sendMessage(chatId, {
+            image: { url: v.thumbnail },
+            caption:
+                `╭━━━━〔 *PLAY VIDEO* 〕━━━━┈⊷\n` +
+                `┃ 🎬 ${v.title}\n` +
+                `┃ ⏳ ${v.timestamp}\n` +
+                `╰━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: message });
 
-        const caption = `╔═══════════════════════╗\n` +
-            `║  🎬 *VIDEO DOWNLOAD* 🎬  ║\n` +
-            `╚═══════════════════════╝\n\n` +
-            `🎥 *Channel:* \`${v.author.name}\`\n` +
-            `📌 *Title:* \`${v.title}\`\n` +
-            `⏱️ *Duration:* \`${v.timestamp}\`\n` +
-            `👁️ *Views:* \`${formatViews(v.views)}\`\n\n` +
-            `🔄 *Inapakuliwa...* ⬇️\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `_📺 Karibu kidogo... 📺_`;
+        // 📥 Downloading
+        await sock.sendMessage(chatId, {
+            react: { text: '📥', key: message.key }
+        }).catch(() => {});
 
-        // Tuma picha (Thumbnail) bila link
-        await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: m });
-
-        // 3. Reaction ya kuanza kudownload (Downloading)
-        await sock.sendMessage(chatId, { react: { text: '⬇️', key: m.key } }).catch(() => {});
-
-        // API Request (Nayan API)
+        // =========================
+        // 🔥 CALL NAYAN API
+        // =========================
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-        const res = await axios.get(api, { timeout: 60000 });
+        const res = await axios.get(api, { timeout: 30000 });
 
-        // KUSOMA JSON: Tunafuata muundo uleule (res.data.data.data.high)
-        const videoUrl = res.data?.data?.data?.high || res.data?.data?.data?.low;
+        const data = res.data?.data?.data;
 
-        if (!videoUrl) throw new Error('Video link not found in JSON');
+        if (!data) throw new Error("Invalid API response");
 
-        // 4. Tuma Video
+        // 🎯 CHUKUA HIGH VIDEO
+        const videoUrl = data.high;
+
+        if (!videoUrl) throw new Error("No video URL found");
+
+        console.log("VIDEO URL:", videoUrl);
+
+        // =========================
+        // 🎬 SEND VIDEO
+        // =========================
         await sock.sendMessage(chatId, {
             video: { url: videoUrl },
-            caption: `✅ *Tayari!* 🎬\n\n*${v.title}*`,
+            caption: `🎬 ${data.title}`,
             mimetype: 'video/mp4'
-        }, { quoted: m });
+        }, { quoted: message });
 
-        // Reaction ya kumaliza (Success)
-        await sock.sendMessage(chatId, { react: { text: '🎬', key: m.key } }).catch(() => {});
+        // ✅ Success
+        await sock.sendMessage(chatId, {
+            react: { text: '✅', key: message.key }
+        }).catch(() => {});
 
     } catch (err) {
-        console.error('[VIDEO] Error:', err.message);
-        await sock.sendMessage(chatId, { react: { text: '⚠️', key: m.key } }).catch(() => {});
-        await sock.sendMessage(chatId, { text: `❌ *Error:* Imeshindwa kupakua video kutoka server.` }, { quoted: m });
+        console.error("VIDEO ERROR:", err.message);
+
+        await sock.sendMessage(chatId, {
+            react: { text: '❌', key: message.key }
+        }).catch(() => {});
+
+        await sock.sendMessage(chatId, {
+            text: '❌ *Imeshindikana kupakua video kutoka API!*'
+        }, { quoted: message });
     }
 }
 
-module.exports = videoCommand;
+module.exports = VideoCommand;
