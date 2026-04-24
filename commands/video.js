@@ -97,4 +97,4 @@ async function playVideoCommand(sock, chatId, message, args) {
     }
 }
 
-module.exports = VideoCommand;
+module.exports = videoCommand;
