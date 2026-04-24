@@ -83,4 +83,4 @@ async function playCommand(sock, chatId, message, args) {
     }
 }
 
-module.exports = { playCommand };
+module.exports = playCommand;
