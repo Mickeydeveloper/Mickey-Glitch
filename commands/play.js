@@ -1,5 +1,7 @@
 /**
- * play.js - FINAL FIX (Formats API - Direct Googlevideo)
+ * play.js - NAYAN ONLY (HIGH QUALITY)
+ * Uses: /alldown API
+ * Sends: direct URL (no buffer)
  */
 
 const yts = require('yt-search');
@@ -8,82 +10,91 @@ const axios = require('axios');
 async function playCommand(sock, chatId, message, args) {
     const query = Array.isArray(args) ? args.join(' ') : args;
 
+    // ❌ No input
     if (!query) {
         return sock.sendMessage(chatId, {
             text: '╭━━━━〔 *MICKEY MUSIC* 〕━━━━┈⊷\n┃ 📝 `.play [jina la wimbo]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷'
         }, { quoted: message });
     }
 
+    // 🔍 Searching
     await sock.sendMessage(chatId, {
         react: { text: '🔍', key: message.key }
     }).catch(() => {});
 
     try {
-        // 🔎 SEARCH
+        // 🔎 Search YouTube
         const search = await yts(query);
-        const v = search.videos[0];
+        const v = search?.videos?.[0];
 
         if (!v) {
-            return sock.sendMessage(chatId, { text: '❌ Sikuipata!' });
+            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+            return sock.sendMessage(chatId, {
+                text: '❌ *Sikuipata!*'
+            }, { quoted: message });
         }
 
-        // 🎧 INFO
+        // 🎧 Found
+        await sock.sendMessage(chatId, {
+            react: { text: '🎧', key: message.key }
+        }).catch(() => {});
+
+        // 🖼️ Info
         await sock.sendMessage(chatId, {
             image: { url: v.thumbnail },
-            caption: `🎵 ${v.title}\n⏳ ${v.timestamp}`
+            caption:
+                `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
+                `┃ 🎵 ${v.title}\n` +
+                `┃ ⏳ ${v.timestamp}\n` +
+                `╰━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: message });
 
+        // 📥 Downloading
         await sock.sendMessage(chatId, {
             react: { text: '📥', key: message.key }
         }).catch(() => {});
 
         // =========================
-        // 🔥 CALL NEW API
+        // 🔥 CALL NAYAN API
         // =========================
-        const api = `https://nayan-video-downloader.vercel.app/youtube?url=${encodeURIComponent(v.url)}`;
+        const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
         const res = await axios.get(api, { timeout: 30000 });
 
-        const formats = res.data?.data?.data?.formats;
+        const data = res.data?.data?.data;
 
-        if (!formats || !formats.length) {
-            throw new Error("No formats found");
-        }
+        if (!data) throw new Error("Invalid API response");
 
-        // =========================
-        // 🎯 CHAGUA FORMAT YENYE AUDIO
-        // =========================
-        const format =
-            formats.find(f => f.type === "video_with_audio") || formats[0];
+        // 🎯 CHUKUA HIGH QUALITY
+        const audioUrl = data.high;
 
-        const audioUrl = format.url;
+        if (!audioUrl) throw new Error("No high quality URL");
 
-        if (!audioUrl) throw new Error("No valid URL");
-
-        console.log("Selected format:", format.label);
+        console.log("HIGH URL:", audioUrl);
 
         // =========================
-        // 🎵 SEND DIRECT (NO DOWNLOAD)
+        // 🎵 SEND DIRECT (IMPORTANT)
         // =========================
         await sock.sendMessage(chatId, {
             audio: { url: audioUrl },
             mimetype: 'audio/mp4',
-            fileName: `${v.title}.mp3`,
+            fileName: `${data.title}.mp3`,
             ptt: false
         }, { quoted: message });
 
+        // ✅ Success
         await sock.sendMessage(chatId, {
             react: { text: '✅', key: message.key }
-        });
+        }).catch(() => {});
 
     } catch (err) {
-        console.error("PLAY ERROR:", err);
+        console.error("PLAY ERROR:", err.message);
 
         await sock.sendMessage(chatId, {
             react: { text: '❌', key: message.key }
-        });
+        }).catch(() => {});
 
         await sock.sendMessage(chatId, {
-            text: '❌ *Imeshindikana kupata audio (format issue au network)*'
+            text: '❌ *Imeshindikana kupata audio kutoka API!*'
         }, { quoted: message });
     }
 }
