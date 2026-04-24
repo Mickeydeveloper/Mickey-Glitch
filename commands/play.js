@@ -1,5 +1,5 @@
 /**
- * play.js - Mickey Music (Compact & Final API Fix)
+ * play.js - Mickey Music (Exact JSON Path Fix)
  * Export format: module.exports = playCommand;
  */
 
@@ -29,7 +29,6 @@ async function playCommand(sock, chatId, message, args) {
         // 2. Reaction: Found 🎧
         await sock.sendMessage(chatId, { react: { text: '🎧', key: message.key } }).catch(() => {});
 
-        // Compact Info
         const caption = `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
             `┃ 🎵 \`${v.title}\`\n` +
             `┃ ⏳ \`${v.timestamp}\`\n` +
@@ -40,35 +39,30 @@ async function playCommand(sock, chatId, message, args) {
         // 3. Reaction: Download 📥
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } }).catch(() => {});
 
-        // API Request (Flexible Scraper)
+        // API Request kulingana na JSON yako
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-        const res = await axios.get(api, { timeout: 60000 });
+        const res = await axios.get(api);
         
-        // Tunakagua kila uwezekano wa JSON kulingana na ulichotuma
-        let audioUrl = null;
-        const d = res.data;
+        // --- EXACT JSON PATH FIX ---
+        // Muundo wako: res.data -> data (object) -> data (object) -> high
+        let audioUrl = res.data.data.data.high || res.data.data.data.low;
 
-        if (d.data?.data?.high) audioUrl = d.data.data.high;
-        else if (d.data?.data?.low) audioUrl = d.data.data.low;
-        else if (d.data?.url) audioUrl = d.data.url;
-        else if (d.url) audioUrl = d.url;
+        if (!audioUrl) throw new Error("Link missed");
 
-        if (!audioUrl) throw new Error("Link blocked");
-
-        // 4. Download Buffer (With Headers to prevent 403 Forbidden)
+        // 4. Download Buffer (With Headers)
         const audioRes = await axios({
             method: 'get',
             url: audioUrl,
             responseType: 'arraybuffer',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Referer': 'https://nayan-video-downloader.vercel.app/'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+                'Accept': '*/*'
             }
         });
 
         const buffer = Buffer.from(audioRes.data, 'binary');
 
-        // Tuma Audio Safi
+        // Tuma Audio
         await sock.sendMessage(chatId, {
             audio: buffer,
             mimetype: 'audio/mpeg',
@@ -83,7 +77,7 @@ async function playCommand(sock, chatId, message, args) {
         console.error('Play Error:', err.message);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
         await sock.sendMessage(chatId, { 
-            text: '❌ *Server imekataa kuleta audio sasa hivi. Jaribu tena!*' 
+            text: '❌ *API imeshindwa kutoa audio. Jaribu tena!*' 
         }, { quoted: message });
     }
 }
