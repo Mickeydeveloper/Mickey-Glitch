@@ -42,7 +42,6 @@ const { autoBioCommand } = require('./commands/autobio');
 
 // Command imports
 const tagAllCommand = require('./commands/tagall');
-const helpCommand = require('./commands/help');
 const banCommand = require('./commands/ban');
 const addCommand = require('./commands/add');
 const { promoteCommand } = require('./commands/promote');
@@ -90,7 +89,6 @@ const antibadwordCommand = require('./commands/antibadword');
 const takeCommand = require('./commands/take');
 // flirt command removed
 const characterCommand = require('./commands/character');
-const wastedCommand = require('./commands/wasted');
 const resetlinkCommand = require('./commands/resetlink');
 const staffCommand = require('./commands/staff');
 const unbanCommand = require('./commands/unban');
@@ -130,12 +128,10 @@ const { anticallCommand, readState: readAnticallState } = require('./commands/an
 const { pinCommand, verifyPinCommand, checkPinVerification } = require('./commands/pin');
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
-const phoneCommand = require('./commands/phone');
 const getLinkCommand = require('./commands/getlink');
 const getPpCommand = require('./commands/getpp');
 const { logGhostActivity, ghostCommand } = require('./commands/ghost');
 const menuCommand = require('./commands/menu');
-const pairCommand = require('./commands/pair');
 const repoCommand = require('./commands/repo');
 const reportCommand = require('./commands/report');
 const shazamCommand = require('./commands/shazam');
