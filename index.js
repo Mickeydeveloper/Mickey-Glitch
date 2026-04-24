@@ -62,7 +62,7 @@ async function startMickeyBot() {
 
         const Mickey = makeWASocket({
             version,
-            logger: pino({ level: "silent" }),
+            logger: pino({ level: "info" }),
             printQRInTerminal: !pairingCode,
             browser: ["Ubuntu", "Chrome", "20.0.04"],
             auth: {
