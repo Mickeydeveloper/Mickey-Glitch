@@ -1,10 +1,11 @@
 /**
- * play.js - NAYAN API (FIXED WITH BUFFER)
- * Uses mp4 audio stream (working)
+ * play.js - ULTIMATE VERSION
+ * Nayan API + Direct URL + ytdl fallback
  */
 
 const yts = require('yt-search');
 const axios = require('axios');
+const ytdl = require('ytdl-core');
 
 async function playCommand(sock, chatId, message, args) {
     const query = Array.isArray(args) ? args.join(' ') : args;
@@ -15,12 +16,13 @@ async function playCommand(sock, chatId, message, args) {
         }, { quoted: message });
     }
 
+    // 🔍 Searching
     await sock.sendMessage(chatId, {
         react: { text: '🔍', key: message.key }
     }).catch(() => {});
 
     try {
-        // 🔎 Search
+        // 🔎 Search YouTube
         const search = await yts(query);
         const v = search?.videos?.[0];
 
@@ -29,6 +31,7 @@ async function playCommand(sock, chatId, message, args) {
             return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' });
         }
 
+        // 🎧 Found
         await sock.sendMessage(chatId, {
             react: { text: '🎧', key: message.key }
         }).catch(() => {});
@@ -43,64 +46,75 @@ async function playCommand(sock, chatId, message, args) {
                 `╰━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: message });
 
+        // 📥 Downloading
         await sock.sendMessage(chatId, {
             react: { text: '📥', key: message.key }
         }).catch(() => {});
 
-        // =========================
-        // 🔥 NAYAN API
-        // =========================
-        const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-        const res = await axios.get(api, { timeout: 30000 });
-
-        const data = res.data?.data?.data;
-
-        if (!data) throw new Error("Invalid API response");
-
-        // 🎯 chukua low (ndogo = faster)
-        const audioUrl = data.low || data.high;
-
-        if (!audioUrl) throw new Error("No download URL");
+        let audioUrl = null;
 
         // =========================
-        // 🔥 DOWNLOAD BUFFER
+        // 🔥 1. NAYAN API (PRIMARY)
         // =========================
-        const audioRes = await axios({
-            method: 'get',
-            url: audioUrl,
-            responseType: 'arraybuffer',
-            timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0',
-                'Accept': '*/*'
+        try {
+            const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
+            const res = await axios.get(api, { timeout: 30000 });
+
+            const data = res.data?.data?.data;
+
+            if (data?.low || data?.high) {
+                audioUrl = data.low || data.high;
             }
-        });
 
-        const buffer = Buffer.from(audioRes.data);
+        } catch (e) {
+            console.log("Nayan API failed:", e.message);
+        }
 
         // =========================
-        // 🎵 SEND AUDIO (MP4 AUDIO)
+        // 🎵 2. SEND DIRECT URL (BEST)
         // =========================
-        await sock.sendMessage(chatId, {
-            audio: buffer,
-            mimetype: 'audio/mp4',
-            fileName: `${data.title}.mp3`,
-            ptt: false
-        }, { quoted: message });
+        if (audioUrl && audioUrl.startsWith('http')) {
+            await sock.sendMessage(chatId, {
+                audio: { url: audioUrl },
+                mimetype: 'audio/mp4',
+                fileName: `${v.title}.mp3`,
+                ptt: false
+            }, { quoted: message });
 
+        } else {
+            // =========================
+            // 🔁 3. FALLBACK: YTDL
+            // =========================
+            console.log("Switching to ytdl fallback...");
+
+            const stream = ytdl(v.url, {
+                filter: 'audioonly',
+                quality: 'highestaudio',
+                highWaterMark: 1 << 25
+            });
+
+            await sock.sendMessage(chatId, {
+                audio: stream,
+                mimetype: 'audio/mpeg',
+                fileName: `${v.title}.mp3`,
+                ptt: false
+            }, { quoted: message });
+        }
+
+        // ✅ Success
         await sock.sendMessage(chatId, {
             react: { text: '✅', key: message.key }
         }).catch(() => {});
 
     } catch (err) {
-        console.error('Play Error:', err.message);
+        console.error('Play Error:', err);
 
         await sock.sendMessage(chatId, {
             react: { text: '❌', key: message.key }
         }).catch(() => {});
 
         await sock.sendMessage(chatId, {
-            text: '❌ *Audio imegoma (API au format issue)*'
+            text: '❌ *Imeshindikana kupata audio (API + fallback zote zimegoma)*'
         }, { quoted: message });
     }
 }
