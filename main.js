@@ -434,7 +434,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                                 const globalIndex = (page - 1) * per + (n - 1);
                                 if (globalIndex >= 0 && globalIndex < commands.length) {
                                     const cmdName = commands[globalIndex];
-                                    await helpCommand.sock, chatId, message, `.help ${cmdName}`);
+                                    await helpCommand(sock, chatId, message, `.help ${cmdName}`);
                                     return;
                                 }
                             }
