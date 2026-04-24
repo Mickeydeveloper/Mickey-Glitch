@@ -1,5 +1,5 @@
 /**
- * play.js - Mickey Music (Nayan JSON Optimized)
+ * play.js - Mickey Music (Fixed & Robust API)
  * Export format: module.exports = playCommand;
  */
 
@@ -8,7 +8,6 @@ const axios = require('axios');
 
 async function playCommand(sock, chatId, message, text) {
     try {
-        // Hakikisha tunapata maneno ya utafutaji (Search Query)
         const msgText = typeof text === 'string' ? text : "";
         const args = msgText.trim().split(/\s+/).slice(1);
         const query = args.join(' ');
@@ -19,53 +18,52 @@ async function playCommand(sock, chatId, message, text) {
             }, { quoted: message });
         }
 
-        // 1. Reaction ya kuanza utafutaji
         await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } }).catch(() => {});
 
         const search = await yts(query);
         const v = search?.videos?.[0];
-        
+
         if (!v) {
             await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
             return sock.sendMessage(chatId, { text: '❌ *Sikuupata wimbo huu!*' });
         }
 
-        // 2. Reaction ya kupata matokeo
         await sock.sendMessage(chatId, { react: { text: '🎧', key: message.key } }).catch(() => {});
 
         const caption = `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
-            `┃ 🎵 *Title:* \`${v.title}\`\n` +
-            `┃ ⏳ *Time:* \`${v.timestamp}\`\n` +
-            `╰━━━━━━━━━━━━━━━━━━━━┈⊷\n\n*Inashusha audio...* 📥`;
+            `┃ 🎵 \`${v.title}\`\n` +
+            `┃ ⏳ \`${v.timestamp}\`\n` +
+            `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-        // TUMA PREVIEW (Picha na Maelezo tu, Bila Link wala Buttons)
-        await sock.sendMessage(chatId, {
-            image: { url: v.thumbnail },
-            caption: caption
-        }, { quoted: message });
+        await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: message });
 
-        // 3. Reaction ya kuanza kudownload
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } }).catch(() => {});
 
-        // API Request kulingana na JSON uliyotoa
+        // API Request kwa muundo wa JSON uliotoa
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-        const res = await axios.get(api, { timeout: 60000 });
-        
-        // KUSOMA JSON: Tunafuata muundo: res.data -> data -> data -> high
-        const audioUrl = res.data?.data?.data?.high || res.data?.data?.data?.low;
+        const res = await axios.get(api);
 
-        if (!audioUrl) {
-            throw new Error("Download link missing from JSON");
-        }
+        // --- JSON ROBUST PICKER ---
+        let audioUrl = res.data?.data?.data?.high || 
+                       res.data?.data?.data?.low || 
+                       res.data?.data?.url || 
+                       res.data?.url;
 
-        // 4. Download Audio Buffer
-        const audioRes = await axios.get(audioUrl, { 
+        if (!audioUrl) throw new Error("Link not found in JSON");
+
+        // --- BUFFER DOWNLOAD WITH HEADERS (FIX KWA ERROR) ---
+        const audioRes = await axios({
+            method: 'get',
+            url: audioUrl,
             responseType: 'arraybuffer',
-            timeout: 120000 
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Referer': 'https://nayan-video-downloader.vercel.app/'
+            }
         });
+
         const buffer = Buffer.from(audioRes.data, 'binary');
 
-        // TUMA AUDIO
         await sock.sendMessage(chatId, {
             audio: buffer,
             mimetype: 'audio/mpeg',
@@ -73,14 +71,13 @@ async function playCommand(sock, chatId, message, text) {
             ptt: false
         }, { quoted: message });
 
-        // 5. Reaction ya kumaliza
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
 
     } catch (err) {
         console.error('Play Error:', err.message);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
         await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu!* Imeshindwa kupata audio kutoka kwa server.' 
+            text: '❌ *Hitilafu!* Link ya audio imekataliwa na server. Jaribu tena baadae.' 
         }, { quoted: message });
     }
 }
