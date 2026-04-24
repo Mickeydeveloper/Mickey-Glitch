@@ -1,10 +1,10 @@
 /**
- * play.js - ULTRA STABLE (NO API VERSION)
- * Uses ytdl-core (direct YouTube audio)
+ * play.js - NAYAN API (FIXED WITH BUFFER)
+ * Uses mp4 audio stream (working)
  */
 
 const yts = require('yt-search');
-const ytdl = require('ytdl-core');
+const axios = require('axios');
 
 async function playCommand(sock, chatId, message, args) {
     const query = Array.isArray(args) ? args.join(' ') : args;
@@ -20,6 +20,7 @@ async function playCommand(sock, chatId, message, args) {
     }).catch(() => {});
 
     try {
+        // 🔎 Search
         const search = await yts(query);
         const v = search?.videos?.[0];
 
@@ -32,32 +33,58 @@ async function playCommand(sock, chatId, message, args) {
             react: { text: '🎧', key: message.key }
         }).catch(() => {});
 
-        const caption =
-            `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
-            `┃ 🎵 ${v.title}\n` +
-            `┃ ⏳ ${v.timestamp}\n` +
-            `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
-
+        // 🖼️ Info
         await sock.sendMessage(chatId, {
             image: { url: v.thumbnail },
-            caption
+            caption:
+                `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
+                `┃ 🎵 ${v.title}\n` +
+                `┃ ⏳ ${v.timestamp}\n` +
+                `╰━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: message });
 
         await sock.sendMessage(chatId, {
             react: { text: '📥', key: message.key }
         }).catch(() => {});
 
-        // 🔥 STREAM AUDIO DIRECT (NO API)
-        const stream = ytdl(v.url, {
-            filter: 'audioonly',
-            quality: 'highestaudio',
-            highWaterMark: 1 << 25 // avoid buffering issues
+        // =========================
+        // 🔥 NAYAN API
+        // =========================
+        const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
+        const res = await axios.get(api, { timeout: 30000 });
+
+        const data = res.data?.data?.data;
+
+        if (!data) throw new Error("Invalid API response");
+
+        // 🎯 chukua low (ndogo = faster)
+        const audioUrl = data.low || data.high;
+
+        if (!audioUrl) throw new Error("No download URL");
+
+        // =========================
+        // 🔥 DOWNLOAD BUFFER
+        // =========================
+        const audioRes = await axios({
+            method: 'get',
+            url: audioUrl,
+            responseType: 'arraybuffer',
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': '*/*'
+            }
         });
 
+        const buffer = Buffer.from(audioRes.data);
+
+        // =========================
+        // 🎵 SEND AUDIO (MP4 AUDIO)
+        // =========================
         await sock.sendMessage(chatId, {
-            audio: stream,
-            mimetype: 'audio/mpeg',
-            fileName: `${v.title}.mp3`,
+            audio: buffer,
+            mimetype: 'audio/mp4',
+            fileName: `${data.title}.mp3`,
             ptt: false
         }, { quoted: message });
 
@@ -66,14 +93,14 @@ async function playCommand(sock, chatId, message, args) {
         }).catch(() => {});
 
     } catch (err) {
-        console.error('Play Error:', err);
+        console.error('Play Error:', err.message);
 
         await sock.sendMessage(chatId, {
             react: { text: '❌', key: message.key }
         }).catch(() => {});
 
         await sock.sendMessage(chatId, {
-            text: '❌ *Error kupata audio (YouTube blocked au network issue)*'
+            text: '❌ *Audio imegoma (API au format issue)*'
         }, { quoted: message });
     }
 }
