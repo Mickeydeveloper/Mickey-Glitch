@@ -64,19 +64,31 @@ async function playCommand(sock, chatId, message, args) {
 
         if (!data) throw new Error("Invalid API response");
 
-        // 🎯 CHUKUA HIGH QUALITY
-        const audioUrl = data.high;
+        // 🎯 JARIBU HIGH KWANZA (Try high first)
+        let audioUrl = null;
+        let quality = null;
 
-        if (!audioUrl) throw new Error("No high quality URL");
+        if (data.high && data.high.length > 0) {
+            audioUrl = data.high;
+            quality = "HIGH 🔊";
+            console.log("✅ Using HIGH quality:", audioUrl);
+        } else if (data.low && data.low.length > 0) {
+            // Fallback to LOW if HIGH fails
+            audioUrl = data.low;
+            quality = "LOW 📻";
+            console.log("⚠️ HIGH failed, using LOW quality:", audioUrl);
+        }
 
-        console.log("HIGH URL:", audioUrl);
+        if (!audioUrl) throw new Error("❌ Hakuna HIGH wala LOW quality URLs!");
+
+        console.log(`✅ Final URL (${quality}):`, audioUrl);
 
         // =========================
         // 🎵 SEND DIRECT (IMPORTANT)
         // =========================
         await sock.sendMessage(chatId, {
             audio: { url: audioUrl },
-            mimetype: 'audio/mp4',
+            mimetype: 'audio/mpeg',
             fileName: `${data.title}.mp3`,
             ptt: false
         }, { quoted: message });

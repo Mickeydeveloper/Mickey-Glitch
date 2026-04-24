@@ -63,12 +63,24 @@ async function playVideoCommand(sock, chatId, message, args) {
 
         if (!data) throw new Error("Invalid API response");
 
-        // 🎯 CHUKUA HIGH VIDEO
-        const videoUrl = data.high;
+        // 🎯 JARIBU HIGH KWANZA (Try high first)
+        let videoUrl = null;
+        let quality = null;
 
-        if (!videoUrl) throw new Error("No video URL found");
+        if (data.high && data.high.length > 0) {
+            videoUrl = data.high;
+            quality = "HIGH 📹";
+            console.log("✅ Using HIGH quality:", videoUrl);
+        } else if (data.low && data.low.length > 0) {
+            // Fallback to LOW if HIGH fails
+            videoUrl = data.low;
+            quality = "LOW 📺";
+            console.log("⚠️ HIGH failed, using LOW quality:", videoUrl);
+        }
 
-        console.log("VIDEO URL:", videoUrl);
+        if (!videoUrl) throw new Error("❌ Hakuna HIGH wala LOW quality URLs!");
+
+        console.log(`✅ Final URL (${quality}):`, videoUrl);
 
         // =========================
         // 🎬 SEND VIDEO
@@ -97,4 +109,4 @@ async function playVideoCommand(sock, chatId, message, args) {
     }
 }
 
-module.exports = videoCommand;
+module.exports = playVideoCommand;
