@@ -188,9 +188,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
         if (message.message?.buttonsResponseMessage) {
             const buttonId = message.message.buttonsResponseMessage.selectedButtonId;
             const chatId = message.key.remoteJid;
-            
+
             console.log(`🔘 Button pressed: ${buttonId}`);
-            
+
             // Predefined button handlers
             const buttonHandlers = {
                 'channel': async () => {
@@ -218,7 +218,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     console.error(`Error handling button ${buttonId}:`, e);
                 }
             }
-            
+
             // Handle quick-reply buttons that start with . (commands)
             if (buttonId && (buttonId.startsWith('.') || buttonId === 'msgowner' || buttonId === '.msgowner')) {
                 try {
@@ -237,7 +237,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                         }
                         return;
                     }
-                    
+
                     // Treat button ID as a command (e.g., .meme, .joke)
                     console.log(`🔄 Button command intercepted: ${buttonId}`);
                     userMessage = buttonId.toLowerCase();
@@ -351,7 +351,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // TicTacToe moves disabled (command removed)
 
-        /*  // Basic message response in private chat
+        /* // Basic message response in private chat
           if (!isGroup && (userMessage === 'hi' || userMessage === 'hello' || userMessage === 'bot' || userMessage === 'hlo' || userMessage === 'hey' || userMessage === 'bro')) {
               await sock.sendMessage(chatId, {
                   text: 'Hi, How can I help you?\nYou can use .menu for more info and commands.'
@@ -434,7 +434,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                                 const globalIndex = (page - 1) * per + (n - 1);
                                 if (globalIndex >= 0 && globalIndex < commands.length) {
                                     const cmdName = commands[globalIndex];
-                                    await helpCommand(sock, chatId, message, `.help ${cmdName}`);
+                                    await helpCommand.sock, chatId, message, `.help ${cmdName}`);
                                     return;
                                 }
                             }
@@ -862,23 +862,23 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 const phoneQuery = userMessage.slice(6).trim();
                 await phoneCommand(sock, chatId, message, phoneQuery);
                 break;
-           
+
             // .move command removed
             case userMessage === '.topmembers':
                 topMembers(sock, chatId, isGroup);
                 break;
-           
+
             // .answer command removed
             case userMessage.startsWith('.compliment'):
                 await complimentCommand(sock, chatId, message);
                 break;
-            
+
             // .8ball command removed
             case userMessage.startsWith('.lyrics'):
                 const songTitle = userMessage.split(' ').slice(1).join(' ');
                 await lyricsCommand(sock, chatId, songTitle, message);
                 break;
-           
+
             // .truth command removed
             case userMessage === '.clear':
                 if (isGroup) await clearCommand(sock, chatId);
@@ -982,7 +982,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await wastedCommand(sock, chatId, message);
                 break;
             // .ship command removed
-            
+
             case userMessage === '.resetlink' || userMessage === '.revoke' || userMessage === '.anularlink':
                 if (!isGroup) {
                     await sock.sendMessage(chatId, { text: 'This command can only be used in groups!' }, { quoted: message });
@@ -1115,14 +1115,14 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await facebookCommand(sock, chatId, message);
                 break;
             case userMessage.startsWith('.music'):
-                await playCommand(sock, chatId, message);
+                await playCommand(sock, chatId, message, userMessage);
                 break;
 
             case userMessage.startsWith('.play') || userMessage.startsWith('.mp3') || userMessage.startsWith('.ytmp3') || userMessage.startsWith('.song'):
-                await playCommand(sock, chatId, message);
+                await playCommand(sock, chatId, message, userMessage);
                 break;
             case userMessage.startsWith('.video') || userMessage.startsWith('.ytmp4'):
-                await videoCommand(sock, chatId, message);
+                await videoCommand(sock, chatId, message, userMessage);
                 break;
 
             case userMessage.startsWith('.tiktok') || userMessage.startsWith('.tt'):
