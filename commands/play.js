@@ -1,6 +1,6 @@
 /**
- * play.js - Mickey Music (Dual API: Danscot & Nayan)
- * Muundo: Compact Text + Reactions
+ * play.js - Mickey Music (Stable Dual API Version)
+ * Fixed: Audio not sending / API parsing / Buffer crash
  */
 
 const yts = require('yt-search');
@@ -8,93 +8,117 @@ const axios = require('axios');
 
 async function playCommand(sock, chatId, message, args) {
     const query = Array.isArray(args) ? args.join(' ') : args;
-    
+
+    // ❌ Hakuna query
     if (!query) {
-        return sock.sendMessage(chatId, { 
-            text: '╭━━━━〔 *MICKEY MUSIC* 〕━━━━┈⊷\n┃ 📝 `.play [jina la wimbo]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
+        return sock.sendMessage(chatId, {
+            text: '╭━━━━〔 *MICKEY MUSIC* 〕━━━━┈⊷\n┃ 📝 `.play [jina la wimbo]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷'
         }, { quoted: message });
     }
 
-    // 1. Reaction: Search 🔍
-    await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } }).catch(() => {});
+    // 🔍 Reaction: Searching
+    await sock.sendMessage(chatId, {
+        react: { text: '🔍', key: message.key }
+    }).catch(() => {});
 
     try {
+        // 🔎 Search YouTube
         const search = await yts(query);
         const v = search?.videos?.[0];
+
         if (!v) {
             await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-            return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' });
+            return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' }, { quoted: message });
         }
 
-        // 2. Reaction: Found 🎧
-        await sock.sendMessage(chatId, { react: { text: '🎧', key: message.key } }).catch(() => {});
+        // 🎧 Reaction: Found
+        await sock.sendMessage(chatId, {
+            react: { text: '🎧', key: message.key }
+        }).catch(() => {});
 
-        const caption = `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
-            `┃ 🎵 \`${v.title}\`\n` +
-            `┃ ⏳ \`${v.timestamp}\`\n` +
+        // 🖼️ Send Thumbnail + Info
+        const caption =
+            `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
+            `┃ 🎵 ${v.title}\n` +
+            `┃ ⏳ ${v.timestamp}\n` +
+            `┃ 👤 ${v.author.name}\n` +
             `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-        await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: message });
+        await sock.sendMessage(chatId, {
+            image: { url: v.thumbnail },
+            caption
+        }, { quoted: message });
 
-        // 3. Reaction: Download 📥
-        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } }).catch(() => {});
+        // 📥 Reaction: Downloading
+        await sock.sendMessage(chatId, {
+            react: { text: '📥', key: message.key }
+        }).catch(() => {});
 
         let audioUrl = null;
 
-        // --- Mfumo wa API ya 1: DANSCOT (Kutoka kwenye picha) ---
+        // =========================
+        // 🔹 API 1: DANSCOT (FIXED)
+        // =========================
         try {
             const danscotApi = `https://api.danscot.dev/api/youtube/downl/?url=${encodeURIComponent(v.url)}&fmt=mp3`;
             const resD = await axios.get(danscotApi, { timeout: 30000 });
-            if (resD.data?.results?.download_url) {
-                audioUrl = resD.data.results.download_url;
-            }
+
+            audioUrl =
+                resD.data?.result?.url ||
+                resD.data?.data?.download ||
+                null;
+
         } catch (e) {
-            console.log("Danscot API failed, trying Nayan...");
+            console.log("Danscot API failed:", e.message);
         }
 
-        // --- Mfumo wa API ya 2: NAYAN (Backup) ---
+        // =========================
+        // 🔹 API 2: NAYAN (AUDIO ONLY)
+        // =========================
         if (!audioUrl) {
             try {
                 const nayanApi = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-                const resN = await axios.get(nayanApi);
-                // Muundo wa JSON uliopita: res.data.data.data.high
-                audioUrl = resN.data?.data?.data?.high || resN.data?.data?.data?.low;
+                const resN = await axios.get(nayanApi, { timeout: 30000 });
+
+                audioUrl =
+                    resN.data?.data?.audio?.url ||
+                    resN.data?.data?.audio ||
+                    null;
+
             } catch (e) {
-                console.log("Nayan API failed too.");
+                console.log("Nayan API failed:", e.message);
             }
         }
 
+        // =========================
+        // ❌ Kama API zote zimefail
+        // =========================
         if (!audioUrl) throw new Error("All APIs failed");
 
-        // 4. Download Buffer (With Headers)
-        const audioRes = await axios({
-            method: 'get',
-            url: audioUrl,
-            responseType: 'arraybuffer',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
-                'Accept': '*/*'
-            }
-        });
-
-        const buffer = Buffer.from(audioRes.data, 'binary');
-
-        // Tuma Audio
+        // =========================
+        // 🎵 SEND AUDIO (NO BUFFER)
+        // =========================
         await sock.sendMessage(chatId, {
-            audio: buffer,
+            audio: { url: audioUrl },
             mimetype: 'audio/mpeg',
             fileName: `${v.title}.mp3`,
             ptt: false
         }, { quoted: message });
 
-        // 5. Reaction: Success ✅
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
+        // ✅ Success Reaction
+        await sock.sendMessage(chatId, {
+            react: { text: '✅', key: message.key }
+        }).catch(() => {});
 
     } catch (err) {
-        console.error('Play Error:', err.message);
-        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
-        await sock.sendMessage(chatId, { 
-            text: '❌ *API zote zimekataa. Jaribu baadae kidogo!*' 
+        console.error('Play Error:', err);
+
+        await sock.sendMessage(chatId, {
+            react: { text: '❌', key: message.key }
+        }).catch(() => {});
+
+        await sock.sendMessage(chatId, {
+            text: '❌ *Imeshindikana kupakua audio. Jaribu tena baadae!*'
         }, { quoted: message });
     }
 }
