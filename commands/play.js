@@ -58,15 +58,25 @@ async function playCommand(sock, chatId, message, args) {
         // 🔥 CALL NAYAN API
         // =========================
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
+        console.log("📡 API Request:", api);
+        
         const res = await axios.get(api, { timeout: 30000 });
+        console.log("✅ API Response Status:", res.status);
+        console.log("📦 Full API Response:", JSON.stringify(res.data, null, 2));
 
         const data = res.data?.data?.data;
 
-        if (!data) throw new Error("Invalid API response");
+        if (!data) {
+            console.error("❌ No data in response:", res.data);
+            throw new Error("Invalid API response");
+        }
 
         // 🎯 JARIBU HIGH KWANZA (Try high first)
         let audioUrl = null;
         let quality = null;
+
+        console.log("🔍 Checking for HIGH quality:", data.high ? "EXISTS" : "MISSING");
+        console.log("🔍 Checking for LOW quality:", data.low ? "EXISTS" : "MISSING");
 
         if (data.high && data.high.length > 0) {
             audioUrl = data.high;
@@ -99,14 +109,16 @@ async function playCommand(sock, chatId, message, args) {
         }).catch(() => {});
 
     } catch (err) {
-        console.error("PLAY ERROR:", err.message);
+        console.error("❌ PLAY ERROR:", err.message);
+        console.error("Full Error:", err);
+        console.error("API Response:", err.response?.data);
 
         await sock.sendMessage(chatId, {
             react: { text: '❌', key: message.key }
         }).catch(() => {});
 
         await sock.sendMessage(chatId, {
-            text: '❌ *Imeshindikana kupata audio kutoka API!*'
+            text: `❌ *Audio Error!*\n\n_Sababu: ${err.message}_`
         }, { quoted: message });
     }
 }
