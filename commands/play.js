@@ -1,85 +1,86 @@
 /**
- * play.js - Mickey Music (Fixed & Robust API)
- * Export format: module.exports = playCommand;
+ * play.js - Nayan API System (Optimized for Messenger)
  */
 
 const yts = require('yt-search');
 const axios = require('axios');
 
-async function playCommand(sock, chatId, message, text) {
+async function playCommand(sock, chatId, message, args) {
+    // 1. Angalia kama kuna jina la wimbo
+    if (!args[0]) {
+        return sock.sendMessage(chatId, { 
+            text: '✨ *MICKEY PLAY*\n\nUsage: `.play [jina la wimbo]`' 
+        }, { quoted: message });
+    }
+
+    // React kuonyesha bot imeanza kazi
+    await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+
     try {
-        const msgText = typeof text === 'string' ? text : "";
-        const args = msgText.trim().split(/\s+/).slice(1);
         const query = args.join(' ');
-
-        if (!query) {
-            return sock.sendMessage(chatId, { 
-                text: '╭━━━━〔 *MICKEY MUSIC* 〕━━━━┈⊷\n┃ 📝 Tumia: `.play [jina la wimbo]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
-            }, { quoted: message });
-        }
-
-        await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } }).catch(() => {});
-
         const search = await yts(query);
-        const v = search?.videos?.[0];
+        const video = search.videos[0];
 
-        if (!v) {
+        // 2. Angalia kama video imepatikana
+        if (!video) {
             await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-            return sock.sendMessage(chatId, { text: '❌ *Sikuupata wimbo huu!*' });
+            return sock.sendMessage(chatId, { text: '❌ *Wimbo haujapatikana!*' }, { quoted: message });
         }
 
-        await sock.sendMessage(chatId, { react: { text: '🎧', key: message.key } }).catch(() => {});
-
-        const caption = `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n` +
-            `┃ 🎵 \`${v.title}\`\n` +
-            `┃ ⏳ \`${v.timestamp}\`\n` +
-            `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
-
-        await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: message });
-
-        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } }).catch(() => {});
-
-        // API Request kwa muundo wa JSON uliotoa
-        const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-        const res = await axios.get(api);
-
-        // --- JSON ROBUST PICKER ---
-        let audioUrl = res.data?.data?.data?.high || 
-                       res.data?.data?.data?.low || 
-                       res.data?.data?.url || 
-                       res.data?.url;
-
-        if (!audioUrl) throw new Error("Link not found in JSON");
-
-        // --- BUFFER DOWNLOAD WITH HEADERS (FIX KWA ERROR) ---
-        const audioRes = await axios({
-            method: 'get',
-            url: audioUrl,
-            responseType: 'arraybuffer',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Referer': 'https://nayan-video-downloader.vercel.app/'
-            }
-        });
-
-        const buffer = Buffer.from(audioRes.data, 'binary');
+        // Muonekano wa Pro (Image + Caption)
+        const caption = `🎵 *MICKEY MUSIC PLAYER*\n\n` +
+            `📝 *Title:* ${video.title}\n` +
+            `👤 *Channel:* ${video.author.name}\n` +
+            `⏳ *Duration:* ${video.timestamp}\n\n` +
+            `*Tulia, audio inashushwa hivi punde...* 🎧`;
 
         await sock.sendMessage(chatId, {
-            audio: buffer,
-            mimetype: 'audio/mpeg',
-            fileName: `${v.title}.mp3`,
-            ptt: false
+            image: { url: video.thumbnail },
+            caption: caption
         }, { quoted: message });
 
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
+        // 3. Mfumo wa API ya Nayan (JSON format)
+        // Tunatumia encodeURIComponent ili kuzuia makosa ya alama kwenye link
+        const nayanApi = `https://nayan-video-downloader.vercel.app/api/ytdl?url=${encodeURIComponent(video.url)}`;
+        
+        const response = await axios.get(nayanApi, {
+            timeout: 120000 // Sekunde 120 kuzuia "Command timeout"
+        });
+
+        // Kuchukua link ya download kutoka kwenye mfumo wa JSON wa Nayan
+        // Kawaida Nayan inarudisha { status: true, title: "...", links: { ... } } au { url: "..." }
+        // Nimetumia mfumo wa mwanzo uliokuwa unatafuta url moja kwa moja
+        const downloadUrl = response.data.url || response.data.result?.url || response.data.links?.audio;
+
+        if (!downloadUrl) {
+            throw new Error("Link ya download haijapatikana kwenye JSON");
+        }
+
+        // 4. Tuma Audio kama File
+        await sock.sendMessage(chatId, {
+            audio: { url: downloadUrl },
+            mimetype: 'audio/mp4',
+            fileName: `${video.title}.mp3`,
+            ptt: false // Inatumwa kama audio file, sio voice note
+        }, { quoted: message });
+
+        // Malizia na reaction ya mafanikio
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error('Play Error:', err.message);
-        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
-        await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu!* Link ya audio imekataliwa na server. Jaribu tena baadae.' 
-        }, { quoted: message });
+        console.error('Play Error Log:', err.message);
+        
+        // Ujumbe wa Error kama ikifeli
+        let errorTxt = '❌ *Error executing play:*';
+        if (err.message.includes('timeout')) {
+            errorTxt = '❌ *Error:* Command timeout (Mtandao uko slow).';
+        } else {
+            errorTxt = `❌ *Error:* Imeshindwa kupata audio.\n*(API huenda ina hitilafu)*`;
+        }
+
+        await sock.sendMessage(chatId, { text: errorTxt }, { quoted: message });
+        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
     }
 }
 
-module.exports = playCommand;
+module.exports = { playCommand };
