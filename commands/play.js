@@ -1,7 +1,7 @@
 /**
  * play.js - NAYAN ONLY (HIGH QUALITY)
  * Uses: /alldown API
- * Sends: direct URL (no buffer)
+ * Sends: buffer via axios
  */
 
 const yts = require('yt-search');
@@ -63,7 +63,6 @@ async function playCommand(sock, chatId, message, args) {
         const res = await axios.get(api, { timeout: 30000 });
         console.log("✅ API Response Status:", res.status);
 
-        // FIXED STRUCTURE: audio info iko ndani ya res.data.data.data
         const data = res.data?.data?.data;
         if (!data) {
             console.error("❌ No data in response:", res.data);
@@ -77,11 +76,9 @@ async function playCommand(sock, chatId, message, args) {
         if (data.high) {
             audioUrl = data.high;
             quality = "HIGH 🔊";
-            console.log("✅ Using HIGH quality:", audioUrl);
         } else if (data.low) {
             audioUrl = data.low;
             quality = "LOW 📻";
-            console.log("⚠️ HIGH failed, using LOW quality:", audioUrl);
         }
 
         if (!audioUrl) throw new Error("❌ Hakuna HIGH wala LOW quality URLs!");
@@ -89,10 +86,13 @@ async function playCommand(sock, chatId, message, args) {
         console.log(`✅ Final URL (${quality}):`, audioUrl);
 
         // =========================
-        // 🎵 SEND DIRECT (IMPORTANT)
+        // 🎵 DOWNLOAD BUFFER VIA AXIOS
         // =========================
+        const audioRes = await axios.get(audioUrl, { responseType: 'arraybuffer', timeout: 60000 });
+        const audioBuffer = Buffer.from(audioRes.data);
+
         await sock.sendMessage(chatId, {
-            audio: { url: audioUrl },
+            audio: audioBuffer,
             mimetype: 'audio/mpeg',
             fileName: `${data.title}.mp3`,
             ptt: false
