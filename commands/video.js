@@ -9,23 +9,23 @@ const axios = require('axios');
 async function videoCommand(sock, chatId, m, text) {
     try {
         const msgText = typeof text === 'string' ? text : "";
-        
+
         // Tunakata neno la kwanza (.video) na kuchukua jina la video lilobaki
         const args = msgText.trim().split(/\s+/).slice(1);
         const query = args.join(' ');
 
         if (!query) {
             return await sock.sendMessage(chatId, { 
-                text: '╭━━━━〔 *🎬 MICKEY VIDEO* 〕━━━━┈⊷\n┃\n┃ 📝 *Usage:* `.video [video name]`\n┃ 🎥 *Example:* `.video Essence Music Video`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
+                text: '╭━━━━〔 *🎬 MICKEY VIDEO* 〕━━━━┈⊷\n┃\n┃ 📝 *Usage:* `.video [jina la video]`\n┃ 🎥 *Example:* `.video kofia`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
             }, { quoted: m });
         }
 
-        // 1. Reaction ya kutafuta (Search)
+        // 1. Reaction ya kuanza utafutaji (Search)
         await sock.sendMessage(chatId, { react: { text: '🔍', key: m.key } }).catch(() => {});
 
         const search = await yts(query);
         const v = search?.videos?.[0];
-        
+
         if (!v) {
             await sock.sendMessage(chatId, { react: { text: '❌', key: m.key } }).catch(() => {});
             return sock.sendMessage(chatId, { text: '❌ *Sikuipata video hii!* 🎥' }, { quoted: m });
@@ -51,7 +51,7 @@ async function videoCommand(sock, chatId, m, text) {
             `━━━━━━━━━━━━━━━━━━━━━━\n` +
             `_📺 Karibu kidogo... 📺_`;
 
-        // Tuma picha (Thumbnail)
+        // Tuma picha (Thumbnail) bila link
         await sock.sendMessage(chatId, { image: { url: v.thumbnail }, caption }, { quoted: m });
 
         // 3. Reaction ya kuanza kudownload (Downloading)
@@ -61,10 +61,10 @@ async function videoCommand(sock, chatId, m, text) {
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
         const res = await axios.get(api, { timeout: 60000 });
 
-        const resData = res.data?.data?.data || res.data?.data || res.data;
-        const videoUrl = resData.high || resData.low || resData.url || resData.main_url;
+        // KUSOMA JSON: Tunafuata muundo uleule (res.data.data.data.high)
+        const videoUrl = res.data?.data?.data?.high || res.data?.data?.data?.low;
 
-        if (!videoUrl) throw new Error('Video link not found');
+        if (!videoUrl) throw new Error('Video link not found in JSON');
 
         // 4. Tuma Video
         await sock.sendMessage(chatId, {
@@ -79,7 +79,7 @@ async function videoCommand(sock, chatId, m, text) {
     } catch (err) {
         console.error('[VIDEO] Error:', err.message);
         await sock.sendMessage(chatId, { react: { text: '⚠️', key: m.key } }).catch(() => {});
-        await sock.sendMessage(chatId, { text: `❌ *Error:* Imeshindwa kupakua video.` }, { quoted: m });
+        await sock.sendMessage(chatId, { text: `❌ *Error:* Imeshindwa kupakua video kutoka server.` }, { quoted: m });
     }
 }
 
