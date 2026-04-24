@@ -62,10 +62,9 @@ async function playCommand(sock, chatId, message, args) {
         
         const res = await axios.get(api, { timeout: 30000 });
         console.log("✅ API Response Status:", res.status);
-        console.log("📦 Full API Response:", JSON.stringify(res.data, null, 2));
 
+        // FIXED STRUCTURE: audio info iko ndani ya res.data.data.data
         const data = res.data?.data?.data;
-
         if (!data) {
             console.error("❌ No data in response:", res.data);
             throw new Error("Invalid API response");
@@ -75,15 +74,11 @@ async function playCommand(sock, chatId, message, args) {
         let audioUrl = null;
         let quality = null;
 
-        console.log("🔍 Checking for HIGH quality:", data.high ? "EXISTS" : "MISSING");
-        console.log("🔍 Checking for LOW quality:", data.low ? "EXISTS" : "MISSING");
-
-        if (data.high && data.high.length > 0) {
+        if (data.high) {
             audioUrl = data.high;
             quality = "HIGH 🔊";
             console.log("✅ Using HIGH quality:", audioUrl);
-        } else if (data.low && data.low.length > 0) {
-            // Fallback to LOW if HIGH fails
+        } else if (data.low) {
             audioUrl = data.low;
             quality = "LOW 📻";
             console.log("⚠️ HIGH failed, using LOW quality:", audioUrl);
