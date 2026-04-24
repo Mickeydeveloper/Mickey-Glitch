@@ -1,116 +1,102 @@
 /**
- * playvideo.js - NAYAN VIDEO PLAYER
- * Uses: /alldown API (high quality video)
+ * video.js - MIKI VIDEO (DYNAMIC VERSION)
+ * Inatafuta URL ya video popote ilipo kwenye JSON
  */
 
 const yts = require('yt-search');
 const axios = require('axios');
 
-async function playVideoCommand(sock, chatId, message, args) {
+async function videoCommand(sock, chatId, message, args) {
     const query = Array.isArray(args) ? args.join(' ') : args;
 
-    // ❌ No input
     if (!query) {
         return sock.sendMessage(chatId, {
-            text: '╭━━━━〔 *MICKEY VIDEO* 〕━━━━┈⊷\n┃ 📝 `.video [jina la wimbo]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷'
+            text: '╭━━━━〔 *MICKEY VIDEO* 〕━━━━┈⊷\n┃ 📝 `.video [jina la video]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷'
         }, { quoted: message });
     }
 
-    // 🔍 Searching
+    // React kuonyesha shughuli imeanza
     await sock.sendMessage(chatId, {
-        react: { text: '🔍', key: message.key }
+        react: { text: '🎬', key: message.key }
     }).catch(() => {});
 
     try {
-        // 🔎 YouTube search
+        // 1. YouTube Search (Tafuta video)
         const search = await yts(query);
         const v = search?.videos?.[0];
 
         if (!v) {
             await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-            return sock.sendMessage(chatId, {
-                text: '❌ *Sikuipata video!*'
-            }, { quoted: message });
+            return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' }, { quoted: message });
         }
 
-        // 🎧 Found
-        await sock.sendMessage(chatId, {
-            react: { text: '🎬', key: message.key }
-        }).catch(() => {});
-
-        // 🖼️ Info
+        // 2. Info ya Video kabla ya kutuma
+        const infoText = `╭━━━━〔 *VIDEO DOWNLOADING* 〕━━━━┈⊷\n┃ 🎬 *Title:* ${v.title}\n┃ ⏳ *Duration:* ${v.timestamp}\n┃ 👁️ *Views:* ${v.views}\n╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
+        
         await sock.sendMessage(chatId, {
             image: { url: v.thumbnail },
-            caption:
-                `╭━━━━〔 *PLAY VIDEO* 〕━━━━┈⊷\n` +
-                `┃ 🎬 ${v.title}\n` +
-                `┃ ⏳ ${v.timestamp}\n` +
-                `╰━━━━━━━━━━━━━━━━━━━━┈⊷`
+            caption: infoText
         }, { quoted: message });
 
-        // 📥 Downloading
-        await sock.sendMessage(chatId, {
-            react: { text: '📥', key: message.key }
-        }).catch(() => {});
-
-        // =========================
-        // 🔥 CALL NAYAN API
-        // =========================
+        // 3. API Call (Tumia API ileile ya /alldown)
         const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-        console.log("📡 API Request:", api);
-        
         const res = await axios.get(api, { timeout: 30000 });
-        console.log("✅ API Response Status:", res.status);
-        console.log("📦 Full API Response:", JSON.stringify(res.data, null, 2));
 
-        const data = res.data?.data?.data;
+        /**
+         * DYNAMIC URL FINDER (Video Version)
+         * Inatafuta mp4 au link ya video kwenye JSON
+         */
+        const findVideoUrl = (obj) => {
+            if (!obj || typeof obj !== 'object') return null;
+            
+            // Kagua keys za video kwa mpangilio wa ubora
+            const keys = ['high', 'video', 'url', 'link', 'download', 'low'];
+            for (let key of keys) {
+                // Hakikisha ni string, inaanza na http, na siyo audio pekee
+                if (typeof obj[key] === 'string' && obj[key].startsWith('http')) {
+                    // Baadhi ya API zinaweka tag ya mp4, tunaihitaji
+                    return obj[key];
+                }
+            }
 
-        if (!data) {
-            console.error("❌ No data in response:", res.data);
-            throw new Error("Invalid API response");
+            for (let key in obj) {
+                const found = findVideoUrl(obj[key]);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        const videoUrl = findVideoUrl(res.data);
+
+        if (!videoUrl) {
+            console.error("❌ API Response:", res.data);
+            throw new Error("Link ya video haijapatikana kwny API.");
         }
 
-        // 🎯 JARIBU HIGH KWANZA (Try high first)
-        let videoUrl = null;
-        let quality = null;
+        // 4. Download Video kama Buffer
+        const videoRes = await axios.get(videoUrl, { 
+            responseType: 'arraybuffer', 
+            timeout: 100000, // Video inachukua muda mrefu kidogo
+            headers: { 'User-Agent': 'Mozilla/5.0' } 
+        });
+        const videoBuffer = Buffer.from(videoRes.data);
 
-        console.log("🔍 Checking for HIGH quality:", data.high ? "EXISTS" : "MISSING");
-        console.log("🔍 Checking for LOW quality:", data.low ? "EXISTS" : "MISSING");
-
-        if (data.high && data.high.length > 0) {
-            videoUrl = data.high;
-            quality = "HIGH 📹";
-            console.log("✅ Using HIGH quality:", videoUrl);
-        } else if (data.low && data.low.length > 0) {
-            // Fallback to LOW if HIGH fails
-            videoUrl = data.low;
-            quality = "LOW 📺";
-            console.log("⚠️ HIGH failed, using LOW quality:", videoUrl);
-        }
-
-        if (!videoUrl) throw new Error("❌ Hakuna HIGH wala LOW quality URLs!");
-
-        console.log(`✅ Final URL (${quality}):`, videoUrl);
-
-        // =========================
-        // 🎬 SEND VIDEO
-        // =========================
+        // 5. Tuma Video sasa
         await sock.sendMessage(chatId, {
-            video: { url: videoUrl },
-            caption: `🎬 ${data.title}`,
-            mimetype: 'video/mp4'
+            video: videoBuffer,
+            mimetype: 'video/mp4',
+            caption: `✅ *${v.title}* imekamilika!`,
+            fileName: `${v.title}.mp4`
         }, { quoted: message });
 
-        // ✅ Success
+        // Success Reaction
         await sock.sendMessage(chatId, {
             react: { text: '✅', key: message.key }
         }).catch(() => {});
 
     } catch (err) {
         console.error("❌ VIDEO ERROR:", err.message);
-        console.error("Full Error:", err);
-        console.error("API Response:", err.response?.data);
-
+        
         await sock.sendMessage(chatId, {
             react: { text: '❌', key: message.key }
         }).catch(() => {});
@@ -121,4 +107,4 @@ async function playVideoCommand(sock, chatId, message, args) {
     }
 }
 
-module.exports = playVideoCommand;
+module.exports = videoCommand;
