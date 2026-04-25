@@ -24,6 +24,29 @@ const { handleAnticall } = require("./commands/anticall");
 const store = require("./lib/lightweight_store");
 const settings = require("./settings");
 
+// ────────────────────────────────────────────────
+// CUSTOM LOGGER CONFIGURATION
+// ────────────────────────────────────────────────
+const pinoLogger = pino({
+    level: process.env.LOG_LEVEL || 'info',
+    transport: {
+        target: 'pino-pretty',
+        options: {
+            colorize: true,
+            translateTime: 'SYS:standard',
+            ignore: 'pid,hostname',
+            singleLine: false,
+            messageFormat: '{levelLabel} - {msg}'
+        }
+    }
+});
+
+// Override console.log to ensure visibility
+const originalLog = console.log;
+console.log = function(...args) {
+    originalLog(...args);
+};
+
 // --- Global Settings ---
 global.botname = "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
 global.themeemoji = '•';
@@ -56,18 +79,25 @@ const question = (text) => {
 
 async function startMickeyBot() {
     try {
+        console.log('\n' + chalk.bgBlue.white("  🚀  STARTING MICKEY GLITCH BOT  🚀  ") + '\n');
+        
         const { version } = await fetchLatestBaileysVersion();
+        console.log(chalk.cyan('📦 Baileys Version:'), chalk.green(version.join('.')));
+        
         const { state, saveCreds } = await useMultiFileAuthState("./session");
+        console.log(chalk.cyan('📁 Session Status:'), chalk.green('Loaded'));
+        
         const msgRetryCounterCache = new NodeCache();
+        console.log(chalk.cyan('💾 Cache Status:'), chalk.green('Initialized'));
 
         const Mickey = makeWASocket({
             version,
-            logger: pino({ level: "info" }),
+            logger: pinoLogger,
             printQRInTerminal: !pairingCode,
             browser: ["Ubuntu", "Chrome", "20.0.04"],
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }).child({ level: 'fatal' }))
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }).child({ level: 'silent' }))
             },
             markOnlineOnConnect: true,
             getMessage: async (key) => {
@@ -109,66 +139,82 @@ async function startMickeyBot() {
             const { connection, lastDisconnect } = update;
             
             if (connection === "open") {
-                console.log(chalk.bgGreen.black("  ✨  CONNECTED  ✨  "), chalk.green("Mickey Glitch Online!"));
+                console.log('\n' + chalk.bgGreen.white("  ✨  CONNECTED  ✨  "));
+                console.log(chalk.green.bold('✅ Mickey Glitch Online!\n'));
                 
                 const myNumber = Mickey.user.id.split(':')[0] + "@s.whatsapp.net";
-                const welcomeMsg = `✨ *MICKEY GLITCH BOT* ✨\n🟢 *Status:* Online\n💾 *RAM:* ${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB\n🎯 All Systems Operational`.trim();
+                const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
+                const welcomeMsg = `✨ *MICKEY GLITCH BOT* ✨\n🟢 *Status:* Online\n💾 *RAM:* ${ramUsage} MB\n🎯 All Systems Operational`.trim();
                 
-                await Mickey.sendMessage(myNumber, {
-                    text: welcomeMsg,
-                    contextInfo: {
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterJid: "120363398106360290@newsletter",
-                            newsletterName: "🅼🅸🅲🅺🅴🆈",
-                            serverMessageId: 100
+                try {
+                    await Mickey.sendMessage(myNumber, {
+                        text: welcomeMsg,
+                        contextInfo: {
+                            isForwarded: true,
+                            forwardedNewsletterMessageInfo: {
+                                newsletterJid: "120363398106360290@newsletter",
+                                newsletterName: "🅼🅸🅲🅺🅴🆈",
+                                serverMessageId: 100
+                            }
                         }
-                    }
-                });
+                    });
+                    console.log(chalk.green('📨 Welcome message sent to bot number\n'));
+                } catch (e) {
+                    console.log(chalk.yellow('⚠️ Could not send welcome message\n'));
+                }
                 
-                console.log(chalk.bgGreen.black("  ✅  STARTUP  ✅  "), chalk.green("Bot is ready for tasks."));
+                console.log(chalk.bgGreen.black("  ✅  STARTUP COMPLETE  ✅  "));
+                console.log(chalk.green('🤖 Bot is ready for tasks.\n'));
             }
 
             if (connection === "close") {
                 const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
                 if (shouldReconnect) {
-                    console.log(chalk.bgYellow.black("  🔄  RECONNECTING  🔄  "));
+                    console.log('\n' + chalk.bgYellow.black("  🔄  CONNECTION LOST - RECONNECTING...  🔄  ") + '\n');
+                    await delay(3000);
                     startMickeyBot();
+                } else {
+                    console.log('\n' + chalk.bgRed.white("  ❌  LOGGED OUT - RESTART REQUIRED  ❌  ") + '\n');
+                    process.exit(0);
                 }
             }
         });
 
         // --- Custom Pairing Implementation ---
         if (pairingCode && !Mickey.authState.creds.registered) {
-            console.log(chalk.bgMagenta.white("  ⏳  PAIRING REQUIRED  ⏳  "));
+            console.log('\n' + chalk.bgMagenta.white("  ⏳  PAIRING REQUIRED - SCAN DEVICE  ⏳  ") + '\n');
             
-            let num = await question(chalk.bgBlack(chalk.greenBright("Weka namba ya simu (mfano: 255xxx): ")));
+            let num = await question(chalk.bgBlack(chalk.greenBright("📱 Enter phone number (e.g., 255xxx): ")));
             num = num.replace(/[^0-9]/g, '');
             if (!num.startsWith("255")) num = "255" + num;
 
+            console.log(chalk.yellow('⏳ Generating pairing code...\n'));
+
             setTimeout(async () => {
                 try {
-                    // HAPA NDIPO TUNAPOWEKA CUSTOM CODE
                     let code = await Mickey.requestPairingCode(num, "MICKDADY");
                     
-                    console.log('');
                     console.log(chalk.bgCyan.black("  🔐  YOUR CUSTOM PAIRING CODE  🔐  "));
                     console.log(chalk.white.bold("  CODE: ") + chalk.green.bold("MICKDADY"));
-                    console.log(chalk.yellow("→ Ingiza code hii kwenye WhatsApp yako (Linked Devices)"));
-                    console.log('');
+                    console.log(chalk.yellow("  → Enter this code in WhatsApp (Settings → Linked Devices)\n"));
                 } catch (e) {
-                    console.log(chalk.red("Error generating pairing code: " + e.message));
+                    console.log(chalk.red('❌ Error generating pairing code: ' + e.message + '\n'));
                 }
             }, 3000);
         }
 
+        console.log(chalk.cyan('✅ Socket initialized successfully\n'));
         return Mickey;
 
     } catch (err) {
-        console.log(chalk.bgRed.white("  ❌  CRITICAL ERROR  ❌  "), chalk.red(err.message));
-        await delay(8000);
+        console.log('\n' + chalk.bgRed.white("  ❌  CRITICAL ERROR  ❌  "));
+        console.log(chalk.red('Error Message: ' + err.message));
+        console.log(chalk.red('Stack: ' + err.stack));
+        console.log(chalk.yellow('⏳ Restarting in 5 seconds...\n'));
+        await delay(5000);
         startMickeyBot();
     }
 }
 
+console.log(chalk.bgBlue.white("  🚀  INITIALIZING MICKEY GLITCH  🚀  \n"));
 startMickeyBot();
