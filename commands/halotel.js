@@ -137,3 +137,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
 // ────────────────────────────────────────────────
 
 module.exports = halotelCommand;
+module.exports.buttonHandlers = {
+    // Halotel package buttons (.h_pkg_XX) are handled by command prefix system
+    // in main.js - they're treated as commands
+};

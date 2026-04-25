@@ -81,3 +81,7 @@ const aliveCommand = async (sock, chatId, msg) => {
 };
 
 module.exports = aliveCommand;
+module.exports.buttonHandlers = {
+    // Buttons .menu, .ping, .owner are handled by command prefix system in main.js
+    // No special handlers needed - they're treated as commands
+};

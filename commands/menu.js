@@ -90,5 +90,14 @@ const menuCommand = async (sock, chatId, m) => {
     }
 };
 
-// Export kwa ajili ya .menu pekee
+// ────────────────────────────────────────────────
+// BUTTON HANDLERS - Auto-loaded by buttonLoader
+const buttonHandlers = {
+    // Menu navigation buttons (handled by falling through to command system)
+    // Dynamic command buttons like .add, .ai, .alive etc are handled by 
+    // the command prefix handler in main.js
+};
+
+// Export for auto-loader
 module.exports = menuCommand;
+module.exports.buttonHandlers = buttonHandlers;

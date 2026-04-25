@@ -128,3 +128,29 @@ async function repoCommand(sock, chatId, message) {
 }
 
 module.exports = repoCommand;
+module.exports.buttonHandlers = {
+    'download_zip': async (sock, chatId, message) => {
+        try {
+            const cachedRepo = repoCache.get(chatId);
+            if (!cachedRepo) {
+                return sock.sendMessage(chatId, { text: '❌ *Session imekwisha. Tumia .repo tena.*' }, { quoted: message });
+            }
+
+            await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+            const zipUrl = `https://github.com/${cachedRepo.owner.login}/${cachedRepo.name}/archive/refs/heads/${cachedRepo.default_branch || 'main'}.zip`;
+            const zipRes = await axios.get(zipUrl, { responseType: 'arraybuffer', timeout: 60000 });
+
+            await sock.sendMessage(chatId, {
+                document: Buffer.from(zipRes.data),
+                mimetype: 'application/zip',
+                fileName: `${cachedRepo.name}.zip`,
+                caption: `✅ *${cachedRepo.name}.zip Imepakuliwa!*`
+            }, { quoted: message });
+            
+            console.log(`✅ [Repo] Download ZIP executed`);
+        } catch (err) {
+            console.error('[Repo Download Error]', err);
+            await sock.sendMessage(chatId, { text: '❌ *Imeshindwa kupakua faili!*' });
+        }
+    }
+};

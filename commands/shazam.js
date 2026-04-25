@@ -110,3 +110,7 @@ async function shazamCommand(sock, chatId, message) {
 }
 
 module.exports = shazamCommand;
+module.exports.buttonHandlers = {
+    // Dynamic song buttons (.play songname) are handled by command prefix system
+    // in main.js - no special handler needed here
+};
