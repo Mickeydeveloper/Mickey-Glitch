@@ -28,7 +28,7 @@ const settings = require("./settings");
 // CUSTOM LOGGER CONFIGURATION
 // ────────────────────────────────────────────────
 const pinoLogger = pino({
-    level: process.env.LOG_LEVEL || 'info',
+    level: process.env.LOG_LEVEL || 'warn', // Changed from 'info' to suppress debug logs
     transport: {
         target: 'pino-pretty',
         options: {
@@ -117,13 +117,19 @@ async function startMickeyBot() {
                 const mek = chatUpdate.messages[0];
                 if (!mek?.message) return;
                 
+                // Skip status@broadcast to avoid session errors
                 if (mek.key?.remoteJid === "status@broadcast") {
                     await handleStatus(Mickey, chatUpdate);
                     return;
                 }
                 await handleMessages(Mickey, chatUpdate, true);
             } catch (err) {
-                console.log(chalk.bgRed.black("  ⚠️  MSG ERROR  ⚠️  "), chalk.red(err.message));
+                // Only log critical errors, suppress session/decryption warnings
+                if (!err.message?.includes("No session found") && 
+                    !err.message?.includes("No matching sessions") &&
+                    !err.message?.includes("timed out waiting")) {
+                    console.log(chalk.bgRed.black("  ⚠️  MSG ERROR  ⚠️  "), chalk.red(err.message));
+                }
             }
         });
 
