@@ -40,7 +40,7 @@ const menuCommand = async (sock, chatId, m) => {
                     header: '✨',
                     title: cmdName.charAt(0).toUpperCase() + cmdName.slice(1),
                     description: description,
-                    id: `.${cmdName}`
+                    id: `.${cmdName}`  // ⭐ IMPORTANT: Button ID must start with '.'
                 });
             } catch (e) {
                 console.log(`Skipping ${file} due to export error: ${e.message}`);
@@ -60,7 +60,11 @@ const menuCommand = async (sock, chatId, m) => {
 │  👤 *User:* ${m.pushName || 'User'}
 │  📅 *Date:* ${now.format('ddd, MMM D')}
 └────────────────────┘
-*Quantum Base Developer (TZ)*`;
+*Quantum Base Developer (TZ)*
+
+👇 *Bonyeza amri hapo chini:*`;
+
+        console.log(`📋 Sending menu with ${sections.length} sections`);
 
         return await sendInteractiveMessage(sock, chatId, {
             text: helpText,
@@ -86,7 +90,7 @@ const menuCommand = async (sock, chatId, m) => {
         }, { quoted: m });
 
     } catch (e) {
-        console.error("Error kwenye Dynamic Menu:", e);
+        console.error("❌ Error kwenye Dynamic Menu:", e);
     }
 };
 

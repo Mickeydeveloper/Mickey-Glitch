@@ -164,6 +164,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const message = messages[0];
         if (!message?.message) return;
 
+        // DEBUG: Log all message types to find list response structure
+        const msgKeys = Object.keys(message.message).filter(k => message.message[k] !== undefined);
+        if (msgKeys.length > 0 && !msgKeys.includes('conversation') && !msgKeys.includes('extendedTextMessage')) {
+            console.log(`📨 Message type detected:`, msgKeys);
+        }
+
         // Handle autoread functionality
         await handleAutoread(sock, message);
 
@@ -197,21 +203,56 @@ async function handleMessages(sock, messageUpdate, printLog) {
         // HANDLE MENU LIST RESPONSES FIRST (single-select)
         // ────────────────────────────────────────────────
         if (message.message?.listResponseMessage) {
+            console.log(`📋 List response detected!`);
+            console.log(`📋 Full listResponseMessage:`, JSON.stringify(message.message.listResponseMessage, null, 2));
+            
             const list = message.message.listResponseMessage;
-            const selectedId = list?.singleSelectReply?.selectedRowId || null;
+            let selectedId = null;
+            
+            // Try multiple paths to find the selected row ID
+            selectedId = list?.singleSelectReply?.selectedRowId ||
+                        list?.selectedRowId ||
+                        list?.singleSelectListResponse?.selectedRowId ||
+                        list?.singleSelectReply ||
+                        list?.title ||
+                        null;
+            
+            console.log(`🔍 Selected ID extracted: ${selectedId}`);
             
             if (selectedId) {
                 console.log(`🔘 Menu item selected: ${selectedId}`);
                 
                 // If command starts with '.', treat as command
-                if (selectedId.startsWith('.')) {
+                if (selectedId.toString().startsWith('.')) {
                     console.log(`✨ Executing menu command: ${selectedId}`);
-                    userMessage = selectedId.toLowerCase();
+                    userMessage = selectedId.toLowerCase().trim();
                     // Will fall through to command handler below
                 } else {
+                    console.log(`⚠️ Selected ID doesn't start with '.': ${selectedId}`);
                     // Unknown menu selection, ignore
                     return;
                 }
+            } else {
+                console.log(`⚠️ No selectedId found in listResponseMessage`);
+                return;
+            }
+        }
+        
+        // ────────────────────────────────────────────────
+        // ALTERNATIVE: HANDLE SINGLE SELECT REPLY (gifted-btns format)
+        // ────────────────────────────────────────────────
+        if (message.message?.singleSelectReply && !userMessage) {
+            console.log(`📋 Single select reply detected!`);
+            console.log(`📋 Full singleSelectReply:`, JSON.stringify(message.message.singleSelectReply, null, 2));
+            
+            const reply = message.message.singleSelectReply;
+            const selectedId = reply?.selectedRowId;
+            
+            console.log(`🔍 Selected ID from singleSelectReply: ${selectedId}`);
+            
+            if (selectedId && selectedId.toString().startsWith('.')) {
+                console.log(`✨ Executing menu command from singleSelectReply: ${selectedId}`);
+                userMessage = selectedId.toLowerCase().trim();
             }
         }
 
@@ -253,6 +294,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
             // Try dynamic button handlers from commands
             const handled = await executeButtonHandler(buttonId, sock, chatId, message, buttonHandlersMap);
             if (handled) {
+                console.log(`✅ Button handled by dynamic handler: ${buttonId}`);
                 return;
             }
 
@@ -260,7 +302,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
             if (buttonId && buttonId.startsWith('.')) {
                 try {
                     console.log(`🔄 Button command intercepted: ${buttonId}`);
-                    userMessage = buttonId.toLowerCase();
+                    userMessage = buttonId.toLowerCase().trim();
+                    console.log(`📝 userMessage set to: ${userMessage}`);
                     // Fall through to command handling - don't return
                 } catch (e) {
                     console.error(`Error handling command button ${buttonId}:`, e);
