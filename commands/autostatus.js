@@ -58,9 +58,9 @@ async function autoView(sock, statusKey) {
 
     try {
         await sock.readMessages([statusKey]).catch(() => {});
-        console.log(`✅ [AutoStatus] Viewed status`);
+        console.log(`✅ [AutoStatus-View] Status marked as read from ${statusKey.participant || 'Unknown'}`);
     } catch (err) {
-        console.debug(`[AutoView] Error:`, err.message);
+        console.error(`❌ [AutoView] Error reading status:`, err.message);
     }
 }
 
@@ -70,6 +70,7 @@ async function autoLike(sock, statusKey) {
     if (!statusKey?.id || !statusKey?.participant) return;
 
     const emoji = getRandomEmoji();
+    const participant = statusKey.participant || 'Unknown';
     
     try {
         await new Promise(r => setTimeout(r, randomMs(300, 800)));
@@ -88,7 +89,7 @@ async function autoLike(sock, statusKey) {
         // Try primary method first
         try {
             await sock.sendMessage('status@broadcast', { react: reaction });
-            console.log(`❤️ [AutoStatus] Liked with ${emoji}`);
+            console.log(`❤️ [AutoStatus-Like] Reacted with ${emoji} to status from ${participant}`);
         } catch (primaryErr) {
             // Fallback: use relayMessage if sendMessage fails
             const reactionMsg = {
@@ -98,10 +99,10 @@ async function autoLike(sock, statusKey) {
                 }
             };
             await sock.relayMessage('status@broadcast', reactionMsg, { messageId: statusKey.id });
-            console.log(`❤️ [AutoStatus] Liked (relay) with ${emoji}`);
+            console.log(`❤️ [AutoStatus-Like] Reacted (via relay) with ${emoji} to status from ${participant}`);
         }
     } catch (err) {
-        console.debug(`[AutoLike] Failed to react:`, err.message);
+        console.error(`❌ [AutoLike] Failed to react to ${participant}:`, err.message);
     }
 }
 
@@ -122,10 +123,19 @@ async function handleStatusUpdate(sock, ev) {
         statusKey = ev.key;
     }
 
-    if (!statusKey?.id) return;
+    if (!statusKey?.id) {
+        console.log(`[AutoStatus] Waiting for status events...`);
+        return;
+    }
+
+    const participant = statusKey.participant || 'Unknown';
+    console.log(`📥 [AutoStatus] New status received from ${participant} (ID: ${statusKey.id.slice(0, 8)}...)`);
 
     // Deduplicate
-    if (processedStatusIds.has(statusKey.id)) return;
+    if (processedStatusIds.has(statusKey.id)) {
+        console.debug(`[AutoStatus] Status already processed (duplicate)`);
+        return;
+    }
     processedStatusIds.add(statusKey.id);
     if (processedStatusIds.size > 1200) {
         // Keep only recent 600 IDs instead of clearing all
@@ -140,7 +150,7 @@ async function handleStatusUpdate(sock, ev) {
             const viewTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('View timeout')), 15000));
             await Promise.race([autoView(sock, statusKey), viewTimeout]);
         } catch (err) {
-            console.debug(`[AutoView] Timeout or error:`, err.message);
+            console.warn(`⏱️ [AutoStatus-View] Timeout or error for ${participant}:`, err.message);
         }
     }
 
@@ -150,7 +160,7 @@ async function handleStatusUpdate(sock, ev) {
             const likeTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Like timeout')), 15000));
             await Promise.race([autoLike(sock, statusKey), likeTimeout]);
         } catch (err) {
-            console.debug(`[AutoLike] Timeout or error:`, err.message);
+            console.warn(`⏱️ [AutoStatus-Like] Timeout or error for ${participant}:`, err.message);
         }
     }
 }
@@ -162,12 +172,14 @@ async function autoStatusCommand(sock, chatId, msg, args = []) {
     const isAllowed = msg.key.fromMe || (await isOwnerOrSudo(sender, sock, chatId));
 
     if (!isAllowed) {
+        console.warn(`[AutoStatus] Unauthorized access attempt from ${sender}`);
         return sock.sendMessage(chatId, { text: '⛔ Owner/sudo only' });
     }
 
     const cfg = await loadConfig();
 
     if (!args.length) {
+        console.log(`[AutoStatus] Config requested: View=${cfg.viewEnabled}, Like=${cfg.likeEnabled}`);
         return sock.sendMessage(chatId, {
             text: `🟢 *Auto Status Manager* (All ON by default)\n\n` +
                   `View Status  : ${cfg.viewEnabled ? '✅ ON' : '❌ OFF'}\n` +
@@ -187,6 +199,7 @@ async function autoStatusCommand(sock, chatId, msg, args = []) {
         }
         const value = args[1].toLowerCase() === 'on';
         await saveConfig({ viewEnabled: value });
+        console.log(`✅ [AutoStatus] View setting changed to ${value ? 'ON' : 'OFF'}`);
         return sock.sendMessage(chatId, { text: `Auto view status → ${value ? '✅ ON' : '❌ OFF'}` });
     }
 
@@ -196,19 +209,64 @@ async function autoStatusCommand(sock, chatId, msg, args = []) {
         }
         const value = args[1].toLowerCase() === 'on';
         await saveConfig({ likeEnabled: value });
+        console.log(`✅ [AutoStatus] Like setting changed to ${value ? 'ON' : 'OFF'}`);
         return sock.sendMessage(chatId, { text: `Auto like status → ${value ? '✅ ON (random emoji)' : '❌ OFF'}` });
     }
 
     if (cmd === 'status') {
+        console.log(`[AutoStatus] Status command executed. Current config: View=${cfg.viewEnabled}, Like=${cfg.likeEnabled}`);
         return sock.sendMessage(chatId, {
             text: `Current config:\n\`\`\`${JSON.stringify(cfg, null, 2)}\`\`\``
         });
     }
 
+    console.warn(`[AutoStatus] Unknown subcommand: ${cmd}`);
     return sock.sendMessage(chatId, { text: 'Unknown subcommand. Try .autostatus' });
 }
 
+// ────────────────────────────────────────────────
+// BUTTON HANDLERS
+const buttonHandlers = {
+    'autostatus_view_on': async (sock, chatId, message) => {
+        const sender = message.key.participant || message.key.remoteJid;
+        const isAllowed = message.key.fromMe || (await isOwnerOrSudo(sender, sock, chatId));
+        if (!isAllowed) return sock.sendMessage(chatId, { text: '⛔ Owner/sudo only' });
+        
+        await saveConfig({ viewEnabled: true });
+        console.log(`✅ [AutoStatus] View enabled via button`);
+        return sock.sendMessage(chatId, { text: `✅ Auto view status is now *ON*` });
+    },
+    'autostatus_view_off': async (sock, chatId, message) => {
+        const sender = message.key.participant || message.key.remoteJid;
+        const isAllowed = message.key.fromMe || (await isOwnerOrSudo(sender, sock, chatId));
+        if (!isAllowed) return sock.sendMessage(chatId, { text: '⛔ Owner/sudo only' });
+        
+        await saveConfig({ viewEnabled: false });
+        console.log(`✅ [AutoStatus] View disabled via button`);
+        return sock.sendMessage(chatId, { text: `❌ Auto view status is now *OFF*` });
+    },
+    'autostatus_like_on': async (sock, chatId, message) => {
+        const sender = message.key.participant || message.key.remoteJid;
+        const isAllowed = message.key.fromMe || (await isOwnerOrSudo(sender, sock, chatId));
+        if (!isAllowed) return sock.sendMessage(chatId, { text: '⛔ Owner/sudo only' });
+        
+        await saveConfig({ likeEnabled: true });
+        console.log(`✅ [AutoStatus] Like enabled via button`);
+        return sock.sendMessage(chatId, { text: `✅ Auto like status is now *ON* (random emoji)` });
+    },
+    'autostatus_like_off': async (sock, chatId, message) => {
+        const sender = message.key.participant || message.key.remoteJid;
+        const isAllowed = message.key.fromMe || (await isOwnerOrSudo(sender, sock, chatId));
+        if (!isAllowed) return sock.sendMessage(chatId, { text: '⛔ Owner/sudo only' });
+        
+        await saveConfig({ likeEnabled: false });
+        console.log(`✅ [AutoStatus] Like disabled via button`);
+        return sock.sendMessage(chatId, { text: `❌ Auto like status is now *OFF*` });
+    }
+};
+
 module.exports = {
     autoStatusCommand,
-    handleStatusUpdate
+    handleStatusUpdate,
+    buttonHandlers
 };

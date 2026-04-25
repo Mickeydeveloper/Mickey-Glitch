@@ -36,6 +36,7 @@ const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
 const { isSudo } = require('./lib/index');
 const isOwnerOrSudo = require('./lib/isOwner');
+const { loadButtonHandlers, executeButtonHandler } = require('./lib/buttonLoader');
 const { autotypingCommand, isAutotypingEnabled, handleAutotypingForMessage, handleAutotypingForCommand, showTypingAfterCommand } = require('./commands/autotyping');
 const { autoreadCommand, isAutoreadEnabled, handleAutoread } = require('./commands/autoread');
 const { autoBioCommand } = require('./commands/autobio');
@@ -144,6 +145,15 @@ global.author = settings.author;
 global.channelLink = "https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610";
 global.ytch = "MICKEY";
 
+// ────────────────────────────────────────────────
+// Initialize Button Handlers
+let buttonHandlersMap = {};
+async function initializeButtonHandlers() {
+    buttonHandlersMap = await loadButtonHandlers();
+    console.log(`\n✅ Button handlers initialized successfully\n`);
+}
+initializeButtonHandlers().catch(err => console.error('Error initializing button handlers:', err));
+
 
 
 async function handleMessages(sock, messageUpdate, printLog) {
@@ -187,8 +197,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
             console.log(`🔘 Button pressed: ${buttonId}`);
 
-            // Predefined button handlers
-            const buttonHandlers = {
+            // Predefined static button handlers
+            const staticButtonHandlers = {
                 'channel': async () => {
                     await sock.sendMessage(chatId, { 
                         text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A' 
@@ -205,14 +215,20 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
             };
 
-            // Try predefined handlers first
-            if (buttonHandlers[buttonId]) {
+            // Try static handlers first
+            if (staticButtonHandlers[buttonId]) {
                 try {
-                    await buttonHandlers[buttonId]();
+                    await staticButtonHandlers[buttonId]();
                     return;
                 } catch (e) {
                     console.error(`Error handling button ${buttonId}:`, e);
                 }
+            }
+
+            // Try dynamic button handlers from commands
+            const handled = await executeButtonHandler(buttonId, sock, chatId, message, buttonHandlersMap);
+            if (handled) {
+                return;
             }
 
             // Handle quick-reply buttons that start with . (commands)
@@ -255,8 +271,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 if (!selectedId) return;
                 console.log(`🔘 List selected: ${selectedId}`);
 
-                // Reuse the same buttonHandlers logic for common ids
-                const listHandlers = {
+                // Static list handlers
+                const staticListHandlers = {
                     'channel': async () => {
                         await sock.sendMessage(chatId, { text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A' }, { quoted: message });
                     },
@@ -269,13 +285,19 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     }
                 };
 
-                if (listHandlers[selectedId]) {
+                if (staticListHandlers[selectedId]) {
                     try {
-                        await listHandlers[selectedId]();
+                        await staticListHandlers[selectedId]();
                         return;
                     } catch (e) {
                         console.error(`Error handling list ${selectedId}:`, e);
                     }
+                }
+
+                // Try dynamic button handlers for list items
+                const handled = await executeButtonHandler(selectedId, sock, chatId, message, buttonHandlersMap);
+                if (handled) {
+                    return;
                 }
 
                 // If the selected id looks like a command, treat it as such
