@@ -15,40 +15,30 @@ async function ownerCommand(sock, chatId, message) {
 
 Choose an action below 👇`;
 
-        // Hakikisha unapitisha contextInfo hapa
+        const imageUrl = 'https://d.uguu.se/LLjViSGg.jpg';
         const msgOptions = {
             text: ownerText,
             footer: "Mickey Glitch Tech • Powered by LOFT",
-            contextInfo: {
-                externalAdReply: {
-                    title: "👑 MICKEY GLITCH OWNER",
-                    body: "Bot Developer & Owner",
-                    thumbnailUrl: "https://d.uguu.se/LLjViSGg.jpg",
-                    sourceUrl: channelLink,
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: true
-                }
-            },
+            image: { url: imageUrl },
             interactiveButtons: [
                 { 
                     name: 'cta_call', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📞 Call Owner', 
+                        display_text: ' Call Owner', 
                         phone_number: ownerNumberRaw 
                     }) 
                 },
                 { 
                     name: 'cta_url', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '💬 Send Message', 
+                        display_text: ' Send Message', 
                         url: waLink 
                     }) 
                 },
                 { 
                     name: 'cta_url', 
                     buttonParamsJson: JSON.stringify({ 
-                        display_text: '📺 Join Channel', 
+                        display_text: ' Join Channel', 
                         url: channelLink 
                     }) 
                 }
