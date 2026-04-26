@@ -29,7 +29,7 @@ async function getcodeCommand(sock, chatId, message, args) {
         // Check if file exists
         if (!fs.existsSync(filePath)) {
             return await sock.sendMessage(chatId, {
-                text: `❌ *File not found!*\n\n📁 Looking for: ${fileName}\n\n*Try:* `.getcode menu.js`'`
+                text: `❌ *File not found!*\n\n📁 Looking for: ${fileName}\n\n*Try:* \`.getcode menu.js\``
             }, { quoted: message });
         }
 
