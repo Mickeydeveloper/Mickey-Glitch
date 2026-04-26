@@ -164,10 +164,20 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const message = messages[0];
         if (!message?.message) return;
 
-        // DEBUG: Log all message types to find list response structure
+        // ⭐⭐⭐ COMPREHENSIVE DEBUG - CATCH EVERY MESSAGE TYPE ⭐⭐⭐
         const msgKeys = Object.keys(message.message).filter(k => message.message[k] !== undefined);
-        if (msgKeys.length > 0 && !msgKeys.includes('conversation') && !msgKeys.includes('extendedTextMessage')) {
-            console.log(`📨 Message type detected:`, msgKeys);
+        const isInteractiveResponse = msgKeys.some(k => 
+            k.includes('Response') || k.includes('Reply') || k.includes('Select') || 
+            k === 'buttonsResponseMessage' || k === 'listResponseMessage' || 
+            k === 'singleSelectReply' || k === 'templateButtonReplyMessage'
+        );
+        
+        if (isInteractiveResponse) {
+            console.log(`\n${'='.repeat(60)}`);
+            console.log(`🎯 INTERACTIVE RESPONSE DETECTED!`);
+            console.log(`📨 Message type(s): ${msgKeys.join(', ')}`);
+            console.log(`Full message object:`, JSON.stringify(message.message, null, 2));
+            console.log(`${'='.repeat(60)}\n`);
         }
 
         // Handle autoread functionality
@@ -199,71 +209,71 @@ async function handleMessages(sock, messageUpdate, printLog) {
         // Declare userMessage early so it can be used by button/list handlers
         let userMessage = '';
 
-        // ────────────────────────────────────────────────
-        // HANDLE MENU LIST RESPONSES FIRST (single-select)
-        // ────────────────────────────────────────────────
-        if (message.message?.listResponseMessage) {
-            console.log(`📋 List response detected!`);
-            console.log(`📋 Full listResponseMessage:`, JSON.stringify(message.message.listResponseMessage, null, 2));
+        // ════════════════════════════════════════════════════════════
+        // 1️⃣ HANDLE TEMPLATE BUTTON RESPONSES (standard buttons)
+        // ════════════════════════════════════════════════════════════
+        if (message.message?.templateButtonReplyMessage) {
+            const buttonReply = message.message.templateButtonReplyMessage;
+            const selectedId = buttonReply?.selectedId;
+            console.log(`🔘 [TEMPLATE BUTTON] Selected: ${selectedId}`);
             
-            const list = message.message.listResponseMessage;
-            let selectedId = null;
-            
-            // Try multiple paths to find the selected row ID
-            selectedId = list?.singleSelectReply?.selectedRowId ||
-                        list?.selectedRowId ||
-                        list?.singleSelectListResponse?.selectedRowId ||
-                        list?.singleSelectReply ||
-                        list?.title ||
-                        null;
-            
-            console.log(`🔍 Selected ID extracted: ${selectedId}`);
-            
-            if (selectedId) {
-                console.log(`🔘 Menu item selected: ${selectedId}`);
-                
-                // If command starts with '.', treat as command
-                if (selectedId.toString().startsWith('.')) {
-                    console.log(`✨ Executing menu command: ${selectedId}`);
-                    userMessage = selectedId.toLowerCase().trim();
-                    // Will fall through to command handler below
-                } else {
-                    console.log(`⚠️ Selected ID doesn't start with '.': ${selectedId}`);
-                    // Unknown menu selection, ignore
-                    return;
-                }
-            } else {
-                console.log(`⚠️ No selectedId found in listResponseMessage`);
-                return;
+            if (selectedId?.startsWith('.')) {
+                userMessage = selectedId.toLowerCase().trim();
+                console.log(`✨ [TEMPLATE BUTTON] Command extracted: ${userMessage}`);
             }
         }
-        
-        // ────────────────────────────────────────────────
-        // ALTERNATIVE: HANDLE SINGLE SELECT REPLY (gifted-btns format)
-        // ────────────────────────────────────────────────
-        if (message.message?.singleSelectReply && !userMessage) {
-            console.log(`📋 Single select reply detected!`);
-            console.log(`📋 Full singleSelectReply:`, JSON.stringify(message.message.singleSelectReply, null, 2));
+
+        // ════════════════════════════════════════════════════════════
+        // 2️⃣ HANDLE LIST RESPONSES (interactive lists)
+        // ════════════════════════════════════════════════════════════
+        if (message.message?.listResponseMessage && !userMessage) {
+            console.log(`📋 [LIST RESPONSE] Detected!`);
+            const list = message.message.listResponseMessage;
             
+            let selectedId = list?.singleSelectReply?.selectedRowId || 
+                            list?.selectedRowId || 
+                            list?.singleSelectListResponse?.selectedRowId ||
+                            null;
+            
+            console.log(`🔍 [LIST RESPONSE] Selected ID: ${selectedId}`);
+            
+            if (selectedId && selectedId.toString().startsWith('.')) {
+                userMessage = selectedId.toString().toLowerCase().trim();
+                console.log(`✨ [LIST RESPONSE] Command extracted: ${userMessage}`);
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // 3️⃣ HANDLE SINGLE SELECT REPLY (different format)
+        // ════════════════════════════════════════════════════════════
+        if (message.message?.singleSelectReply && !userMessage) {
+            console.log(`📋 [SINGLE SELECT] Detected!`);
             const reply = message.message.singleSelectReply;
             const selectedId = reply?.selectedRowId;
             
-            console.log(`🔍 Selected ID from singleSelectReply: ${selectedId}`);
+            console.log(`🔍 [SINGLE SELECT] Selected ID: ${selectedId}`);
             
             if (selectedId && selectedId.toString().startsWith('.')) {
-                console.log(`✨ Executing menu command from singleSelectReply: ${selectedId}`);
-                userMessage = selectedId.toLowerCase().trim();
+                userMessage = selectedId.toString().toLowerCase().trim();
+                console.log(`✨ [SINGLE SELECT] Command extracted: ${userMessage}`);
             }
         }
 
         // ────────────────────────────────────────────────
         // HANDLE BUTTON RESPONSES (quick-reply buttons)
         // ────────────────────────────────────────────────
-        if (message.message?.buttonsResponseMessage) {
+        if (message.message?.buttonsResponseMessage && !userMessage) {
             const buttonId = message.message.buttonsResponseMessage.selectedButtonId;
-            console.log(`🔘 Button pressed: ${buttonId}`);
+            console.log(`🔘 [BUTTONS RESPONSE] Button pressed: ${buttonId}`);
 
-            // Predefined static button handlers
+            // If button ID is a command, use it
+            if (buttonId && buttonId.startsWith('.')) {
+                console.log(`🔄 [BUTTONS RESPONSE] Command button intercepted: ${buttonId}`);
+                userMessage = buttonId.toLowerCase().trim();
+                console.log(`✨ [BUTTONS RESPONSE] Command extracted: ${userMessage}`);
+            }
+
+            // Predefined static button handlers (if not a command)
             const staticButtonHandlers = {
                 'channel': async () => {
                     await sock.sendMessage(chatId, { 
@@ -281,38 +291,24 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
             };
 
-            // Try static handlers first
-            if (staticButtonHandlers[buttonId]) {
+            // Try static handlers first (if not a command)
+            if (!userMessage && staticButtonHandlers[buttonId]) {
                 try {
+                    console.log(`✅ [BUTTONS RESPONSE] Static handler executing: ${buttonId}`);
                     await staticButtonHandlers[buttonId]();
                     return;
                 } catch (e) {
-                    console.error(`Error handling button ${buttonId}:`, e);
+                    console.error(`❌ [BUTTONS RESPONSE] Error handling button ${buttonId}:`, e);
                 }
             }
 
-            // Try dynamic button handlers from commands
-            const handled = await executeButtonHandler(buttonId, sock, chatId, message, buttonHandlersMap);
-            if (handled) {
-                console.log(`✅ Button handled by dynamic handler: ${buttonId}`);
-                return;
-            }
-
-            // Handle quick-reply buttons that start with . (commands)
-            if (buttonId && buttonId.startsWith('.')) {
-                try {
-                    console.log(`🔄 Button command intercepted: ${buttonId}`);
-                    userMessage = buttonId.toLowerCase().trim();
-                    console.log(`📝 userMessage set to: ${userMessage}`);
-                    // Fall through to command handling - don't return
-                } catch (e) {
-                    console.error(`Error handling command button ${buttonId}:`, e);
+            // Try dynamic button handlers from commands (if not a command)
+            if (!userMessage) {
+                const handled = await executeButtonHandler(buttonId, sock, chatId, message, buttonHandlersMap);
+                if (handled) {
+                    console.log(`✅ [BUTTONS RESPONSE] Dynamic handler executed: ${buttonId}`);
                     return;
                 }
-            } else {
-                // Unhandled button ID
-                console.log(`⚠️ Unhandled button: ${buttonId}`);
-                return;
             }
         }
 
@@ -663,7 +659,15 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 commandExecuted = true;
                 break;
             case userMessage === '.menu':
-                await menuCommand(sock, chatId, message);
+                try {
+                    // Try new simple menu first (works better with buttons)
+                    const simpleMenu = require('./commands/menu-simple');
+                    await simpleMenu(sock, chatId, message);
+                } catch (e) {
+                    console.error('Error in simple menu:', e);
+                    // Fallback to original menu
+                    await menuCommand(sock, chatId, message);
+                }
                 commandExecuted = true;
                 break;
             case userMessage === '.sticker' || userMessage === '.s':
