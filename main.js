@@ -138,6 +138,8 @@ const reportCommand = require('./commands/report');
 const shazamCommand = require('./commands/shazam');
 const stickerAltCommand = require('./commands/sticker-alt');
 const wastedCommand = require('./commands/wasted');
+const newgroupCommand = require('./commands/newgroup');
+const gdriveCommand = require('./commands/gdrive');
 // sora command removed
 
 // Global settings
@@ -599,7 +601,26 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 break;
             case userMessage === '.owner':
-                await ownerCommand(sock, chatId);
+                await ownerCommand(sock, chatId, message);
+                break;
+            case userMessage.startsWith('.newgroup'):
+                if (!isGroup) {
+                    await sock.sendMessage(chatId, { text: 'This command only works in groups!' }, { quoted: message });
+                    break;
+                }
+                {
+                    const groupName = userMessage.slice(9).trim();
+                    await newgroupCommand(sock, chatId, message, groupName.split(' '));
+                }
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.gdrive'):
+                {
+                    const driveUrl = userMessage.slice(7).trim();
+                    const args = driveUrl ? [driveUrl] : [];
+                    await gdriveCommand(sock, chatId, message, args);
+                }
+                commandExecuted = true;
                 break;
             case userMessage === '.ghost':
                 if (!isGroup) {
