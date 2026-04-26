@@ -224,50 +224,22 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 userMessage = buttonCommand;
                 console.log(`✨ [AutoButton] Using button command: ${userMessage}`);
             } else {
-                // Button is not a command - check for static handlers
+                // Button is not a command - use handlers from buttonHandlersMap
                 const buttonId = getButtonId(message);
                 console.log(`🔘 [AutoButton] Non-command button ID: ${buttonId}`);
                 
-                // Predefined static button handlers
-                const staticButtonHandlers = {
-                    'channel': async () => {
-                        await sock.sendMessage(chatId, { 
-                            text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A' 
-                        }, { quoted: message });
-                    },
-                    'owner': async () => {
-                        const ownerCommand = require('./commands/owner');
-                        await ownerCommand(sock, chatId, message);
-                    },
-                    'support': async () => {
-                        await sock.sendMessage(chatId, { 
-                            text: `🔗 *Support Group*\n\nJoin our support community:\nhttps://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7?mode=wwt` 
-                        }, { quoted: message });
-                    }
-                };
-
-                // Execute static handler if exists
-                if (staticButtonHandlers[buttonId]) {
-                    try {
-                        console.log(`✅ [AutoButton] Executing static handler: ${buttonId}`);
-                        await staticButtonHandlers[buttonId]();
-                        return;
-                    } catch (e) {
-                        console.error(`❌ [AutoButton] Error handling button ${buttonId}:`, e);
-                        return;
-                    }
-                }
-                
-                // Try dynamic handlers from buttonHandlersMap
                 try {
                     const handled = await executeButtonHandler(buttonId, sock, chatId, message, buttonHandlersMap);
                     if (handled) {
-                        console.log(`✅ [AutoButton] Dynamic handler executed for: ${buttonId}`);
+                        console.log(`✅ [AutoButton] Handler executed for: ${buttonId}`);
                         return;
+                    } else {
+                        console.warn(`⚠️ [AutoButton] No handler found for: ${buttonId}`);
                     }
                 } catch (e) {
-                    console.error(`❌ [AutoButton] Error with dynamic handler:`, e);
+                    console.error(`❌ [AutoButton] Error with handler:`, e);
                 }
+                return;
             }
         }
 
