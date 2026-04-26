@@ -140,6 +140,7 @@ const stickerAltCommand = require('./commands/sticker-alt');
 const wastedCommand = require('./commands/wasted');
 const newgroupCommand = require('./commands/newgroup');
 const gdriveCommand = require('./commands/gdrive');
+const getcodeCommand = require('./commands/getcode');
 // sora command removed
 
 // Global settings
@@ -619,6 +620,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     const driveUrl = userMessage.slice(7).trim();
                     const args = driveUrl ? [driveUrl] : [];
                     await gdriveCommand(sock, chatId, message, args);
+                }
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.getcode'):
+                {
+                    const codeArgs = userMessage.slice(8).trim().split(' ');
+                    await getcodeCommand(sock, chatId, message, codeArgs);
                 }
                 commandExecuted = true;
                 break;

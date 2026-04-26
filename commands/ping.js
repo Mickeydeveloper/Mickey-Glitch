@@ -1,5 +1,4 @@
 const os = require('os');
-const { safeSendMessage } = require('../lib/myfunc');
 const { sendButtons } = require('gifted-btns');
 
 function formatTime(seconds) {
@@ -12,7 +11,7 @@ function formatTime(seconds) {
 async function pingCommand(sock, chatId, message) {
     try {
         const start = Date.now();
-        const sentMsg = await safeSendMessage(sock, chatId, { text: 'Checking...' }, { quoted: message });
+        await sock.sendMessage(chatId, { text: 'Checking...' }, { quoted: message });
         const latency = Date.now() - start;
 
         const uptime = formatTime(process.uptime());
@@ -54,7 +53,7 @@ async function pingCommand(sock, chatId, message) {
         console.error('Ping command error:', error);
         // Try to send error message
         try {
-            await safeSendMessage(sock, chatId, { text: '❌ Ping failed - connection issue' }, { quoted: message });
+            await sock.sendMessage(chatId, { text: '❌ Ping failed - connection issue' }, { quoted: message });
         } catch (e) {
             // Silent fail
         }
