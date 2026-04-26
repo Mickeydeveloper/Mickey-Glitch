@@ -36,7 +36,7 @@ const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
 const { isSudo } = require('./lib/index');
 const isOwnerOrSudo = require('./lib/isOwner');
-const { loadButtonHandlers, executeButtonHandler } = require('./lib/buttonLoader');
+const { loadButtonHandlers, executeButtonHandler, getButtonId, isCommandId, extractCommand, isButtonResponse, autoDetectButtonCommand } = require('./lib/buttonLoader');
 const { autotypingCommand, isAutotypingEnabled, handleAutotypingForMessage, handleAutotypingForCommand, showTypingAfterCommand } = require('./commands/autotyping');
 const { autoreadCommand, isAutoreadEnabled, handleAutoread } = require('./commands/autoread');
 const { autoBioCommand } = require('./commands/autobio');
@@ -210,106 +210,63 @@ async function handleMessages(sock, messageUpdate, printLog) {
         let userMessage = '';
 
         // ════════════════════════════════════════════════════════════
-        // 1️⃣ HANDLE TEMPLATE BUTTON RESPONSES (standard buttons)
+        // 🔘 AUTOBUTTON - Auto-detect & handle ALL button responses
         // ════════════════════════════════════════════════════════════
-        if (message.message?.templateButtonReplyMessage) {
-            const buttonReply = message.message.templateButtonReplyMessage;
-            const selectedId = buttonReply?.selectedId;
-            console.log(`🔘 [TEMPLATE BUTTON] Selected: ${selectedId}`);
+        if (isButtonResponse(message)) {
+            console.log(`🎯 [AutoButton] Button response detected!`);
             
-            if (selectedId?.startsWith('.')) {
-                userMessage = selectedId.toLowerCase().trim();
-                console.log(`✨ [TEMPLATE BUTTON] Command extracted: ${userMessage}`);
-            }
-        }
+            // Try to extract command from button
+            const buttonCommand = autoDetectButtonCommand(message);
+            
+            if (buttonCommand) {
+                // Button contains a command ID - use it
+                userMessage = buttonCommand;
+                console.log(`✨ [AutoButton] Using button command: ${userMessage}`);
+            } else {
+                // Button is not a command - check for static handlers
+                const buttonId = getButtonId(message);
+                console.log(`🔘 [AutoButton] Non-command button ID: ${buttonId}`);
+                
+                // Predefined static button handlers
+                const staticButtonHandlers = {
+                    'channel': async () => {
+                        await sock.sendMessage(chatId, { 
+                            text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A' 
+                        }, { quoted: message });
+                    },
+                    'owner': async () => {
+                        const ownerCommand = require('./commands/owner');
+                        await ownerCommand(sock, chatId, message);
+                    },
+                    'support': async () => {
+                        await sock.sendMessage(chatId, { 
+                            text: `🔗 *Support Group*\n\nJoin our support community:\nhttps://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7?mode=wwt` 
+                        }, { quoted: message });
+                    }
+                };
 
-        // ════════════════════════════════════════════════════════════
-        // 2️⃣ HANDLE LIST RESPONSES (interactive lists)
-        // ════════════════════════════════════════════════════════════
-        if (message.message?.listResponseMessage && !userMessage) {
-            console.log(`📋 [LIST RESPONSE] Detected!`);
-            const list = message.message.listResponseMessage;
-            
-            let selectedId = list?.singleSelectReply?.selectedRowId || 
-                            list?.selectedRowId || 
-                            list?.singleSelectListResponse?.selectedRowId ||
-                            null;
-            
-            console.log(`🔍 [LIST RESPONSE] Selected ID: ${selectedId}`);
-            
-            if (selectedId && selectedId.toString().startsWith('.')) {
-                userMessage = selectedId.toString().toLowerCase().trim();
-                console.log(`✨ [LIST RESPONSE] Command extracted: ${userMessage}`);
-            }
-        }
-
-        // ════════════════════════════════════════════════════════════
-        // 3️⃣ HANDLE SINGLE SELECT REPLY (different format)
-        // ════════════════════════════════════════════════════════════
-        if (message.message?.singleSelectReply && !userMessage) {
-            console.log(`📋 [SINGLE SELECT] Detected!`);
-            const reply = message.message.singleSelectReply;
-            const selectedId = reply?.selectedRowId;
-            
-            console.log(`🔍 [SINGLE SELECT] Selected ID: ${selectedId}`);
-            
-            if (selectedId && selectedId.toString().startsWith('.')) {
-                userMessage = selectedId.toString().toLowerCase().trim();
-                console.log(`✨ [SINGLE SELECT] Command extracted: ${userMessage}`);
-            }
-        }
-
-        // ────────────────────────────────────────────────
-        // HANDLE BUTTON RESPONSES (quick-reply buttons)
-        // ────────────────────────────────────────────────
-        if (message.message?.buttonsResponseMessage && !userMessage) {
-            const buttonId = message.message.buttonsResponseMessage.selectedButtonId;
-            console.log(`🔘 [BUTTONS RESPONSE] Button pressed: ${buttonId}`);
-
-            // If button ID is a command, use it
-            if (buttonId && buttonId.startsWith('.')) {
-                console.log(`🔄 [BUTTONS RESPONSE] Command button intercepted: ${buttonId}`);
-                userMessage = buttonId.toLowerCase().trim();
-                console.log(`✨ [BUTTONS RESPONSE] Command extracted: ${userMessage}`);
-            }
-
-            // Predefined static button handlers (if not a command)
-            const staticButtonHandlers = {
-                'channel': async () => {
-                    await sock.sendMessage(chatId, { 
-                        text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A' 
-                    }, { quoted: message });
-                },
-                'owner': async () => {
-                    const ownerCommand = require('./commands/owner');
-                    await ownerCommand(sock, chatId, message);
-                },
-                'support': async () => {
-                    await sock.sendMessage(chatId, { 
-                        text: `🔗 *Support Group*\n\nJoin our support community:\nhttps://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7?mode=wwt` 
-                    }, { quoted: message });
+                // Execute static handler if exists
+                if (staticButtonHandlers[buttonId]) {
+                    try {
+                        console.log(`✅ [AutoButton] Executing static handler: ${buttonId}`);
+                        await staticButtonHandlers[buttonId]();
+                        return;
+                    } catch (e) {
+                        console.error(`❌ [AutoButton] Error handling button ${buttonId}:`, e);
+                        return;
+                    }
                 }
-            };
-
-            // Try static handlers first (if not a command)
-            if (!userMessage && staticButtonHandlers[buttonId]) {
+                
+                // Try dynamic handlers from buttonHandlersMap
                 try {
-                    console.log(`✅ [BUTTONS RESPONSE] Static handler executing: ${buttonId}`);
-                    await staticButtonHandlers[buttonId]();
-                    return;
+                    const handled = await executeButtonHandler(buttonId, sock, chatId, message, buttonHandlersMap);
+                    if (handled) {
+                        console.log(`✅ [AutoButton] Dynamic handler executed for: ${buttonId}`);
+                        return;
+                    }
                 } catch (e) {
-                    console.error(`❌ [BUTTONS RESPONSE] Error handling button ${buttonId}:`, e);
+                    console.error(`❌ [AutoButton] Error with dynamic handler:`, e);
                 }
-            }
-
-            // Try dynamic button handlers from commands (if not a command)
-            if (!userMessage) {
-                const handled = await executeButtonHandler(buttonId, sock, chatId, message, buttonHandlersMap);
-                if (handled) {
-                    console.log(`✅ [BUTTONS RESPONSE] Dynamic handler executed: ${buttonId}`);
-                    return;
-                }
-            }
         }
 
         // Extract userMessage from normal sources (text, caption, etc)
