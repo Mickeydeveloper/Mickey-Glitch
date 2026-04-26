@@ -267,6 +267,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 } catch (e) {
                     console.error(`❌ [AutoButton] Error with dynamic handler:`, e);
                 }
+            }
         }
 
         // Extract userMessage from normal sources (text, caption, etc)
