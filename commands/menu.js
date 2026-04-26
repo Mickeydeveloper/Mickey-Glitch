@@ -2,6 +2,7 @@ const moment = require('moment-timezone');
 const fs = require('fs');
 const path = require('path');
 const { sendInteractiveMessage } = require('gifted-btns');
+const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
 
 /**
  * @project: MICKEY GLITCH V3.0.5
@@ -76,21 +77,14 @@ const menuCommand = async (sock, chatId, m) => {
                         sections: sections
                     })
                 }
-            ],
-            contextInfo: {
-                externalAdReply: {
-                    title: '🎉 MICKEY GLITCH V3.0.5',
-                    body: 'Quantum Base Developer (TZ)',
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
-                    sourceUrl: 'https://whatsapp.com/channel/0029VajVv9sEwEjw9T9S0C26'
-                }
-            }
-        }, { quoted: m });
+            ]
+        });
 
     } catch (e) {
-        console.error("❌ Error kwenye Dynamic Menu:", e);
+        console.error('Menu Cmd Error:', e);
+        await sock.sendMessage(chatId, { 
+            text: '❌ *Error occurred! (Hitilafu imetokea)*' 
+        }, { quoted: m });
     }
 };
 
