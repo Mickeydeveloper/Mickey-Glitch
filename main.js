@@ -137,6 +137,7 @@ const repoCommand = require('./commands/repo');
 const reportCommand = require('./commands/report');
 const shazamCommand = require('./commands/shazam');
 const stickerAltCommand = require('./commands/sticker-alt');
+const wastedCommand = require('./commands/wasted');
 // sora command removed
 
 // Global settings
@@ -352,100 +353,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // Then check for command prefix
         if (!userMessage.startsWith('.')) {
-            // Allow numeric replies to the bot's menu: if user replies to our menu message
-            // with a number like "1", treat it as ".help 1" so category selection works.
-            const replyQuoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-            const quotedText = (
-                replyQuoted?.conversation ||
-                replyQuoted?.extendedTextMessage?.text ||
-                replyQuoted?.imageMessage?.caption ||
-                replyQuoted?.videoMessage?.caption ||
-                ''
-            ).toString().toLowerCase();
-
-            // More relaxed detection: check if it looks like the menu (has numbered items, categories, or help text)
-            const isMenuReply = quotedText && (
-                quotedText.includes('command categories') ||
-                quotedText.includes('reply with number') ||
-                quotedText.includes('available commands') ||
-                quotedText.includes('command') ||
-                /\d+.*command|category/.test(quotedText)  // e.g., "1 Fun Commands"
-            );
-
-            if (isMenuReply) {
-                const reply = userMessage.trim().toLowerCase();
-                const metaMatch = (quotedText.match(/\[help_meta:([^\]]+)\]/) || [])[1];
-                const meta = {};
-                if (metaMatch) {
-                    metaMatch.split(';').forEach(kv => {
-                        const [k, v] = kv.split('=');
-                        if (k && v) meta[k.trim()] = v.trim();
-                    });
-                }
-
-                // Numeric reply
-                if (/^\d+$/.test(reply)) {
-                    const n = parseInt(reply, 10);
-                    if (meta.type === 'cat') {
-                        // user selected a command inside a category page
-                        try {
-                            const categories = helpCommand.getCategories ? helpCommand.getCategories() : [];
-                            const catIndex = parseInt(meta.cat || '0', 10) - 1;
-                            const per = parseInt(meta.per || String(8), 10);
-                            const page = parseInt(meta.page || '1', 10);
-                            if (catIndex >= 0 && catIndex < categories.length) {
-                                const commands = categories[catIndex].commands;
-                                const globalIndex = (page - 1) * per + (n - 1);
-                                if (globalIndex >= 0 && globalIndex < commands.length) {
-                                    const cmdName = commands[globalIndex];
-                                    await helpCommand(sock, chatId, message, `.help ${cmdName}`);
-                                    return;
-                                }
-                            }
-                        } catch (e) {
-                            console.error('Error resolving category command reply:', e);
-                        }
-                    }
-
-                    // If meta.type == index or no meta, treat as category selection (page-aware)
-                    const per = parseInt(meta.per || String(6), 10);
-                    const page = parseInt(meta.page || '1', 10);
-                    const absIndex = (page - 1) * per + n; // 1-based
-                    await helpCommand(sock, chatId, message, `.help ${absIndex}`);
-                    return;
-                }
-
-                // Navigation replies
-                if (/^(next|more|prev|back|previous)$/i.test(reply)) {
-                    const cmd = reply;
-                    const type = meta.type || 'index';
-                    const page = parseInt(meta.page || '1', 10);
-                    const pages = parseInt(meta.pages || '1', 10);
-                    if (cmd === 'back') {
-                        await helpCommand(sock, chatId, message, `.help`);
-                        return;
-                    }
-                    if (cmd === 'next' || cmd === 'more') {
-                        const newPage = Math.min(page + 1, pages);
-                        if (type === 'index') await helpCommand(sock, chatId, message, `.help ${newPage}`);
-                        else await helpCommand(sock, chatId, message, `.help ${meta.cat} ${newPage}`);
-                        return;
-                    }
-                    if (cmd === 'prev' || cmd === 'previous') {
-                        const newPage = Math.max(page - 1, 1);
-                        if (type === 'index') await helpCommand(sock, chatId, message, `.help ${newPage}`);
-                        else await helpCommand(sock, chatId, message, `.help ${meta.cat} ${newPage}`);
-                        return;
-                    }
-                }
-            }
-
             // Allow running commands without '.' prefix: if the first token matches a known command,
             // treat it as if the user sent the command with a dot. This makes both "ping" and ".ping" work.
             try {
                 const firstToken = (userMessage.split(' ')[0] || '').replace(/[^a-z0-9\-_]/gi, '').toLowerCase();
-                const knownCommands = helpCommand.getAllCommands ? helpCommand.getAllCommands() : [];
-                if (firstToken && knownCommands.includes(firstToken)) {
+                // TODO: implement knownCommands list without helpCommand
+                if (firstToken) {
                     userMessage = '.' + userMessage; // now falls through to normal command handling
                 }
             } catch (e) {
@@ -612,20 +525,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 commandExecuted = true;
                 break;
-            case userMessage === '.help' || userMessage === '.bot' || userMessage === '.list' || userMessage === '.cmd' || userMessage === '.commands':
-                await helpCommand(sock, chatId, message, userMessage);
-                commandExecuted = true;
-                break;
             case userMessage === '.menu':
-                try {
-                    // Try new simple menu first (works better with buttons)
-                    const simpleMenu = require('./commands/menu-simple');
-                    await simpleMenu(sock, chatId, message);
-                } catch (e) {
-                    console.error('Error in simple menu:', e);
-                    // Fallback to original menu
-                    await menuCommand(sock, chatId, message);
-                }
+                await menuCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
             case userMessage === '.sticker' || userMessage === '.s':
@@ -735,10 +636,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 await ghostCommand(sock, chatId, isGroup);
                 break;
-            case userMessage.startsWith('.pair'):
-                const pairQuery = userMessage.slice(5).trim();
-                await pairCommand(sock, chatId, message, pairQuery);
-                break;
             case userMessage === '.repo':
                 await repoCommand(sock, chatId, message);
                 commandExecuted = true;
@@ -829,10 +726,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.halotel'):
                 await halotelCommand(sock, chatId, message, userMessage);
-                break;
-            case userMessage.startsWith('.phone'):
-                const phoneQuery = userMessage.slice(6).trim();
-                await phoneCommand(sock, chatId, message, phoneQuery);
                 break;
 
             // .move command removed
@@ -1106,9 +999,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage.startsWith('.aivoice') || userMessage.startsWith('.vai') || userMessage.startsWith('.voicex') || userMessage.startsWith('.voiceai'):
                 const voiceText = userMessage.replace(/^\.(aivoice|vai|voicex|voiceai)\s*/i, '');
                 await aiVoiceCommand(sock, chatId, senderId, voiceText, message);
-                break;
-            case userMessage.startsWith('.mickey'):
-                await mickeyCommand(sock, chatId, message);
                 break;
             case userMessage.startsWith('.translate') || userMessage.startsWith('.trt'):
                 const commandLength = userMessage.startsWith('.translate') ? 10 : 4;
