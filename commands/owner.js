@@ -15,10 +15,10 @@ async function ownerCommand(sock, chatId, message) {
 
 Choose an action below 👇`;
 
-        const imageUrl = 'https://d.uguu.se/LLjViSGg.jpg';
+        const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
         const msgOptions = {
             text: ownerText,
-            footer: "Mickey Glitch Tech • Powered by LOFT",
+            footer: "Mickey Glitch Tech • Powered by Mickey Glitch",
             image: { url: imageUrl },
             interactiveButtons: [
                 { 
