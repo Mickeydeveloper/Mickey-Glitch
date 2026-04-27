@@ -1,6 +1,6 @@
 /**
  * play.js - MIKI MUSIC (DYNAMIC VERSION)
- * Inatafuta URL ya audio moja kwa moja bila kujali muundo wa JSON
+ * Imeboreshwa kulingana na JSON mpya ya Nayan API
  */
 
 const yts = require('yt-search');
@@ -15,13 +15,13 @@ async function playCommand(sock, chatId, message, args) {
         }, { quoted: message });
     }
 
-    // Reaction ya kutafuta
+    // Reaction (itikia) kuanza kutafuta
     await sock.sendMessage(chatId, {
         react: { text: '🔍', key: message.key }
     }).catch(() => {});
 
     try {
-        // 1. YouTube Search
+        // 1. YouTube Search (Tafuta YT)
         const search = await yts(query);
         const v = search?.videos?.[0];
 
@@ -30,83 +30,64 @@ async function playCommand(sock, chatId, message, args) {
             return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' }, { quoted: message });
         }
 
-        // 2. Tuma Thumbnail na Info
+        // 2. Tuma Thumbnail na Info (Maelezo)
         await sock.sendMessage(chatId, {
             image: { url: v.thumbnail },
             caption: `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n┃ 🎵 *Title:* ${v.title}\n┃ ⏳ *Duration:* ${v.timestamp}\n┃ 👤 *Channel:* ${v.author.name}\n╰━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: message });
 
-        // 3. API Call - New YouTube API Structure
+        // 3. API Call - Imebadilishwa kulingana na JSON yako
         let audioUrl = null;
 
         try {
-            const api = `https://nayan-video-downloader.vercel.app/youtube?url=${encodeURIComponent(v.url)}`;
+            // Kutumia endpoint ya 'alldown' kama JSON yako ilivyoonyesha
+            const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
             const res = await axios.get(api, { timeout: 30000 });
 
-            // Check if API request was successful (accept 200 or true)
-            const topStatus = res.data?.status;
-            if (topStatus !== 200 && topStatus !== true) {
-                throw new Error(`API Error - Invalid status: ${topStatus}`);
+            // Kukagua kama status ni 200 (OK)
+            if (res.data?.status !== 200 || !res.data?.data?.status) {
+                throw new Error("API haijatoa majibu sahihi.");
             }
 
-            // Check if API data processing was successful
-            if (!res.data?.data || !res.data.data.status) {
-                const error = res.data?.data?.error || 'API processing failed';
-                throw new Error(error);
-            }
+            // Kuchukua link ya audio (Prefer 'high' quality)
+            const videoData = res.data.data.data;
+            audioUrl = videoData.high || videoData.low;
 
-            // Extract formats array from nested structure
-            const formats = res.data?.data?.data?.formats;
-            
-            if (!Array.isArray(formats) || formats.length === 0) {
-                console.error("❌ API Response:", res.data);
-                throw new Error("No formats available in API response");
-            }
-
-            // Find audio format - prefer audio_only or video_with_audio
-            const audioFormat = formats.find(f => 
-                f.type === 'audio' || f.type === 'audio_only' || f.ext === 'mp3' || f.ext === 'aac'
-            ) || formats[formats.length - 1]; // Fallback to last format
-
-            audioUrl = audioFormat?.url;
-
-            if (!audioUrl || !audioUrl.startsWith('http')) {
-                console.error("❌ Formats available:", formats.map(f => ({ type: f.type, ext: f.ext })));
-                throw new Error("Audio URL not found in formats");
+            if (!audioUrl) {
+                throw new Error("Link ya audio haikupatikana.");
             }
         } catch (apiErr) {
             console.error("❌ API Error:", apiErr.message);
             throw new Error(`API Error: ${apiErr.message}`);
         }
 
-        if (!audioUrl) {
-            throw new Error("Failed to extract audio URL");
-        }
-
-        // 4. Download Audio kama Buffer
+        // 4. Download Audio kama Buffer (Pakua audio)
         const audioRes = await axios.get(audioUrl, { 
             responseType: 'arraybuffer', 
             timeout: 60000,
-            headers: { 'User-Agent': 'Mozilla/5.0' } 
+            headers: { 
+                'User-Agent': 'Mozilla/5.0',
+                'Referer': 'https://nayan-video-downloader.vercel.app/' 
+            } 
         });
         const audioBuffer = Buffer.from(audioRes.data);
 
-        // 5. Tuma Audio kulingana na muundo wa Baileys
+        // 5. Tuma Audio (Send to WA)
         await sock.sendMessage(chatId, {
             audio: audioBuffer,
-            mimetype: 'audio/mp4', // 'audio/mp4' inafanya kazi vizuri zaidi kwny WA
+            mimetype: 'audio/mp4', 
             fileName: `${v.title}.mp3`,
             ptt: false
         }, { quoted: message });
 
-        // Success Reaction
+        // Success Reaction (Imefanikiwa)
         await sock.sendMessage(chatId, {
             react: { text: '✅', key: message.key }
         }).catch(() => {});
 
     } catch (err) {
         console.error("❌ PLAY ERROR:", err.message);
-        
+
         await sock.sendMessage(chatId, {
             react: { text: '❌', key: message.key }
         }).catch(() => {});
