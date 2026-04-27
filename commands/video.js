@@ -38,47 +38,43 @@ async function videoCommand(sock, chatId, message, args) {
             caption: infoText
         }, { quoted: message });
 
-        // 3. API Call with Better Error Handling
+        // 3. API Call - New YouTube API Structure
         let videoUrl = null;
+        let selectedQuality = null;
 
         try {
-            const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
+            const api = `https://nayan-video-downloader.vercel.app/youtube?url=${encodeURIComponent(v.url)}`;
             const res = await axios.get(api, { timeout: 30000 });
 
-            // Check if API returned error status
-            if (res.data?.status === false) {
-                const errorMsg = res.data?.error || 'API returned error';
-                throw new Error(errorMsg);
+            // Check if API request was successful
+            if (res.data?.status !== 200) {
+                throw new Error(`API returned status ${res.data?.status}`);
             }
 
-            /**
-             * DYNAMIC URL FINDER (Video Version)
-             * Inatafuta mp4 au link ya video kwenye JSON
-             */
-            const findVideoUrl = (obj, depth = 0) => {
-                if (!obj || typeof obj !== 'object' || depth > 5) return null;
-                
-                // Kagua keys za video kwa mpangilio wa ubora
-                const keys = ['high', 'video', 'url', 'link', 'download', 'low', 'videoUrl', 'videoLink', 'mp4'];
-                for (let key of keys) {
-                    // Hakikisha ni string, inaanza na http, na siyo audio pekee
-                    if (typeof obj[key] === 'string' && obj[key].startsWith('http') && !obj[key].includes('audio')) {
-                        return obj[key];
-                    }
-                }
+            // Check if API data processing was successful
+            if (!res.data?.data?.status) {
+                const error = res.data?.data?.error || 'API processing failed';
+                throw new Error(error);
+            }
 
-                for (let key in obj) {
-                    const found = findVideoUrl(obj[key], depth + 1);
-                    if (found) return found;
-                }
-                return null;
-            };
-
-            videoUrl = findVideoUrl(res.data);
-
-            if (!videoUrl) {
+            // Extract formats array from nested structure
+            const formats = res.data?.data?.data?.formats;
+            
+            if (!Array.isArray(formats) || formats.length === 0) {
                 console.error("❌ API Response:", res.data);
-                throw new Error("Video download link haijapatikana katika API response");
+                throw new Error("No formats available in API response");
+            }
+
+            // Sort by quality: prefer video_with_audio, then highest quality video
+            const videoFormats = formats.filter(f => f.type === 'video_with_audio' || f.type === 'video');
+            const bestFormat = videoFormats.length > 0 ? videoFormats[0] : formats[0];
+
+            videoUrl = bestFormat?.url;
+            selectedQuality = bestFormat?.quality || 'unknown';
+
+            if (!videoUrl || !videoUrl.startsWith('http')) {
+                console.error("❌ Formats available:", formats.map(f => ({ type: f.type, quality: f.quality })));
+                throw new Error("Video URL not found in formats");
             }
         } catch (apiErr) {
             console.error("❌ API Error:", apiErr.message);
