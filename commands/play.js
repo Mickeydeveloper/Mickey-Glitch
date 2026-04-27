@@ -1,6 +1,6 @@
 /**
- * play.js - MIKI MUSIC (DYNAMIC VERSION)
- * Imeboreshwa kulingana na JSON mpya ya Nayan API
+ * play.js - MIKI MUSIC (JSON ADAPTIVE)
+ * Inasoma link hata kama haina extension (.mp3/.mp4)
  */
 
 const yts = require('yt-search');
@@ -8,90 +8,64 @@ const axios = require('axios');
 
 async function playCommand(sock, chatId, message, args) {
     const query = Array.isArray(args) ? args.join(' ') : args;
+    if (!query) return;
 
-    if (!query) {
-        return sock.sendMessage(chatId, {
-            text: '╭━━━━〔 *MICKEY MUSIC* 〕━━━━┈⊷\n┃ 📝 `.play [jina la wimbo]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷'
-        }, { quoted: message });
-    }
-
-    // Reaction (itikia) kuanza kutafuta
-    await sock.sendMessage(chatId, {
-        react: { text: '🔍', key: message.key }
-    }).catch(() => {});
+    await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } }).catch(() => {});
 
     try {
-        // 1. YouTube Search (Tafuta YT)
         const search = await yts(query);
         const v = search?.videos?.[0];
+        if (!v) return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' }, { quoted: message });
 
-        if (!v) {
-            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-            return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' }, { quoted: message });
-        }
-
-        // 2. Tuma Thumbnail na Info (Maelezo)
+        // Tuma Thumbnail
         await sock.sendMessage(chatId, {
             image: { url: v.thumbnail },
-            caption: `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n┃ 🎵 *Title:* ${v.title}\n┃ ⏳ *Duration:* ${v.timestamp}\n┃ 👤 *Channel:* ${v.author.name}\n╰━━━━━━━━━━━━━━━━━━━━┈⊷`
+            caption: `🎵 *Title:* ${v.title}\n👤 *Author:* ${v.author.name}`
         }, { quoted: message });
 
-        // 3. API Call - Imebadilishwa kulingana na JSON yako
+        // 1. Fetch JSON kutoka API
+        const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
+        const res = await axios.get(api, { timeout: 15000 });
+
+        // 2. SMART EXTRACTION (Inatafuta link kwny JSON popote ilipo)
         let audioUrl = null;
+        const rawData = res.data;
 
-        try {
-            // Kutumia endpoint ya 'alldown' kama JSON yako ilivyoonyesha
-            const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-            const res = await axios.get(api, { timeout: 30000 });
-
-            // Kukagua kama status ni 200 (OK)
-            if (res.data?.status !== 200 || !res.data?.data?.status) {
-                throw new Error("API haijatoa majibu sahihi.");
-            }
-
-            // Kuchukua link ya audio (Prefer 'high' quality)
-            const videoData = res.data.data.data;
-            audioUrl = videoData.high || videoData.low;
-
-            if (!audioUrl) {
-                throw new Error("Link ya audio haikupatikana.");
-            }
-        } catch (apiErr) {
-            console.error("❌ API Error:", apiErr.message);
-            throw new Error(`API Error: ${apiErr.message}`);
+        // Angalia structure uliyotuma (res.data.data.data.high)
+        if (rawData?.data?.data?.high) {
+            audioUrl = rawData.data.data.high;
+        } else if (rawData?.data?.high) {
+            audioUrl = rawData.data.high;
+        } else {
+            // Kama structure imebadilika, search link yoyote ya 'download'
+            const searchLinks = JSON.stringify(rawData).match(/https?:\/\/[^\s"']+/g);
+            audioUrl = searchLinks?.find(link => link.includes('download') || link.includes('ymcdn'));
         }
 
-        // 4. Download Audio kama Buffer (Pakua audio)
-        const audioRes = await axios.get(audioUrl, { 
-            responseType: 'arraybuffer', 
-            timeout: 60000,
-            headers: { 
-                'User-Agent': 'Mozilla/5.0',
-                'Referer': 'https://nayan-video-downloader.vercel.app/' 
-            } 
-        });
-        const audioBuffer = Buffer.from(audioRes.data);
+        if (!audioUrl) throw new Error("Link ya audio haikupatikana kwny JSON.");
 
-        // 5. Tuma Audio (Send to WA)
+        // 3. DOWNLOAD AUDIO (Muhimu: Headers lazima ziwepo)
+        const audioRes = await axios.get(audioUrl, {
+            responseType: 'arraybuffer',
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Connection': 'keep-alive'
+            }
+        });
+
+        // 4. TUMA WHATSAPP
         await sock.sendMessage(chatId, {
-            audio: audioBuffer,
-            mimetype: 'audio/mp4', 
-            fileName: `${v.title}.mp3`,
-            ptt: false
+            audio: Buffer.from(audioRes.data),
+            mimetype: 'audio/mp4',
+            fileName: `${v.title}.mp3`
         }, { quoted: message });
 
-        // Success Reaction (Imefanikiwa)
-        await sock.sendMessage(chatId, {
-            react: { text: '✅', key: message.key }
-        }).catch(() => {});
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
 
     } catch (err) {
-        console.error("❌ PLAY ERROR:", err.message);
-
-        await sock.sendMessage(chatId, {
-            react: { text: '❌', key: message.key }
-        }).catch(() => {});
-
+        console.error("DEBUG ERROR:", err.message);
         await sock.sendMessage(chatId, {
             text: `❌ *Audio Error!*\n\n_Sababu: ${err.message}_`
         }, { quoted: message });
