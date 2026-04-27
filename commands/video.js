@@ -46,13 +46,14 @@ async function videoCommand(sock, chatId, message, args) {
             const api = `https://nayan-video-downloader.vercel.app/youtube?url=${encodeURIComponent(v.url)}`;
             const res = await axios.get(api, { timeout: 30000 });
 
-            // Check if API request was successful
-            if (res.data?.status !== 200) {
-                throw new Error(`API returned status ${res.data?.status}`);
+            // Check if API request was successful (accept 200 or true)
+            const topStatus = res.data?.status;
+            if (topStatus !== 200 && topStatus !== true) {
+                throw new Error(`API Error - Invalid status: ${topStatus}`);
             }
 
             // Check if API data processing was successful
-            if (!res.data?.data?.status) {
+            if (!res.data?.data || !res.data.data.status) {
                 const error = res.data?.data?.error || 'API processing failed';
                 throw new Error(error);
             }
