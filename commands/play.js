@@ -36,38 +36,56 @@ async function playCommand(sock, chatId, message, args) {
             caption: `╭━━━━〔 *PLAYING* 〕━━━━┈⊷\n┃ 🎵 *Title:* ${v.title}\n┃ ⏳ *Duration:* ${v.timestamp}\n┃ 👤 *Channel:* ${v.author.name}\n╰━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: message });
 
-        // 3. API Call
-        const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-        const res = await axios.get(api, { timeout: 30000 });
+        // 3. API Call with Fallback
+        let audioUrl = null;
+        let apiError = null;
 
-        /**
-         * DYNAMIC URL FINDER
-         * Inakagua JSON yote kutafuta link ya download
-         */
-        const findAudioUrl = (obj) => {
-            if (!obj || typeof obj !== 'object') return null;
-            
-            // Angalia keys zinazotumiwa mara kwa mara
-            const keys = ['high', 'low', 'url', 'link', 'download', 'audio', 'mp3'];
-            for (let key of keys) {
-                if (typeof obj[key] === 'string' && obj[key].startsWith('http')) {
-                    return obj[key];
+        try {
+            const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
+            const res = await axios.get(api, { timeout: 30000 });
+
+            // Check if API returned error
+            if (res.data?.status === false) {
+                apiError = res.data?.error || 'API error';
+                throw new Error(apiError);
+            }
+
+            /**
+             * DYNAMIC URL FINDER
+             * Inakagua JSON yote kutafuta link ya download
+             */
+            const findAudioUrl = (obj, depth = 0) => {
+                if (!obj || typeof obj !== 'object' || depth > 5) return null;
+                
+                // Angalia keys zinazotumiwa mara kwa mara
+                const keys = ['high', 'low', 'url', 'link', 'download', 'audio', 'mp3', 'audioUrl', 'audioLink'];
+                for (let key of keys) {
+                    if (typeof obj[key] === 'string' && obj[key].startsWith('http')) {
+                        return obj[key];
+                    }
                 }
-            }
 
-            // Kama haipo, ingia ndani zaidi (Recursion)
-            for (let key in obj) {
-                const found = findAudioUrl(obj[key]);
-                if (found) return found;
-            }
-            return null;
-        };
+                // Kama haipo, ingia ndani zaidi (Recursion)
+                for (let key in obj) {
+                    const found = findAudioUrl(obj[key], depth + 1);
+                    if (found) return found;
+                }
+                return null;
+            };
 
-        const audioUrl = findAudioUrl(res.data);
+            audioUrl = findAudioUrl(res.data);
+
+            if (!audioUrl) {
+                console.error("❌ JSON Response Structure:", res.data);
+                throw new Error("Invalid API response - Audio link haijapatikana");
+            }
+        } catch (apiErr) {
+            console.error("❌ API Error:", apiErr.message);
+            throw new Error(`API Error: ${apiErr.message}`);
+        }
 
         if (!audioUrl) {
-            console.error("❌ JSON Response Structure:", res.data);
-            throw new Error("Invalid API response - Link haijapatikana");
+            throw new Error("Failed to extract audio URL");
         }
 
         // 4. Download Audio kama Buffer

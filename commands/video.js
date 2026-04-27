@@ -38,39 +38,55 @@ async function videoCommand(sock, chatId, message, args) {
             caption: infoText
         }, { quoted: message });
 
-        // 3. API Call (Tumia API ileile ya /alldown)
-        const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
-        const res = await axios.get(api, { timeout: 30000 });
+        // 3. API Call with Better Error Handling
+        let videoUrl = null;
 
-        /**
-         * DYNAMIC URL FINDER (Video Version)
-         * Inatafuta mp4 au link ya video kwenye JSON
-         */
-        const findVideoUrl = (obj) => {
-            if (!obj || typeof obj !== 'object') return null;
-            
-            // Kagua keys za video kwa mpangilio wa ubora
-            const keys = ['high', 'video', 'url', 'link', 'download', 'low'];
-            for (let key of keys) {
-                // Hakikisha ni string, inaanza na http, na siyo audio pekee
-                if (typeof obj[key] === 'string' && obj[key].startsWith('http')) {
-                    // Baadhi ya API zinaweka tag ya mp4, tunaihitaji
-                    return obj[key];
+        try {
+            const api = `https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`;
+            const res = await axios.get(api, { timeout: 30000 });
+
+            // Check if API returned error status
+            if (res.data?.status === false) {
+                const errorMsg = res.data?.error || 'API returned error';
+                throw new Error(errorMsg);
+            }
+
+            /**
+             * DYNAMIC URL FINDER (Video Version)
+             * Inatafuta mp4 au link ya video kwenye JSON
+             */
+            const findVideoUrl = (obj, depth = 0) => {
+                if (!obj || typeof obj !== 'object' || depth > 5) return null;
+                
+                // Kagua keys za video kwa mpangilio wa ubora
+                const keys = ['high', 'video', 'url', 'link', 'download', 'low', 'videoUrl', 'videoLink', 'mp4'];
+                for (let key of keys) {
+                    // Hakikisha ni string, inaanza na http, na siyo audio pekee
+                    if (typeof obj[key] === 'string' && obj[key].startsWith('http') && !obj[key].includes('audio')) {
+                        return obj[key];
+                    }
                 }
-            }
 
-            for (let key in obj) {
-                const found = findVideoUrl(obj[key]);
-                if (found) return found;
-            }
-            return null;
-        };
+                for (let key in obj) {
+                    const found = findVideoUrl(obj[key], depth + 1);
+                    if (found) return found;
+                }
+                return null;
+            };
 
-        const videoUrl = findVideoUrl(res.data);
+            videoUrl = findVideoUrl(res.data);
+
+            if (!videoUrl) {
+                console.error("❌ API Response:", res.data);
+                throw new Error("Video download link haijapatikana katika API response");
+            }
+        } catch (apiErr) {
+            console.error("❌ API Error:", apiErr.message);
+            throw new Error(`API Error: ${apiErr.message}`);
+        }
 
         if (!videoUrl) {
-            console.error("❌ API Response:", res.data);
-            throw new Error("Link ya video haijapatikana kwny API.");
+            throw new Error("Failed to extract video URL");
         }
 
         // 4. Download Video kama Buffer
