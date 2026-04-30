@@ -1,13 +1,5 @@
-/**
- * play.js - MIKI MUSIC (YTDL-CORE VERSION)
- * Using local ytdl-core instead of external API for better reliability
- */
-
 const yts = require('yt-search');
-const ytdl = require('ytdl-core');
-const YTDownloader = require('../lib/ytdl2');
-const fs = require('fs');
-const path = require('path');
+const axios = require('axios');
 
 async function playCommand(sock, chatId, message, args) {
     const query = Array.isArray(args) ? args.join(' ') : args;
@@ -28,20 +20,33 @@ async function playCommand(sock, chatId, message, args) {
 
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } }).catch(() => {});
 
-        // Get audio stream URL using ytdl-core
-        const videoInfo = await ytdl.getInfo(v.url);
-        const audioFormat = ytdl.chooseFormat(videoInfo.formats, { 
-            quality: 'highestaudio',
-            filter: 'audioonly' 
-        });
+        let audioUrl = null;
 
-        if (!audioFormat || !audioFormat.url) {
-            throw new Error("Failed to get audio stream URL");
+        // --- JARIBIO LA 1: alldown API ---
+        try {
+            const res1 = await axios.get(`https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(v.url)}`);
+            // Kulingana na JSON yako: data.data.high (au low kama mbadala)
+            audioUrl = res1.data?.data?.data?.high || res1.data?.data?.data?.low;
+        } catch (e) {
+            console.log("Alldown failed, switching to ytdown...");
         }
 
-        // TUMA WHATSAPP
+        // --- JARIBIO LA 2: ytdown API (Fallback) ---
+        if (!audioUrl) {
+            try {
+                const res2 = await axios.get(`https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(v.url)}`);
+                // Kulingana na JSON yako ya pili: data.data.audio
+                audioUrl = res2.data?.data?.data?.audio;
+            } catch (e) {
+                throw new Error("API zote mbili zimefeli.");
+            }
+        }
+
+        if (!audioUrl) throw new Error("Sikuweza kupata link ya audio kwnye API.");
+
+        // TUMA AUDIO
         await sock.sendMessage(chatId, {
-            audio: { url: audioFormat.url },
+            audio: { url: audioUrl },
             mimetype: 'audio/mpeg',
             fileName: `${v.title}.mp3`
         }, { quoted: message });
@@ -49,10 +54,11 @@ async function playCommand(sock, chatId, message, args) {
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
 
     } catch (err) {
-        console.error("DEBUG ERROR:", err.message);
+        console.error("DEBUG:", err.message);
         await sock.sendMessage(chatId, {
-            text: `❌ *Audio Error!*\n\n_Sababu: ${err.message}_`
+            text: `❌ *Error!*\n\n_Sababu: ${err.message}_`
         }, { quoted: message });
+        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
     }
 }
 
