@@ -1,7 +1,7 @@
 const settings = require('../settings');
 
 /**
- * Create new WhatsApp group - Owner Only
+ * Create new WhatsApp group - Works in both private and group chats
  */
 async function newgroupCommand(sock, chatId, message, args) {
     try {
@@ -9,20 +9,10 @@ async function newgroupCommand(sock, chatId, message, args) {
             return console.error('❌ Missing required parameters for newgroup command');
         }
 
-        // 1. Check if sender is owner (Angalia kama ni owner)
-        const ownerNumbers = Array.isArray(settings.ownerNumber)
-            ? settings.ownerNumber
-            : [settings.ownerNumber];
-        
-        const senderId = (message.sender || message.key?.participant || '').split('@')[0];
+        // Get bot number for reference
+        const botNumber = sock.user?.id?.split(':')[0] || '';
 
-        if (!ownerNumbers.includes(senderId)) {
-            return await sock.sendMessage(chatId, {
-                text: '❌ *Amri hii ni kwa mmiliki pekee! (Owner Only)*'
-            }, { quoted: message });
-        }
-
-        // 2. Define group name (Jina la group)
+        // 1. Define group name (Jina la group)
         const groupName = (args && Array.isArray(args) && args.join(' ').trim()) || `Mickey Group ${Date.now()}`;
 
         if (!groupName || groupName.length === 0) {
@@ -85,7 +75,7 @@ async function newgroupCommand(sock, chatId, message, args) {
             // Tuma ujumbe wa kwanza kwenye group jipya
             try {
                 await sock.sendMessage(newGroup.id, {
-                    text: `👋 *Karibuni kwenye ${groupName}!*\n\n_Created via MICKEY GLITCH_`
+                    text: `👋 *Karibuni kwenye ${groupName}!*\n\n_Created via MICKEY GLITCH_\n\n*Bot Number:* ${botNumber}`
                 });
             } catch (welcomeError) {
                 console.error('Error sending welcome message:', welcomeError);
@@ -112,5 +102,5 @@ async function newgroupCommand(sock, chatId, message, args) {
 
 module.exports = newgroupCommand;
 module.exports.name = 'newgroup';
-module.exports.category = 'OWNER';
-module.exports.description = 'Create a new group (Owner only)';
+module.exports.category = 'GENERAL';
+module.exports.description = 'Create a new group (Works in private and group chats)';
