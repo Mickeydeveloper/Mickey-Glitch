@@ -86,8 +86,11 @@ const { handlePromotionEvent } = require('./commands/promote');
 const { handleDemotionEvent } = require('./commands/demote');
 const viewOnceCommand = require('./commands/viewonce');
 const clearSessionCommand = require('./commands/clearsession');
+
+// ⭐ HANDLE MPYA YA STATUS (IMEREKEBISHWA)
 const { autoStatusCommand, handleAutoStatus } = require('./commands/autostatus'); 
 const { statusForwardCommand, handleStatusForward } = require('./commands/statusforward');
+
 const stickerTelegramCommand = require('./commands/stickertelegram');
 const textmakerCommand = require('./commands/textmaker');
 const { handleAntideleteCommand, handleMessageRevocation, storeMessage } = require('./commands/antidelete');
@@ -413,147 +416,38 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage.startsWith('.antilink'):
                 await handleAntilinkCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message);
                 break;
-            case userMessage.startsWith('.antitag'):
-                await handleAntitagCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message);
-                break;
-            case userMessage.startsWith('.weather'):
-                await weatherCommand(sock, chatId, message, userMessage.slice(9).trim());
-                break;
-            case userMessage.startsWith('.halotel'):
-                await halotelCommand(sock, chatId, message, userMessage);
-                break;
-            case userMessage.startsWith('.lyrics'):
-                await lyricsCommand(sock, chatId, userMessage.split(' ').slice(1).join(' '), message);
-                break;
-            case userMessage === '.clear':
-                if (isGroup) await clearCommand(sock, chatId);
-                break;
-            case userMessage.startsWith('.promote'):
-                await promoteCommand(sock, chatId, message.message.extendedTextMessage?.contextInfo?.mentionedJid || [], message);
-                break;
-            case userMessage.startsWith('.demote'):
-                await demoteCommand(sock, chatId, message.message.extendedTextMessage?.contextInfo?.mentionedJid || [], message);
-                break;
-            case userMessage === '.alive':
-                await aliveCommand(sock, chatId, message);
-                break;
-            case userMessage.startsWith('.autobio'):
-                await autoBioCommand(sock, chatId, message, userMessage.split(' ').slice(1).join(' '));
-                break;
-            case userMessage.startsWith('.antibadword'):
-                await antibadwordCommand(sock, chatId, message, senderId, isSenderAdmin);
-                break;
-            case userMessage.startsWith('.take') || userMessage.startsWith('.steal'):
-                await takeCommand(sock, chatId, message, rawText.slice(userMessage.startsWith('.steal') ? 6 : 5).trim().split(' '));
-                break;
-            case userMessage === '.staff':
-                await staffCommand(sock, chatId, message);
-                break;
-            case userMessage.startsWith('.url'):
-                await urlCommand(sock, chatId, message);
-                break;
-            case userMessage === '.vv':
-                await viewOnceCommand(sock, chatId, message);
-                break;
-            case userMessage === '.clearsession':
-                await clearSessionCommand(sock, chatId, message);
-                break;
+            // ⭐ CASE ZA STATUS
             case userMessage.startsWith('.autostatus'):
                 await autoStatusCommand(sock, chatId, message, userMessage.split(' ').slice(1));
                 break;
             case userMessage.startsWith('.statusforward'):
                 await statusForwardCommand(sock, chatId, message, userMessage.split(' ').slice(1));
                 break;
-            case userMessage.startsWith('.antidelete'):
-                await handleAntideleteCommand(sock, chatId, message, userMessage.slice(11).trim());
-                break;
-            case userMessage === '.cleartmp':
-                await clearTmpCommand(sock, chatId, message);
-                break;
-            case userMessage === '.setpp':
-                await setProfilePicture(sock, chatId, message);
-                break;
-            case userMessage.startsWith('.setgdesc'):
-                await setGroupDescription(sock, chatId, senderId, rawText.slice(9).trim(), message);
-                break;
-            case userMessage.startsWith('.instagram') || userMessage.startsWith('.ig'):
-                await instagramCommand(sock, chatId, message);
-                break;
-            case userMessage.startsWith('.play') || userMessage.startsWith('.song'):
-                await playCommand(sock, chatId, message, userMessage);
-                break;
-            case userMessage.startsWith('.video'):
-                await videoCommand(sock, chatId, message, userMessage);
-                break;
-            case userMessage.startsWith('.gpt') || userMessage.startsWith('.gemini'):
-                await aiCommand(sock, chatId, message);
-                break;
-            case userMessage.startsWith('.translate'):
-                await handleTranslateCommand(sock, chatId, message, userMessage.slice(10));
-                break;
-            case userMessage.startsWith('.autoreact'):
-                await handleAreactCommand(sock, chatId, message, isOwnerOrSudoCheck);
-                break;
-            case userMessage.startsWith('.imagine'):
-                await imagineCommand(sock, chatId, message);
-                break;
-            case userMessage.startsWith('.autotyping'):
-                await autotypingCommand(sock, chatId, message);
-                commandExecuted = true;
-                break;
-            case userMessage.startsWith('.autoread'):
-                await autoreadCommand(sock, chatId, message);
-                commandExecuted = true;
-                break;
-            case userMessage === '.crop':
-                await stickercropCommand(sock, chatId, message);
-                commandExecuted = true;
-                break;
-            case userMessage.startsWith('.update'):
-                await updateCommand(sock, chatId, message, rawText.trim().split(/\s+/)[1] || '');
-                commandExecuted = true;
-                break;
-            default:
-                commandExecuted = false;
-                break;
         }
 
-        if (commandExecuted) await showTypingAfterCommand(sock, chatId);
-        if (userMessage.startsWith('.')) await addCommandReaction(sock, message);
-
-    } catch (error) {
-        console.error('❌ MICKEY ERROR PROTECTOR:', error.message);
+    } catch (e) {
+        console.error('❌ CRITICAL Message handler error:', e.message);
     }
 }
 
-async function handleGroupParticipantUpdate(sock, update) {
+/**
+ * 🛡️ [STATUS HANDLER] - IMEREKEBISHWA KIKAMILIFU
+ * Handle ya status view na forward
+ */
+async function handleStatus(sock, messageUpdate) {
     try {
-        const { id, participants, action, author } = update;
-        if (!id.endsWith('@g.us')) return;
-        let mode = JSON.parse(fs.readFileSync('./data/messageCount.json'));
-        if (!mode.isPublic) return;
+        if (!sock || !messageUpdate?.messages?.length) return;
 
-        if (action === 'promote') await handlePromotionEvent(sock, id, participants, author);
-        if (action === 'demote') await handleDemotionEvent(sock, id, participants, author);
-    } catch (e) { console.error('❌ Group Update Error:', e.message); }
+        // 1. View & Reaction (Inachuja status zako kule ndani)
+        const processedStatus = await handleAutoStatus(sock, messageUpdate);
+
+        // 2. Kama imekubaliwa (sio yako), i-forward
+        if (processedStatus) {
+            await handleStatusForward(sock, processedStatus);
+        }
+    } catch (e) {
+        // Silent
+    }
 }
 
-module.exports = {
-    handleMessages,
-    handleGroupParticipantUpdate,
-    handleStatus: async (sock, status) => {
-        try {
-            // 1. Inaview na kulike kwanza (Inategemea autostatus.js)
-            const processedStatus = await handleAutoStatus(sock, { messages: [status] });
-
-            // 2. Kama imefanikiwa kuview, inatuma kwako (Inategemea statusforward.js)
-            if (processedStatus) {
-                await handleStatusForward(sock, processedStatus);
-            }
-        } catch (e) { 
-            if (!e.message.includes('participant')) {
-                console.error('❌ Status Error:', e.message); 
-            }
-        }
-    }
-};
+module.exports = { handleMessages, handleStatus };
