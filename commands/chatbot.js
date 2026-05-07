@@ -51,13 +51,10 @@ function saveMemory(memory) {
     } catch (e) { console.error('❌ Memory Save Err:', e); }
 }
 
-// BORESHO KUBWA: Hii inakamata kila aina ya text (Conversations, Replies, Captions)
 function extractText(m) {
     try {
         if (!m || !m.message) return '';
         const msg = m.message;
-        
-        // Inasoma message za kawaida, za kureply (extended), na captions za picha/video
         const text = msg.conversation || 
                      msg.extendedTextMessage?.text || 
                      msg.imageMessage?.caption || 
@@ -74,16 +71,12 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
     try {
         if (!chatId || m.key?.fromMe) return;
 
-        // Kama kuna text imetumwa moja kwa moja au itafute kwenye message
         const text = userText || extractText(m);
-        
-        // Kama hakuna maandishi, au ni command ya bot (mfano .menu), usijibu
         if (!text || text.startsWith('.') || text.startsWith('!') || text.startsWith('/')) return; 
 
         const state = loadState();
         const isGroup = chatId.endsWith('@g.us');
-        
-        // Check kama chatbot imewashwa
+
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
         if (!enabled) return;
 
@@ -92,47 +85,43 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
         let memory = loadMemory();
         if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
 
-        // Tunatunza message 5 za mwisho ili AI iwe na kumbukumbu ya mazungumzo
         memory[chatId].chats.push({ role: "user", content: text });
         memory[chatId].lastUpdate = Date.now();
 
-        if (memory[chatId].chats.length > 5) memory[chatId].chats.shift();
+        if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
         const history = memory[chatId].chats
             .map(msg => `${msg.role === 'user' ? 'Mteja' : 'Mickey'}: ${msg.content}`)
             .join("\n");
 
-        // Onyesha bot "inatype..."
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (e) {}
 
-        // --- SYSTEM PROMPT (Hapa ndipo tabia ya bot inatengenezwa) ---
-        const systemPrompt = `Wewe unaitwa MICKEY, mshkaji wa karibu na Genius Support wa Mickey Glitch Bot. 
-        TABIA: Ongea kishkaji cha Kitanzania (Sheng/Slang kama 'Niaje', 'Safi', 'Oya'). 
-        MAJIBU: Jibu kwa ufasaha na maneno kamili. Usitumie emoji pekee. Kama hujui kitu, waambie wamcheki Mickdadi (Owner).
-        IDENTITY: Wewe ni Mickey Glitch V3 Bot, iliyotengenezwa na Mickdadi Hamza.`;
+        // --- BORESHO LA PROMPT (IDENTITY ENFORCEMENT) ---
+        const systemPrompt = `STRICT RULES:
+        1. Wewe ni MICKEY GLITCH V3 BOT, sio Microsoft Copilot, sio AI Assistant, wala GPT.
+        2. Umengenezwa na MICKDADI HAMZA (Owner).
+        3. Ongea kishkaji cha Kitanzania (Sheng/Slang). Tumia maneno kama 'Oya', 'Niaje', 'Safi mwanangu', 'Fresh', 'Mzee baba'.
+        4. KAMWE usiseme wewe ni mtambo wa lugha au AI ya kampuni fulani. 
+        5. Jibu kwa ufupi na kwa vibe la mtaani lakini uwe na akili (Genius).
+        6. Kama huwezi kusaidia kitu, waambie "Mcheki mwanangu Mickdadi (Owner) akusaidie" au "Hiyo imekataa bro".`;
 
-        // Kuchanganya historia na swali jipya
-        const fullPrompt = `Maelekezo: ${systemPrompt}\n\nHistoria ya Chati:\n${history}\n\nMteja: ${text}\nMickey:`;
-        
-        // Kutumia API (Yupra API)
+        const fullPrompt = `Roleplay: ${systemPrompt}\n\nChat History:\n${history}\n\nMteja: ${text}\nMickey:`;
+
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
 
         const fetchRes = await fetch(apiUrl);
         const res = await fetchRes.json();
-        
-        // Kunasa jibu (Fallback kwenye keys mbalimbali za API)
+
         let reply = res?.response || res?.result || res?.message || res?.data;
 
-        if (!reply || reply.length < 1) {
-            console.log("⚠️ API haijatoa jibu kwa maandishi haya.");
-            return;
-        }
+        if (!reply || reply.length < 1) return;
 
-        // Hifadhi jibu la bot kwenye memory
+        // --- AUTO-CLEANER (Kama AI itajisahau na kusema yeye ni Copilot/Microsoft) ---
+        reply = reply.replace(/Microsoft|Copilot|AI Assistant|OpenAI|GPT/gi, "Mickey Glitch Bot");
+        
         memory[chatId].chats.push({ role: "assistant", content: reply });
         saveMemory(memory);
 
-        // Tuma jibu kwa mteja
         await sock.sendMessage(chatId, { text: reply }, { quoted: m });
 
     } catch (e) { 
@@ -151,7 +140,7 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
             const mode = args[1]?.toLowerCase();
             state.private = (mode === 'on');
             saveState(state);
-            return await sock.sendMessage(chatId, { text: `✅ Chatbot Private: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: m });
+            return await sock.sendMessage(chatId, { text: `✅ *Mickey Chatbot Private:* ${state.private ? 'ON 🟢' : 'OFF 🔴'}` }, { quoted: m });
         }
 
         if (sub === 'on' || sub === 'off') {
@@ -163,12 +152,15 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
                 state.private = isEnable;
             }
             saveState(state);
-            return await sock.sendMessage(chatId, { text: `✅ Chatbot imewekwa: *${isEnable ? 'ON' : 'OFF'}*` }, { quoted: m });
+            return await sock.sendMessage(chatId, { text: `✅ *Chatbot imewekwa:* ${isEnable ? 'ON 🟢' : 'OFF 🔴'}` }, { quoted: m });
         }
 
-        return await sock.sendMessage(chatId, { 
-            text: `🤖 *MICKEY CHATBOT SETTINGS*\n\n.chatbot on (Washa hapa)\n.chatbot off (Zima hapa)\n.chatbot private on (Washa inbox)` 
-        }, { quoted: m });
+        const helpMsg = `🤖 *MICKEY CHATBOT SETTINGS*\n\n` +
+                        `*Kwenye Group:* .chatbot on/off\n` +
+                        `*Inbox/Private:* .chatbot private on/off\n\n` +
+                        `_Powered by Mickey Infor Technology_`;
+
+        return await sock.sendMessage(chatId, { text: helpMsg }, { quoted: m });
 
     } catch (e) { console.error('❌ Toggle Error:', e); }
 }
