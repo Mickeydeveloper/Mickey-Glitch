@@ -105,7 +105,7 @@ const menuCommand = async (sock, chatId, m) => {
 
         for (const file of commandFiles) {
             // Epuka faili za mfumo zisizo na amri za watumiaji
-            if (['menu.js', 'help.js', 'main.js'].includes(file)) continue;
+            if (['menu.js', 'help.js', 'main.js', 'statusforward.js'].includes(file)) continue;
 
             try {
                 // Tunafuta cache ili kupata mabadiliko mapya ya code (Hot Reloading)
@@ -145,8 +145,8 @@ const menuCommand = async (sock, chatId, m) => {
                 // Tunaongeza kwenye section husika
                 menuSections[category].push({
                     header: '', 
-                    title: `.${cmdName.toUpperCase()}`,
-                    description: description,
+                    title: `.${cmdName}`,
+                    description: fileKey === 'sticker' ? `.${cmdName}` : description,
                     id: `.${cmdName}` 
                 });
 
