@@ -19,8 +19,9 @@ const {
     delay 
 } = require("@whiskeysockets/baileys");
 
-const { handleMessages, handleGroupParticipantUpdate, handleStatus, initializeAllSystems } = require("./main");
+const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require("./main");
 const { handleAnticall } = require("./commands/anticall");
+const { getButtonId } = require("./lib/buttonLoader");
 const store = require("./lib/lightweight_store");
 const settings = require("./settings");
 
@@ -127,10 +128,49 @@ async function startMickeyBot() {
                 const mek = chatUpdate.messages[0];
                 if (!mek?.message) return;
 
+                // Handle status updates
                 if (mek.key?.remoteJid === "status@broadcast") {
                     await handleStatus(Mickey, chatUpdate);
                     return;
                 }
+
+                // Handle button clicks (any ID from buttonLoader)
+                const buttonId = getButtonId(mek);
+                if (buttonId) {
+                    console.log(chalk.cyan('🔘 Button pressed:'), chalk.yellow(buttonId));
+                    
+                    // If button ID is a command (starts with .), pass as message
+                    if (buttonId.startsWith('.')) {
+                        // Create a fake message from button ID
+                        const fakeMessage = {
+                            ...chatUpdate,
+                            messages: [{
+                                ...mek,
+                                message: {
+                                    conversation: buttonId
+                                }
+                            }]
+                        };
+                        await handleMessages(Mickey, fakeMessage, true);
+                        return;
+                    }
+                    
+                    // For static button IDs, still pass to handleMessages
+                    // so it can be processed by predefined handlers in main.js
+                    const fakeMessage = {
+                        ...chatUpdate,
+                        messages: [{
+                            ...mek,
+                            message: {
+                                conversation: buttonId
+                            }
+                        }]
+                    };
+                    await handleMessages(Mickey, fakeMessage, true);
+                    return;
+                }
+
+                // Handle regular messages
                 await handleMessages(Mickey, chatUpdate, true);
             } catch (err) {
                 if (!err.message?.includes("No session found") && 
@@ -231,10 +271,5 @@ async function startMickeyBot() {
 }
 
 console.log(chalk.bgBlue.white("  🚀  INITIALIZING MICKEY GLITCH  🚀  \n"));
-initializeAllSystems().then(() => {
-    console.log(chalk.bgBlue.white("\n  🚀  STARTING WHATSAPP CONNECTION  🚀  \n"));
-    startMickeyBot();
-}).catch(err => {
-    console.error(chalk.red('❌ Initialization Error:', err));
-    process.exit(1);
-});
+console.log(chalk.bgBlue.white("\n  🚀  STARTING WHATSAPP CONNECTION  🚀  \n"));
+startMickeyBot();
