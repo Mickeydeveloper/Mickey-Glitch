@@ -1,75 +1,105 @@
-/**
- * video.js - MIKI VIDEO (YTDL-CORE VERSION)
- * Using local ytdl-core instead of external API for better reliability
- */
-
-const yts = require('yt-search');const ytdl = require('ytdl-core');const { YTDownloader } = require('../lib/ytdl2');
+const { sendGiftedButtons } = require('gifted-btns');
+const yts = require('yt-search');
 const axios = require('axios');
 
-async function videoCommand(sock, chatId, message, args) {
-    const query = Array.isArray(args) ? args.join(' ') : args;
+/**
+ * 1. MP4 Downloader Logic
+ * Inajaribu API tofauti (Nayan & Keith)
+ */
+async function getVideoUrl(url) {
+    const apis = [
+        // API ya Nayan (Inatoa MP4 direct)
+        async () => {
+            const res = await axios.get(`https://nayan-video-downloader.vercel.app/ytdown?url=${encodeURIComponent(url)}`);
+            return res.data?.data?.data?.video || res.data?.data?.video;
+        },
+        // API ya Keith (MP4)
+        async () => {
+            const res = await axios.get(`https://apiskeith.top/download/mp4?url=${encodeURIComponent(url)}`);
+            if (res.data?.success) return res.data.downloadURL;
+            throw new Error("Keith Fail");
+        }
+    ];
 
-    if (!query) {
-        return sock.sendMessage(chatId, {
-            text: '╭━━━━〔 *MICKEY VIDEO* 〕━━━━┈⊷\n┃ 📝 `.video [jina la video]`\n╰━━━━━━━━━━━━━━━━━━━━┈⊷'
-        }, { quoted: message });
+    for (const api of apis) {
+        try {
+            const link = await api();
+            if (link) return link;
+        } catch (e) { continue; }
     }
+    throw new Error("APIs zote zimefeli kutoa MP4");
+}
 
-    // Reaction (itikia)
-    await sock.sendMessage(chatId, {
-        react: { text: '🎬', key: message.key }
-    }).catch(() => {});
+/**
+ * 2. Main Command
+ */
+async function videoCommand(sock, chatId, message, args) {
+    const q = Array.isArray(args) ? args.join(' ') : args;
+    if (!q) return sock.sendMessage(chatId, { text: 'Weka jina la video!' });
+
+    // React 🎬
+    await sock.sendMessage(chatId, { react: { text: '🎬', key: message.key } });
 
     try {
-        // 1. YouTube Search
-        const search = await yts(query);
-        const v = search?.videos?.[0];
+        const s = await yts(q);
+        const v = s?.videos?.[0];
+        if (!v) return sock.sendMessage(chatId, { text: '❌ Sikuipata!' });
 
-        if (!v) {
-            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-            return sock.sendMessage(chatId, { text: '❌ *Sikuipata!*' }, { quoted: message });
-        }
+        // TUMA BUTTONS KUTUMIA GIFTED-BTNS
+        // Tunatuma buttons mbili: Moja ya Audio na moja ya Video
+        const buttons = [
+            {
+                name: "quick_reply",
+                buttonParamsJson: JSON.stringify({
+                    display_text: "🎵 AUDIO",
+                    id: `.myaudio ${v.url}`
+                }),
+            },
+            {
+                name: "quick_reply",
+                buttonParamsJson: JSON.stringify({
+                    display_text: "🎥 VIDEO",
+                    id: `.myvideo ${v.url}`
+                }),
+            }
+        ];
 
-        // 2. Info ya Video
-        await sock.sendMessage(chatId, {
-            image: { url: v.thumbnail },
-            caption: `╭━━━━〔 *VIDEO DOWNLOADING* 〕━━━━┈⊷\n┃ 🎬 *Title:* ${v.title}\n┃ ⏳ *Duration:* ${v.timestamp}\n┃ 👁️ *Views:* ${v.views}\n╰━━━━━━━━━━━━━━━━━━━━┈⊷`
-        }, { quoted: message });
-
-        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } }).catch(() => {});
-
-        // Get video stream URL using ytdl-core
-        const videoInfo = await ytdl.getInfo(v.url);
-        const videoFormat = ytdl.chooseFormat(videoInfo.formats, { 
-            quality: 134, // 360p
-            filter: 'videoandaudio' 
+        // Kutuma kwa npm ya gifted-btns
+        await sendGiftedButtons({
+            sock: sock,
+            chatId: chatId,
+            body: `🎬 *Title:* ${v.title}\n⏲️ *Dur:* ${v.timestamp}\n👁️ *Views:* ${v.views}`,
+            footer: "Miki Video Downloader",
+            title: "DOWNLOAD OPTIONS",
+            media: {
+                image: { url: v.thumbnail }
+            },
+            buttons: buttons,
+            quoted: message
         });
 
-        if (!videoFormat || !videoFormat.url) {
-            throw new Error("Failed to get video stream URL");
-        }
-
-        // Tuma Video kwny WhatsApp
-        await sock.sendMessage(chatId, {
-            video: { url: videoFormat.url },
-            mimetype: 'video/mp4',
-            caption: `✅ *${v.title}*\n\nEnjoy your video!`,
-            fileName: `${v.title}.mp4`
-        }, { quoted: message });
-
-        // Success Reaction
-        await sock.sendMessage(chatId, {
-            react: { text: '✅', key: message.key }
-        }).catch(() => {});
-
     } catch (err) {
-        console.error("❌ VIDEO ERROR:", err.message);
-        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
-
-        await sock.sendMessage(chatId, {
-            text: `❌ *Video Error!*\n\n_Sababu: ${err.message}_`
-        }, { quoted: message });
+        console.error("ERROR:", err.message);
+        sock.sendMessage(chatId, { text: `❌ Hitilafu: ${err.message}` });
     }
 }
 
-module.exports = videoCommand;
+/**
+ * 3. Handling Downloader (Kwa matumizi ya case zako)
+ */
+async function handleDownload(sock, chatId, vUrl, type) {
+    try {
+        if (type === 'video') {
+            const downloadUrl = await getVideoUrl(vUrl);
+            await sock.sendMessage(chatId, {
+                video: { url: downloadUrl },
+                mimetype: 'video/mp4',
+                caption: "✅ Tayari imekamilika!"
+            });
+        }
+    } catch (e) {
+        sock.sendMessage(chatId, { text: "Download failed!" });
+    }
+}
+
+module.exports = { videoCommand, getVideoUrl, handleDownload };
