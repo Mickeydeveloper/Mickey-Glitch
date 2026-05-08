@@ -30,6 +30,7 @@ function loadMemory() {
         const now = Date.now();
         let changed = false;
         for (const id in data) {
+            // Futa memory baada ya dk 10 (600000ms) ili isijae sana
             if (data[id].lastUpdate && (now - data[id].lastUpdate > 600000)) {
                 delete data[id];
                 changed = true;
@@ -62,42 +63,48 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
         if (!chatId || m.key?.fromMe) return;
 
         const text = userText || extractText(m);
+        // Puuza kama ni command au hamna text
         if (!text || text.startsWith('.') || text.startsWith('!') || text.startsWith('/')) return; 
 
-        // 🛡️ [FIX]: Kupata Jina la Mtumaji (Push Name)
+        // Kupata Push Name ya mtumiaji
         const userName = m.pushName || 'Mshkaji'; 
 
         const state = loadState();
         const isGroup = chatId.endsWith('@g.us');
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
+        
         if (!enabled) return;
 
         let memory = loadMemory();
         if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
 
+        // Hifadhi message ya user
         memory[chatId].chats.push({ role: "user", content: text, name: userName });
         memory[chatId].lastUpdate = Date.now();
 
+        // Limit ya memory (messages 6 za mwisho pekee)
         if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
         const history = memory[chatId].chats
             .map(msg => `${msg.role === 'user' ? msg.name : 'Mickey'}: ${msg.content}`)
             .join("\n");
 
+        // Typing indicator
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (e) {}
 
-        // --- BORESHO LA PROMPT (IDENTITY & PERSONALIZATION) ---
-        const systemPrompt = `Wewe ni MICKEY GLITCH, msaidizi mwerevu uliyetengenezwa na MICKDADI HAMZA (Quantum Code Developer).
-        
-        STRICT RULES:
-        1. Jina la mtu unayeongea naye sasa hivi ni "${userName}". Mtaje kwa jina lake anapokusalimia au unapoona inafaa ili kuleta vibe la kishkaji.
-        2. Lugha: Ongea kishkaji sana (Slang ya Tanzania). Tumia maneno kama: 'Oya ${userName}', 'Niaje mwanangu', 'Safi sana', 'Mzuka'.
-        3. Identity: Wewe ni bot, sio AI ya Microsoft au OpenAI. Ukimbiwa wewe ni GPT, kataa na useme wewe ni "Mickey Glitch V3".
-        4. Kama kuna ishu ngumu, mwambie "Mcheki mwanangu Mickdadi (Owner) namba 255612130873".
-        5. Jibu yawe mafupi, yenye akili (Genius), na yenye michapo.`;
+        // --- BORESHO LA PROMPT (IDENTITY & VIBE) ---
+        const systemPrompt = `[ROLE]: Wewe ni MICKEY GLITCH V3, genius chatbot uliyetengenezwa na Mickdadi Hamza (Quantum Code Dev).
+[TARGET]: Unaongea na "${userName}".
+[STRICT RULES]:
+1. IDENTITY: Ukiulizwa wewe ni nani, kataa kuwa ChatGPT au OpenAI. Wewe ni Mickey Glitch.
+2. PERSONALITY: Ongea kishkaji sana (Tanzanian Slang). Tumia maneno kama 'Oya', 'Niaje', 'Mwanangu'.
+3. CONTEXT: Mtaje "${userName}" anapokusalimia au unapoona inafaa ili kuleta vibe.
+4. BREVITY: Majibu yawe mafupi, straight to the point, na yenye michapo.
+5. OWNER: Masuala ya kitalaamu mwelekeze kwa Mickdadi (255612130873).`;
 
-        const fullPrompt = `${systemPrompt}\n\nRecent Conversation:\n${history}\n\n${userName}: ${text}\nMickey:`;
+        const fullPrompt = `INSTRUCTIONS:\n${systemPrompt}\n\n---\nCHAT_HISTORY:\n${history}\n\n---\nUSER: ${userName}\nINPUT: ${text}\nMICKEY:`;
 
+        // API Call
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
         const fetchRes = await fetch(apiUrl);
         const res = await fetchRes.json();
@@ -106,12 +113,14 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
 
         if (!reply) return;
 
-        // Auto-cleaner kuzuia kujitaja kama AI mgeni
-        reply = reply.replace(/Microsoft|Copilot|AI Assistant|OpenAI|GPT-3|GPT-4/gi, "Mickey Glitch");
+        // Auto-cleaner kuzuia majibu ya ajabu ya AI nyingine
+        reply = reply.replace(/Microsoft|Copilot|AI Assistant|OpenAI|GPT-3|GPT-4|ChatGPT/gi, "Mickey Glitch");
 
+        // Hifadhi jibu la bot kwenye memory
         memory[chatId].chats.push({ role: "assistant", content: reply });
         saveMemory(memory);
 
+        // Tuma message
         await sock.sendMessage(chatId, { text: reply }, { quoted: m });
 
     } catch (e) { 
@@ -119,6 +128,7 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
     }
 }
 
+// --- COMMAND HANDLER (ON/OFF) ---
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
         const state = loadState();
@@ -143,7 +153,7 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
             return await sock.sendMessage(chatId, { text: `✅ *Chatbot:* ${isEnable ? 'ON 🟢' : 'OFF 🔴'}` }, { quoted: m });
         }
 
-        const helpMsg = `🤖 *MICKEY CHATBOT*\n\n.chatbot on/off\n.chatbot private on/off`;
+        const helpMsg = `🤖 *MICKEY CHATBOT*\n\n.chatbot on/off (Kwa group)\n.chatbot private on/off (Kwa DM)`;
         return await sock.sendMessage(chatId, { text: helpMsg }, { quoted: m });
     } catch (e) { console.error('❌ Toggle Error:', e); }
 }
