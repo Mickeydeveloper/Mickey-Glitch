@@ -6,144 +6,104 @@ const settings = require('../settings');
 async function newgroupCommand(sock, chatId, message, args) {
     try {
         if (!sock || !chatId || !message) {
-            return console.error('❌ Missing required parameters for newgroup command');
+            return console.error('❌ Missing required parameters');
         }
 
-        // Get bot number for reference
         const botNumber = sock.user?.id?.split(':')[0] || '';
-        
-        // Check if bot is connected
+        const botJid = sock.user?.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
+
         if (!sock.user || !sock.user.id) {
             return await sock.sendMessage(chatId, {
-                text: '❌ *Bot haijaunganishwa vizuri. Jaribu tena baada ya muda. (Bot not properly connected. Try again later)*'
+                text: '❌ *Bot haijaunganishwa vizuri. (Bot not connected)*'
             }, { quoted: message });
         }
 
-        // 1. Define group name (Jina la group)
-        let groupName = (args && Array.isArray(args) && args.join(' ').trim()) || `Mickey Group ${Date.now()}`;
+        // 1. Define group name
+        let groupName = (args && args.length > 0) ? args.join(' ').trim() : `Mickey Group ${Date.now()}`;
+        groupName = groupName.replace(/[^\w\s\-_]/g, '').trim() || `Group ${Math.floor(Math.random() * 1000)}`;
+        
+        if (groupName.length > 25) groupName = groupName.substring(0, 25).trim();
 
-        // Validate and clean group name
-        groupName = groupName.replace(/[^\w\s\-_]/g, '').trim(); // Remove special characters except spaces, hyphens, underscores
-        if (groupName.length > 25) {
-            groupName = groupName.substring(0, 25).trim(); // WhatsApp limit
-        }
-        if (groupName.length < 1) {
-            groupName = `Mickey Group ${Date.now()}`;
-        }
-
-        if (!groupName || groupName.length === 0) {
-            return await sock.sendMessage(chatId, {
-                text: '❌ *Jina la group halipatikani! (Group name not found)*'
-            }, { quoted: message });
-        }
-
-        // 3. Define members (Wanachama)
-        // Ikiwa ni kwenye group, itachukua members wote. Ikiwa ni DM, utakuwa wewe pekee.
-        const senderJid = message.sender || message.key?.participant;
+        // 2. Define members
+        const senderJid = message.sender || message.key?.participant || chatId;
         let members = [];
 
         try {
-            if (message.isGroup || chatId?.endsWith('@g.us')) {
-                const groupMetadata = await sock.groupMetadata(chatId);
-                
-                if (groupMetadata && groupMetadata.participants && Array.isArray(groupMetadata.participants)) {
-                    members = groupMetadata.participants
-                        .filter(p => p && p.id)
-                        .map(p => p.id);
-                } else {
-                    members = senderJid ? [senderJid] : [];
-                }
-
-                if (senderJid && !members.includes(senderJid)) {
-                    members.push(senderJid);
-                }
-            } else {
-                if (senderJid) {
-                    members.push(senderJid);
+            if (chatId?.endsWith('@g.us')) {
+                const groupMetadata = await sock.groupMetadata(chatId).catch(() => null);
+                if (groupMetadata?.participants) {
+                    members = groupMetadata.participants.map(p => p.id);
                 }
             }
-        } catch (metadataError) {
-            console.error('Error getting group metadata:', metadataError);
-            if (senderJid) {
-                members = [senderJid];
-            }
+        } catch (e) {
+            console.log('Metadata fetch skipped');
         }
 
-        if (!members || members.length === 0) {
-            return await sock.sendMessage(chatId, {
-                text: '❌ *Haijaweza kupata wanachama wa kuunda group. (Could not get members)*'
-            }, { quoted: message });
+        // Hakikisha sender yupo
+        if (senderJid && !members.includes(senderJid)) {
+            members.push(senderJid);
         }
 
-        // Validate members array
-        members = members.filter(jid => jid && typeof jid === 'string' && jid.includes('@'));
-        if (members.length > 256) { // WhatsApp group limit
-            members = members.slice(0, 256);
+        // USALAMA: Safisha list ya members
+        members = [...new Set(members)].filter(jid => jid && jid.includes('@s.whatsapp.net') && jid !== botJid);
+
+        // NGUVU MPYA: Hata kama hakuna members wengine, bot itajijumuisha yenyewe na sender
+        if (members.length === 0) {
+            members = [senderJid];
         }
-        if (members.length < 2) {
-            return await sock.sendMessage(chatId, {
-                text: '❌ *Unahitaji angalau wanachama 2 kuunda group. (Need at least 2 members to create group)*'
-            }, { quoted: message });
-        }
+
+        // Limit members to 250 for safety
+        if (members.length > 250) members = members.slice(0, 250);
+
+        await sock.sendMessage(chatId, { react: { text: '🛠️', key: message.key } });
 
         try {
-            // Add small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // 4. Create group (Tengeneza group)
+            // Add delay
+            await new Promise(r => setTimeout(r, 1500));
+
+            // 3. Create group
             const newGroup = await sock.groupCreate(groupName, members);
 
-            if (!newGroup || !newGroup.id) {
-                throw new Error('Group creation returned invalid response');
-            }
+            if (newGroup && newGroup.id) {
+                await sock.sendMessage(chatId, {
+                    text: `✅ *Group Limetengenezwa!*\n\n📛 *Jina:* ${groupName}\n👥 *Wanachama:* ${members.length}\n🆔 *ID:* ${newGroup.id}`
+                }, { quoted: message });
 
-            // Tuma jibu kwenye chat ulikotoa amri
-            await sock.sendMessage(chatId, {
-                text: `✅ *Group Jipya Limetengenezwa!* (New Group Created)\n\n📛 *Jina:* ${groupName}\n👥 *Wanachama:* ${members.length}\n🆔 *ID:* ${newGroup.id}`
-            }, { quoted: message });
-
-            // Tuma ujumbe wa kwanza kwenye group jipya
-            try {
+                // Tuma welcome message
                 await sock.sendMessage(newGroup.id, {
-                    text: `👋 *Karibuni kwenye ${groupName}!*\n\n_Created via MICKEY GLITCH_\n\n*Bot Number:* ${botNumber}`
-                });
-            } catch (welcomeError) {
-                console.error('Error sending welcome message:', welcomeError);
+                    text: `👋 *Karibuni kwenye ${groupName}!*\n\n_Created via MICKEY GLITCH_`
+                }).catch(e => console.log('Welcome msg failed'));
+                
+                await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
             }
 
         } catch (error) {
-            console.error('Group creation error:', error);
+            console.error('Inner creation error:', error);
             
-            let errorMessage = '❌ *Imeshindwa kutengeneza group!* (Failed to create group)';
-            
-            if (error.message?.includes('bad-request') || error.data === 400) {
-                errorMessage += '\n\n*Sababu ya kushindwa:* (Possible reasons:)\n• Jina la group si sahihi (Invalid group name)\n• Idadi ya wanachama kupita kiasi (Too many members)\n• Akaunti ya bot haina ruhusa (Bot account restrictions)\n• Jaribu tena baada ya dakika chache (Try again after a few minutes)';
-            } else if (error.message?.includes('rate-overlimit')) {
-                errorMessage += '\n\n*Sababu:* Umefanya maagizo mengi sana. Subiri dakika 5-10 kisha jaribu tena. (Rate limit exceeded. Wait 5-10 minutes and try again)';
-            } else if (error.message?.includes('not-authorized')) {
-                errorMessage += '\n\n*Sababu:* Akaunti ya bot haina ruhusa ya kutengeneza groups. (Bot account not authorized to create groups)';
-            } else {
-                errorMessage += `\n\n_Error: ${error.message || 'Unknown error'}_`;
+            // Kama members wote wamekataa (Privacy), jaribu kutengeneza na sender pekee
+            if (members.length > 1) {
+                try {
+                    const fallbackGroup = await sock.groupCreate(groupName, [senderJid]);
+                    return await sock.sendMessage(chatId, {
+                        text: `✅ *Group limeundwa na wewe pekee!* (Wengine wana privacy settings).`
+                    }, { quoted: message });
+                } catch (e2) {
+                    throw error; // Rusha error ya kwanza kama hii pia ikifeli
+                }
             }
-            
-            await sock.sendMessage(chatId, {
-                text: errorMessage
-            }, { quoted: message });
+            throw error;
         }
 
     } catch (e) {
-        console.error('NewGroup Cmd Error:', e);
-        try {
-            await sock.sendMessage(chatId, {
-                text: '❌ *Hitilafu imetokea! (Error occurred)*'
-            }, { quoted: message });
-        } catch (sendError) {
-            console.error('Error sending error message:', sendError);
-        }
+        console.error('Final Catch:', e);
+        const errType = e.message || 'Unknown';
+        await sock.sendMessage(chatId, {
+            text: `❌ *Imeshindwa:* ${errType}\n\n_Hakikisha bot ina ruhusa ya kuunda group._`
+        }, { quoted: message });
     }
 }
 
 module.exports = newgroupCommand;
 module.exports.name = 'newgroup';
 module.exports.category = 'GENERAL';
-module.exports.description = 'Create a new group (Works in private and group chats)';
+module.exports.description = 'Create a new group even with one member';
