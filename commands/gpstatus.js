@@ -10,14 +10,16 @@ const path = require('path');
 async function gpstatusCommand(sock, chatId, message) {
     try {
         // Check if replying to a message
-        const quotedMessage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+        const contextInfo = message.message?.extendedTextMessage?.contextInfo;
         
-        if (!quotedMessage) {
+        if (!contextInfo || !contextInfo.quotedMessage) {
             await sock.sendMessage(chatId, {
                 text: '📸 *Usage:* Reply to a media message with `.gpstatus` to share it as a status in this group.\n\n✅ Supports: Images, Videos, Documents'
             }, { quoted: message });
             return;
         }
+
+        const quotedMessage = contextInfo.quotedMessage;
 
         // Extract media from quoted message
         const mediaMessage = quotedMessage.imageMessage || 
@@ -36,13 +38,19 @@ async function gpstatusCommand(sock, chatId, message) {
             text: '⏳ Processing media...' 
         }, { quoted: message });
 
-        // Build message object for download
-        const quotedInfo = message.message.extendedTextMessage.contextInfo;
+        // Build message object for download with proper fallbacks
+        const stanzaId = contextInfo.stanzaId || contextInfo.id || message.key.id;
+        const participant = contextInfo.participant || message.key.participant || message.key.remoteJid;
+        
+        if (!stanzaId) {
+            throw new Error('Cannot retrieve message ID from context');
+        }
+
         const targetMessage = {
             key: {
                 remoteJid: chatId,
-                id: quotedInfo.stanzaId,
-                participant: quotedInfo.participant
+                id: stanzaId,
+                participant: participant
             },
             message: quotedMessage
         };
@@ -99,14 +107,18 @@ async function gpstatusCommand(sock, chatId, message) {
         const mediaType = quotedMessage.imageMessage ? '📸 Image' :
                          quotedMessage.videoMessage ? '🎥 Video' : '📄 Document';
         
+        // Safe extraction of sender number for attribution
+        const senderJid = message.key.participant || message.key.remoteJid;
+        const senderNumber = senderJid ? senderJid.split('@')[0] : 'Unknown';
+        
         await sock.sendMessage(chatId, {
-            text: `✅ ${mediaType} shared as status in group!\n\n💫 Posted by: @${(message.key.participant || message.key.remoteJid).split('@')[0]}`
+            text: `✅ ${mediaType} shared as status in group!\n\n💫 Posted by: @${senderNumber}`
         }, { quoted: message });
 
     } catch (err) {
-        console.error('❌ GPStatus Error:', err);
+        console.error('❌ GPStatus Error:', err.message || err);
         await sock.sendMessage(chatId, {
-            text: `❌ Error: ${err.message || 'Failed to process media'}`
+            text: `❌ Error sharing status: ${err.message || 'Failed to process media'}`
         }, { quoted: message });
     }
 }

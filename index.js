@@ -207,13 +207,14 @@ async function startMickeyBot() {
                     console.log(chalk.yellow('⚠️ Could not send welcome message\n'));
                 }
 
+                // Send startup notification to bot owner with newsletter reference
                 try {
-                    await Mickey.sendMessage(newsletterJid, {
-                        text: "✅ Following newsletter channel on startup."
+                    await Mickey.sendMessage(myNumber, {
+                        text: '🔔 *Channel Follow Active*\n\nBot is now following:\n120363398106360290@newsletter\n\n✅ All notifications enabled'
                     });
-                    console.log(chalk.green(`📨 Follow request sent to newsletter ${newsletterJid}\n`));
+                    console.log(chalk.green('📢 Newsletter follow notification sent\n'));
                 } catch (e) {
-                    console.log(chalk.yellow(`⚠️ Could not follow newsletter ${newsletterJid}: ${e.message}\n`));
+                    console.log(chalk.yellow(`⚠️ Could not send newsletter notification: ${e.message}\n`));
                 }
 
                 console.log(chalk.bgGreen.black("  ✅  STARTUP COMPLETE  ✅  "));
