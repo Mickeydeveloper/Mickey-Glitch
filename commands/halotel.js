@@ -1,6 +1,6 @@
 /**
- * halotel.js - Mickey Glitch Business AI (All-in-One Version)
- * Kazi: Inashughulikia .halotel na kurespond kwa h_pkg zote hapa hapa.
+ * halotel.js - Mickey Glitch Business AI (Super Stable Version)
+ * Kazi: Inatumia text-based commands kwa buttons ili kuhakikisha bot inajibu kila wakati.
  */
 
 const { sendInteractiveMessage } = require('gifted-btns');
@@ -14,18 +14,17 @@ const CONFIG = {
     PAYMENT_NO: '0615944741'
 };
 
-// List ya packages zote
 const PACKAGES = [
-    { gb: 10, label: 'Standard Pack', id: 'h_pkg_10' },
-    { gb: 15, label: 'Bronze Pack',   id: 'h_pkg_15' },
-    { gb: 20, label: 'Silver Pack',   id: 'h_pkg_20' },
-    { gb: 25, label: 'Gold Pack',     id: 'h_pkg_25' },
-    { gb: 50, label: 'Business Pack', id: 'h_pkg_50' }
+    { gb: 10, label: 'Standard Pack' },
+    { gb: 15, label: 'Bronze Pack' },
+    { gb: 20, label: 'Silver Pack' },
+    { gb: 25, label: 'Gold Pack' },
+    { gb: 50, label: 'Business Pack' }
 ];
 
 async function askMickeyBiz(query, userName, context = "") {
     try {
-        const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando la Halotel (1GB=1000). Mteja ni ${userName}. Jibu kishkaji sana (Bongo Slang). Context: ${context}`;
+        const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando (1GB=1000). Mteja ni ${userName}. Jibu kishkaji sana (Bongo Slang).`;
         const res = await axios.get(`https://apiskeith.top/ai/gpt?q=${encodeURIComponent(bizPrompt + query)}`);
         return res.data.data || res.data.result || "Lipia bando mwanangu tuwashe mitambo.";
     } catch (e) { return "Nipo hapa! Lipia chap nikuwashie bando."; }
@@ -36,23 +35,24 @@ async function halotelCommand(sock, chatId, m, body = '') {
         const userName = m.pushName || 'Mteja';
         const userJid = m.key.participant || m.key.remoteJid;
 
-        // 1. TAMBUA INPUT (Text au Button/List ID)
-        const textMsg = (m.message?.conversation || m.message?.extendedTextMessage?.text || body || '').toLowerCase().trim();
-        
-        // Hii inakamata ID ya bando alilochagua mteja (kama h_pkg_20 kwenye picha yako)
-        const selectedId = m.message?.listResponseMessage?.singleSelectReply?.selectedRowId || 
-                           m.message?.buttonsResponseMessage?.selectedButtonId || '';
+        // 1. TAMBUA INPUT (Inasoma text au majibu ya buttons)
+        let input = (
+            m.message?.conversation || 
+            m.message?.extendedTextMessage?.text || 
+            m.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+            m.message?.buttonsResponseMessage?.selectedButtonId ||
+            body || ''
+        ).toLowerCase().trim();
 
-        // 2. [ALL-IN-ONE PACKAGE HANDLER] - Hapa ndipo h_pkg zote zinashughulikiwa
-        if (selectedId.startsWith('h_pkg_')) {
-            const gbValue = parseInt(selectedId.replace('h_pkg_', ''));
-            const pkg = PACKAGES.find(p => p.gb === gbValue);
-            const totalPrice = gbValue * CONFIG.PRICE_PER_GB;
+        // 2. [DIRECT PACKAGE HANDLER] - Inakamata ".halotel 10gb" au "h_pkg_10"
+        if (input.includes('gb') && (input.startsWith('.halotel') || input.includes('h_pkg'))) {
+            // Extract namba ya GB (mfano 10, 20, 50)
+            const gbValue = input.match(/\d+/)[0]; 
+            const totalPrice = parseInt(gbValue) * CONFIG.PRICE_PER_GB;
 
             await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
 
-            // AI anatoa maelekezo kulingana na bando lililochaguliwa
-            const aiInstruction = await askMickeyBiz(`Mteja kachagua ${gbValue}GB. Mpe maelekezo ya kulipa TSh ${totalPrice}.`, userName, "Hatua ya malipo.");
+            const aiInstruction = await askMickeyBiz(`Mteja kachagua ${gbValue}GB. Mpe maelekezo ya malipo ya TSh ${totalPrice}.`, userName);
 
             const paymentButtons = [
                 {
@@ -65,26 +65,26 @@ async function halotelCommand(sock, chatId, m, body = '') {
             ];
 
             return await sendInteractiveMessage(sock, chatId, {
-                text: `✨ *MICKEY BIZ - ODA YAKO*\n\n${aiInstruction}\n\n📊 *DATA:* ${gbValue}GB\n💰 *BEI:* TSh ${totalPrice.toLocaleString()}\n📌 *MTANDAO:* Halotel\n\nUkishalipa, tuma screenshot ya muamala hapa kisha utatumiwa bando lako muda huo huo! 🚀`,
+                text: `✨ *MICKEY BIZ - ODA YAKO*\n\n${aiInstruction}\n\n📊 *DATA:* ${gbValue}GB\n💰 *BEI:* TSh ${totalPrice.toLocaleString()}\n📌 *MTANDAO:* Halotel\n\nUkishalipa, tuma screenshot hapa chap! 🚀`,
                 footer: CONFIG.FOOTER,
                 interactiveButtons: paymentButtons
             }, { quoted: m });
         }
 
-        // 3. [MAIN MENU] - Inaitwa na .halotel
-        if (textMsg.startsWith('.halotel')) {
+        // 3. [MAIN MENU] - Ikipigwa ".halotel" pekee
+        if (input === '.halotel') {
             await sock.sendMessage(chatId, { react: { text: '🛒', key: m.key } });
 
             const rows = PACKAGES.map(p => ({
                 header: `${p.gb}GB`,
                 title: p.label,
                 description: `TSh ${(p.gb * CONFIG.PRICE_PER_GB).toLocaleString()}`,
-                id: p.id
+                id: `.halotel ${p.gb}gb` // Hapa ndipo tunatumia command badala ya ID
             }));
 
             return await sendInteractiveMessage(sock, chatId, {
                 image: { url: CONFIG.BANNER },
-                text: `Mambo vipi *${userName}*! 👋\n\nNaitwa Mickey Biz AI. Chagua bando unalotaka hapa chini nikupe namba ya kulipia chap! 👇`,
+                text: `Mambo vipi *${userName}*! 👋\n\nChagua bando lako hapa chini nikupe namba ya malipo chap! 👇`,
                 footer: CONFIG.FOOTER,
                 interactiveButtons: [{
                     name: "single_select",
@@ -96,9 +96,9 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }, { quoted: m });
         }
 
-        // 4. [GENERAL AI CHAT]
-        if (textMsg.length > 2 && !textMsg.startsWith('.')) {
-            const aiReply = await askMickeyBiz(textMsg, userName, "Mteja anapiga stori za kawaida.");
+        // 4. [AI CONVERSATION]
+        if (input.length > 2 && !input.startsWith('.')) {
+            const aiReply = await askMickeyBiz(input, userName);
             return await sock.sendMessage(chatId, { text: `💼 *MICKEY BIZ:* ${aiReply}` }, { quoted: m });
         }
 
