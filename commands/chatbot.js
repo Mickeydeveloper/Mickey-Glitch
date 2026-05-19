@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
+// Ku-import gifted-btns kwa ajili ya kutengeneza button za kisasa za Baileys
+const { sendButtons } = require('gifted-btns');
 
 // Paths za kuhifadhi data
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
@@ -30,7 +32,6 @@ function loadMemory() {
         const now = Date.now();
         let changed = false;
         for (const id in data) {
-            // Futa memory baada ya dk 10 (600000ms) ili isijae sana
             if (data[id].lastUpdate && (now - data[id].lastUpdate > 600000)) {
                 delete data[id];
                 changed = true;
@@ -53,7 +54,19 @@ function extractText(m) {
     try {
         if (!m || !m.message) return '';
         const msg = m.message;
-        return (msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption || '').trim();
+        // Inasoma text za kawaida na zile zinazotokana na kubonyeza button za kisasa
+        return (
+            msg.conversation || 
+            msg.extendedTextMessage?.text || 
+            msg.imageMessage?.caption || 
+            msg.videoMessage?.caption || 
+            msg.buttonsResponseMessage?.selectedButtonId || 
+            msg.templateButtonReplyMessage?.selectedId ||
+            msg.interactiveResponseMessage?.nativeFlowResponseMessage?.name ||
+            msg.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? 
+                JSON.parse(msg.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson).id : '' ||
+            ''
+        ).trim();
     } catch (e) { return ''; }
 }
 
@@ -63,36 +76,31 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
         if (!chatId || m.key?.fromMe) return;
 
         const text = userText || extractText(m);
-        // Puuza kama ni command au hamna text
         if (!text || text.startsWith('.') || text.startsWith('!') || text.startsWith('/')) return; 
 
-        // Kupata Push Name ya mtumiaji
         const userName = m.pushName || 'Mshkaji'; 
 
         const state = loadState();
         const isGroup = chatId.endsWith('@g.us');
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
-        
+
         if (!enabled) return;
 
         let memory = loadMemory();
         if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
 
-        // Hifadhi message ya user
         memory[chatId].chats.push({ role: "user", content: text, name: userName });
         memory[chatId].lastUpdate = Date.now();
 
-        // Limit ya memory (messages 6 za mwisho pekee)
         if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
         const history = memory[chatId].chats
             .map(msg => `${msg.role === 'user' ? msg.name : 'Mickey'}: ${msg.content}`)
             .join("\n");
 
-        // Typing indicator
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (e) {}
 
-        // --- BORESHO LA PROMPT (IDENTITY & VIBE) ---
+        // --- PROMPT YA MAELEKEZO KWA AI ---
         const systemPrompt = `[ROLE]: Wewe ni MICKEY GLITCH V3, genius chatbot uliyetengenezwa na Mickdadi Hamza (Quantum Code Dev).
 [TARGET]: Unaongea na "${userName}".
 [STRICT RULES]:
@@ -100,11 +108,17 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
 2. PERSONALITY: Ongea kishkaji sana (Tanzanian Slang). Tumia maneno kama 'Oya', 'Niaje', 'Mwanangu'.
 3. CONTEXT: Mtaje "${userName}" anapokusalimia au unapoona inafaa ili kuleta vibe.
 4. BREVITY: Majibu yawe mafupi, straight to the point, na yenye michapo.
-5. OWNER: Masuala ya kitalaamu mwelekeze kwa Mickdadi (255612130873).`;
+5. OWNER: Masuala ya kitalaamu mwelekeze kwa Mickdadi (255612130873).
+6. BUTTON GENERATION: Kama unatoa machaguo (options) kwa mtumiaji, weka button mwisho wa jibu lako kwa muundo huu maalum:
+[BUTTON: Maandishi ya Button | id_ya_button]
+Mfano ukitoa menu au options:
+Oya mwanangu, chagua kitu hapa chini:
+[BUTTON: Msaada wa Menu | .menu]
+[BUTTON: Ongea na Boss | .owner]
+Usiweke button zaidi ya tatu (3).`;
 
         const fullPrompt = `INSTRUCTIONS:\n${systemPrompt}\n\n---\nCHAT_HISTORY:\n${history}\n\n---\nUSER: ${userName}\nINPUT: ${text}\nMICKEY:`;
 
-        // API Call
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
         const fetchRes = await fetch(apiUrl);
         const res = await fetchRes.json();
@@ -113,15 +127,34 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
 
         if (!reply) return;
 
-        // Auto-cleaner kuzuia majibu ya ajabu ya AI nyingine
         reply = reply.replace(/Microsoft|Copilot|AI Assistant|OpenAI|GPT-3|GPT-4|ChatGPT/gi, "Mickey Glitch");
 
-        // Hifadhi jibu la bot kwenye memory
-        memory[chatId].chats.push({ role: "assistant", content: reply });
+        // --- REGEX YA KUCHUJA BUTTONS KUTOKA KWA AI ---
+        const buttonRegex = /\[BUTTON:\s*([^|]+)\s*\|\s*([^\]]+)\]/g;
+        let match;
+        let extractedButtons = [];
+
+        while ((match = buttonRegex.exec(reply)) !== null) {
+            extractedButtons.push({
+                displayText: match[1].trim(),
+                id: match[2].trim()
+            });
+        }
+
+        // Kusafisha jibu ili lisionyeshe zile code za [BUTTON: ...] kwenye chat
+        let cleanReply = reply.replace(buttonRegex, '').trim();
+
+        // Hifadhi jibu safi kwenye memory
+        memory[chatId].chats.push({ role: "assistant", content: cleanReply });
         saveMemory(memory);
 
-        // Tuma message
-        await sock.sendMessage(chatId, { text: reply }, { quoted: m });
+        // --- TUMA MESSAGE KWA KUTUMIA GIFTED-BTNS KAMA KUNA BUTTONS ---
+        if (extractedButtons.length > 0) {
+            // sendButtons inahitaji: sock, chatId, text, footer, buttonsArray, quoted
+            await sendButtons(sock, chatId, cleanReply, "Mickey Glitch V3", extractedButtons, m);
+        } else {
+            await sock.sendMessage(chatId, { text: cleanReply }, { quoted: m });
+        }
 
     } catch (e) { 
         console.error('❌ Chatbot Error:', e); 
