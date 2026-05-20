@@ -24,6 +24,7 @@ const { handleAnticall } = require("./commands/anticall");
 const { getButtonId, isButtonResponse, autoDetectButtonCommand, isCommandId } = require("./lib/buttonLoader");
 const store = require("./lib/lightweight_store");
 const settings = require("./settings");
+const { startTelegramBot } = require("./telegram-bot");
 
 // ────────────────────────────────────────────────
 // CUSTOM LOGGER CONFIGURATION
@@ -271,5 +272,10 @@ async function startMickeyBot() {
 }
 
 console.log(chalk.bgBlue.white("  🚀  INITIALIZING MICKEY GLITCH  🚀  \n"));
-console.log(chalk.bgBlue.white("\n  🚀  STARTING WHATSAPP CONNECTION  🚀  \n"));
-startMickeyBot();
+if (settings.mode && settings.mode.toLowerCase() === 'telegram') {
+  console.log(chalk.bgBlue.white("\n  🚀  STARTING TELEGRAM BOT  🚀  \n"));
+  startTelegramBot();
+} else {
+  console.log(chalk.bgBlue.white("\n  🚀  STARTING WHATSAPP CONNECTION  🚀  \n"));
+  startMickeyBot();
+}
