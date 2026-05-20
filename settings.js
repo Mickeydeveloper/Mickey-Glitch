@@ -17,9 +17,9 @@ const settings = {
   },
   mode: "whatsapp", // "whatsapp" or "telegram"
   telegram: {
-    botToken: "",
+    botToken: "8018854420:AAFBgafzTMBzIQFEZRcUDGxxcdCDJQmxB90",
     ownerId: "",
-    pairCode: ""
+    pairCode: "MICKDADY"
   },
   commandMode: "public",
   maxStoreMessages: 20,
