@@ -7,6 +7,21 @@ const TELEGRAM_DATA_DIR = path.join(__dirname, 'data');
 const TELEGRAM_DATA_FILE = path.join(TELEGRAM_DATA_DIR, 'telegramPairs.json');
 const TELEGRAM_BASE_URL = (token) => `https://api.telegram.org/bot${token}`;
 
+async function removeWebhookIfSet(token) {
+  try {
+    const resp = await axios.post(`${TELEGRAM_BASE_URL(token)}/deleteWebhook`);
+    if (resp?.data?.ok) {
+      console.log('✅ Telegram: existing webhook deleted.');
+      return true;
+    }
+    console.log('ℹ️ Telegram deleteWebhook response:', resp?.data);
+    return false;
+  } catch (err) {
+    console.error('Failed to delete Telegram webhook:', err?.response?.data || err.message);
+    return false;
+  }
+}
+
 function ensureTelegramDataFile() {
   if (!fs.existsSync(TELEGRAM_DATA_DIR)) {
     fs.mkdirSync(TELEGRAM_DATA_DIR, { recursive: true });
@@ -239,6 +254,8 @@ async function startTelegramBot() {
   }
 
   ensureTelegramDataFile();
+  // Ensure no webhook is active (prevents 409 conflict when using getUpdates)
+  try { await removeWebhookIfSet(token); } catch (e) {}
 
   let offset = 0;
   console.log('✅ Telegram bot mode imeanzishwa. Inasubiri updates...');
@@ -264,7 +281,15 @@ async function startTelegramBot() {
         await handleUpdate(update);
       }
     } catch (error) {
-      console.error('Telegram polling error:', error?.response?.data || error.message);
+      const errData = error?.response?.data;
+      console.error('Telegram polling error:', errData || error.message);
+
+      // If webhook is active, attempt to delete it and continue polling
+      if (errData?.error_code === 409) {
+        console.log('⚠️ Detected active webhook; attempting to delete it and resume polling...');
+        try { await removeWebhookIfSet(token); } catch (e) {}
+      }
+
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
