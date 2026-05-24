@@ -294,6 +294,7 @@ async function startMickeyBot(options = {}) {
             console.log(chalk.cyan('✅ Socket initialized successfully\n'));
             return Mickey;
         } catch (err) {
+            whatsappBot = null;
             console.log('\n' + chalk.bgRed.white("  ❌  CRITICAL ERROR  ❌  "));
             console.log(chalk.red('Error Message: ' + err.message));
             console.log(chalk.red('Stack: ' + err.stack));
