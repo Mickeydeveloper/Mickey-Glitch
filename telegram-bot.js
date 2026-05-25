@@ -224,7 +224,7 @@ async function handleUpdateCommand(chatId, isActiveOwner) {
 async function handleShazamCommand(chatId, repliedMessage) {
     const token = settings.telegram?.botToken?.trim();
     const media = repliedMessage.audio || repliedMessage.video || repliedMessage.voice;
-    if (!media || !media.file_id) return sendTelegramMessage(chatId, '❌ *Tafadhali reply ujumbe wa audio/video uandike /shazam*');
+    if (!media || !media.file_id) return sendTelegramMessage(chatId, '❌ *Tafadhali reply kwenye audio/video kisha uandike /shazam*');
     if (!settings.acrcloud || !settings.acrcloud.access_key) return sendTelegramMessage(chatId, '❌ *ACRCloud API haijawekwa!*');
     await sendTelegramMessage(chatId, '🔍 *Inatambua wimbo, subiri kidogo...*');
     try {
@@ -302,7 +302,6 @@ async function handleUpdate(update) {
     return;
   }
 
-  // 🛡️ REFIXED: PAIR COMMAND INAYOMALIZA MATATIZO YA DELAY
   if (commandText === 'pair') {
     const inputNumber = args[0] || '';
     if (!inputNumber) {
@@ -340,7 +339,6 @@ async function handleUpdate(update) {
     return;
   }
 
-  // 📈 COMMAND MPYA: /stats (Orodha ya Resource za Panel)
   if (commandText === 'stats') {
     const uptime = Math.floor(process.uptime());
     const hours = Math.floor(uptime / 3600);
@@ -361,7 +359,6 @@ async function handleUpdate(update) {
     return sendTelegramMessage(chatId, statsText);
   }
 
-  // 📝 COMMAND MPYA: /chats (Kuona Idadi ya Magroup yaliyopairishwa)
   if (commandText === 'chats') {
     if (!isActiveOwner) return sendTelegramMessage(chatId, '🚷 Amri hii ni ya Owner tu.');
     const list = loadAllowedChats();
@@ -369,7 +366,6 @@ async function handleUpdate(update) {
     return sendTelegramMessage(chatId, `📝 *CHATS ZILIZOPAIRISHWA (${list.length}):*\n\n` + list.map((id, index) => `${index + 1}. ID: \`${id}\``).join('\n'));
   }
 
-  // 💻 COMMAND MAALUM YA USIMAMIZI: /exec (Inakimbiza Terminal Commands za Linux)
   if (commandText === 'exec') {
     if (!isActiveOwner) return sendTelegramMessage(chatId, '🚷 Amri hii ni maalum kwa Mmiliki wa Mfumo pekee!');
     if (!fullArgs) return sendTelegramMessage(chatId, '⚠️ Weka command unayotaka ku-execute. Mfano: `/exec ls` au `/exec pm2 status`');
@@ -438,6 +434,33 @@ async function startTelegramBot() {
   if (!token) { console.error('Telegram botToken haipo kwenye settings.js'); process.exit(1); }
   ensureTelegramDataFile();
   try { await removeWebhookIfSet(token); } catch (e) {}
+
+  // --- ADDED: TELEGRAM CONNECTION TEXT ON STARTUP ---
+  const ownerId = String(settings.telegram?.ownerId || '').trim();
+  if (ownerId) {
+      const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
+      const imageUrl = "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg";
+      const connectionText = `*M* *I* *C* *K* *E* *Y*\n\n✨ *MICKEY GLITCH BOT (TELEGRAM)* ✨\n🟢 *Status:* Online\n💾 *RAM:* ${ramUsage} MB\n🎯 *All Systems Operational (TG Engine)*`;
+      
+      // Jaribu kutuma ikiwa na picha, isipokubali inatuma kama maandishi ya kawaida
+      try {
+          await axios.post(`${TELEGRAM_BASE_URL(token)}/sendPhoto`, {
+              chat_id: ownerId,
+              photo: imageUrl,
+              caption: connectionText,
+              parse_mode: 'Markdown'
+          });
+      } catch (e) {
+          try {
+              await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
+                  chat_id: ownerId,
+                  text: connectionText,
+                  parse_mode: 'Markdown'
+              });
+          } catch (msgErr) {}
+      }
+  }
+
   let offset = 0;
   console.log('✅ Telegram Bot Engine Imewashwa Vizuri kwa Mfumo wa Index.');
   while (true) {
