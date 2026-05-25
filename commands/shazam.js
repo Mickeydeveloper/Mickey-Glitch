@@ -74,12 +74,15 @@ async function shazamCommand(sock, chatId, message) {
             const title = song.title || 'Unknown';
             const artist = song.artists?.[0]?.name || 'Unknown';
 
-            // 🛠️ FIXED: Tunasafisha jina la wimbo na msanii ili lisiwe na alama zinazovuruga button ID
+            // 🛠️ Kusafisha majina ili yasilete mgogoro kwenye Command na ID
             const cleanArtist = artist.replace(/[^\w\s]/gi, '');
             const cleanTitle = title.replace(/[^\w\s]/gi, '');
+
+            // ID itatuma: .play Msanii - Wimbo
+            const playCmd = ".play " + cleanArtist + " - " + cleanTitle;
             
-            // Hapa tunatengeneza ID bila kutumia backticks ndani ya variable kama mwanzo
-            const playCmd = ".play " + cleanTitle;
+            // Text itakayoonekana kwenye button: 📥 Msanii - Wimbo
+            const buttonText = "📥 " + artist + " - " + title;
 
             const caption = `🎵 *SHAZAM IDENTIFIED!*\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -94,7 +97,7 @@ async function shazamCommand(sock, chatId, message) {
                 text: caption,
                 footer: 'MICKEY GLITCH V3.0',
                 buttons: [
-                    { id: playCmd, text: '📥 ' + artist + ' - ' + title }
+                    { id: playCmd, text: buttonText }
                 ]
             }, { quoted: message });
 
@@ -110,7 +113,4 @@ async function shazamCommand(sock, chatId, message) {
 }
 
 module.exports = shazamCommand;
-module.exports.buttonHandlers = {
-    // Dynamic song buttons (.play songname) are handled by command prefix system
-    // in main.js - no special handler needed here
-};
+module.exports.buttonHandlers = {};
