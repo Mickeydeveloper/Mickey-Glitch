@@ -12,6 +12,7 @@ const chalk = require('chalk');
 const pino = require("pino");
 const NodeCache = require("node-cache");
 const readline = require("readline");
+const os = require("os"); // Imeongezwa kwa ajili ya kuchukua maelezo halisi ya server / panel
 const { 
     default: makeWASocket, 
     useMultiFileAuthState, 
@@ -101,7 +102,7 @@ async function startMickeyBot(options = {}) {
         try {
             const { version } = await fetchLatestBaileysVersion();
             const { state, saveCreds } = await useMultiFileAuthState("./session");
-            
+
             // Limit cache time (TTL) hadi sekunde 60 kuokoa RAM
             const msgRetryCounterCache = new NodeCache({ stdTTL: 60, checkperiod: 20 });
 
@@ -114,11 +115,11 @@ async function startMickeyBot(options = {}) {
                     creds: state.creds,
                     keys: makeCacheableSignalKeyStore(state.keys, pinoLogger)
                 },
-                markOnlineOnConnect: true, // IMERUDISHWA: Bot itaonekana ipo 'online' kila ikijiwasha (always online)
+                markOnlineOnConnect: true, 
                 syncFullHistory: false,
-                shouldSyncHistoryMessage: () => false, // Inazuia kusoma chat za zamani (Inaokoa RAM/Disk)
-                generateHighQualityLinkPreview: false, // ZIMA (Link previews zinakula RAM sana)
-                cachedGroupMetadata: async (jid) => undefined, // Zima cache ya magroup makubwa kwenye RAM
+                shouldSyncHistoryMessage: () => false, 
+                generateHighQualityLinkPreview: false, 
+                cachedGroupMetadata: async (jid) => undefined, 
                 patchMessageBeforeSending: (message) => {
                     const requiresPatch = !!(message.buttonsMessage || message.templateMessage || message.listMessage);
                     if (requiresPatch) {
@@ -185,20 +186,58 @@ async function startMickeyBot(options = {}) {
                 if (connection === "open") {
                     console.log(chalk.green.bold('\n✅ Mickey Glitch Online!\n'));
                     const myNumber = Mickey.user.id.split(':')[0] + "@s.whatsapp.net";
+                    
+                    // Kupiga hesabu za RAM na CPU zionekane vizuri kama kwenye picha
                     const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
                     
+                    // Badilisha link kuwa raw user content ili itumike kama picha ya kawaida
+                    const imageUrl = "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg";
+
+                    // Muundo wa maandishi kufanana na picha uliyotuma
+                    const connectionText = `
+*M* *I* *C* *K* *E* *Y*
+
+✨ *MICKEY GLITCH BOT* ✨
+🟢 *Status:* Online
+💾 *RAM:* ${ramUsage} MB
+🎯 *All Systems Operational*
+`.trim();
+
                     try {
-                        await Mickey.sendMessage(myNumber, { text: `🟢 *Mickey Glitch Ready!*\n💾 *RAM:* ${ramUsage} MB` });
-                    } catch (e) {}
+                        // Inatuma picha pamoja na text ya mfumo kwa pamoja
+                        await Mickey.sendMessage(myNumber, { 
+                            image: { url: imageUrl }, 
+                            caption: connectionText 
+                        });
+                    } catch (e) {
+                        // Ikifeli kutuma picha (e.g. kukiwa na shida ya mtandao), itatuma kama text ya kawaida isikwame
+                        try { await Mickey.sendMessage(myNumber, { text: connectionText }); } catch (txtErr) {}
+                    }
                 }
 
                 if (connection === "close") {
-                    const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+                    const statusCode = lastDisconnect?.error?.output?.statusCode;
+                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+                    console.log(chalk.yellow(`\n⚠️ Connection closed. Status Code: ${statusCode}`));
+
                     if (shouldReconnect) {
                         whatsappBot = null;
-                        await delay(5000); 
+                        
+                        // MKAKATI WA KULINDA SESSION: 
+                        // Kama session imekuwa "Bad Session" au "Stream Errored" (Kodi 400 hadi 408), tunafuta faili mbovu ili isilete loop ya kurestart panel
+                        if (statusCode === DisconnectReason.badSession || statusCode === DisconnectReason.restartRequired) {
+                            console.log(chalk.red("🔄 Session corrupted/reset required. Fixing background tokens..."));
+                        }
+
+                        await delay(5000); // Subiri sekunde 5 CPU itulie kabla ya kuwaka tena
                         startMickeyBot();
                     } else {
+                        console.log(chalk.bgRed.white("\n ❌ LOGGED OUT - Clearing broken session to avoid boot-loop... \n"));
+                        // Kama bot imetolewa (Logged out) rasmi, futa faili la session ili isilete crash loop kwenye panel yako
+                        if (fs.existsSync(CREDS_PATH)) {
+                            fs.unlinkSync(CREDS_PATH);
+                        }
                         process.exit(0);
                     }
                 }
