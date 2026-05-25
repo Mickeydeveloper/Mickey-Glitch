@@ -2,26 +2,25 @@ const moment = require('moment-timezone');
 const fs = require('fs');
 const path = require('path');
 const { sendInteractiveMessage } = require('gifted-btns');
-const axios = require('axios'); // Kwa API calls
 
 /**
  * @project: MICKEY GLITCH ULTRA V4.0.0
  * @author: Quantum Base Developer (TZ)
- * @description: Ultra Menu - Dynamic + Interactive + Auto-update
+ * @description: Ultra Menu - Compact & Attractive Design
  */
 
 // ============ ULTRA FEATURES ============
 
-// 1. AUTO RANK SYSTEM (Kiwango cha mtumiaji)
+// 1. AUTO RANK SYSTEM
 const getUserRank = (totalCommands) => {
-    if (totalCommands < 10) return { rank: '🥉 Newbie', emoji: '🐣', color: '#808080' };
-    if (totalCommands < 50) return { rank: '🥈 Regular', emoji: '📱', color: '#00FF00' };
-    if (totalCommands < 200) return { rank: '🥇 Pro User', emoji: '⚡', color: '#00BFFF' };
-    if (totalCommands < 500) return { rank: '👑 Elite', emoji: '🔥', color: '#FFD700' };
-    return { rank: '💎 Legend', emoji: '👾', color: '#FF00FF' };
+    if (totalCommands < 10) return { rank: '🥉Newbie', emoji: '🐣' };
+    if (totalCommands < 50) return { rank: '🥈Regular', emoji: '📱' };
+    if (totalCommands < 200) return { rank: '🥇Pro', emoji: '⚡' };
+    if (totalCommands < 500) return { rank: '👑Elite', emoji: '🔥' };
+    return { rank: '💎Legend', emoji: '👾' };
 };
 
-// 2. DYNAMIC STATS (Hesabu za bot)
+// 2. DYNAMIC BOT STATS
 const getBotStats = () => {
     const uptime = process.uptime();
     const days = Math.floor(uptime / 86400);
@@ -30,252 +29,211 @@ const getBotStats = () => {
     
     return {
         uptime: `${days}d ${hours}h ${minutes}m`,
-        memory: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2),
+        memory: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1),
         commandsLoaded: 85,
         usersTotal: 1247,
         groupsActive: 43
     };
 };
 
-// 3. CATEGORY ICONS MAPPING
-const categoryIcons = {
-    'GENERAL': '🏠',
-    'GROUP': '👥',
-    'MODERATION': '🛡️',
-    'MEDIA': '🎨',
-    'AUDIO / VIDEO': '🎵',
-    'FUN': '🎮',
-    'AUTOMATION': '🤖',
-    'AI / BOT': '🧠',
-    'EFFECTS': '✨'
-};
-
-// 4. DAILY TIP (Mawaidha ya siku)
+// 3. DAILY TIPS (Compact)
 const dailyTips = [
-    "💡 *Tip:* Tumia `.autostatus` kuwaona wote waliotuma status!",
-    "🎯 *Pro:* `.tagall` inawataja wote kwenye group!",
-    "⚡ *Speed:* `.ping` inaonyesha speed ya bot!",
-    "🎨 *Creative:* Jaribu `.imagine` kutengeneza picha za AI!",
-    "🔒 *Security:* `.antilink` inazuia links za hatari!",
-    "🎵 *Music:* `.play` inapakua audio kutoka YouTube!",
-    "🤖 *Smart:* `.gpt` inaongea kama ChatGPT!"
+    "⚡.ping inaonyesha speed",
+    "🎨.imagine tengeneza picha AI",
+    "🤖.gpt ongea na AI",
+    "🎵.play pakua audio YouTube",
+    "🛡️.antilink zuia link hatari",
+    "👥.tagall wataje wote",
+    "📥.tiktok pakua video no watermark"
 ];
 
 // ============ MAIN MENU FUNCTION ============
 
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
-        const botName = 'MICKEY GLITCH ULTRA';
+        const botName = 'MICKEY GLITCH';
         const now = moment().tz('Africa/Dar_es_Salaam');
-        const greet = now.hour() < 12 ? 'Asubuhi ☀️' : now.hour() < 18 ? 'Mchana 🌤️' : 'Jioni 🌙';
+        const greet = now.hour() < 12 ? '☀️' : now.hour() < 18 ? '🌤️' : '🌙';
         
-        // Get user stats (kama una database)
+        // User stats
         const userCommandsTotal = userDb?.commandsCount || 42;
         const userRank = getUserRank(userCommandsTotal);
         const botStats = getBotStats();
         const dailyTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
         
-        // Random color theme
-        const themes = ['🔴', '🔵', '🟢', '🟡', '🟣', '⚫'];
-        const themeColor = themes[Math.floor(Math.random() * themes.length)];
+        // Category icons mapping
+        const categoryIcons = {
+            'GENERAL': '🏠', 'GROUP': '👥', 'MODERATION': '🛡️',
+            'MEDIA': '🎨', 'AUDIO/VIDEO': '🎵', 'FUN': '🎮',
+            'AUTOMATION': '🤖', 'AI/BOT': '🧠', 'EFFECTS': '✨'
+        };
 
-        // ============ ENHANCED CATEGORIES ============
+        // ============ COMPACT MENU CATEGORIES ============
         const MENU_CATEGORIES = [
             {
                 title: 'GENERAL',
                 items: [
-                    { command: '.help', description: 'Show the full command menu', example: '.help' },
-                    { command: '.ping', description: 'Check bot speed and uptime', example: '.ping' },
-                    { command: '.alive', description: 'Check if the bot is online', example: '.alive' },
-                    { command: '.owner', description: 'Show bot owner contact', example: '.owner' },
-                    { command: '.repo', description: 'Show bot repository info', example: '.repo' },
-                    { command: '.stats', description: 'Show bot statistics', example: '.stats' },
-                    { command: '.settings', description: 'Open bot settings', example: '.settings' },
-                    { command: '.checkupdates', description: 'Check for bot updates', example: '.checkupdates' },
-                    { command: '.donate', description: 'Support bot development', example: '.donate' }
+                    { command: '.help', description: 'Menu', example: '.help' },
+                    { command: '.ping', description: 'Speed', example: '.ping' },
+                    { command: '.alive', description: 'Bot status', example: '.alive' },
+                    { command: '.owner', description: 'Owner info', example: '.owner' },
+                    { command: '.repo', description: 'Source code', example: '.repo' },
+                    { command: '.stats', description: 'Bot stats', example: '.stats' }
                 ]
             },
             {
                 title: 'GROUP',
                 items: [
-                    { command: '.add', description: 'Add a user to this group', example: '.add 2557XXXXXX' },
-                    { command: '.kick', description: 'Remove a user from the group', example: '.kick @user' },
-                    { command: '.promote', description: 'Promote a member to admin', example: '.promote @user' },
-                    { command: '.demote', description: 'Demote a group admin', example: '.demote @user' },
-                    { command: '.tagall', description: 'Mention all group members', example: '.tagall Hello!' },
-                    { command: '.tagnotadmin', description: 'Mention non-admin members', example: '.tagnotadmin' },
-                    { command: '.hidetag', description: 'Send invisible mention', example: '.hidetag Message' },
-                    { command: '.tag', description: 'Tag a specific user', example: '.tag @user' },
-                    { command: '.mention', description: 'Mention users in chat', example: '.mention' },
-                    { command: '.setmention', description: 'Set mention mode for group', example: '.setmention on' },
-                    { command: '.setgname', description: 'Change group name', example: '.setgname New Name' },
-                    { command: '.setgdesc', description: 'Change group description', example: '.setgdesc New Desc' },
-                    { command: '.setgpp', description: 'Set group profile picture', example: '.setgpp (reply image)' },
-                    { command: '.groupinfo', description: 'Show group details', example: '.groupinfo' },
-                    { command: '.admins', description: 'List all group admins', example: '.admins' }
+                    { command: '.add', description: 'Add user', example: '.add 2557xxxxxx' },
+                    { command: '.kick', description: 'Remove user', example: '.kick @user' },
+                    { command: '.promote', description: 'Make admin', example: '.promote @user' },
+                    { command: '.demote', description: 'Remove admin', example: '.demote @user' },
+                    { command: '.tagall', description: 'Mention all', example: '.tagall hello' },
+                    { command: '.hidetag', description: 'Hidden mention', example: '.hidetag msg' },
+                    { command: '.setgname', description: 'Group name', example: '.setgname Name' },
+                    { command: '.setgdesc', description: 'Group desc', example: '.setgdesc Text' }
                 ]
             },
             {
                 title: 'MODERATION',
                 items: [
-                    { command: '.ban', description: 'Ban a user from using the bot', example: '.ban @user' },
-                    { command: '.unban', description: 'Unban a user', example: '.unban @user' },
-                    { command: '.antibadword', description: 'Block bad language automatically', example: '.antibadword on' },
-                    { command: '.antilink', description: 'Block links in group automatically', example: '.antilink on' },
-                    { command: '.antitag', description: 'Block unwanted tags automatically', example: '.antitag on' },
-                    { command: '.pmblocker', description: 'Block private messages automatically', example: '.pmblocker on' },
-                    { command: '.anticall', description: 'Block unwanted calls automatically', example: '.anticall on' },
-                    { command: '.resetlink', description: 'Revoke and reset group invite link', example: '.resetlink' },
-                    { command: '.staff', description: 'Show group admins / staff list', example: '.staff' },
-                    { command: '.warn', description: 'Warn a user', example: '.warn @user reason' },
-                    { command: '.warns', description: 'Check user warnings', example: '.warns @user' },
-                    { command: '.delwarn', description: 'Remove a warning', example: '.delwarn @user' }
+                    { command: '.ban', description: 'Ban user', example: '.ban @user' },
+                    { command: '.unban', description: 'Unban user', example: '.unban @user' },
+                    { command: '.antilink', description: 'Block links', example: '.antilink on' },
+                    { command: '.antibadword', description: 'Block bad words', example: '.antibadword on' },
+                    { command: '.anticall', description: 'Block calls', example: '.anticall on' },
+                    { command: '.warn', description: 'Warn user', example: '.warn @user' }
                 ]
             },
             {
-                title: 'MEDIA DOWNLOAD',
+                title: 'MEDIA',
                 items: [
-                    { command: '.sticker', description: 'Convert image/video to sticker', example: '.sticker (reply media)' },
-                    { command: '.stickeralt', description: 'Create alternate sticker format', example: '.stickeralt' },
-                    { command: '.stickertelegram', description: 'Create Telegram-style sticker', example: '.stickertelegram' },
-                    { command: '.setpp', description: 'Set your profile picture', example: '.setpp (reply image)' },
-                    { command: '.pp', description: 'Get your own profile picture', example: '.pp' },
-                    { command: '.img-blur', description: 'Blur an image', example: '.img-blur (reply image)' },
-                    { command: '.facebook', description: 'Download Facebook media', example: '.facebook (url)' },
-                    { command: '.instagram', description: 'Download Instagram post', example: '.instagram (url)' },
-                    { command: '.igs', description: 'Download Instagram story', example: '.igs (username)' },
-                    { command: '.tiktok', description: 'Download TikTok video (no watermark)', example: '.tiktok (url)' },
-                    { command: '.shazam', description: 'Identify music by sound', example: '.shazam (reply audio)' },
-                    { command: '.twitter', description: 'Download Twitter/X video', example: '.twitter (url)' },
-                    { command: '.ytmp3', description: 'YouTube to MP3', example: '.ytmp3 (url)' },
-                    { command: '.ytmp4', description: 'YouTube to MP4', example: '.ytmp4 (url)' }
+                    { command: '.sticker', description: 'Image to sticker', example: '.sticker' },
+                    { command: '.facebook', description: 'FB downloader', example: '.facebook url' },
+                    { command: '.instagram', description: 'IG downloader', example: '.instagram url' },
+                    { command: '.tiktok', description: 'TT no watermark', example: '.tiktok url' },
+                    { command: '.twitter', description: 'X downloader', example: '.twitter url' },
+                    { command: '.ytmp3', description: 'YouTube to MP3', example: '.ytmp3 url' },
+                    { command: '.ytmp4', description: 'YouTube to MP4', example: '.ytmp4 url' }
                 ]
             },
             {
-                title: 'AUDIO / VIDEO',
+                title: 'AUDIO/VIDEO',
                 items: [
-                    { command: '.play', description: 'Download audio from YouTube', example: '.play song name' },
-                    { command: '.video', description: 'Download video from YouTube', example: '.video song name' },
-                    { command: '.music', description: 'Search and download music', example: '.music artist - song' },
-                    { command: '.url', description: 'Convert link to media download', example: '.url (url)' },
-                    { command: '.song', description: 'Download song from Spotify', example: '.song (spotify url)' }
+                    { command: '.play', description: 'Audio from YT', example: '.play song name' },
+                    { command: '.video', description: 'Video from YT', example: '.video song name' },
+                    { command: '.music', description: 'Search music', example: '.music artist song' }
                 ]
             },
             {
-                title: 'FUN & GAMES',
+                title: 'FUN',
                 items: [
-                    { command: '.compliment', description: 'Send a compliment message', example: '.compliment @user' },
-                    { command: '.lyrics', description: 'Search song lyrics', example: '.lyrics song name' },
-                    { command: '.character', description: 'Generate a character message', example: '.character text' },
-                    { command: '.wasted', description: 'Create wasted-style effect', example: '.wasted (reply image)' },
-                    { command: '.mickey', description: 'Show Mickey Glitch animation', example: '.mickey' },
-                    { command: '.weather', description: 'Show weather information', example: '.weather city' },
-                    { command: '.report', description: 'Send a report message', example: '.report issue' },
-                    { command: '.halotel', description: 'Show Halotel service info', example: '.halotel' },
-                    { command: '.truth', description: 'Truth or dare - truth', example: '.truth' },
-                    { command: '.dare', description: 'Truth or dare - dare', example: '.dare' },
-                    { command: '.quiz', description: 'Play a quiz game', example: '.quiz' },
-                    { command: '.slot', description: 'Slot machine game', example: '.slot 100' },
-                    { command: '.rps', description: 'Rock paper scissors', example: '.rps rock' }
+                    { command: '.compliment', description: 'Compliment', example: '.compliment @user' },
+                    { command: '.lyrics', description: 'Song lyrics', example: '.lyrics song name' },
+                    { command: '.weather', description: 'Weather info', example: '.weather city' },
+                    { command: '.truth', description: 'Truth game', example: '.truth' },
+                    { command: '.dare', description: 'Dare game', example: '.dare' },
+                    { command: '.quiz', description: 'Quiz game', example: '.quiz' }
                 ]
             },
             {
                 title: 'AUTOMATION',
                 items: [
-                    { command: '.autostatus', description: 'Auto view + like status (default ON)', example: '.autostatus on' },
-                    { command: '.autotyping', description: 'Auto typing status', example: '.autotyping on' },
-                    { command: '.autoread', description: 'Auto read messages', example: '.autoread on' },
-                    { command: '.areact', description: 'Auto react to messages', example: '.areact on' },
-                    { command: '.autobio', description: 'Auto change bio', example: '.autobio on' },
-                    { command: '.autoquote', description: 'Auto quote messages', example: '.autoquote on' }
+                    { command: '.autostatus', description: 'Auto view status', example: '.autostatus on' },
+                    { command: '.autotyping', description: 'Auto typing', example: '.autotyping on' },
+                    { command: '.autoread', description: 'Auto read msgs', example: '.autoread on' },
+                    { command: '.areact', description: 'Auto react', example: '.areact on' }
                 ]
             },
             {
-                title: 'AI / BOT',
+                title: 'AI/BOT',
                 items: [
-                    { command: '.gpt', description: 'Chat with GPT-4', example: '.gpt What is AI?' },
-                    { command: '.aivoice', description: 'Create AI voice response', example: '.aivoice Hello world' },
-                    { command: '.imagine', description: 'Generate image from prompt', example: '.imagine cat in space' },
-                    { command: '.sudo', description: 'Owner-only sudo command', example: '.sudo command' },
-                    { command: '.update', description: 'Update the bot code', example: '.update' },
-                    { command: '.newgroup', description: 'Create a new group', example: '.newgroup Group Name' },
-                    { command: '.ghost', description: 'Use ghost command features', example: '.ghost' },
-                    { command: '.gdrive', description: 'Download from Google Drive', example: '.gdrive (file id)' },
-                    { command: '.getcode', description: 'Get a code from a link', example: '.getcode (url)' },
-                    { command: '.getlink', description: 'Get direct download link', example: '.getlink (url)' },
-                    { command: '.gemini', description: 'Chat with Google Gemini', example: '.gemini question' },
-                    { command: '.llama', description: 'Chat with Llama 3 AI', example: '.llama question' }
+                    { command: '.gpt', description: 'ChatGPT AI', example: '.gpt question' },
+                    { command: '.imagine', description: 'AI image gen', example: '.imagine cat' },
+                    { command: '.gemini', description: 'Google Gemini', example: '.gemini question' },
+                    { command: '.aivoice', description: 'AI voice', example: '.aivoice text' }
                 ]
             },
             {
-                title: 'PHOTO EFFECTS',
+                title: 'EFFECTS',
                 items: [
-                    { command: '.metallic', description: 'Metallic image effect', example: '.metallic (reply image)' },
-                    { command: '.ice', description: 'Ice image effect', example: '.ice (reply image)' },
-                    { command: '.snow', description: 'Snow image effect', example: '.snow (reply image)' },
-                    { command: '.impressive', description: 'Impressive effect', example: '.impressive (reply image)' },
-                    { command: '.matrix', description: 'Matrix style effect', example: '.matrix (reply image)' },
-                    { command: '.light', description: 'Light glow effect', example: '.light (reply image)' },
-                    { command: '.neon', description: 'Neon effect', example: '.neon (reply image)' },
-                    { command: '.devil', description: 'Devil effect', example: '.devil (reply image)' },
-                    { command: '.purple', description: 'Purple effect', example: '.purple (reply image)' },
-                    { command: '.thunder', description: 'Thunder effect', example: '.thunder (reply image)' },
-                    { command: '.leaves', description: 'Leaves effect', example: '.leaves (reply image)' },
-                    { command: '.1917', description: '1917 movie style effect', example: '.1917 (reply image)' },
-                    { command: '.arena', description: 'Arena effect', example: '.arena (reply image)' },
-                    { command: '.hacker', description: 'Hacker text effect', example: '.hacker text' },
-                    { command: '.sand', description: 'Sand effect', example: '.sand (reply image)' },
-                    { command: '.blackpink', description: 'Blackpink style effect', example: '.blackpink (reply image)' },
-                    { command: '.glitch', description: 'Glitch text effect', example: '.glitch text' },
-                    { command: '.fire', description: 'Fire effect', example: '.fire (reply image)' },
-                    { command: '.rainbow', description: 'Rainbow effect', example: '.rainbow (reply image)' },
-                    { command: '.sketch', description: 'Pencil sketch effect', example: '.sketch (reply image)' }
+                    { command: '.glitch', description: 'Glitch text', example: '.glitch text' },
+                    { command: '.neon', description: 'Neon effect', example: '.neon text' },
+                    { command: '.fire', description: 'Fire effect', example: '.fire text' },
+                    { command: '.matrix', description: 'Matrix style', example: '.matrix text' }
                 ]
             }
         ];
 
-        // Build interactive sections
+        // Build interactive sections (Compact)
         const sections = MENU_CATEGORIES.map(category => ({
             title: `${categoryIcons[category.title] || '📌'} ${category.title} (${category.items.length})`,
             rows: category.items.map(item => ({
                 header: `📌 ${item.command}`,
-                title: item.description.length > 35 ? item.description.slice(0, 32) + '...' : item.description,
-                description: `💡 Example: ${item.example || item.command}`,
+                title: item.description,
+                description: `💡 ${item.example}`,
                 id: item.command.toLowerCase()
             }))
         }));
 
-        // ============ ULTRA BEAUTIFUL TEXT ============
-        const helpText = `╔══════════════════════════════════════╗
-${themeColor}  ✨ *${botName}* — *V4.0.0* ${themeColor}
-╚══════════════════════════════════════╝
-┌───[ ${greet} ${categoryIcons[Object.keys(categoryIcons)[Math.floor(Math.random()*Object.keys(categoryIcons).length)]]} ]───
-│ 👤 *User:* ${m.pushName || 'User'} ${userRank.emoji}
-│ 🎖️ *Rank:* ${userRank.rank}
-│ 📅 *Date:* ${now.format('dddd, MMMM D, YYYY')}
-│ ⏰ *Time:* ${now.format('HH:mm:ss')} [${now.format('zz')}]
-│ 📊 *Commands Used:* ${userCommandsTotal}
-├────────────────────────────────────┤
-│ 🤖 *Bot Stats*
-│ ⏱️ *Uptime:* ${botStats.uptime}
-│ 💾 *Memory:* ${botStats.memory} MB
-│ 📁 *Commands:* ${botStats.commandsLoaded}
-│ 👥 *Users:* ${botStats.usersTotal}
-├────────────────────────────────────┤
-│ ${dailyTip}
-└────────────────────────────────────┘
-*💎 Quantum Base Developer (TZ)*
-*🔗 Repo:* github.com/Mickeymozy/Mickey-trony
+        // ============ DESIGN 1: CARDS STYLE (COMPACT) ============
+        const helpText_Cards = `
+╭─────────────────╮
+│ ✨MICKEY GLITCH │
+│  ⚡ULTRA V4.0⚡  │
+╰─────────────────╯
 
-👇 *CLICK BUTTON BELOW TO OPEN MENU* 👇`;
+┌─────────────────┐
+│ ▸${m.pushName || 'User'} ${userRank.rank}│
+│ ▸${userCommandsTotal}cmds ⏱️${botStats.uptime}│
+│ ▸💾${botStats.memory}MB 👥${botStats.usersTotal}│
+└─────────────────┘
 
-        // ============ SEND ULTRA INTERACTIVE MESSAGE ============
+┌─────────────────┐
+│ 💡${dailyTip}│
+└─────────────────┘
+
+╭─────────────────╮
+│ 🔗Mickey-trony  │
+│ 👨‍💻@Mickeymozy  │
+╰─────────────────╯
+    【 📋OPEN 】
+`;
+
+        // ============ DESIGN 2: MINIMAL ELEGANT (COMPACT) ============
+        const helpText_Minimal = `
+▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰
+   ✨MICKEY GLITCH✨
+     ULTRA V4.0
+▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰
+
+ 👋${greet} ${m.pushName}
+ 🎖️${userRank.rank} 📊${userCommandsTotal}
+
+ ⏱️${botStats.uptime} 💾${botStats.memory}MB
+ 👥${botStats.usersTotal} users
+
+▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰
+ 💡${dailyTip}
+▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰
+
+ 🔗Mickey-trony
+ 👨‍💻@Mickeymozy
+
+▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰
+     【 📋OPEN 】
+`;
+
+        // ============ SELECT YOUR DESIGN HERE ============
+        const helpText = helpText_Minimal; // Change to helpText_Cards if you want Cards style
+
+        // ============ SEND INTERACTIVE MESSAGE ============
         await sendInteractiveMessage(sock, chatId, {
             text: helpText,
             contextInfo: {
                 externalAdReply: {
-                    title: "𝙼𝙸𝙲𝙺𝙴𝚈 𝙶𝙻𝙸𝚃𝙲𝙷 𝚄𝙻𝚃𝚁𝙰 𝚅𝟺.𝟶",
-                    body: "𝙿𝚘𝚠𝚎𝚛𝚎𝚍 𝚋𝚢 𝚀𝚞𝚊𝚗𝚝𝚞𝚖 𝙲𝚘𝚍𝚎 | 𝚃𝚊𝚗𝚣𝚊𝚗𝚒𝚊",
+                    title: "MICKEY GLITCH ULTRA",
+                    body: "Powered by Quantum Code",
                     thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
                     sourceUrl: 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610',
                     mediaType: 1,
@@ -286,44 +244,33 @@ ${themeColor}  ✨ *${botName}* — *V4.0.0* ${themeColor}
                 {
                     name: 'single_select',
                     buttonParamsJson: JSON.stringify({
-                        title: '📋 OPEN COMMAND MENU',
+                        title: '📋 OPEN MENU',
                         sections: sections
                     })
                 },
                 {
                     name: 'quick_reply',
                     buttonParamsJson: JSON.stringify({
-                        display_text: '⚡ PING BOT',
+                        display_text: '⚡ PING',
                         id: '.ping'
                     })
                 },
                 {
                     name: 'quick_reply',
                     buttonParamsJson: JSON.stringify({
-                        display_text: '📊 MY STATS',
-                        id: '.mystats'
-                    })
-                },
-                {
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '🎮 FUN MENU',
-                        id: '.funmenu'
+                        display_text: '📊 STATS',
+                        id: '.stats'
                     })
                 }
             ]
         });
 
-        // ============ LOGGING ============
-        console.log(`[MENU] Used by: ${m.pushName} | Rank: ${userRank.rank}`);
-
     } catch (e) {
-        console.error('Menu Cmd Error:', e);
+        console.error('Menu Error:', e);
         await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu imetokea!* Tafadhali jaribu tena.\n\n📌 *Ikiwa inaendelea*, wasiliana na owner.'
+            text: '❌ Error! Jaribu tena.'
         }, { quoted: m });
     }
 };
 
-// Export kwa ajili ya main.js
 module.exports = menuCommand;
