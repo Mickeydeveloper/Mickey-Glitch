@@ -7,7 +7,6 @@
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
 
 // Temporary directory for media processing
 const TEMP_DIR = path.join(__dirname, '../temp');
@@ -25,8 +24,8 @@ async function isGroupAdmin(sock, groupId, participantId) {
     }
 }
 
-// Function to post status to group members only (alternative feature)
-async function postGroupStatusToMembers(sock, groupId, mediaBuffer, caption, senderId) {
+// Function to post status to group members only
+async function postGroupStatusToMembers(sock, groupId, mediaBuffer, caption, senderId, mediaType) {
     try {
         const groupMetadata = await sock.groupMetadata(groupId);
         const members = groupMetadata.participants.map(p => p.id);
@@ -39,10 +38,17 @@ async function postGroupStatusToMembers(sock, groupId, mediaBuffer, caption, sen
             if (member === senderId) continue; // Skip sender
             
             try {
-                await sock.sendMessage(member, {
-                    image: mediaBuffer,
-                    caption: `📢 *GROUP STATUS*\nFrom: ${groupMetadata.subject}\n\n${caption || 'No caption'}\n\n🟣 This is a group status update`
-                });
+                if (mediaType === 'image') {
+                    await sock.sendMessage(member, {
+                        image: mediaBuffer,
+                        caption: `📢 *GROUP STATUS*\nFrom: ${groupMetadata.subject}\n\n${caption || 'No caption'}\n\n🟣 This is a group status update`
+                    });
+                } else if (mediaType === 'video') {
+                    await sock.sendMessage(member, {
+                        video: mediaBuffer,
+                        caption: `📢 *GROUP STATUS*\nFrom: ${groupMetadata.subject}\n\n${caption || 'No caption'}\n\n🟣 This is a group status update`
+                    });
+                }
                 successCount++;
             } catch (err) {
                 failCount++;
@@ -64,13 +70,11 @@ async function postGroupStatusToMembers(sock, groupId, mediaBuffer, caption, sen
 async function postToWhatsAppStatus(sock, mediaBuffer, caption, mediaType, options = {}) {
     try {
         let statusPayload = {};
-        const timestamp = Date.now();
         
         if (mediaType === 'image') {
             statusPayload = {
                 image: mediaBuffer,
                 caption: caption || '📸 Status update',
-                // Add view once privacy features
                 viewOnce: options.viewOnce || false
             };
         } else if (mediaType === 'video') {
@@ -78,22 +82,12 @@ async function postToWhatsAppStatus(sock, mediaBuffer, caption, mediaType, optio
                 video: mediaBuffer,
                 caption: caption || '🎥 Status update',
                 gifPlayback: false,
-                // Video status options
                 seconds: options.seconds || 30
             };
         }
         
         // Send to WhatsApp status broadcast
-        const result = await sock.sendMessage('status@broadcast', statusPayload, {
-            // Background color for text status
-            backgroundColor: options.backgroundColor || '#000000',
-            font: options.font || 1,
-            // Privacy settings - who can see this status
-            privacy: options.privacy || 'contactOnly', // 'contactOnly', 'everyone', 'contactsExcept'
-            // Status expiry (24 hours default)
-            disappearingMessagesInChat: options.disappearingMessagesInChat || true
-        });
-        
+        const result = await sock.sendMessage('status@broadcast', statusPayload);
         return result;
     } catch (err) {
         console.error('Error posting to status:', err);
@@ -136,9 +130,42 @@ async function processMedia(sock, chatId, contextInfo, quotedMessage, mediaMessa
 // Delay helper
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Help command
+async function gpstatusHelp(sock, chatId, message) {
+    const helpText = `📸 *GPSTATUS COMMAND HELP*
+
+*Usage:* 
+\`.gpstatus\` - Reply to media to post to WhatsApp Status
+\`.gpstatus group\` - Post to group members only (admin only)
+\`.gpstatus both\` - Post to both Status and Group
+\`.gpstatus viewonce\` - Post as view once status
+
+*Examples:*
+1. Reply to an image with \`.gpstatus\`
+2. Reply to a video with \`.gpstatus group\`
+3. Reply to media with \`.gpstatus both viewonce\`
+
+*Features:*
+✅ Post images/videos to WhatsApp Stories
+✅ Share to group members (admin only)
+✅ View once privacy option
+✅ Automatic media compression
+
+*Note:* Group status feature requires admin privileges.
+
+📞 *Support:* Contact bot owner for issues`;
+    
+    await sock.sendMessage(chatId, { text: helpText }, { quoted: message });
+}
+
 // Main command function
 async function gpstatusCommand(sock, chatId, message, args = []) {
     try {
+        // Check if help is requested
+        if (args && args.length > 0 && (args[0] === 'help' || args[0] === '--help')) {
+            return gpstatusHelp(sock, chatId, message);
+        }
+        
         const contextInfo = message.message?.extendedTextMessage?.contextInfo;
         
         // Check if message is quoted
@@ -148,7 +175,8 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
                       '📌 *Options:*\n' +
                       '• `.gpstatus group` - Post to group members only\n' +
                       '• `.gpstatus viewonce` - Post as view once status\n' +
-                      '• `.gpstatus both` - Post to both status and group'
+                      '• `.gpstatus both` - Post to both status and group\n\n' +
+                      '• `.gpstatus help` - Show detailed help'
             }, { quoted: message });
             return;
         }
@@ -176,28 +204,22 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
             return;
         }
         
-        // Parse arguments
-        const mode = args[0]?.toLowerCase() || 'status';
-        const isGroupMode = mode === 'group' || mode === 'both';
-        const isStatusMode = mode === 'status' || mode === 'both';
-        const isViewOnce = args.includes('viewonce');
+        // Parse arguments safely
+        const firstArg = args && args.length > 0 ? args[0].toLowerCase() : '';
+        const secondArg = args && args.length > 1 ? args[1].toLowerCase() : '';
+        
+        const isGroupMode = firstArg === 'group' || firstArg === 'both';
+        const isStatusMode = firstArg === 'status' || firstArg === 'both' || firstArg === '';
+        const isViewOnce = firstArg === 'viewonce' || secondArg === 'viewonce';
         
         // Send processing message
-        const statusMsg = await sock.sendMessage(chatId, { 
-            text: '⏳ *Processing media...*\n\n' +
-                  '📥 Downloading media...' 
+        await sock.sendMessage(chatId, { 
+            text: '⏳ *Processing media...*\n\n📥 Downloading media...' 
         }, { quoted: message });
         
         // Download media
         const mediaBuffer = await processMedia(sock, chatId, contextInfo, quotedMessage, mediaMessage);
         const caption = mediaMessage.caption || '';
-        
-        // Update status
-        await sock.sendMessage(chatId, { 
-            text: '✅ Media downloaded!\n\n' +
-                  '📤 Uploading to WhatsApp...',
-            edit: statusMsg.key
-        });
         
         let results = [];
         let success = false;
@@ -205,16 +227,7 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
         // Mode 1: Post to WhatsApp Status (Stories)
         if (isStatusMode) {
             try {
-                await sock.sendMessage(chatId, { 
-                    text: '📤 Posting to WhatsApp Status/Stories...',
-                    edit: statusMsg.key
-                });
-                
-                const statusResult = await postToWhatsAppStatus(
-                    sock, mediaBuffer, caption, mediaType, 
-                    { viewOnce: isViewOnce }
-                );
-                
+                await postToWhatsAppStatus(sock, mediaBuffer, caption, mediaType, { viewOnce: isViewOnce });
                 results.push('✅ *WhatsApp Status:* Posted successfully!');
                 success = true;
             } catch (err) {
@@ -226,19 +239,15 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
         // Mode 2: Post to Group Members only
         if (isGroupMode) {
             // Check if sender is admin
-            const isAdmin = await isGroupAdmin(sock, chatId, message.key.participant || message.key.remoteJid);
+            const senderId = message.key.participant || message.key.remoteJid;
+            const isAdmin = await isGroupAdmin(sock, chatId, senderId);
             
             if (!isAdmin) {
                 results.push('❌ *Group Status:* Only group admins can post group status!');
             } else {
                 try {
-                    await sock.sendMessage(chatId, { 
-                        text: '👥 Posting to group members...',
-                        edit: statusMsg.key
-                    });
-                    
                     const groupResult = await postGroupStatusToMembers(
-                        sock, chatId, mediaBuffer, caption, message.key.participant || message.key.remoteJid
+                        sock, chatId, mediaBuffer, caption, senderId, mediaType
                     );
                     
                     results.push(`✅ *Group Status:* Posted to ${groupResult.successCount}/${groupResult.total} group members!`);
@@ -258,12 +267,8 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
         const emoji = success ? '✅' : '❌';
         
         await sock.sendMessage(chatId, { 
-            text: `${emoji} *Status Post Complete*\n\n${finalMessage}\n\n💡 Tip: Use .gpstatus help for more options`,
-            edit: statusMsg.key
-        });
-        
-        // Clean up any temp files if created
-        // (Media buffer will be garbage collected)
+            text: `${emoji} *Status Post Complete*\n\n${finalMessage}\n\n💡 Tip: Use .gpstatus help for more options`
+        }, { quoted: message });
         
     } catch (err) {
         console.error('❌ GPStatus Command Error:', err);
@@ -273,36 +278,5 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
     }
 }
 
-// Help command
-async function gpstatusHelp(sock, chatId, message) {
-    const helpText = `📸 *GPStatus Command Help*
-
-*Usage:* 
-\`.gpstatus\` - Reply to media to post to WhatsApp Status
-\`.gpstatus group\` - Post to group members only (admin only)
-\`.gpstatus both\` - Post to both Status and Group
-\`.gpstatus viewonce\` - Post as view once status
-
-*Examples:*
-1. Reply to an image with \`.gpstatus\`
-2. Reply to a video with \`.gpstatus group\`
-3. Reply to media with \`.gpstatus both viewonce\`
-
-*Features:*
-✅ Post images/videos to WhatsApp Stories
-✅ Share to group members (admin only)
-✅ View once privacy option
-✅ Automatic media compression
-
-*Note:* Group status feature requires admin privileges.`;
-    
-    await sock.sendMessage(chatId, { text: helpText }, { quoted: message });
-}
-
-// Export with help support
-module.exports = async function(sock, chatId, message, args) {
-    if (args[0] === 'help' || args[0] === '--help') {
-        return gpstatusHelp(sock, chatId, message);
-    }
-    return gpstatusCommand(sock, chatId, message, args);
-};
+// Export kama za code za awali (direct function export)
+module.exports = gpstatusCommand;
