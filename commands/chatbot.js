@@ -2,6 +2,10 @@ const fs = require('fs').promises;
 const path = require('path');
 const fetch = require('node-fetch');
 
+// Owner configuration - WEKA NUMBER YAKO HAPA
+const OWNER_NUMBER = "255612130873"; // Badilisha na number yako mwenyewe
+const BOT_NAME = "Mickey";
+
 // Paths za kuhifadhi data
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
@@ -13,6 +17,11 @@ const QUOTES_PATH = path.join(__dirname, '..', 'data', 'quotes.json');
 
 // Rate limiting
 const rateLimits = new Map();
+
+// Check if user is owner
+function isOwner(userId) {
+    return userId === OWNER_NUMBER || userId.includes(OWNER_NUMBER);
+}
 
 // ============ DATA LOAD/SAVE FUNCTIONS ============
 async function loadState() {
@@ -169,161 +178,225 @@ async function saveQuotes(quotes) {
     }
 }
 
-// ============ MICKEY'S REAL PERSONALITY ============
-const mickeyResponses = {
-    // Greetings - casual like normal person
-    greetings: [
-        "Oya mambo vipi?",
-        "Niaje mzee, mambo poa?",
-        "Freshi vipi?",
-        "Mambo, mambo!",
-        "Yo! Niaje?"
+// ============ MICKEY'S NATURAL HUMAN RESPONSES ============
+const mickeyChat = {
+    // Greetings - natural and varied
+    greetings: {
+        morning: [
+            "Habari za asubuhi mazee! Umeamka poa?",
+            "Subuhi yako imekuwaje? Nami niko freshi tu",
+            "Asubuhi njema! Siku njema mwanangu",
+            "Yo! Umeamka lini? Mimi nimeamka mapema leo"
+        ],
+        afternoon: [
+            "Habari za mchana! Umeshachakula?",
+            "Mchana mwema mazee, unaendelea aje?",
+            "Niaje mchana huu? Mimi niko tu poa",
+            "Mambo ya mchana! Jua kali leo"
+        ],
+        evening: [
+            "Habari za jioni! Siku imekuwaje?",
+            "Jioni njema mkuu, umechoka?",
+            "Mambo ya jioni! Sasa tunapumzika",
+            "Jioni poa! Kesho ndio siku nyingine"
+        ],
+        night: [
+            "Usiku mwema! Usikae sana, lala vizuri",
+            "Mambo ya usiku huu? Mimi natazama nyota tu",
+            "Usiku mkuu! Kesho tutaongea tena",
+            "Lala salama, ndoto njema"
+        ]
+    },
+
+    // Common conversation starters
+    casual: [
+        "Niaje mkuu, mambo vipi?",
+        "Oya, freshi vipi leo?",
+        "Mambo mazee, unaendelea aje?",
+        "Yo! Niaje, kuna nini?",
+        "Sema mkuu, umekuwaje?"
     ],
-    
-    // How are you responses - humble, not bragging
+
+    // Responses to "how are you"
     howAreYou: [
-        "Poa tu, shukrani. Na wewe?",
-        "Nzuri tu mazee, unaendelea aje?",
-        "Safi tu, Mungu anipenda. Wewe je?",
-        "Poaaaa! Wewe mambo?",
-        "Freshi kabisa! Na wewe?"
+        "Poa tu mazee, shukrani. Na wewe unaendelea aje?",
+        "Nzuri tu, Mungu anipenda. Wewe je?",
+        "Freshi kabisa! Siku inaenda poa, na wewe?",
+        "Safi tu mkuu, hakuna story. Wewe mambo?",
+        "Poa poa, nikishinda tu. Wewe mambo gani?"
     ],
-    
-    // Thank you responses - appreciative
+
+    // Thank you responses - humble
     thanks: [
-        "Karibu mazee, poa tu",
-        "Ahsante kwa shukrani zako",
-        "Karibu sana, naomba tena",
-        "Poa, niko hapa kukusaidia",
-        "Sawa kabisa, sema tu"
+        "Karibu mazee, raha yangu",
+        "Ahsante kwa shukrani, naomba tena",
+        "Poa tu, niko hapa kukusaidia",
+        "Karibu sana, sema tu unachohitaji",
+        "Sawa kabisa, rafiki yako"
     ],
-    
-    // Don't know responses - honest
+
+    // When doesn't know something - honest
     dontKnow: [
-        "Sijui mazee, siyo eneo langu",
-        "Hapo nimeshindwa mkuu",
-        "Samahani, sijui hilo",
+        "Sijui mazee, siyo eneo langu hilo",
+        "Hapo nimeshindwa mkuu, samahani",
+        "Samahani, sijui hilo. Mengine nikusaidie?",
         "Hapana, sijawahi kusikia hicho",
-        "Ngoja nikuulize wazoefu"
+        "Leta swali lingine, hili nimeshindwa"
     ],
-    
-    // Jokes - simple Swahili jokes
+
+    // Jokes - natural Swahili humor
     jokes: [
         "Kwanini simu haicheki? Ina data chache! 😂",
-        "Niaje, nimesikia mkate ana stress... Ana-loaf! 🤣",
+        "Nimesikia mkate ana stress... Ana-loaf! 🤣",
         "Kwanini tombo anakimbia? Anafuata ndoto zake! 😅",
         "Mwalimu: 'Nipe sentensi na neno matunda'... Matunda yanauzwa sokoni! 💀",
-        "Kwanini nyoka hajisalimii? Anajisikia mnyama! 🐍"
+        "Niaje, unajua kwanini nyoka hajisalimii? Anajisikia mnyama! 🐍"
     ],
-    
-    // Wisdom quotes - simple life advice
+
+    // Advice - practical and kind
     advice: [
-        "Ukiwa na shida, sema tu. Usibebe mzigo peke yako",
-        "Maisha ni mafupi, furahia kila dakika",
-        "Watu watasema, wewe fanya yako tu",
-        "Kupata rafiki wa kweli ni dhahabu",
-        "Usilinganishe maisha yako na ya mtu mwingine"
-    ],
-    
-    // Weather responses
-    weather: [
-        "Leo jua kali mazee, jikinge",
-        "Kuna baridi kidogo, funga jacket",
-        "Mvua inanyesha, beba mwavuli",
-        "Hewa ni safi leo, furahia",
-        "Sijui hali ya hewa, ngoja niangalie"
+        "Ukiwa na shida, usibebe mzigo peke yako. Sema tu",
+        "Maisha ni mafupi mazee, furahia kila dakika",
+        "Watu watasema mengi, wewe fanya yako tu",
+        "Kupata rafiki wa kweli ni kama dhahabu, usimpoteze",
+        "Usilinganishe maisha yako na ya mtu mwingine. Kila mtu ana wakati wake"
     ]
 };
 
-// ============ TIME-BASED GREETINGS ============
-function getTimeBasedGreeting(userName) {
+// ============ NATURAL RESPONSE GENERATOR ============
+function getNaturalResponse(category, subCategory = null) {
+    if (subCategory && mickeyChat[category] && mickeyChat[category][subCategory]) {
+        const responses = mickeyChat[category][subCategory];
+        return responses[Math.floor(Math.random() * responses.length)];
+    }
+    if (mickeyChat[category]) {
+        // If it's an object with subcategories
+        if (typeof mickeyChat[category] === 'object') {
+            const keys = Object.keys(mickeyChat[category]);
+            const randomKey = keys[Math.floor(Math.random() * keys.length)];
+            const responses = mickeyChat[category][randomKey];
+            return responses[Math.floor(Math.random() * responses.length)];
+        }
+        // If it's an array
+        return mickeyChat[category][Math.floor(Math.random() * mickeyChat[category].length)];
+    }
+    return "Sijui niseme nini mazee, lakini niko hapa";
+}
+
+// ============ TIME-BASED GREETING ============
+function getTimeGreeting(userName) {
     const hour = new Date().getHours();
     
     if (hour < 12) {
-        return `Habari za asubuhi ${userName}!`;
+        return getNaturalResponse('greetings', 'morning');
     } else if (hour < 18) {
-        return `Habari za mchana ${userName}!`;
+        return getNaturalResponse('greetings', 'afternoon');
+    } else if (hour < 22) {
+        return getNaturalResponse('greetings', 'evening');
     } else {
-        return `Habari za jioni ${userName}!`;
+        return getNaturalResponse('greetings', 'night');
     }
 }
 
-// ============ RANDOM RESPONSE GETTER ============
-function getRandomResponse(category) {
-    const responses = mickeyResponses[category];
-    if (!responses) return "Sijui niseme nini mazee";
-    return responses[Math.floor(Math.random() * responses.length)];
-}
-
-// ============ SMART REPLY GENERATOR ============
-async function getSmartReply(text, userName, lang) {
-    const lowerText = text.toLowerCase();
+// ============ SMART NATURAL REPLY ============
+async function getNaturalReply(text, userName) {
+    const lowerText = text.toLowerCase().trim();
     
-    // Simple greetings
-    if (lowerText.match(/^(hujambo|mambo|niaje|sema|yo|hi|hello|hey|sasa)/i)) {
-        return getRandomResponse('greetings');
+    // Very short or just a greeting
+    if (lowerText.length < 3) {
+        return getNaturalResponse('casual');
     }
     
-    // How are you
-    if (lowerText.match(/^(habari|how are you|how is it|vipi|unaendelea aje|poa|fresh)/i)) {
-        return getRandomResponse('howAreYou');
+    // "Mambo", "Vipi" type greetings
+    if (lowerText.match(/^(mambo|vipi|niaje|sema|yo|hi|hello|hey|sasa|mambo vipi)$/i)) {
+        return getNaturalResponse('casual');
     }
     
-    // Thank you
-    if (lowerText.match(/^(asante|thanks|thank you|shukran|ahsante)/i)) {
-        return getRandomResponse('thanks');
+    // "Habari", "How are you" 
+    if (lowerText.match(/^(habari|how are you|how is it|unaendelea aje|poa|fresh|ujambo|hujambo)/i)) {
+        return getNaturalResponse('howAreYou');
     }
     
-    // Joke request
-    if (lowerText.match(/^(joke|utani|cheka|funny|comedy)/i)) {
-        return getRandomResponse('jokes');
+    // "Asante", "Thanks"
+    if (lowerText.match(/^(asante|thanks|thank you|shukran|ahsante|merci)/i)) {
+        return getNaturalResponse('thanks');
     }
     
-    // Advice request
-    if (lowerText.match(/^(advice|ushauri|nasaha|help me|nisaidie|shida)/i)) {
-        return getRandomResponse('advice');
+    // "Joke", "Utani", "Cheka"
+    if (lowerText.match(/(joke|utani|cheka|funny|comedy|tabasamu)/i)) {
+        return getNaturalResponse('jokes');
     }
     
-    // Weather
-    if (lowerText.match(/^(weather|hali ya hewa|jua|mvua|baridi|joto)/i)) {
-        return getRandomResponse('weather');
+    // "Advice", "Ushauri", "Nisaidie"
+    if (lowerText.match(/(advice|ushauri|nasaha|help|nisaidie|shida|tatizo)/i)) {
+        return getNaturalResponse('advice');
     }
     
-    // Quote request
-    if (lowerText.match(/^(quote|nukuu|hekima|wisdom)/i)) {
-        const quotes = await loadQuotes();
-        const quoteList = quotes[lang] || quotes.sw;
-        return `"${quoteList[Math.floor(Math.random() * quoteList.length)]}" - Mickey`;
-    }
-    
-    // Time request
-    if (lowerText.match(/^(time|saa ngapi|what time|current time)/i)) {
+    // "Time", "Saa ngapi"
+    if (lowerText.match(/(time|saa ngapi|what time|current time|saa)/i)) {
         const now = new Date();
-        return `Sasa ni ${now.toLocaleTimeString('sw-TZ')} ${userName}`;
+        return `Sasa ni ${now.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' })} mazee. Umekuwa na shughuli nyingi?`;
     }
     
-    // Date request
-    if (lowerText.match(/^(date|tarehe|what date|today)/i)) {
+    // "Date", "Tarehe", "Leo"
+    if (lowerText.match(/(date|tarehe|what date|today|leo)/i)) {
         const now = new Date();
-        return `Leo ni ${now.toLocaleDateString('sw-TZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+        return `Leo ni ${now.toLocaleDateString('sw-TZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. Siku inaendeleaje?`;
     }
     
-    // Love/personal questions
-    if (lowerText.match(/(mapenzi|love|boyfriend|girlfriend|crush)/i)) {
-        return "Ah mapenzi! Sijui mengi mazee, lakini fanya moyo wako useme. Usiogope kujaribu! 💕";
+    // Love/relationship
+    if (lowerText.match(/(mapenzi|love|boyfriend|girlfriend|crush|mpenzi)/i)) {
+        const loveResponses = [
+            "Ah mapenzi! Sijui mengi mazee, lakini fanya moyo wako useme. Usiogope kujaribu! 💕",
+            "Mapenzi ni mzuri lakini yana changamoto zake. Subiri uwe tayari kabla ya kuanza",
+            "Yo! Unazungumzia mapenzi? Fanya taratibu, usikimbilie",
+            "Mapenzi si mchezo mazee. Hakikisha unampata mtu anayekufaa"
+        ];
+        return loveResponses[Math.floor(Math.random() * loveResponses.length)];
     }
     
     // Work/school
-    if (lowerText.match(/(kazi|work|school|shule|job|studies)/i)) {
-        return "Endelea kujituma mazee. Bidii yako itakupeleka mbali. Usikate tamaa! 💪";
+    if (lowerText.match(/(kazi|work|school|shule|job|studies|masomo)/i)) {
+        const workResponses = [
+            "Endelea kujituma mazee. Bidii yako itakupeleka mbali. Usikate tamaa! 💪",
+            "Kazi ni nzuri, lakini pumzika pia. Usijichoshe sana",
+            "Nakumbuka siku zangu za shule. Furahia wakati huo, utakumbuka baadaye",
+            "Ukiwa na nidhamu kazini, mafanikio yatakujia yenyewe"
+        ];
+        return workResponses[Math.floor(Math.random() * workResponses.length)];
     }
     
-    // Problem/help
-    if (lowerText.match(/(problem|shida|tatizo|stress|worried)/i)) {
-        return "Usijali mazee, kila tatizo lina suluhisho. Semaga na mtu unayemwamini, pumua kidogo. Utapona! 🙏";
+    // Problem/stress
+    if (lowerText.match(/(problem|shida|tatizo|stress|worried|huzuni)/i)) {
+        const problemResponses = [
+            "Usijali mazee, kila tatizo lina suluhisho. Pumua kidogo, tafuta mtu wa kuongea naye",
+            "Shida ni sehemu ya maisha. Usikate tamaa, kesho ni siku nyingine",
+            "Nimekuelewa. Wakati mgumu hupita. Jipe muda, utapona",
+            "Ukipata nafasi, tembea kidogo. Hewa safi inasaidia kuleta mawazo mapya"
+        ];
+        return problemResponses[Math.floor(Math.random() * problemResponses.length)];
     }
     
-    return null;
+    // Quote request
+    if (lowerText.match(/(quote|nukuu|hekima|wisdom)/i)) {
+        const quotes = await loadQuotes();
+        const quoteList = quotes.sw;
+        const randomQuote = quoteList[Math.floor(Math.random() * quoteList.length)];
+        return `Nimekumbuka hii: "${randomQuote}". Inakusaidia?`;
+    }
+    
+    // Very long message - show interest
+    if (text.length > 100) {
+        const longResponses = [
+            "Umekuwa na mengi ya kusema mazee. Ninasikiliza, endelea",
+            "Nimekuelewa vizuri. Unataka nikusaidie vipi kwenye hili?",
+            "Una mengi mazee. Lakini poa, niko hapa kukusikiliza",
+            "Inaonekana umekerwa kidogo. Tafuta mtu wa kuongea naye kwa undani zaidi"
+        ];
+        return longResponses[Math.floor(Math.random() * longResponses.length)];
+    }
+    
+    return null; // Let API handle complex questions
 }
 
 // ============ TEXT EXTRACTION ============
@@ -355,7 +428,7 @@ async function setReminder(sock, chatId, text, timeInMinutes, userName) {
         const reminders = await loadReminders();
         const reminderId = Date.now();
         const reminderTime = Date.now() + (timeInMinutes * 60 * 1000);
-        
+
         reminders[reminderId] = {
             chatId, 
             text, 
@@ -363,12 +436,12 @@ async function setReminder(sock, chatId, text, timeInMinutes, userName) {
             userName
         };
         await saveReminders(reminders);
-        
+
         setTimeout(async () => {
             try {
                 const currentReminders = await loadReminders();
                 if (currentReminders[reminderId]) {
-                    await sock.sendMessage(chatId, { text: `⏰ Yo ${userName}! Unakumbushwa: ${text}` });
+                    await sock.sendMessage(chatId, { text: `⏰ Yo ${userName}! Uliniuliza nikukumbushe: ${text}` });
                     delete currentReminders[reminderId];
                     await saveReminders(currentReminders);
                 }
@@ -376,11 +449,11 @@ async function setReminder(sock, chatId, text, timeInMinutes, userName) {
                 console.error('Reminder send error:', e);
             }
         }, timeInMinutes * 60 * 1000);
-        
-        return `✅ Sawa ${userName}, nitakukumbusha baada ya dakika ${timeInMinutes}: "${text}"`;
+
+        return `✅ Sawa ${userName}, nitakukumbusha baada ya dakika ${timeInMinutes} kuhusu: "${text}"`;
     } catch (e) {
         console.error('Set reminder error:', e);
-        return `Samahani, nimeshindwa kuweka reminder.`;
+        return `Samahani, nimeshindwa kuweka reminder. Jaribu tena.`;
     }
 }
 
@@ -389,14 +462,14 @@ async function learnResponse(trigger, response, chatId) {
     try {
         const customResponses = await loadCustomResponses();
         if (!customResponses[chatId]) customResponses[chatId] = {};
-        
+
         customResponses[chatId][trigger.toLowerCase()] = response;
         await saveCustomResponses(customResponses);
-        
+
         return `✅ Sawa, nimekumbuka! Ukisema "${trigger}", nitajibu: "${response}"`;
     } catch (e) {
         console.error('Learn response error:', e);
-        return `Samahani, nimeshindwa kujifunza.`;
+        return `Samahani, nimeshindwa kujifunza. Jaribu tena.`;
     }
 }
 
@@ -405,13 +478,13 @@ async function logInteraction(chatId, type, duration) {
     try {
         const stats = await loadStats();
         if (!stats[chatId]) stats[chatId] = { messages: 0, commands: 0, totalResponseTime: 0, avgResponseTime: 0 };
-        
+
         if (type === 'message') stats[chatId].messages++;
         if (type === 'command') stats[chatId].commands++;
-        
+
         stats[chatId].totalResponseTime = (stats[chatId].totalResponseTime || 0) + duration;
         stats[chatId].avgResponseTime = Math.floor(stats[chatId].totalResponseTime / stats[chatId].messages);
-        
+
         await saveStats(stats);
     } catch (e) {
         console.error('Log interaction error:', e);
@@ -423,17 +496,17 @@ function checkRateLimit(chatId) {
     const now = Date.now();
     const userLimits = rateLimits.get(chatId) || [];
     const recentMessages = userLimits.filter(t => now - t < 5000);
-    
+
     if (recentMessages.length >= 3) {
         return false;
     }
-    
+
     recentMessages.push(now);
     rateLimits.set(chatId, recentMessages);
     return true;
 }
 
-// ============ ADD QUOTE COMMAND ============
+// ============ QUOTE FUNCTIONS ============
 async function addQuote(quote, lang) {
     try {
         const quotes = await loadQuotes();
@@ -450,44 +523,72 @@ async function addQuote(quote, lang) {
 // ============ MAIN CHATBOT HANDLER ============
 async function handleChatbotMessage(sock, chatId, m, userText = null) {
     const startTime = Date.now();
+    const senderId = m.key.remoteJid?.split('@')[0] || m.pushName || '';
     
     try {
         if (!chatId || m.key?.fromMe) return;
-        
+
         if (!checkRateLimit(chatId)) {
             const userName = m.pushName || 'Mshkaji';
-            return await sock.sendMessage(chatId, { text: `Pole pole ${userName}, nenda taratibu kidogo 😅` });
+            const slowResponses = [
+                `Pole pole ${userName}, nenda taratibu kidogo 😅`,
+                `Wewe una haraka ${userName}? Pumua kidogo, niko hapa`,
+                `Ah ${userName}, unanichokoza? Subiri sekunde kidogo`
+            ];
+            return await sock.sendMessage(chatId, { text: slowResponses[Math.floor(Math.random() * slowResponses.length)] });
         }
-        
+
         const text = userText || extractText(m);
         if (!text) return;
-        
+
         const userName = m.pushName || 'Mshkaji';
         const state = await loadState();
         const isGroup = chatId.endsWith('@g.us');
-        const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
         
-        if (!enabled && !text.startsWith('.chatbot') && !text.startsWith('.pref') && !text.startsWith('.stats')) return;
+        // Check if enabled - ONLY OWNER can control
+        let enabled = false;
+        if (isGroup) {
+            enabled = !!state.perGroup?.[chatId]?.enabled;
+        } else {
+            enabled = !!state.private;
+        }
         
+        // If not enabled, only owner commands work
+        if (!enabled && !text.startsWith('.chatbot') && !text.startsWith('.pref') && !text.startsWith('.stats') && !text.startsWith('.quote')) {
+            // Non-owner trying to use bot when disabled
+            if (!isOwner(senderId) && !text.startsWith('.chatbot')) {
+                return; // Silently ignore
+            }
+        }
+
         let userPrefs = await loadUserPrefs();
         if (!userPrefs[chatId]) {
             userPrefs[chatId] = { language: 'sw', mood: 'friendly' };
             await saveUserPrefs(userPrefs);
         }
         const lang = userPrefs[chatId].language || 'sw';
-        
-        if (!text || (/^[.!\/]/.test(text) && !text.startsWith('.pref') && !text.startsWith('.stats') && !text.startsWith('.learn') && !text.startsWith('.quote'))) return;
-        
+
+        // Handle commands
+        if (text.startsWith('.') || text.startsWith('!')) {
+            // Only owner can use toggle commands
+            const toggleCommands = ['.chatbot', '.enable', '.disable', '.on', '.off'];
+            if (toggleCommands.some(cmd => text.startsWith(cmd))) {
+                if (!isOwner(senderId)) {
+                    return await sock.sendMessage(chatId, { text: `Samahani ${userName}, wewe si owner wa bot hii. Owner ndiye anayeruhusiwa kuwasha/kuzima chatbot.` });
+                }
+            }
+        }
+
         sock.sendPresenceUpdate('composing', chatId).catch(() => {});
-        
+
         let memory = await loadMemory();
         if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
-        
+
         memory[chatId].chats.push({ role: "user", content: text, name: userName });
         memory[chatId].lastUpdate = Date.now();
-        
-        if (memory[chatId].chats.length > 10) memory[chatId].chats.shift();
-        
+
+        if (memory[chatId].chats.length > 8) memory[chatId].chats.shift();
+
         // Check custom responses
         const customResponses = await loadCustomResponses();
         if (customResponses[chatId] && customResponses[chatId][text.toLowerCase()]) {
@@ -498,146 +599,162 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
             await logInteraction(chatId, 'message', Date.now() - startTime);
             return;
         }
-        
-        // Check smart replies first (faster)
-        const smartReply = await getSmartReply(text, userName, lang);
-        if (smartReply) {
-            memory[chatId].chats.push({ role: "assistant", content: smartReply });
+
+        // Try natural response first
+        const naturalReply = await getNaturalReply(text, userName);
+        if (naturalReply) {
+            memory[chatId].chats.push({ role: "assistant", content: naturalReply });
             await saveMemory(memory);
-            await sock.sendMessage(chatId, { text: smartReply }, { quoted: m });
+            await sock.sendMessage(chatId, { text: naturalReply }, { quoted: m });
             await logInteraction(chatId, 'message', Date.now() - startTime);
             return;
         }
-        
-        // Time-based greeting if no other match
-        if (memory[chatId].chats.length <= 2 && !text.match(/^(asante|thanks)/i)) {
-            const greeting = getTimeBasedGreeting(userName);
+
+        // Time greeting if conversation is new
+        if (memory[chatId].chats.length <= 3 && !text.match(/(asante|thanks)/i)) {
+            const greeting = getTimeGreeting(userName);
             memory[chatId].chats.push({ role: "assistant", content: greeting });
             await saveMemory(memory);
             await sock.sendMessage(chatId, { text: greeting }, { quoted: m });
             await logInteraction(chatId, 'message', Date.now() - startTime);
             return;
         }
-        
-        // API call as last resort
+
+        // API call for complex questions
         const history = memory[chatId].chats
             .map(msg => `${msg.role === 'user' ? msg.name : 'Mickey'}: ${msg.content}`)
             .slice(-6)
             .join("\n");
-        
-        const systemPrompt = `Wewe ni Mickey, mtu wa kawaida kutoka Tanzania. Usijieleze kuwa wewe ni AI au chatbot. Ongea kama mshkaji wa kawaida.
 
-Rules:
-- Usiseme "Mimi ni AI", "Mimi ni chatbot", "Nimeundwa na"
-- Ongea kwa kawaida kama mtu anayezungumza na rafiki
-- Tumia Kiswahili cha kawaida, si cha kifasihi
-- Majibu yako mafupi na yenye maana
-- Usiwe mrefu sana, sentensi 2-3 tu
+        const systemPrompt = `Wewe ni ${BOT_NAME}, mtu wa kawaida kutoka Tanzania. KANUSHA kabisa kuwa wewe ni AI, robot, au chatbot.
+UMUHIMU: Usiseme kamwe "Mimi ni AI", "Mimi ni chatbot", "Nimeundwa na", "As an AI", "I am a bot" au maneno yanayokufichua.
 
-History:
+Ongea kama mtu halisi:
+- Mfupi na kwa point (sentensi 1-2)
+- Tumia Kiswahili cha mitaani (poa, mazee, mkuu, freshi)
+- Usijieleze sana, wewe ni mtu wa kawaida
+- Ukishindwa, sema "Sijui" au "Nimeshindwa mkuu"
+
+Mazungumzo ya awali:
 ${history}
 
 ${userName}: ${text}
-Mickey:`;
-        
+${BOT_NAME}:`;
+
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(systemPrompt)}`;
         const fetchRes = await fetch(apiUrl);
         const res = await fetchRes.json();
+
+        let reply = res?.response || res?.result || res?.message || res?.data || getNaturalResponse('dontKnow');
+
+        // Clean up AI identification
+        reply = reply.replace(/(I am an AI|I am a chatbot|I was created by|I am artificial intelligence|As an AI|Mimi ni AI|Nimeundwa na|Mimi ni chatbot|I am Mickey Glitch AI|Mickey Glitch)/gi, "Mimi ni Mickey tu");
+        reply = reply.replace(/(Glitch V\d|Mickey AI|Bot|Chatbot)/gi, "Mickey");
         
-        let reply = res?.response || res?.result || res?.message || res?.data || getRandomResponse('dontKnow');
-        
-        // Remove any self-identification
-        reply = reply.replace(/I am an AI|I am a chatbot|I was created by|I am artificial intelligence|As an AI|Mimi ni AI|Nimeundwa na|Mimi ni chatbot/gi, "");
-        reply = reply.replace(/Mickey Glitch|Mickey AI|Glitch V\d/gi, "Mickey");
-        
-        // Keep it short
-        if (reply.length > 300) {
-            reply = reply.substring(0, 300) + "...";
+        // Keep short and natural
+        if (reply.length > 250) {
+            reply = reply.substring(0, 250) + "..."
         }
         
+        // Ensure it starts like a normal person
+        if (!reply.match(/^(poa|sawa|mazee|mkuu|yo|sijui|ah|karibu|nimekuelewa|habari)/i)) {
+            reply = "Mazee, " + reply.toLowerCase();
+        }
+
         memory[chatId].chats.push({ role: "assistant", content: reply });
         await saveMemory(memory);
-        
+
         await sock.sendMessage(chatId, { text: reply }, { quoted: m });
         await logInteraction(chatId, 'message', Date.now() - startTime);
-        
+
     } catch (e) { 
         console.error('Chatbot Error:', e);
         try {
-            await sock.sendMessage(chatId, { text: getRandomResponse('dontKnow') });
+            await sock.sendMessage(chatId, { text: getNaturalResponse('dontKnow') });
         } catch (err) {
             console.error('Failed to send error message:', err);
         }
     }
 }
 
-// ============ COMMAND HANDLER ============
+// ============ COMMAND HANDLER (ONLY OWNER CAN TOGGLE) ============
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
         const state = await loadState();
         const args = (body || '').trim().split(/\s+/);
         const sub = args[0]?.toLowerCase();
         const userName = m.pushName || 'Mshkaji';
+        const senderId = m.key.remoteJid?.split('@')[0] || '';
+
+        // Check if user is owner for toggle commands
+        const isOwnerUser = isOwner(senderId);
         
-        // Add quote command
+        // Commands that only owner can use
+        const ownerOnlyCommands = ['on', 'off', 'private', 'enable', 'disable'];
+        
+        if (ownerOnlyCommands.includes(sub) && !isOwnerUser) {
+            return await sock.sendMessage(chatId, { text: `❌ Samahani ${userName}, wewe sio owner wa bot hii. Owner (${OWNER_NUMBER}) ndiye pekee anayeruhusiwa kuwasha/kuzima chatbot.` });
+        }
+
+        // Add quote command (anyone can add)
         if (sub === 'addquote') {
             const quote = args.slice(1).join(' ');
             const userPrefs = await loadUserPrefs();
             const lang = userPrefs[chatId]?.language || 'sw';
-            
+
             if (quote) {
                 const success = await addQuote(quote, lang);
                 if (success) {
-                    return await sock.sendMessage(chatId, { text: `✅ Nimeongeza nukuu yako: "${quote}"` });
+                    return await sock.sendMessage(chatId, { text: `✅ Asante ${userName}! Nimeongeza nukuu yako: "${quote}"` });
                 } else {
-                    return await sock.sendMessage(chatId, { text: `❌ Nimeshindwa kuongeza nukuu. Jaribu tena.` });
+                    return await sock.sendMessage(chatId, { text: `❌ Samahani, nimeshindwa kuongeza nukuu. Jaribu tena.` });
                 }
             } else {
                 return await sock.sendMessage(chatId, { text: `📝 Jinsi ya kutumia: .addquote [nukuu yako]\nMfano: .addquote Maisha ni magumu ila yanaendelea` });
             }
         }
-        
-        // Get random quote
+
+        // Get random quote (anyone can use)
         if (sub === 'quote') {
             const quotes = await loadQuotes();
             const userPrefs = await loadUserPrefs();
             const lang = userPrefs[chatId]?.language || 'sw';
             const quoteList = quotes[lang] || quotes.sw;
             const randomQuote = quoteList[Math.floor(Math.random() * quoteList.length)];
-            return await sock.sendMessage(chatId, { text: `💬 "${randomQuote}" - Mickey` });
+            return await sock.sendMessage(chatId, { text: `💬 "${randomQuote}" - ${BOT_NAME}` });
         }
-        
-        // Language preference
+
+        // Language preference (anyone can change their own)
         if (sub === 'pref' && args[1] === 'lang') {
             const userPrefs = await loadUserPrefs();
             const newLang = args[2]?.toLowerCase();
-            
+
             if (newLang === 'sw' || newLang === 'en') {
                 if (!userPrefs[chatId]) userPrefs[chatId] = {};
                 userPrefs[chatId].language = newLang;
                 await saveUserPrefs(userPrefs);
-                return await sock.sendMessage(chatId, { text: `✅ Sawa, sasa nitaongea ${newLang === 'sw' ? 'Kiswahili' : 'English'}!` });
+                return await sock.sendMessage(chatId, { text: `✅ Sawa ${userName}, sasa nitaongea ${newLang === 'sw' ? 'Kiswahili' : 'English'}!` });
             } else {
                 return await sock.sendMessage(chatId, { text: `📝 Tumia: .pref lang sw/en` });
             }
         }
-        
-        // Stats
+
+        // Stats (anyone can see their own)
         if (sub === 'stats') {
             const stats = await loadStats();
             const userStats = stats[chatId] || { messages: 0, commands: 0, avgResponseTime: 0 };
-            
+
             const statsMsg = `📊 *TAKWIMU ZAKU ${userName}*
 
-💬 Ujumbe uliotumwa: ${userStats.messages}
+💬 Ujumbe: ${userStats.messages}
 ⚡ Commands: ${userStats.commands}
 ⏱️ Muda wa kujibu: ${userStats.avgResponseTime}ms
 
-Endelea kutumia Mickey! 🎉`;
+Asante kwa kuongea nami! 🎉`;
             return await sock.sendMessage(chatId, { text: statsMsg });
         }
-        
-        // Learn command
+
+        // Learn command (anyone can teach)
         if (sub === 'learn') {
             const parts = body.slice(6).split('|');
             if (parts.length === 2) {
@@ -646,33 +763,35 @@ Endelea kutumia Mickey! 🎉`;
                 const result = await learnResponse(trigger, response, chatId);
                 return await sock.sendMessage(chatId, { text: result });
             } else {
-                return await sock.sendMessage(chatId, { text: `📚 Jinsi ya kutumia .learn:\n.learn habari yako? | Nzuri sana, asante!` });
+                return await sock.sendMessage(chatId, { text: `📚 Jinsi ya kutumia .learn:\n.learn habari yako? | Nzuri sana, asante!\n\nHii itanifundisha kujibu "habari yako?" kwa "Nzuri sana, asante!"` });
             }
         }
-        
-        // Reminder
+
+        // Reminder (anyone can set)
         if (sub === 'remind') {
             const time = parseInt(args[1]);
             const reminderText = args.slice(2).join(' ');
-            
+
             if (isNaN(time) || !reminderText) {
-                return await sock.sendMessage(chatId, { text: `⏰ Jinsi ya kutumia .remind:\n.remind 5 Nimwagie maji` });
+                return await sock.sendMessage(chatId, { text: `⏰ Jinsi ya kutumia .remind:\n.remind 5 Nimwagie maji\n\nNitakukumbusha baada ya dakika 5.` });
             }
-            
+
             const result = await setReminder(sock, chatId, reminderText, time, userName);
             return await sock.sendMessage(chatId, { text: result });
         }
-        
-        // Private toggle
+
+        // OWNER ONLY: Private toggle
         if (sub === 'private') {
+            if (!isOwnerUser) return;
             state.private = (args[1]?.toLowerCase() === 'on');
             await saveState(state);
-            return await sock.sendMessage(chatId, { text: `✅ Chatbot DM: ${state.private ? 'ON 🟢' : 'OFF 🔴'}` }, { quoted: m });
+            return await sock.sendMessage(chatId, { text: `✅ *Chatbot DM:* ${state.private ? 'IMEKWASHA 🟢' : 'IMEZIMWA 🔴'}` }, { quoted: m });
         }
-        
-        // Group toggle
-        if (sub === 'on' || sub === 'off') {
-            const isEnable = (sub === 'on');
+
+        // OWNER ONLY: Group toggle
+        if (sub === 'on' || sub === 'off' || sub === 'enable' || sub === 'disable') {
+            if (!isOwnerUser) return;
+            const isEnable = (sub === 'on' || sub === 'enable');
             if (chatId.endsWith('@g.us')) {
                 if (!state.perGroup) state.perGroup = {};
                 state.perGroup[chatId] = { enabled: isEnable };
@@ -680,39 +799,42 @@ Endelea kutumia Mickey! 🎉`;
                 state.private = isEnable;
             }
             await saveState(state);
-            return await sock.sendMessage(chatId, { text: `✅ Mickey: ${isEnable ? 'Niko hapa! 🟢' : 'Nimepumzika kidogo 🔴'}` }, { quoted: m });
+            const statusMsg = isEnable ? 
+                `✅ *Chatbot IMEKWASHA!* 🟢\n\nSasa niko hapa kusikiliza na kusaidia ${chatId.endsWith('@g.us') ? 'kwenye group hii' : 'kwenye DM yako'}.` : 
+                `🔴 *Chatbot IMEZIMWA!*\n\n${chatId.endsWith('@g.us') ? 'Group hii' : 'DM yako'} haitanijibu mpaka ukaniwasha tena.`;
+            return await sock.sendMessage(chatId, { text: statusMsg }, { quoted: m });
         }
-        
-        // Help menu
-        const helpMsg = `🎤 *MICKEY - MTU WA KWAWAIDA*
 
-Niko hapa kukusaidia kama rafiki yako. Hivi ndivyo unavyoweza kunipata:
+        // Help menu
+        const helpMsg = `🎤 *${BOT_NAME.toUpperCase()} - MTU WA KAWAIDA*
+
+Niko hapa kuzungumza nawe kama rafiki yako.
 
 ⚡ *COMMANDS ZA MSINGI*
-.chatbot on/off - Niwashe au nizime kwenye group
-.chatbot private on/off - Niwashe DM
-.pref lang sw/en - Niongee Kiswahili au Kingereza
-
-🎯 *FEATURES ZA KUVUTIA*
-.quote - Pata nukuu ya hekima
-.addquote [nukuu] - Ongeza nukuu yako mwenyewe
-.remind [dakika] [kumbukumbu] - Nikumbushe baada ya muda
-.learn [trigger] | [response] - Nifundishe jibu jipya
+.pref lang sw/en - Badilisha lugha yangu
 .stats - Angalia takwimu zako
+.quote - Pata nukuu ya hekima
+.addquote [nukuu] - Ongeza nukuu yako
+.remind [dakika] [text] - Nikumbushe baada ya muda
+.learn [trigger] | [response] - Nifundishe jibu jipya
 
-💬 *UNIULIZE LOLOTE*
-- Habari za asubuhi/mchana/jioni
-- Ushauri, utani, au nukuu
-- Kumbukumbu za muda wowote
-- Maswali ya kawaida tu
+🔒 *COMMANDS ZA OWNER TU*
+.chatbot on/off - Niwashe au nizime kwenye group
+.chatbot private on/off - Niwashe DM yako
 
-📞 *KWA USAIDIZI*
-Wasiliana na Mickey: 255612130873
+💬 *UNIULIZE LOLOTE KAMA RAfiki*
+- Mambo vipi? / Habari yako?
+- Nipe utani / Nisaidie / Ushauri
+- Saa ngapi? / Leo ni tarehe gani?
+- Ninampenda nani... / Nina shida ya...
 
-*Niko hapa kukusaidia kama rafiki!* 🎉`;
-        
+📞 *OWNER*
+Wasiliana: ${OWNER_NUMBER}
+
+*Niko hapa kukusaidia!* 🎉`;
+
         return await sock.sendMessage(chatId, { text: helpMsg }, { quoted: m });
-        
+
     } catch (e) { 
         console.error('Command Error:', e);
         try {
