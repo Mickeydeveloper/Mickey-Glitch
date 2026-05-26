@@ -1,7 +1,7 @@
 /**
  * MICKEY GLITCH - A WhatsApp Bot
  * Clean, Optimized & Auto-Skip Version
- * [LOW RESOURCE / PANEL OPTIMIZED VERSION]
+ * [LOW RESOURCE / PANEL OPTIMIZED VERSION - ENHANCED]
  */
 
 require("dotenv").config();
@@ -12,7 +12,7 @@ const chalk = require('chalk');
 const pino = require("pino");
 const NodeCache = require("node-cache");
 const readline = require("readline");
-const os = require("os"); // Imeongezwa kwa ajili ya kuchukua maelezo halisi ya server / panel
+const os = require("os");
 const { 
     default: makeWASocket, 
     useMultiFileAuthState, 
@@ -31,6 +31,9 @@ const settings = require("./settings");
 let whatsappBot = null;
 let whatsappBootstrapPromise = null;
 let lastPairingCode = null;
+let reconnectAttempts = 0;
+let lastReconnectTime = 0;
+let isShuttingDown = false;
 
 const SESSION_DIR = path.join(process.cwd(), 'session');
 const CREDS_PATH = path.join(SESSION_DIR, 'creds.json');
@@ -44,23 +47,55 @@ const pinoLogger = pino({ level: 'silent' });
 global.botname = "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
 global.themeemoji = '•';
 
-// Initialize store (Imepunguzwa kuandika kwenye disk hadi sekunde 30 badala ya 10)
+// Initialize store (Imepunguzwa kuandika kwenye disk hadi sekunde 60 kuokoa disk I/O)
 store.readFromFile();
-setInterval(() => store.writeToFile(), settings.storeWriteInterval || 30000);
+setInterval(() => store.writeToFile(), settings.storeWriteInterval || 60000);
 
-// --- Memory Management (Aggressive Garbage Collection for Panels) ---
-setInterval(() => {
+// --- Memory Management (Aggressive but Safe) ---
+let memoryCheckInterval = setInterval(() => {
     if (global.gc) global.gc();
-}, 30000); 
+}, 60000); // Punguza frequency ya GC
 
-setInterval(() => {
+let memoryAlertInterval = setInterval(() => {
     const usageMB = process.memoryUsage().rss / 1024 / 1024;
-    // Imeshushwa hadi 250MB ili isizidi kikomo cha panel ndogo (e.g. 512MB)
-    if (usageMB > 250) {
-        console.log(chalk.bgRed.white("  ⚠️  MEMORY ALERT  ⚠️  "), chalk.red(`RAM > 250MB (${usageMB.toFixed(2)}MB) → Restarting...`));
-        process.exit(1);
+    // Ongeza threshold hadi 400MB kuepuka restarts zisizo za lazima
+    if (usageMB > 400 && !isShuttingDown) {
+        console.log(chalk.bgYellow.black("  ⚠️  MEMORY WARNING  ⚠️  "), chalk.yellow(`RAM > 400MB (${usageMB.toFixed(2)}MB) - Cleaning...`));
+        if (global.gc) global.gc();
+        
+        // Ikiwa bado iko juu sana baada ya GC
+        setTimeout(() => {
+            const newUsage = process.memoryUsage().rss / 1024 / 1024;
+            if (newUsage > 500 && !isShuttingDown) {
+                console.log(chalk.bgRed.white("  🔄  MEMORY RESTART  🔄  "), chalk.red(`RAM > 500MB - Soft restart...`));
+                softRestart();
+            }
+        }, 5000);
     }
-}, 30000);
+}, 60000); // Angalia kila dakika moja badala ya sekunde 30
+
+// Soft restart function (bila kuacha process kabisa)
+async function softRestart() {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    
+    console.log(chalk.yellow("🔄 Performing soft restart..."));
+    
+    if (whatsappBot) {
+        try {
+            await whatsappBot.end();
+        } catch(e) {}
+        whatsappBot = null;
+    }
+    
+    whatsappBootstrapPromise = null;
+    reconnectAttempts = 0;
+    isShuttingDown = false;
+    
+    setTimeout(() => {
+        startMickeyBot();
+    }, 10000);
+}
 
 // --- Interface for Pairing ---
 const pairingCode = true; 
@@ -79,7 +114,7 @@ function normalizeWhatsappNumber(phoneNumber) {
 
 async function chooseStartupMode() {
     if (fs.existsSync(CREDS_PATH)) {
-        return 'whatsapp'; // Ruka maswali moja kwa moja kuokoa muda wa panel kuwaka
+        return 'whatsapp';
     }
 
     const settingMode = settings.mode?.toLowerCase() === 'telegram' ? 'telegram' : 'whatsapp';
@@ -97,14 +132,23 @@ async function chooseStartupMode() {
 async function startMickeyBot(options = {}) {
     if (whatsappBot) return whatsappBot;
     if (whatsappBootstrapPromise) return whatsappBootstrapPromise;
+    
+    // Anti reconnect spam
+    const now = Date.now();
+    if (now - lastReconnectTime < 30000 && reconnectAttempts > 3) {
+        console.log(chalk.red("⚠️ Too many reconnect attempts! Waiting 2 minutes..."));
+        await delay(120000);
+        reconnectAttempts = 0;
+    }
+    lastReconnectTime = now;
 
     whatsappBootstrapPromise = (async () => {
         try {
             const { version } = await fetchLatestBaileysVersion();
             const { state, saveCreds } = await useMultiFileAuthState("./session");
 
-            // Limit cache time (TTL) hadi sekunde 60 kuokoa RAM
-            const msgRetryCounterCache = new NodeCache({ stdTTL: 60, checkperiod: 20 });
+            // Limit cache time (TTL) hadi sekunde 120 kuokoa RAM na kuongeza utulivu
+            const msgRetryCounterCache = new NodeCache({ stdTTL: 120, checkperiod: 60 });
 
             const Mickey = makeWASocket({
                 version,
@@ -119,7 +163,10 @@ async function startMickeyBot(options = {}) {
                 syncFullHistory: false,
                 shouldSyncHistoryMessage: () => false, 
                 generateHighQualityLinkPreview: false, 
-                cachedGroupMetadata: async (jid) => undefined, 
+                cachedGroupMetadata: async (jid) => undefined,
+                connectTimeoutMs: 60000, // Ongeza timeout
+                defaultQueryTimeoutMs: 60000,
+                keepAliveIntervalMs: 30000, // Punguza keep-alive frequency
                 patchMessageBeforeSending: (message) => {
                     const requiresPatch = !!(message.buttonsMessage || message.templateMessage || message.listMessage);
                     if (requiresPatch) {
@@ -138,6 +185,7 @@ async function startMickeyBot(options = {}) {
 
             whatsappBot = Mickey;
             lastPairingCode = null;
+            reconnectAttempts = 0; // Reset reconnect attempts on successful connection
 
             Mickey.ev.on("creds.update", saveCreds);
             store.bind(Mickey.ev);
@@ -185,15 +233,12 @@ async function startMickeyBot(options = {}) {
 
                 if (connection === "open") {
                     console.log(chalk.green.bold('\n✅ Mickey Glitch Online!\n'));
+                    reconnectAttempts = 0;
+                    
                     const myNumber = Mickey.user.id.split(':')[0] + "@s.whatsapp.net";
-                    
-                    // Kupiga hesabu za RAM na CPU zionekane vizuri kama kwenye picha
                     const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-                    
-                    // Badilisha link kuwa raw user content ili itumike kama picha ya kawaida
                     const imageUrl = "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg";
 
-                    // Muundo wa maandishi kufanana na picha uliyotuma
                     const connectionText = `
 *M* *I* *C* *K* *E* *Y*
 
@@ -204,41 +249,53 @@ async function startMickeyBot(options = {}) {
 `.trim();
 
                     try {
-                        // Inatuma picha pamoja na text ya mfumo kwa pamoja
                         await Mickey.sendMessage(myNumber, { 
                             image: { url: imageUrl }, 
                             caption: connectionText 
                         });
                     } catch (e) {
-                        // Ikifeli kutuma picha (e.g. kukiwa na shida ya mtandao), itatuma kama text ya kawaida isikwame
                         try { await Mickey.sendMessage(myNumber, { text: connectionText }); } catch (txtErr) {}
                     }
                 }
 
                 if (connection === "close") {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
-                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
+                    
                     console.log(chalk.yellow(`\n⚠️ Connection closed. Status Code: ${statusCode}`));
+                    
+                    reconnectAttempts++;
+                    console.log(chalk.cyan(`Reconnect attempt ${reconnectAttempts}/10`));
+                    
+                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut && reconnectAttempts <= 10;
 
-                    if (shouldReconnect) {
+                    if (shouldReconnect && !isShuttingDown) {
                         whatsappBot = null;
+                        whatsappBootstrapPromise = null;
                         
-                        // MKAKATI WA KULINDA SESSION: 
-                        // Kama session imekuwa "Bad Session" au "Stream Errored" (Kodi 400 hadi 408), tunafuta faili mbovu ili isilete loop ya kurestart panel
-                        if (statusCode === DisconnectReason.badSession || statusCode === DisconnectReason.restartRequired) {
-                            console.log(chalk.red("🔄 Session corrupted/reset required. Fixing background tokens..."));
+                        // Calculate backoff delay (exponential backoff)
+                        const backoffDelay = Math.min(30000, 5000 * Math.pow(1.5, reconnectAttempts));
+                        console.log(chalk.yellow(`Waiting ${backoffDelay/1000} seconds before reconnecting...`));
+                        
+                        await delay(backoffDelay);
+                        
+                        if (!isShuttingDown) {
+                            startMickeyBot();
                         }
-
-                        await delay(5000); // Subiri sekunde 5 CPU itulie kabla ya kuwaka tena
-                        startMickeyBot();
-                    } else {
-                        console.log(chalk.bgRed.white("\n ❌ LOGGED OUT - Clearing broken session to avoid boot-loop... \n"));
-                        // Kama bot imetolewa (Logged out) rasmi, futa faili la session ili isilete crash loop kwenye panel yako
+                    } else if (statusCode === DisconnectReason.loggedOut) {
+                        console.log(chalk.bgRed.white("\n ❌ LOGGED OUT - Session invalid \n"));
                         if (fs.existsSync(CREDS_PATH)) {
                             fs.unlinkSync(CREDS_PATH);
                         }
-                        process.exit(0);
+                        if (!isShuttingDown) {
+                            isShuttingDown = true;
+                            process.exit(0);
+                        }
+                    } else {
+                        console.log(chalk.bgRed.white("\n ❌ MAX RECONNECT ATTEMPTS REACHED - Manual restart needed \n"));
+                        if (!isShuttingDown) {
+                            isShuttingDown = true;
+                            process.exit(1);
+                        }
                     }
                 }
             });
@@ -263,12 +320,24 @@ async function startMickeyBot(options = {}) {
 
             return Mickey;
         } catch (err) {
+            console.error(chalk.red("Startup error:"), err);
             whatsappBot = null;
-            await delay(5000);
-            startMickeyBot();
+            whatsappBootstrapPromise = null;
+            
+            reconnectAttempts++;
+            
+            if (reconnectAttempts <= 5 && !isShuttingDown) {
+                await delay(10000);
+                return startMickeyBot();
+            } else if (!isShuttingDown) {
+                isShuttingDown = true;
+                process.exit(1);
+            }
             throw err;
         } finally {
-            whatsappBootstrapPromise = null;
+            if (whatsappBootstrapPromise === this) {
+                whatsappBootstrapPromise = null;
+            }
         }
     })();
 
@@ -293,6 +362,29 @@ async function initializeBot() {
     startMickeyBot();
   }
 }
+
+// Cleanup on exit
+process.on('SIGINT', () => {
+    if (!isShuttingDown) {
+        isShuttingDown = true;
+        console.log(chalk.yellow('\n🛑 Shutting down gracefully...'));
+        if (whatsappBot) {
+            whatsappBot.end().catch(() => {});
+        }
+        setTimeout(() => process.exit(0), 2000);
+    }
+});
+
+process.on('SIGTERM', () => {
+    if (!isShuttingDown) {
+        isShuttingDown = true;
+        console.log(chalk.yellow('\n🛑 Terminating...'));
+        if (whatsappBot) {
+            whatsappBot.end().catch(() => {});
+        }
+        setTimeout(() => process.exit(0), 2000);
+    }
+});
 
 if (!module.parent) initializeBot();
 
