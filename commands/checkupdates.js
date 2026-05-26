@@ -13,7 +13,7 @@ async function loadReminder() {
         const data = await fs.readFile(REMINDER_FILE, 'utf8');
         reminderCache = JSON.parse(data);
     } catch {
-        reminderCache = { lastCheck: null, updateFound: false, updateHash: null };
+        reminderCache = { lastCheck: null, updateFound: false, updateHash: null, autoReminder: false };
         await saveReminder();
     }
     return reminderCache;
@@ -56,7 +56,7 @@ function categorizeChanges(files) {
 // Create detailed update info message
 function formatUpdateInfo(res) {
     let message = '🔄 *UPDATE CHECK RESULT*\n\n';
-    
+
     if (!res || res.mode === 'none') {
         return '✅ *No updates available* — Your bot is up to date!';
     }
@@ -74,7 +74,7 @@ function formatUpdateInfo(res) {
             message += `🟢 *STATUS:* UPDATE AVAILABLE\n\n`;
             message += `📊 *Changes Summary:*\n`;
             message += `  • Total files: ${total}\n`;
-            
+
             if (categories.commands.length > 0) {
                 message += `  • Commands: ${categories.commands.length} ${categories.commands.length > 3 ? `(${categories.commands.slice(0, 2).join(', ')} +${categories.commands.length - 2})` : `(${categories.commands.join(', ')})`}\n`;
             }
@@ -88,7 +88,7 @@ function formatUpdateInfo(res) {
                 message += `  • Other: ${categories.other.length}\n`;
             }
             message += `\n💡 *Use .update to install now*`;
-            
+
             return message;
         } else {
             return `✅ *No updates available* — All files are up to date`;
@@ -130,6 +130,80 @@ function formatUpdateInfo(res) {
     return message;
 }
 
+// Function to check for updates (built-in, doesn't rely on external module)
+async function checkForUpdates() {
+    try {
+        // Option 1: Check via GitHub API
+        const axios = require('axios');
+        const repoOwner = 'Mickeydeveloper';
+        const repoName = 'Mickey-Glitch';
+        
+        // Get latest commit from GitHub
+        const response = await axios.get(`https://api.github.com/repos/${repoOwner}/${repoName}/commits`, {
+            headers: { 'User-Agent': 'MickeyBot' },
+            params: { per_page: 1 }
+        });
+        
+        if (response.data && response.data.length > 0) {
+            const latestCommit = response.data[0];
+            const latestSha = latestCommit.sha;
+            
+            // Check current version (you can store this in a file)
+            let currentSha = null;
+            try {
+                const versionFile = path.join(__dirname, '../data/currentVersion.json');
+                const versionData = await fs.readFile(versionFile, 'utf8');
+                currentSha = JSON.parse(versionData).sha;
+            } catch (e) {
+                // First time checking
+                currentSha = null;
+            }
+            
+            const isUpdateAvailable = currentSha && latestSha !== currentSha;
+            
+            // Get changed files
+            let changedFiles = [];
+            if (isUpdateAvailable && currentSha) {
+                const compareResponse = await axios.get(`https://api.github.com/repos/${repoOwner}/${repoName}/compare/${currentSha}...${latestSha}`, {
+                    headers: { 'User-Agent': 'MickeyBot' }
+                });
+                changedFiles = compareResponse.data.files.map(f => f.filename);
+            }
+            
+            return {
+                available: isUpdateAvailable,
+                mode: 'git',
+                files: changedFiles.join('\n'),
+                version: latestSha,
+                currentVersion: currentSha
+            };
+        }
+        
+        return { available: false, mode: 'none' };
+        
+    } catch (err) {
+        console.error('Update check error:', err);
+        
+        // Option 2: Fallback to manual check
+        return {
+            available: false,
+            mode: 'none',
+            error: err.message
+        };
+    }
+}
+
+// Function to save current version after update
+async function saveCurrentVersion(sha) {
+    try {
+        const versionFile = path.join(__dirname, '../data/currentVersion.json');
+        await fs.mkdir(path.dirname(versionFile), { recursive: true });
+        await fs.writeFile(versionFile, JSON.stringify({ sha, updatedAt: new Date().toISOString() }, null, 2));
+    } catch (err) {
+        console.error('Failed to save version:', err);
+    }
+}
+
 async function checkUpdatesCommand(sock, chatId, message, args = []) {
     const senderId = message.key.participant || message.key.remoteJid;
     const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
@@ -162,9 +236,10 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
     }
 
     try {
-        const res = await updateCommand.checkUpdates();
+        // Use our built-in check function instead of updateCommand.checkUpdates
+        const res = await checkForUpdates();
         const updateHash = res && res.files ? generateUpdateHash(res.files.split('\n'), res.mode) : null;
-        
+
         // Format and send update info
         const updateMsg = formatUpdateInfo(res);
         await sock.sendMessage(chatId, { text: updateMsg }, { quoted: message });
@@ -194,7 +269,7 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
     } catch (err) {
         console.error('CheckUpdates failed:', err);
         await sock.sendMessage(chatId, {
-            text: `❌ *Update Check Failed*\n\n${String(err.message || err).slice(0, 300)}`
+            text: `❌ *Update Check Failed*\n\nError: ${err.message || err}\n\n💡 Make sure you have internet connection and try again.`
         }, { quoted: message });
     }
 }
