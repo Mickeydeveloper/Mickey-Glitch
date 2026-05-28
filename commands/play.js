@@ -1,7 +1,5 @@
 const axios = require('axios');
 const yts = require('yt-search');
-const fs = require('fs');
-const path = require('path');
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -30,17 +28,18 @@ async function tryRequest(getter, attempts = 3) {
     throw lastErr;
 }
 
-// Validate URL is accessible
-async function validateUrl(url) {
+// Download image as buffer
+async function getImageBuffer(url) {
     try {
-        const response = await axios.head(url, {
-            timeout: 10000,
+        const response = await axios.get(url, {
+            responseType: 'arraybuffer',
+            timeout: 15000,
             headers: AXIOS_DEFAULTS.headers
         });
-        return response.status === 200;
+        return Buffer.from(response.data);
     } catch (err) {
-        console.log(`[PLAY] URL validation failed: ${err.message}`);
-        return false;
+        console.log(`[PLAY] Failed to download image: ${err.message}`);
+        return null;
     }
 }
 
@@ -73,34 +72,14 @@ async function getYoutubeMp3(ytUrl) {
             const thumbnail = res.data.data.thumb;
             const channel = res.data.data.channel;
             
-            // Validate audio URL
-            const isValid = await validateUrl(audioUrl);
-            if (isValid) {
-                console.log(`[PLAY] Nayan API success: ${title}`);
-                return {
-                    download: audioUrl,
-                    title: title,
-                    thumbnail: thumbnail,
-                    channel: channel,
-                    source: 'Nayan'
-                };
-            } else {
-                console.log(`[PLAY] Nayan audio URL invalid, trying different format...`);
-                // Try video_hd as alternative
-                if (res.data.data.video_hd) {
-                    const altUrl = res.data.data.video_hd;
-                    const altValid = await validateUrl(altUrl);
-                    if (altValid) {
-                        return {
-                            download: altUrl,
-                            title: title,
-                            thumbnail: thumbnail,
-                            channel: channel,
-                            source: 'Nayan'
-                        };
-                    }
-                }
-            }
+            console.log(`[PLAY] Nayan API success: ${title}`);
+            return {
+                download: audioUrl,
+                title: title,
+                thumbnail: thumbnail,
+                channel: channel,
+                source: 'Nayan'
+            };
         }
     } catch (err) {
         console.log(`[PLAY] Nayan API failed: ${err.message}`);
@@ -117,23 +96,20 @@ async function getYoutubeMp3(ytUrl) {
             const audioUrl = res.data.data.url;
             const title = res.data.data.title;
             
-            const isValid = await validateUrl(audioUrl);
-            if (isValid) {
-                console.log(`[PLAY] Aswin API success: ${title}`);
-                return {
-                    download: audioUrl,
-                    title: title,
-                    thumbnail: null,
-                    channel: null,
-                    source: 'Aswin Sparky'
-                };
-            }
+            console.log(`[PLAY] Aswin API success: ${title}`);
+            return {
+                download: audioUrl,
+                title: title,
+                thumbnail: null,
+                channel: null,
+                source: 'Aswin Sparky'
+            };
         }
     } catch (err) {
         console.log(`[PLAY] Aswin API failed: ${err.message}`);
     }
     
-    throw new Error('No working API available - Audio URL invalid');
+    throw new Error('No working API available');
 }
 
 async function playCommand(sock, chatId, message) {
@@ -165,13 +141,9 @@ async function playCommand(sock, chatId, message) {
             videoInfo = videos[0];
             videoUrl = videoInfo.url;
             
-            // Send song info message (short and clean)
-            const infoMsg = `🎵 *${videoInfo.title}*\n⏱️ *Muda:* ${videoInfo.timestamp}\n👤 *Msanii:* ${videoInfo.author.name}\n👁️ *Views:* ${videoInfo.views?.toLocaleString() || 'N/A'}\n\n📥 *Inapakua wimbo...*`;
-            
+            // Send short info message
+            const infoMsg = `🎵 *${videoInfo.title}*\n⏱️ *${videoInfo.timestamp}* | 👤 ${videoInfo.author.name}\n👁️ ${videoInfo.views?.toLocaleString() || 'N/A'} views\n\n📥 *Inapakua wimbo...*`;
             await sock.sendMessage(chatId, { text: infoMsg }, { quoted: message });
-        } else {
-            // Direct URL - show downloading message
-            await sock.sendMessage(chatId, { text: `📥 *Inapakua wimbo kutoka link yako...*` }, { quoted: message });
         }
 
         // Download and send audio
@@ -186,40 +158,61 @@ async function playCommand(sock, chatId, message) {
 
 async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = null) {
     try {
-        // Change reaction to downloading
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
         const data = await getYoutubeMp3(ytUrl);
         
         console.log(`[PLAY] Downloading from: ${data.source}`);
-        console.log(`[PLAY] Audio URL: ${data.download}`);
         
-        // Use proper mimetype for WhatsApp audio
-        // WhatsApp accepts: audio/mpeg, audio/mp4, audio/aac, audio/ogg
+        // Get thumbnail image buffer (use videoInfo thumbnail or API thumbnail)
+        let thumbnailBuffer = null;
+        let title = data.title || videoInfo?.title || 'Audio';
+        let channel = data.channel || videoInfo?.author?.name || 'Mickey Glitch';
+        
+        // Try to get thumbnail from videoInfo first
+        if (videoInfo?.thumbnail) {
+            thumbnailBuffer = await getImageBuffer(videoInfo.thumbnail);
+        } else if (data.thumbnail) {
+            thumbnailBuffer = await getImageBuffer(data.thumbnail);
+        }
+        
+        // Prepare audio message with proper mimetype
         const audioMessage = {
             audio: { url: data.download },
-            mimetype: 'audio/mpeg',  // Changed from audio/mp4 to audio/mpeg for better compatibility
+            mimetype: 'audio/mpeg',
             ptt: false,
-            fileName: data.title ? `${data.title}.mp3` : (videoInfo?.title ? `${videoInfo.title}.mp3` : 'audio.mp3')
+            fileName: `${title}.mp3`
         };
         
-        // Add context info with title (optional, not required)
-        if (data.title || videoInfo?.title) {
-            const title = (data.title || videoInfo?.title || 'Audio').substring(0, 50);
+        // Add thumbnail as externalAdReply (this shows thumbnail on WhatsApp)
+        if (thumbnailBuffer) {
             audioMessage.contextInfo = {
                 externalAdReply: {
-                    title: title,
-                    body: data.channel || videoInfo?.author?.name || 'Mickey Glitch Bot',
-                    mediaType: 2, // Audio media type
+                    title: title.length > 50 ? title.substring(0, 47) + '...' : title,
+                    body: channel,
+                    thumbnail: thumbnailBuffer,
+                    mediaType: 2, // Audio
+                    mediaUrl: data.download,
+                    sourceUrl: ytUrl,
+                    renderLargerThumbnail: true
+                }
+            };
+        } else {
+            // Fallback without thumbnail but with basic info
+            audioMessage.contextInfo = {
+                externalAdReply: {
+                    title: title.length > 50 ? title.substring(0, 47) + '...' : title,
+                    body: channel,
+                    mediaType: 2,
                     renderLargerThumbnail: false
                 }
             };
         }
         
-        // Send audio
+        // Send audio with thumbnail
         await sock.sendMessage(chatId, audioMessage, { quoted: message });
         
-        // Change reaction to success after sending
+        // Success reaction
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (e) {
@@ -230,11 +223,9 @@ async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = nul
         if (e.message.includes('No working API')) {
             errorMsg += "Hakuna API inayofanya kazi kwa sasa. Jaribu tena baadae.";
         } else if (e.message.includes('timeout')) {
-            errorMsg += "Muda umekwisha. Jaribu tena kwa wimbo mwingine.";
-        } else if (e.message.includes('URL')) {
-            errorMsg += "Link ya download haifanyi kazi. Jaribu wimbo mwingine.";
+            errorMsg += "Muda umekwisha. Jaribu tena.";
         } else {
-            errorMsg += e.message || 'API haipatikani kwa sasa';
+            errorMsg += e.message || 'Jaribu tena baadae';
         }
         
         await sock.sendMessage(chatId, { text: errorMsg }, { quoted: message });
