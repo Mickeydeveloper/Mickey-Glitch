@@ -34,9 +34,22 @@ let lastPairingCode = null;
 let reconnectAttempts = 0;
 let lastReconnectTime = 0;
 let isShuttingDown = false;
+let connectionState = 'idle';
 
-const SESSION_DIR = path.join(process.cwd(), 'session');
+const SESSION_DIR = path.resolve(process.cwd(), 'session');
 const CREDS_PATH = path.join(SESSION_DIR, 'creds.json');
+
+function clearSessionDirectory(reason = 'unknown') {
+    try {
+        if (fs.existsSync(SESSION_DIR)) {
+            fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+        }
+        fs.mkdirSync(SESSION_DIR, { recursive: true });
+        console.log(chalk.yellow(`🧹 Cleared WhatsApp auth session (${reason})`));
+    } catch (err) {
+        console.error(chalk.red('Failed to clear WhatsApp auth session:'), err);
+    }
+}
 
 // ────────────────────────────────────────────────
 // CUSTOM LOGGER CONFIGURATION (Zimwa zote kuokoa CPU)
@@ -145,7 +158,7 @@ async function startMickeyBot(options = {}) {
     whatsappBootstrapPromise = (async () => {
         try {
             const { version } = await fetchLatestBaileysVersion();
-            const { state, saveCreds } = await useMultiFileAuthState("./session");
+            const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
             // Limit cache time (TTL) hadi sekunde 120 kuokoa RAM na kuongeza utulivu
             const msgRetryCounterCache = new NodeCache({ stdTTL: 120, checkperiod: 60 });
@@ -184,13 +197,10 @@ async function startMickeyBot(options = {}) {
             });
 
             whatsappBot = Mickey;
-            lastPairingCode = null;
-            reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+            connectionState = 'connecting';
 
-            Mickey.ev.on("creds.update", saveCreds);
-            store.bind(Mickey.ev);
-
-            Mickey.ev.on("messages.upsert", async chatUpdate => {
+            const messageUpsertHandler = async (chatUpdate) => {
+                if (connectionState !== 'open') return;
                 try {
                     const mek = chatUpdate.messages[0];
                     if (!mek?.message) return;
@@ -220,21 +230,22 @@ async function startMickeyBot(options = {}) {
                     });
 
                 } catch (err) {}
-            });
+            };
 
-            Mickey.ev.on("call", async (callData) => {
+            const callHandler = async (callData) => {
                 try {
                     await handleAnticall(Mickey, { call: callData });
                 } catch (err) {}
-            });
+            };
 
-            Mickey.ev.on("connection.update", async (update) => {
+            const connectionUpdateHandler = async (update) => {
                 const { connection, lastDisconnect } = update;
 
                 if (connection === "open") {
+                    connectionState = 'open';
                     console.log(chalk.green.bold('\n✅ Mickey Glitch Online!\n'));
                     reconnectAttempts = 0;
-                    
+
                     const myNumber = Mickey.user.id.split(':')[0] + "@s.whatsapp.net";
                     const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
                     const imageUrl = "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg";
@@ -249,46 +260,72 @@ async function startMickeyBot(options = {}) {
 `.trim();
 
                     try {
-                        await Mickey.sendMessage(myNumber, { 
-                            image: { url: imageUrl }, 
-                            caption: connectionText 
+                        await Mickey.sendMessage(myNumber, {
+                            image: { url: imageUrl },
+                            caption: connectionText
                         });
                     } catch (e) {
-                        try { await Mickey.sendMessage(myNumber, { text: connectionText }); } catch (txtErr) {}
+                        try {
+                            await Mickey.sendMessage(myNumber, { text: connectionText });
+                        } catch (txtErr) {}
                     }
                 }
 
                 if (connection === "close") {
+                    connectionState = 'closed';
+                    try {
+                        Mickey.ev.off("messages.upsert", messageUpsertHandler);
+                        Mickey.ev.off("call", callHandler);
+                        Mickey.ev.off("connection.update", connectionUpdateHandler);
+                    } catch (err) {}
+
+                    try {
+                        await Mickey.end();
+                    } catch (err) {}
+
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
-                    
+
                     console.log(chalk.yellow(`\n⚠️ Connection closed. Status Code: ${statusCode}`));
-                    
+
                     reconnectAttempts++;
                     console.log(chalk.cyan(`Reconnect attempt ${reconnectAttempts}/10`));
-                    
-                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut && reconnectAttempts <= 10;
+
+                    if (statusCode === DisconnectReason.loggedOut) {
+                        console.log(chalk.bgRed.white("\n ❌ LOGGED OUT - Session reset \n"));
+                        clearSessionDirectory('logged out');
+                        if (!isShuttingDown) {
+                            isShuttingDown = true;
+                            process.exit(0);
+                        }
+                        return;
+                    }
+
+                    if (statusCode === DisconnectReason.badSession) {
+                        console.log(chalk.bgRed.white("\n ❌ BAD SESSION - Session reset \n"));
+                        clearSessionDirectory('bad session');
+                        whatsappBot = null;
+                        whatsappBootstrapPromise = null;
+                        reconnectAttempts = 0;
+                        await delay(5000);
+                        if (!isShuttingDown) {
+                            startMickeyBot().catch(() => {});
+                        }
+                        return;
+                    }
+
+                    const shouldReconnect = reconnectAttempts <= 10;
 
                     if (shouldReconnect && !isShuttingDown) {
                         whatsappBot = null;
                         whatsappBootstrapPromise = null;
-                        
-                        // Calculate backoff delay (exponential backoff)
+
                         const backoffDelay = Math.min(30000, 5000 * Math.pow(1.5, reconnectAttempts));
                         console.log(chalk.yellow(`Waiting ${backoffDelay/1000} seconds before reconnecting...`));
-                        
+
                         await delay(backoffDelay);
-                        
+
                         if (!isShuttingDown) {
                             startMickeyBot();
-                        }
-                    } else if (statusCode === DisconnectReason.loggedOut) {
-                        console.log(chalk.bgRed.white("\n ❌ LOGGED OUT - Session invalid \n"));
-                        if (fs.existsSync(CREDS_PATH)) {
-                            fs.unlinkSync(CREDS_PATH);
-                        }
-                        if (!isShuttingDown) {
-                            isShuttingDown = true;
-                            process.exit(0);
                         }
                     } else {
                         console.log(chalk.bgRed.white("\n ❌ MAX RECONNECT ATTEMPTS REACHED - Manual restart needed \n"));
@@ -298,7 +335,11 @@ async function startMickeyBot(options = {}) {
                         }
                     }
                 }
-            });
+            };
+
+            Mickey.ev.on("messages.upsert", messageUpsertHandler);
+            Mickey.ev.on("call", callHandler);
+            Mickey.ev.on("connection.update", connectionUpdateHandler);
 
             if (pairingCode && !Mickey.authState.creds.registered) {
                 const isTelegramTriggered = Boolean(options.useTelegramPairing);
@@ -320,7 +361,11 @@ async function startMickeyBot(options = {}) {
 
             return Mickey;
         } catch (err) {
+            const startupError = String(err?.message || err || '');
             console.error(chalk.red("Startup error:"), err);
+            if (startupError.toLowerCase().includes('session') || startupError.toLowerCase().includes('auth')) {
+                clearSessionDirectory('startup error');
+            }
             whatsappBot = null;
             whatsappBootstrapPromise = null;
             
