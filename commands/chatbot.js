@@ -2,353 +2,768 @@ const fs = require('fs').promises;
 const path = require('path');
 const fetch = require('node-fetch');
 
-// ===== CONFIG =====
-const BOT_NAME = "Mickey";
-const OWNER_NUMBERS = ["255612130873"];
+// Paths za kuhifadhi data
+const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
+const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
+const USER_PREFS_PATH = path.join(__dirname, '..', 'data', 'user_prefs.json');
+const CUSTOM_RESPONSES_PATH = path.join(__dirname, '..', 'data', 'custom_responses.json');
+const REMINDERS_PATH = path.join(__dirname, '..', 'data', 'reminders.json');
+const STATS_PATH = path.join(__dirname, '..', 'data', 'stats.json');
+const QUOTES_PATH = path.join(__dirname, '..', 'data', 'quotes.json');
 
-const DATA_DIR = path.join(__dirname, 'data');
-const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
-const STATE_FILE = path.join(DATA_DIR, 'state.json');
+// Rate limiting
+const rateLimits = new Map();
 
-const cooldown = new Map();
-const messageCache = new Set();
+// Global variable for bot number (set automatically)
+let BOT_NUMBER = null;
 
-// ===== HELPERS =====
-function isOwner(id) {
-    return OWNER_NUMBERS.includes(id);
+// Function to set bot number
+function setBotNumber(number) {
+    BOT_NUMBER = number;
+    console.log(`🤖 Bot number set to: ${BOT_NUMBER}`);
 }
 
-function cleanName(name = "") {
-    return name
-        .replace(/[^\w\s]/gi, '')
-        .trim() || "Mshkaji";
+// Check if user is owner (bot itself)
+function isOwner(userId) {
+    if (!BOT_NUMBER) return false;
+    // Remove @s.whatsapp.net suffix if present
+    const cleanUserId = userId.split('@')[0];
+    const cleanBotNumber = BOT_NUMBER.split('@')[0];
+    return cleanUserId === cleanBotNumber;
 }
 
-function extractText(m) {
-    const msg = m.message || {};
-
-    return (
-        msg.conversation ||
-        msg.extendedTextMessage?.text ||
-        msg.imageMessage?.caption ||
-        msg.videoMessage?.caption ||
-        msg.documentMessage?.caption ||
-        msg.buttonsResponseMessage?.selectedDisplayText ||
-        msg.listResponseMessage?.title ||
-        ""
-    );
-}
-
-function getSender(m) {
-    return (
-        m.key.participant?.split('@')[0] ||
-        m.key.remoteJid?.split('@')[0] ||
-        ''
-    );
-}
-
-// ===== FILE SYSTEM =====
-async function loadJSON(file, defaultData = {}) {
+// ============ DATA LOAD/SAVE FUNCTIONS ============
+async function loadState() {
     try {
-        const data = await fs.readFile(file, 'utf8');
-        return JSON.parse(data);
-    } catch {
-        return defaultData;
+        const data = await fs.readFile(STATE_PATH, 'utf8');
+        return { perGroup: {}, private: false, ...JSON.parse(data) };
+    } catch (e) { 
+        return { perGroup: {}, private: false }; 
     }
 }
 
-async function saveJSON(file, data) {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(file, JSON.stringify(data, null, 2));
-}
-
-// ===== COOLDOWN =====
-function isCooldown(user) {
-    const now = Date.now();
-
-    if (cooldown.has(user)) {
-        const diff = now - cooldown.get(user);
-
-        if (diff < 4000) {
-            return true;
-        }
+async function saveState(state) {
+    try {
+        await fs.mkdir(path.dirname(STATE_PATH), { recursive: true });
+        await fs.writeFile(STATE_PATH, JSON.stringify(state, null, 2));
+    } catch (e) { 
+        console.error('State Save Err:', e); 
     }
-
-    cooldown.set(user, now);
-    return false;
 }
 
-// ===== SMART FALLBACK =====
-function smartReply(text) {
-    const t = text.toLowerCase();
+async function loadMemory() {
+    try {
+        const data = await fs.readFile(MEMORY_PATH, 'utf8');
+        const memory = JSON.parse(data);
+        const now = Date.now();
+        let changed = false;
 
-    if (/mambo|niaje|vipi|sema/.test(t))
-        return "Poa mazee 😎";
-
-    if (/habari/.test(t))
-        return "Nzuri mkuu, wewe je?";
-
-    if (/asante|thanks/.test(t))
-        return "Karibu sana 🤝";
-
-    if (/joke|utani/.test(t))
-        return "Kwa nini simu ilienda shule? Ili kuongeza smartness 😂";
-
-    if (/saa/.test(t))
-        return `Sasa ni ${new Date().toLocaleTimeString('sw-TZ')}`;
-
-    return null;
-}
-
-// ===== AI =====
-async function askAI(prompt) {
-
-    const apis = [
-        `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(prompt)}`,
-        `https://vihangayt.me/tools/gpt4?q=${encodeURIComponent(prompt)}`
-    ];
-
-    for (const url of apis) {
-
-        try {
-
-            const response = await fetch(url, {
-                timeout: 10000
-            });
-
-            const data = await response.json();
-
-            const reply =
-                data.result ||
-                data.response ||
-                data.message ||
-                data.reply;
-
-            if (reply) {
-                return reply;
+        for (const id in memory) {
+            if (memory[id].lastUpdate && (now - memory[id].lastUpdate > 600000)) {
+                delete memory[id];
+                changed = true;
             }
-
-        } catch (e) {
-            console.log("API FAIL:", e.message);
         }
+        if (changed) await saveMemory(memory);
+        return memory;
+    } catch (e) { 
+        return {}; 
     }
+}
 
+async function saveMemory(memory) {
+    try {
+        await fs.mkdir(path.dirname(MEMORY_PATH), { recursive: true });
+        await fs.writeFile(MEMORY_PATH, JSON.stringify(memory, null, 2));
+    } catch (e) { 
+        console.error('Memory Save Err:', e); 
+    }
+}
+
+async function loadUserPrefs() {
+    try {
+        const data = await fs.readFile(USER_PREFS_PATH, 'utf8');
+        return JSON.parse(data);
+    } catch (e) { 
+        return {}; 
+    }
+}
+
+async function saveUserPrefs(prefs) {
+    try {
+        await fs.mkdir(path.dirname(USER_PREFS_PATH), { recursive: true });
+        await fs.writeFile(USER_PREFS_PATH, JSON.stringify(prefs, null, 2));
+    } catch (e) { 
+        console.error('UserPrefs Save Err:', e); 
+    }
+}
+
+async function loadCustomResponses() {
+    try {
+        const data = await fs.readFile(CUSTOM_RESPONSES_PATH, 'utf8');
+        return JSON.parse(data);
+    } catch (e) { 
+        return {}; 
+    }
+}
+
+async function saveCustomResponses(responses) {
+    try {
+        await fs.mkdir(path.dirname(CUSTOM_RESPONSES_PATH), { recursive: true });
+        await fs.writeFile(CUSTOM_RESPONSES_PATH, JSON.stringify(responses, null, 2));
+    } catch (e) { 
+        console.error('CustomResponses Save Err:', e); 
+    }
+}
+
+async function loadReminders() {
+    try {
+        const data = await fs.readFile(REMINDERS_PATH, 'utf8');
+        return JSON.parse(data);
+    } catch (e) { 
+        return {}; 
+    }
+}
+
+async function saveReminders(reminders) {
+    try {
+        await fs.mkdir(path.dirname(REMINDERS_PATH), { recursive: true });
+        await fs.writeFile(REMINDERS_PATH, JSON.stringify(reminders, null, 2));
+    } catch (e) { 
+        console.error('Reminders Save Err:', e); 
+    }
+}
+
+async function loadStats() {
+    try {
+        const data = await fs.readFile(STATS_PATH, 'utf8');
+        return JSON.parse(data);
+    } catch (e) { 
+        return {}; 
+    }
+}
+
+async function saveStats(stats) {
+    try {
+        await fs.mkdir(path.dirname(STATS_PATH), { recursive: true });
+        await fs.writeFile(STATS_PATH, JSON.stringify(stats, null, 2));
+    } catch (e) { 
+        console.error('Stats Save Err:', e); 
+    }
+}
+
+async function loadQuotes() {
+    try {
+        const data = await fs.readFile(QUOTES_PATH, 'utf8');
+        return JSON.parse(data);
+    } catch (e) {
+        const defaultQuotes = {
+            sw: [
+                "Maisha ni kama wimbi, zama na ibuke tena",
+                "Furaha haitoki kwenye pesa, inatoka moyoni",
+                "Kila siku ni fursa mpya kuanza upya",
+                "Usiogope kushindwa, ogopa kutojaribu",
+                "Mvumilivu hula mbivu"
+            ]
+        };
+        await saveQuotes(defaultQuotes);
+        return defaultQuotes;
+    }
+}
+
+async function saveQuotes(quotes) {
+    try {
+        await fs.mkdir(path.dirname(QUOTES_PATH), { recursive: true });
+        await fs.writeFile(QUOTES_PATH, JSON.stringify(quotes, null, 2));
+    } catch (e) { 
+        console.error('Quotes Save Err:', e); 
+    }
+}
+
+// ============ HUMAN-LIKE RESPONSES (Natural conversation) ============
+const humanResponses = {
+    greetings: [
+        "Oya mambo vipi mazee?",
+        "Niaje mkuu, mambo poa?",
+        "Yo! Niaje, upo freshi?",
+        "Mambo mambo! Unaendeleaje?",
+        "Sema mkuu, niko hapa kusikiliza"
+    ],
+    
+    howAreYou: [
+        "Poa tu mazee, shukrani. Na wewe mambo?",
+        "Freshi kabisa! Siku inaenda poa, na wewe je?",
+        "Nzuri tu mkuu, Mungu anipenda. Wewe unaendelea aje?",
+        "Safi tu, hakuna story. Wewe mambo gani?",
+        "Poa poa nikishinda tu. Wewe?"
+    ],
+    
+    thanks: [
+        "Karibu mazee, raha yangu kabisa",
+        "Ahsante kwa shukrani, naomba tena",
+        "Poa tu, niko hapa kukusaidia",
+        "Karibu sana mkuu",
+        "Sawa kabisa, rafiki yako"
+    ],
+    
+    dontKnow: [
+        "Sijui mazee, siyo eneo langu hilo",
+        "Hapo nimeshindwa mkuu, samahani",
+        "Samahani, sijui hilo. Mengine nikusaidie?",
+        "Hapana, sijawahi kusikia hicho",
+        "Leta swali lingine, hili nimeshindwa"
+    ],
+    
+    jokes: [
+        "Nimesikia simu haicheki... Ina data chache! 😂",
+        "Kwanini tombo anakimbia? Anafuata ndoto zake! 😅",
+        "Mwalimu: 'Nipe sentensi na neno matunda'... Matunda yanauzwa sokoni! 💀",
+        "Kwanini nyoka hajisalimii? Anajisikia mnyama! 🐍",
+        "Unajua kwanini mchele haendi shule? Anachelewa! 🤣"
+    ],
+    
+    advice: [
+        "Ukiwa na shida, usibebe mzigo peke yako. Sema tu na mtu",
+        "Maisha ni mafupi mazee, furahia kila dakika",
+        "Watu watasema mengi, wewe fanya yako tu",
+        "Kupata rafiki wa kweli ni kama dhahabu, usimpoteze",
+        "Usilinganishe maisha yako na ya mtu mwingine"
+    ],
+    
+    love: [
+        "Ah mapenzi! Sijui mengi mazee, lakini fanya moyo wako useme",
+        "Mapenzi si mchezo mkuu. Hakikisha unampata anayekufaa",
+        "Yo! Unazungumzia mapenzi? Usikimbilie, fanya taratibu",
+        "Mapenzi yana changamoto zake. Subiri uwe tayari",
+        "Moyo unasema nini? Fanya hivyo, usiogope"
+    ],
+    
+    work: [
+        "Endelea kujituma mazee. Bidii yako itakupeleka mbali",
+        "Kazi ni nzuri, lakini pumzika pia. Usijichoshe",
+        "Nakumbuka siku zangu za kazi. Furahia wakati huo",
+        "Ukiwa na nidhamu, mafanikio yatakujia yenyewe"
+    ],
+    
+    problem: [
+        "Usijali mazee, kila tatizo lina suluhisho",
+        "Nimekuelewa. Wakati mgumu hupita, jipe muda",
+        "Shida ni sehemu ya maisha. Usikate tamaa",
+        "Ukipata nafasi, tembea kidogo. Hewa safi inasaidia"
+    ],
+    
+    time: [
+        "Sasa ni {time} mazee. Umekuwa na shughuli nyingi?",
+        "Saa {time} tu mkuu, una mpango gani?",
+        "Sasa {time}, kuna nini mazee?"
+    ],
+    
+    date: [
+        "Leo ni {date} mazee. Siku inaendeleaje?",
+        "Tarehe {date} mkuu, una mpango gani leo?",
+        "Leo {date}, siku nzuri kweli?"
+    ]
+};
+
+function getHumanResponse(category, params = {}) {
+    let responses = humanResponses[category];
+    if (!responses) return "Sijui niseme nini mazee";
+    
+    let response = responses[Math.floor(Math.random() * responses.length)];
+    
+    // Replace placeholders
+    if (params.time) response = response.replace('{time}', params.time);
+    if (params.date) response = response.replace('{date}', params.date);
+    
+    return response;
+}
+
+function getTimeGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Habari za asubuhi mazee!";
+    if (hour < 18) return "Habari za mchana mkuu!";
+    return "Habari za jioni mazee!";
+}
+
+// ============ NATURAL RESPONSE DETECTION ============
+async function getHumanReply(text, userName) {
+    const lowerText = text.toLowerCase().trim();
+    
+    // Just a greeting
+    if (lowerText.match(/^(mambo|vipi|niaje|sema|yo|hi|hello|hey|sasa)$/i)) {
+        return getHumanResponse('greetings');
+    }
+    
+    // How are you
+    if (lowerText.match(/^(habari|how are you|unaendelea aje|poa|fresh|hujambo|ujambo)/i)) {
+        return getHumanResponse('howAreYou');
+    }
+    
+    // Thank you
+    if (lowerText.match(/^(asante|thanks|thank you|shukran|ahsante)/i)) {
+        return getHumanResponse('thanks');
+    }
+    
+    // Joke
+    if (lowerText.match(/(joke|utani|cheka|funny|comedy)/i)) {
+        return getHumanResponse('jokes');
+    }
+    
+    // Advice
+    if (lowerText.match(/(advice|ushauri|nasaha|help|nisaidie|shida|tatizo)/i)) {
+        return getHumanResponse('problem');
+    }
+    
+    // Love
+    if (lowerText.match(/(mapenzi|love|boyfriend|girlfriend|crush|mpenzi|pendo)/i)) {
+        return getHumanResponse('love');
+    }
+    
+    // Work/School
+    if (lowerText.match(/(kazi|work|school|shule|job|studies|masomo|biashara)/i)) {
+        return getHumanResponse('work');
+    }
+    
+    // Time
+    if (lowerText.match(/(time|saa ngapi|what time|saa)/i)) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' });
+        return getHumanResponse('time', { time: timeStr });
+    }
+    
+    // Date
+    if (lowerText.match(/(date|tarehe|what date|leo)/i)) {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('sw-TZ', { weekday: 'long', day: 'numeric', month: 'long' });
+        return getHumanResponse('date', { date: dateStr });
+    }
+    
+    // Goodbye
+    if (lowerText.match(/(kwaheri|bye|goodbye|tutaonana|later)/i)) {
+        const goodbyes = ["Kwaheri mazee, tutaonana! 👋", "Bye mkuu, kesho! 😎", "Later mazee, nitarudi!"];
+        return goodbyes[Math.floor(Math.random() * goodbyes.length)];
+    }
+    
+    // Very short message
+    if (text.length < 5) {
+        return getHumanResponse('greetings');
+    }
+    
     return null;
 }
 
-// ===== MAIN CHATBOT =====
-async function chatbot(sock, m) {
-
+// ============ TEXT EXTRACTION ============
+function extractText(m) {
     try {
+        if (!m || !m.message) return '';
+        const msg = m.message;
+        return (
+            msg.conversation || 
+            msg.extendedTextMessage?.text || 
+            msg.imageMessage?.caption || 
+            msg.videoMessage?.caption || 
+            msg.buttonsResponseMessage?.selectedButtonId || 
+            msg.buttonsResponseMessage?.selectedDisplayText ||
+            msg.templateButtonReplyMessage?.selectedId ||
+            msg.listResponseMessage?.singleSelectReply?.selectedRowId ||
+            (msg.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? 
+                JSON.parse(msg.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson).id : '') ||
+            ''
+        ).trim();
+    } catch (e) { 
+        return ''; 
+    }
+}
 
-        if (!m.message) return;
+// ============ REMINDER SYSTEM ============
+async function setReminder(sock, chatId, text, timeInMinutes, userName) {
+    try {
+        const reminders = await loadReminders();
+        const reminderId = Date.now();
+        const reminderTime = Date.now() + (timeInMinutes * 60 * 1000);
 
-        const chatId = m.key.remoteJid;
+        reminders[reminderId] = {
+            chatId, 
+            text, 
+            time: reminderTime,
+            userName
+        };
+        await saveReminders(reminders);
 
-        if (messageCache.has(m.key.id)) return;
+        setTimeout(async () => {
+            try {
+                const currentReminders = await loadReminders();
+                if (currentReminders[reminderId]) {
+                    await sock.sendMessage(chatId, { text: `⏰ Yo ${userName}! Uliniomba nikukumbushe: ${text}` });
+                    delete currentReminders[reminderId];
+                    await saveReminders(currentReminders);
+                }
+            } catch (e) {
+                console.error('Reminder send error:', e);
+            }
+        }, timeInMinutes * 60 * 1000);
 
-        messageCache.add(m.key.id);
+        return `✅ Sawa ${userName}, nitakukumbusha baada ya dakika ${timeInMinutes}: "${text}"`;
+    } catch (e) {
+        console.error('Set reminder error:', e);
+        return `Samahani, nimeshindwa kuweka reminder.`;
+    }
+}
 
-        setTimeout(() => {
-            messageCache.delete(m.key.id);
-        }, 60000);
+// ============ LEARNING MODE ============
+async function learnResponse(trigger, response, chatId) {
+    try {
+        const customResponses = await loadCustomResponses();
+        if (!customResponses[chatId]) customResponses[chatId] = {};
 
-        const text = extractText(m);
+        customResponses[chatId][trigger.toLowerCase()] = response;
+        await saveCustomResponses(customResponses);
 
+        return `✅ Sawa, nimekumbuka! Ukisema "${trigger}", nitajibu: "${response}"`;
+    } catch (e) {
+        console.error('Learn response error:', e);
+        return `Samahani, nimeshindwa kujifunza.`;
+    }
+}
+
+// ============ STATS LOGGING ============
+async function logInteraction(chatId, type, duration) {
+    try {
+        const stats = await loadStats();
+        if (!stats[chatId]) stats[chatId] = { messages: 0, commands: 0, totalResponseTime: 0, avgResponseTime: 0 };
+
+        if (type === 'message') stats[chatId].messages++;
+        if (type === 'command') stats[chatId].commands++;
+
+        stats[chatId].totalResponseTime = (stats[chatId].totalResponseTime || 0) + duration;
+        stats[chatId].avgResponseTime = Math.floor(stats[chatId].totalResponseTime / stats[chatId].messages);
+
+        await saveStats(stats);
+    } catch (e) {
+        console.error('Log interaction error:', e);
+    }
+}
+
+// ============ RATE LIMITING ============
+function checkRateLimit(chatId) {
+    const now = Date.now();
+    const userLimits = rateLimits.get(chatId) || [];
+    const recentMessages = userLimits.filter(t => now - t < 3000);
+
+    if (recentMessages.length >= 2) {
+        return false;
+    }
+
+    recentMessages.push(now);
+    rateLimits.set(chatId, recentMessages);
+    return true;
+}
+
+// ============ QUOTE FUNCTIONS ============
+async function addQuote(quote) {
+    try {
+        const quotes = await loadQuotes();
+        if (!quotes.sw) quotes.sw = [];
+        quotes.sw.push(quote);
+        await saveQuotes(quotes);
+        return true;
+    } catch (e) {
+        console.error('Add quote error:', e);
+        return false;
+    }
+}
+
+// ============ MAIN CHATBOT HANDLER ============
+async function handleChatbotMessage(sock, chatId, m, userText = null) {
+    const startTime = Date.now();
+    const senderId = m.key.remoteJid?.split('@')[0] || '';
+    
+    try {
+        if (!chatId || m.key?.fromMe) return;
+
+        // Set bot number if not set
+        if (!BOT_NUMBER && sock.user) {
+            setBotNumber(sock.user.id);
+        }
+
+        if (!checkRateLimit(chatId)) {
+            const slowResponses = ["Pole pole mazee 😅", "Nenda taratibu kidogo mkuu", "Ah, unanichokoza? Subiri sekunde"];
+            return await sock.sendMessage(chatId, { text: slowResponses[Math.floor(Math.random() * slowResponses.length)] });
+        }
+
+        const text = userText || extractText(m);
         if (!text) return;
 
-        const sender = getSender(m);
-
-        const userName = cleanName(m.pushName);
-
-        if (m.key.fromMe) return;
-
-        // ===== LOAD STATE =====
-        const state = await loadJSON(STATE_FILE, {
-            groups: {},
-            private: true
-        });
-
+        const userName = m.pushName || 'Mshkaji';
+        const state = await loadState();
         const isGroup = chatId.endsWith('@g.us');
-
+        
+        // Check if enabled
         let enabled = false;
-
         if (isGroup) {
-            enabled = state.groups[chatId];
+            enabled = !!state.perGroup?.[chatId]?.enabled;
         } else {
-            enabled = state.private;
+            enabled = !!state.private;
+        }
+        
+        // Only owner can use toggle commands when disabled
+        if (!enabled && !text.startsWith('.chatbot') && !text.startsWith('.pref') && !text.startsWith('.stats') && !text.startsWith('.quote') && !text.startsWith('.learn') && !text.startsWith('.remind')) {
+            if (!isOwner(senderId)) {
+                return; // Ignore non-owner messages when disabled
+            }
         }
 
-        // ===== COMMANDS =====
-        if (text.startsWith(".")) {
+        // Load user preferences
+        let userPrefs = await loadUserPrefs();
+        if (!userPrefs[chatId]) {
+            userPrefs[chatId] = { language: 'sw' };
+            await saveUserPrefs(userPrefs);
+        }
 
-            const args = text.trim().split(/\s+/);
-
-            const cmd = args[0].slice(1).toLowerCase();
-
-            // chatbot on/off
-            if (cmd === "chatbot") {
-
-                if (!isOwner(sender)) {
-                    return sock.sendMessage(chatId, {
-                        text: "❌ Wewe sio owner"
-                    });
-                }
-
-                const action = args[1];
-
-                if (action === "on") {
-
-                    if (isGroup) {
-                        state.groups[chatId] = true;
-                    } else {
-                        state.private = true;
-                    }
-
-                    await saveJSON(STATE_FILE, state);
-
-                    return sock.sendMessage(chatId, {
-                        text: "✅ Chatbot ON"
-                    });
-                }
-
-                if (action === "off") {
-
-                    if (isGroup) {
-                        state.groups[chatId] = false;
-                    } else {
-                        state.private = false;
-                    }
-
-                    await saveJSON(STATE_FILE, state);
-
-                    return sock.sendMessage(chatId, {
-                        text: "❌ Chatbot OFF"
-                    });
+        // Handle commands
+        if (text.startsWith('.') || text.startsWith('!')) {
+            const toggleCommands = ['.chatbot', '.enable', '.disable', '.on', '.off', '.private'];
+            if (toggleCommands.some(cmd => text.startsWith(cmd))) {
+                if (!isOwner(senderId)) {
+                    return await sock.sendMessage(chatId, { text: `Samahani ${userName}, wewe sio owner wa bot hii.` });
                 }
             }
+        }
 
-            if (cmd === "ping") {
-                return sock.sendMessage(chatId, {
-                    text: "🏓 Pong!"
-                });
-            }
+        // Show typing indicator
+        sock.sendPresenceUpdate('composing', chatId).catch(() => {});
 
-            if (cmd === "alive") {
-                return sock.sendMessage(chatId, {
-                    text: `✅ ${BOT_NAME} yupo active`
-                });
-            }
+        // Load memory
+        let memory = await loadMemory();
+        if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
 
-            if (cmd === "owner") {
-                return sock.sendMessage(chatId, {
-                    text: `👑 Owner: ${OWNER_NUMBERS[0]}`
-                });
-            }
+        memory[chatId].chats.push({ role: "user", content: text, name: userName });
+        memory[chatId].lastUpdate = Date.now();
+        if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
+        // Check custom responses
+        const customResponses = await loadCustomResponses();
+        if (customResponses[chatId] && customResponses[chatId][text.toLowerCase()]) {
+            const customReply = customResponses[chatId][text.toLowerCase()];
+            memory[chatId].chats.push({ role: "assistant", content: customReply });
+            await saveMemory(memory);
+            await sock.sendMessage(chatId, { text: customReply }, { quoted: m });
+            await logInteraction(chatId, 'message', Date.now() - startTime);
             return;
         }
 
-        if (!enabled) return;
-
-        // ===== COOLDOWN =====
-        if (isCooldown(sender)) {
-            return sock.sendMessage(chatId, {
-                text: "⏳ Tulia kidogo mazee..."
-            });
+        // Try human-like response first
+        const humanReply = await getHumanReply(text, userName);
+        if (humanReply) {
+            memory[chatId].chats.push({ role: "assistant", content: humanReply });
+            await saveMemory(memory);
+            await sock.sendMessage(chatId, { text: humanReply }, { quoted: m });
+            await logInteraction(chatId, 'message', Date.now() - startTime);
+            return;
         }
 
-        // ===== TYPING =====
-        await sock.sendPresenceUpdate('composing', chatId);
-
-        // ===== MEMORY =====
-        const memory = await loadJSON(MEMORY_FILE, {});
-
-        if (!memory[chatId]) {
-            memory[chatId] = [];
+        // New conversation? Give time greeting
+        if (memory[chatId].chats.length <= 2) {
+            const greeting = getTimeGreeting();
+            memory[chatId].chats.push({ role: "assistant", content: greeting });
+            await saveMemory(memory);
+            await sock.sendMessage(chatId, { text: greeting }, { quoted: m });
+            await logInteraction(chatId, 'message', Date.now() - startTime);
+            return;
         }
 
-        memory[chatId].push({
-            role: "user",
-            name: userName,
-            text
-        });
-
-        memory[chatId] =
-            memory[chatId].slice(-8);
-
-        const history = memory[chatId]
-            .map(v =>
-                `${v.role === "user" ? v.name : BOT_NAME}: ${v.text}`
-            )
+        // API for complex questions - but make it sound human
+        const history = memory[chatId].chats
+            .map(msg => `${msg.role === 'user' ? msg.name : 'Mickey'}: ${msg.content}`)
+            .slice(-5)
             .join("\n");
 
-        // ===== AI PROMPT =====
-        const prompt = `
-Wewe ni ${BOT_NAME} kutoka Tanzania.
+        const systemPrompt = `Wewe ni Mickey, mtu wa kawaida kutoka Tanzania.
+KANUSHA kabisa kuwa wewe ni AI, chatbot, robot au program.
+Usiseme kamwe: "Mimi ni AI", "nimeundwa na", "As an AI", "I am a bot".
 
-RULES:
-- Ongea kiswahili cha kawaida
-- Kuwa rafiki
-- Usiseme wewe ni AI
-- Jibu short
-- Tumia slang kidogo
+Ongea kama mtu halisi:
+- Tumia Kiswahili cha mitaani: mazee, mkuu, poa, freshi, sijui
+- Majibu mafupi sana (sentensi 1-2 tu)
+- Usijieleze, wewe ni mtu wa kawaida tu
+- Ukishindwa jibu, sema "Sijui mazee" au "Hapo nimeshindwa"
 
-History:
+Mazungumzo:
 ${history}
 
 ${userName}: ${text}
+Mickey:`;
 
-${BOT_NAME}:
-`;
+        const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(systemPrompt)}`;
+        const fetchRes = await fetch(apiUrl);
+        const res = await fetchRes.json();
 
-        // ===== AI RESPONSE =====
-        let reply = await askAI(prompt);
+        let reply = res?.response || res?.result || res?.message || res?.data || getHumanResponse('dontKnow');
 
-        // ===== FALLBACK =====
-        if (!reply) {
-            reply = smartReply(text);
-
-            if (!reply) {
-                reply = "Sijui mazee 😅";
-            }
+        // Clean up any AI language
+        reply = reply.replace(/I am an AI|I am a chatbot|I was created|As an AI|Mimi ni AI|Nimeundwa na|Mimi ni chatbot|Mickey AI|Glitch V\d/gi, "Mimi ni Mickey");
+        
+        // Shorten if too long
+        if (reply.length > 200) {
+            reply = reply.substring(0, 200) + "..."
         }
 
-        // ===== CLEAN RESPONSE =====
-        reply = reply
-            .replace(/AI|robot|chatbot|bot/gi, BOT_NAME)
-            .slice(0, 400);
+        memory[chatId].chats.push({ role: "assistant", content: reply });
+        await saveMemory(memory);
 
-        // ===== SAVE MEMORY =====
-        memory[chatId].push({
-            role: "assistant",
-            text: reply
-        });
+        await sock.sendMessage(chatId, { text: reply }, { quoted: m });
+        await logInteraction(chatId, 'message', Date.now() - startTime);
 
-        await saveJSON(MEMORY_FILE, memory);
-
-        // ===== SEND =====
-        await sock.sendMessage(chatId, {
-            text: reply
-        }, {
-            quoted: m
-        });
-
-    } catch (err) {
-
-        console.log(err);
-
+    } catch (e) { 
+        console.error('Chatbot Error:', e);
         try {
-
-            await sock.sendMessage(
-                m.key.remoteJid,
-                {
-                    text: "⚠️ Kuna tatizo kidogo mazee..."
-                }
-            );
-
-        } catch {}
+            await sock.sendMessage(chatId, { text: getHumanResponse('dontKnow') });
+        } catch (err) {
+            console.error('Failed to send error message:', err);
+        }
     }
 }
 
-module.exports = chatbot;
+// ============ COMMAND HANDLER ============
+async function groupChatbotToggleCommand(sock, chatId, m, body) {
+    try {
+        const state = await loadState();
+        const args = (body || '').trim().split(/\s+/);
+        const sub = args[0]?.toLowerCase();
+        const userName = m.pushName || 'Mshkaji';
+        const senderId = m.key.remoteJid?.split('@')[0] || '';
+
+        // Set bot number if not set
+        if (!BOT_NUMBER && sock.user) {
+            setBotNumber(sock.user.id);
+        }
+
+        const isOwnerUser = isOwner(senderId);
+        const ownerOnlyCommands = ['on', 'off', 'private', 'enable', 'disable'];
+        
+        if (ownerOnlyCommands.includes(sub) && !isOwnerUser) {
+            return await sock.sendMessage(chatId, { text: `Samahani ${userName}, wewe sio owner wa bot hii.` });
+        }
+
+        // Add quote
+        if (sub === 'addquote') {
+            const quote = args.slice(1).join(' ');
+            if (quote) {
+                const success = await addQuote(quote);
+                if (success) {
+                    return await sock.sendMessage(chatId, { text: `✅ Asante ${userName}! Nimeongeza nukuu yako.` });
+                }
+            }
+            return await sock.sendMessage(chatId, { text: `📝 Tumia: .addquote [nukuu yako]` });
+        }
+
+        // Get quote
+        if (sub === 'quote') {
+            const quotes = await loadQuotes();
+            const quoteList = quotes.sw || [];
+            const randomQuote = quoteList[Math.floor(Math.random() * quoteList.length)];
+            return await sock.sendMessage(chatId, { text: `💬 "${randomQuote}"` });
+        }
+
+        // Language preference
+        if (sub === 'pref' && args[1] === 'lang') {
+            const userPrefs = await loadUserPrefs();
+            const newLang = args[2]?.toLowerCase();
+            if (newLang === 'sw' || newLang === 'en') {
+                if (!userPrefs[chatId]) userPrefs[chatId] = {};
+                userPrefs[chatId].language = newLang;
+                await saveUserPrefs(userPrefs);
+                return await sock.sendMessage(chatId, { text: `✅ Sawa ${userName}, nitaongea ${newLang === 'sw' ? 'Kiswahili' : 'English'}!` });
+            }
+            return await sock.sendMessage(chatId, { text: `📝 Tumia: .pref lang sw/en` });
+        }
+
+        // Stats
+        if (sub === 'stats') {
+            const stats = await loadStats();
+            const userStats = stats[chatId] || { messages: 0, commands: 0, avgResponseTime: 0 };
+            const statsMsg = `📊 *TAKWIMU ZAKU ${userName}*\n\n💬 Ujumbe: ${userStats.messages}\n⚡ Commands: ${userStats.commands}\n⏱️ Muda: ${userStats.avgResponseTime}ms`;
+            return await sock.sendMessage(chatId, { text: statsMsg });
+        }
+
+        // Learn command
+        if (sub === 'learn') {
+            const parts = body.slice(6).split('|');
+            if (parts.length === 2) {
+                const trigger = parts[0].trim();
+                const response = parts[1].trim();
+                const result = await learnResponse(trigger, response, chatId);
+                return await sock.sendMessage(chatId, { text: result });
+            }
+            return await sock.sendMessage(chatId, { text: `📚 Jinsi ya kutumia .learn:\n.learn trigger | response` });
+        }
+
+        // Reminder
+        if (sub === 'remind') {
+            const time = parseInt(args[1]);
+            const reminderText = args.slice(2).join(' ');
+            if (isNaN(time) || !reminderText) {
+                return await sock.sendMessage(chatId, { text: `⏰ Tumia: .remind 5 kumbukumbu yangu` });
+            }
+            const result = await setReminder(sock, chatId, reminderText, time, userName);
+            return await sock.sendMessage(chatId, { text: result });
+        }
+
+        // OWNER ONLY: Private toggle
+        if (sub === 'private') {
+            if (!isOwnerUser) return;
+            state.private = (args[1]?.toLowerCase() === 'on');
+            await saveState(state);
+            return await sock.sendMessage(chatId, { text: `✅ Chatbot DM: ${state.private ? 'ON 🟢' : 'OFF 🔴'}` });
+        }
+
+        // OWNER ONLY: Group toggle
+        if (sub === 'on' || sub === 'off' || sub === 'enable' || sub === 'disable') {
+            if (!isOwnerUser) return;
+            const isEnable = (sub === 'on' || sub === 'enable');
+            if (chatId.endsWith('@g.us')) {
+                if (!state.perGroup) state.perGroup = {};
+                state.perGroup[chatId] = { enabled: isEnable };
+            } else {
+                state.private = isEnable;
+            }
+            await saveState(state);
+            const statusMsg = isEnable ? 
+                `✅ Niko hapa! 🟢` : 
+                `🔴 Nimepumzika kidogo.`;
+            return await sock.sendMessage(chatId, { text: statusMsg });
+        }
+
+        // Help menu
+        const helpMsg = `🎤 *MICKEY - MTU WA KAWAIDA*
+
+⚡ COMMANDS
+.pref lang sw/en - Badilisha lugha
+.stats - Takwimu zako
+.quote - Nukuu za hekima
+.addquote [nukuu] - Ongeza nukuu
+.remind [dakika] [text] - Kumbukumbu
+.learn [trigger] | [res] - Nifundishe
+
+🔒 OWNER TU
+.chatbot on/off - Niwashe group
+.chatbot private on/off - Niwashe DM
+
+💬 NIULIZE LOLOTE
+Mambo vipi? | Nipe utani | Ushauri | Ninampenda...
+
+*Niko hapa kuzungumza nawe!* 🎉`;
+
+        return await sock.sendMessage(chatId, { text: helpMsg });
+
+    } catch (e) { 
+        console.error('Command Error:', e);
+        try {
+            await sock.sendMessage(chatId, { text: "Samahani, kuna issue. Jaribu tena!" });
+        } catch (err) {
+            console.error('Failed to send error message:', err);
+        }
+    }
+}
+
+module.exports = { handleChatbotMessage, groupChatbotToggleCommand, setBotNumber };
