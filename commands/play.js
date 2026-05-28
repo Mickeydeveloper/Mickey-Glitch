@@ -154,7 +154,7 @@ async function playCommand(sock, chatId, message) {
 
         if (!q) {
             return sock.sendMessage(chatId, { 
-                text: '🎵 *Unataka wimbo gani?*\n\n📝 Mfano: `.play Darude Sandstorm`\n🎧 Au tuma link ya YouTube: `.play https://youtu.be/...`' 
+                text: '🎵 *Unataka wimbo gani?*\n\n📝 Mfano: `.play Mario mvua`' 
             });
         }
 
@@ -169,32 +169,24 @@ async function playCommand(sock, chatId, message) {
             const searchResults = await yts(q);
             const videos = searchResults?.videos;
             if (!videos || videos.length === 0) {
+                await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
                 return sock.sendMessage(chatId, { text: '❌ Sikuipata wimbo huo! Jaribu kutafuta kwa maneno mengine.' });
             }
             
             videoInfo = videos[0];
             videoUrl = videoInfo.url;
             
-            // Send song info with thumbnail
-            try {
-                await sock.sendMessage(chatId, {
-                    image: { url: videoInfo.thumbnail },
-                    caption: `🎵 *${videoInfo.title}*\n⏱️ *Muda:* ${videoInfo.timestamp}\n👤 *Msanii:* ${videoInfo.author.name}\n👁️ *Views:* ${videoInfo.views?.toLocaleString() || 'N/A'}\n\n📥 *Inapakua wimbo...*`
-                }, { quoted: message });
-            } catch (thumbErr) {
-                console.log('[PLAY] Thumbnail send failed, continuing...');
-                await sock.sendMessage(chatId, { 
-                    text: `🎵 *${videoInfo.title}*\n⏱️ *Muda:* ${videoInfo.timestamp}\n👤 *Msanii:* ${videoInfo.author.name}\n\n📥 *Inapakua wimbo...*`
-                }, { quoted: message });
-            }
+            // Send song info message (short and clean)
+            const infoMsg = `🎵 *${videoInfo.title}*\n⏱️ *Muda:* ${videoInfo.timestamp}\n👤 *Msanii:* ${videoInfo.author.name}\n👁️ *Views:* ${videoInfo.views?.toLocaleString() || 'N/A'}\n\n📥 *Inapakua wimbo...*`;
+            
+            await sock.sendMessage(chatId, { text: infoMsg }, { quoted: message });
         } else {
-            // Direct YouTube URL
-            await sock.sendMessage(chatId, { 
-                text: `📥 *Inapakua wimbo kutoka link yako...*` 
-            }, { quoted: message });
+            // Direct URL - show downloading message
+            await sock.sendMessage(chatId, { text: `📥 *Inapakua wimbo kutoka link yako...*` }, { quoted: message });
         }
 
-        await handleAudioDownload(sock, chatId, videoUrl, message, videoInfo);
+        // Download and send audio
+        await handleAudioDownload(sock, chatId, videoUrl, message);
 
     } catch (err) {
         console.error('[PLAY] Error:', err?.message || err);
@@ -203,49 +195,28 @@ async function playCommand(sock, chatId, message) {
     }
 }
 
-async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = null) {
+async function handleAudioDownload(sock, chatId, ytUrl, message) {
     try {
+        // Change reaction to downloading
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
         const data = await getYoutubeMp3(ytUrl);
         
         console.log(`[PLAY] Downloading from: ${data.source}`);
         
-        // Prepare audio message
+        // Send ONLY the audio - clean, no captions, no ads
         const audioMessage = {
             audio: { url: data.download },
             mimetype: 'audio/mp4',
             ptt: false,
-            fileName: data.title ? `${data.title}.mp3` : (videoInfo?.title ? `${videoInfo.title}.mp3` : 'audio.mp3')
+            fileName: data.title ? `${data.title}.mp3` : 'audio.mp3'
         };
         
-        // Add context info if available
-        if (data.title || videoInfo?.title) {
-            const title = data.title || videoInfo?.title;
-            const channel = data.channel || videoInfo?.author?.name;
-            
-            audioMessage.contextInfo = {
-                externalAdReply: {
-                    title: title.length > 50 ? title.substring(0, 47) + '...' : title,
-                    body: channel ? `🎵 ${channel}` : 'Mickey Glitch Bot',
-                    thumbnailUrl: data.thumbnail || videoInfo?.thumbnail,
-                    mediaType: 1,
-                    renderLargerThumbnail: false
-                }
-            };
-        }
-
+        // Send audio directly
         await sock.sendMessage(chatId, audioMessage, { quoted: message });
+        
+        // Change reaction to success after sending
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-        
-        // Send success message with source
-        const successMsg = data.source === 'Nayan' ? 
-            '✅ *Wimbo umetumwa!*\n🎵 Imedownload kutoka Nayan API' :
-            (data.source === 'Aswin Sparky' ? 
-            '✅ *Wimbo umetumwa!*\n🎵 Imedownload kutoka Aswin Sparky API' :
-            '✅ *Wimbo umetumwa!*');
-        
-        await sock.sendMessage(chatId, { text: successMsg }, { quoted: message });
 
     } catch (e) {
         console.error('[PLAY] Audio download error:', e);
