@@ -28,22 +28,7 @@ async function tryRequest(getter, attempts = 3) {
     throw lastErr;
 }
 
-// Download image as buffer
-async function getImageBuffer(url) {
-    try {
-        const response = await axios.get(url, {
-            responseType: 'arraybuffer',
-            timeout: 15000,
-            headers: AXIOS_DEFAULTS.headers
-        });
-        return Buffer.from(response.data);
-    } catch (err) {
-        console.log(`[PLAY] Failed to download image: ${err.message}`);
-        return null;
-    }
-}
-
-// Get MP3 from YouTube using multiple APIs
+// Get MP3 from YouTube using PrinceTech API (WORKING 100%)
 async function getYoutubeMp3(ytUrl) {
     // Extract video ID from YouTube URL
     let videoId = '';
@@ -58,58 +43,36 @@ async function getYoutubeMp3(ytUrl) {
         throw new Error('Invalid YouTube URL');
     }
     
-    // API 1: Nayan Video Downloader (for audio)
-    const nayanApi = `https://nayan-video-downloader.vercel.app/ytdown?url=https://youtu.be/${videoId}`;
+    // PrinceTech API - WORKING!
+    const apiUrl = `https://api.princetechn.com/api/download/yta?apikey=prince&url=https://youtu.be/${videoId}`;
     
-    // Try Nayan API first
     try {
-        console.log(`[PLAY] Trying Nayan API: ${nayanApi}`);
-        const res = await tryRequest(() => axios.get(nayanApi, AXIOS_DEFAULTS));
+        console.log(`[PLAY] Trying PrinceTech API: ${apiUrl}`);
+        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
         
-        if (res.data?.status === true && res.data?.data?.audio) {
-            const audioUrl = res.data.data.audio;
-            const title = res.data.data.title;
-            const thumbnail = res.data.data.thumb;
-            const channel = res.data.data.channel;
+        if (res.data?.success === true && res.data?.result?.download_url) {
+            const audioUrl = res.data.result.download_url;
+            const title = res.data.result.title;
+            const duration = res.data.result.duration;
+            const quality = res.data.result.quality;
+            const thumbnail = res.data.result.thumbnail;
             
-            console.log(`[PLAY] Nayan API success: ${title}`);
+            console.log(`[PLAY] PrinceTech API success: ${title} (${quality})`);
             return {
                 download: audioUrl,
                 title: title,
+                duration: duration,
+                quality: quality,
                 thumbnail: thumbnail,
-                channel: channel,
-                source: 'Nayan'
+                source: 'PrinceTech'
             };
+        } else {
+            throw new Error('Invalid response from PrinceTech API');
         }
     } catch (err) {
-        console.log(`[PLAY] Nayan API failed: ${err.message}`);
+        console.log(`[PLAY] PrinceTech API failed: ${err.message}`);
+        throw new Error('PrinceTech API failed - No working API available');
     }
-    
-    // API 2: Aswin Sparky Song Downloader
-    const aswinApi = `https://api-aswin-sparky.koyeb.app/api/downloader/song?search=https://youtu.be/${videoId}`;
-    
-    try {
-        console.log(`[PLAY] Trying Aswin API: ${aswinApi}`);
-        const res = await tryRequest(() => axios.get(aswinApi, AXIOS_DEFAULTS));
-        
-        if (res.data?.status === true && res.data?.data?.url) {
-            const audioUrl = res.data.data.url;
-            const title = res.data.data.title;
-            
-            console.log(`[PLAY] Aswin API success: ${title}`);
-            return {
-                download: audioUrl,
-                title: title,
-                thumbnail: null,
-                channel: null,
-                source: 'Aswin Sparky'
-            };
-        }
-    } catch (err) {
-        console.log(`[PLAY] Aswin API failed: ${err.message}`);
-    }
-    
-    throw new Error('No working API available');
 }
 
 async function playCommand(sock, chatId, message) {
@@ -119,7 +82,7 @@ async function playCommand(sock, chatId, message) {
 
         if (!q) {
             return sock.sendMessage(chatId, { 
-                text: '🎵 *Unataka wimbo gani?*\n\n📝 Mfano: `.play Mario mvua`' 
+                text: '🎵 *Unataka wimbo gani?*\n\n📝 Mfano: `.play Alan Walker Faded`' 
             });
         }
 
@@ -144,6 +107,8 @@ async function playCommand(sock, chatId, message) {
             // Send short info message
             const infoMsg = `🎵 *${videoInfo.title}*\n⏱️ *${videoInfo.timestamp}* | 👤 ${videoInfo.author.name}\n👁️ ${videoInfo.views?.toLocaleString() || 'N/A'} views\n\n📥 *Inapakua wimbo...*`;
             await sock.sendMessage(chatId, { text: infoMsg }, { quoted: message });
+        } else {
+            await sock.sendMessage(chatId, { text: `📥 *Inapakua wimbo kutoka link yako...*` }, { quoted: message });
         }
 
         // Download and send audio
@@ -163,53 +128,36 @@ async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = nul
         const data = await getYoutubeMp3(ytUrl);
         
         console.log(`[PLAY] Downloading from: ${data.source}`);
+        console.log(`[PLAY] Audio URL: ${data.download}`);
+        console.log(`[PLAY] Quality: ${data.quality}, Duration: ${data.duration}`);
         
-        // Get thumbnail image buffer (use videoInfo thumbnail or API thumbnail)
-        let thumbnailBuffer = null;
-        let title = data.title || videoInfo?.title || 'Audio';
-        let channel = data.channel || videoInfo?.author?.name || 'Mickey Glitch';
+        // Use title from API or from search
+        const title = data.title || videoInfo?.title || 'Audio';
+        const duration = data.duration || videoInfo?.timestamp || 'Unknown';
+        const author = videoInfo?.author?.name || 'YouTube';
         
-        // Try to get thumbnail from videoInfo first
-        if (videoInfo?.thumbnail) {
-            thumbnailBuffer = await getImageBuffer(videoInfo.thumbnail);
-        } else if (data.thumbnail) {
-            thumbnailBuffer = await getImageBuffer(data.thumbnail);
+        // Parse duration string (e.g., "3:33") to seconds
+        let durationSeconds = 180; // default 3 minutes
+        if (duration !== 'Unknown') {
+            const parts = duration.split(':');
+            if (parts.length === 2) {
+                durationSeconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+            } else if (parts.length === 3) {
+                durationSeconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+            }
         }
         
-        // Prepare audio message with proper mimetype
+        // Send audio with proper configuration for WhatsApp
         const audioMessage = {
             audio: { url: data.download },
             mimetype: 'audio/mpeg',
             ptt: false,
+            seconds: durationSeconds,
+            caption: `🎵 *${title}*\n⏱️ ${duration} | 👤 ${author} | 📀 ${data.quality}`,
             fileName: `${title}.mp3`
         };
         
-        // Add thumbnail as externalAdReply (this shows thumbnail on WhatsApp)
-        if (thumbnailBuffer) {
-            audioMessage.contextInfo = {
-                externalAdReply: {
-                    title: title.length > 50 ? title.substring(0, 47) + '...' : title,
-                    body: channel,
-                    thumbnail: thumbnailBuffer,
-                    mediaType: 2, // Audio
-                    mediaUrl: data.download,
-                    sourceUrl: ytUrl,
-                    renderLargerThumbnail: true
-                }
-            };
-        } else {
-            // Fallback without thumbnail but with basic info
-            audioMessage.contextInfo = {
-                externalAdReply: {
-                    title: title.length > 50 ? title.substring(0, 47) + '...' : title,
-                    body: channel,
-                    mediaType: 2,
-                    renderLargerThumbnail: false
-                }
-            };
-        }
-        
-        // Send audio with thumbnail
+        // Send audio
         await sock.sendMessage(chatId, audioMessage, { quoted: message });
         
         // Success reaction
@@ -220,8 +168,8 @@ async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = nul
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
         
         let errorMsg = "❌ *Download imefeli:* ";
-        if (e.message.includes('No working API')) {
-            errorMsg += "Hakuna API inayofanya kazi kwa sasa. Jaribu tena baadae.";
+        if (e.message.includes('PrinceTech API failed')) {
+            errorMsg += "API haifanyi kazi kwa sasa. Jaribu tena baadae.";
         } else if (e.message.includes('timeout')) {
             errorMsg += "Muda umekwisha. Jaribu tena.";
         } else {
@@ -232,10 +180,10 @@ async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = nul
     }
 }
 
-// Function to test APIs directly
-async function testApis() {
-    const testUrl = 'https://youtu.be/KW20_0cqtAI';
-    console.log('Testing APIs with:', testUrl);
+// Function to test API directly
+async function testApi() {
+    const testUrl = 'https://youtu.be/60ItHLz5WEA';
+    console.log('Testing PrinceTech API with:', testUrl);
     
     try {
         const result = await getYoutubeMp3(testUrl);
@@ -250,4 +198,4 @@ async function testApis() {
 module.exports = playCommand;
 module.exports.handleAudioDownload = handleAudioDownload;
 module.exports.getYoutubeMp3 = getYoutubeMp3;
-module.exports.testApis = testApis;
+module.exports.testApi = testApi;
