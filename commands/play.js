@@ -1,5 +1,14 @@
 const axios = require('axios');
 const yts = require('yt-search');
+const { toAudio } = require('./lib/converter');  // ← Path sahihi sasa
+const fs = require('fs');
+const path = require('path');
+
+// Create temp directory if it doesn't exist
+const tempDir = path.join(__dirname, 'temp');
+if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+}
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -28,8 +37,8 @@ async function tryRequest(getter, attempts = 3) {
     throw lastErr;
 }
 
-// Get best audio format from YouTube using Nayan API (PRIORITY)
-async function getYoutubeMp3FromNayan(ytUrl) {
+// Download video from Nayan AllDown API and convert to audio
+async function getYoutubeAudioFromNayan(ytUrl) {
     // Extract video ID from YouTube URL
     let videoId = '';
     if (ytUrl.includes('youtu.be/')) {
@@ -43,152 +52,93 @@ async function getYoutubeMp3FromNayan(ytUrl) {
         throw new Error('Invalid YouTube URL');
     }
 
-    // Nayan API (from your JSON)
-    const apiUrl = `https://nayan-video-downloader.vercel.app/youtube?url=https://youtu.be/${videoId}`;
+    // Nayan AllDown API
+    const apiUrl = `https://nayan-video-downloader.vercel.app/alldown?url=https://youtu.be/${videoId}`;
 
     try {
-        console.log(`[PLAY] Trying Nayan API (Primary): ${apiUrl}`);
+        console.log(`[PLAY] Trying Nayan AllDown API: ${apiUrl}`);
         const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
 
-        if (res.data?.status === true && res.data?.data?.data?.formats) {
-            const formats = res.data.data.data.formats;
-            const videoTitle = res.data.data.data.title;
-            const thumbnail = res.data.data.data.thumbnail;
-            const author = res.data.data.data.author;
+        if (res.data?.status === true && res.data?.data) {
+            const videoData = res.data.data;
+            const title = videoData.title;
+            const thumbnail = videoData.thumbnail;
             
-            // Priotize audio formats (opus or m4a)
-            let bestAudio = null;
-            let bestQuality = 0;
+            // Get best quality video URL (high quality preferred)
+            let videoUrl = videoData.high || videoData.low;
             
-            // Audio quality priority: opus (251 > 249) then m4a (140 > 139)
-            const audioPriority = {
-                '251': 100, // opus best
-                '250': 90,  // opus medium
-                '249': 85,  // opus low
-                '140': 80,  // m4a medium
-                '139': 70   // m4a low
+            if (!videoUrl) {
+                throw new Error('No video URL found in API response');
+            }
+
+            console.log(`[PLAY] Downloading video: ${title}`);
+            console.log(`[PLAY] Video URL: ${videoUrl}`);
+            
+            // Download video as buffer
+            const videoResponse = await tryRequest(() => axios.get(videoUrl, {
+                ...AXIOS_DEFAULTS,
+                responseType: 'arraybuffer'
+            }));
+            
+            const videoBuffer = Buffer.from(videoResponse.data);
+            console.log(`[PLAY] Video downloaded: ${videoBuffer.length} bytes`);
+            
+            // Convert video to audio using ffmpeg
+            console.log(`[PLAY] Converting video to audio...`);
+            const audioBuffer = await toAudio(videoBuffer, 'mp4');
+            
+            console.log(`[PLAY] Conversion complete: ${audioBuffer.length} bytes`);
+            
+            // Calculate duration (approximate from file size, or we can try to get from ffprobe)
+            let durationSeconds = 180; // default 3 minutes
+            
+            // Try to get duration using ffprobe if available
+            try {
+                const { exec } = require('child_process');
+                const tempFile = path.join(tempDir, `${Date.now()}.mp3`);
+                await fs.promises.writeFile(tempFile, audioBuffer);
+                
+                const durationCmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${tempFile}"`;
+                const durationResult = await new Promise((resolve, reject) => {
+                    exec(durationCmd, (error, stdout, stderr) => {
+                        if (error) reject(error);
+                        else resolve(stdout.trim());
+                    });
+                });
+                
+                if (durationResult && !isNaN(parseFloat(durationResult))) {
+                    durationSeconds = Math.round(parseFloat(durationResult));
+                }
+                
+                await fs.promises.unlink(tempFile).catch(() => {});
+            } catch (err) {
+                console.log(`[PLAY] Could not get duration: ${err.message}`);
+            }
+            
+            return {
+                buffer: audioBuffer,
+                title: title,
+                duration: durationSeconds,
+                quality: '128kbps MP3',
+                thumbnail: thumbnail,
+                source: 'Nayan AllDown (Video to Audio)',
+                mimeType: 'audio/mpeg'
             };
-            
-            for (const format of formats) {
-                if (format.type === 'audio' || (format.mimeType && format.mimeType.includes('audio'))) {
-                    // Check mimeType explicitly
-                    if (format.mimeType && (
-                        format.mimeType.includes('audio/mp4') || 
-                        format.mimeType.includes('audio/webm') ||
-                        format.mimeType.includes('opus')
-                    )) {
-                        const priority = audioPriority[format.formatId] || 50;
-                        if (priority > bestQuality) {
-                            bestQuality = priority;
-                            bestAudio = format;
-                        }
-                    }
-                }
-            }
-            
-            // Also check for video_with_audio formats if no pure audio found
-            if (!bestAudio) {
-                for (const format of formats) {
-                    if (format.type === 'video_with_audio' && format.mimeType && format.mimeType.includes('mp4')) {
-                        if (bestQuality < 60) {
-                            bestQuality = 60;
-                            bestAudio = format;
-                        }
-                    }
-                }
-            }
-            
-            if (bestAudio && bestAudio.url) {
-                const quality = bestAudio.quality || bestAudio.label || 'audio';
-                const bitrate = bestAudio.bitrate ? `${Math.round(bestAudio.bitrate / 1000)}kbps` : 'Unknown';
-                const mimeType = bestAudio.mimeType || 'audio/mpeg';
-                
-                console.log(`[PLAY] Nayan API success: ${videoTitle}`);
-                console.log(`[PLAY] Selected audio format: ${quality} (${bitrate}) - ${mimeType}`);
-                
-                return {
-                    download: bestAudio.url,
-                    title: videoTitle,
-                    duration: bestAudio.duration || res.data.data.data.duration || 'Unknown',
-                    quality: quality,
-                    bitrate: bitrate,
-                    thumbnail: thumbnail,
-                    author: author,
-                    mimeType: mimeType,
-                    source: 'NayanAPI'
-                };
-            } else {
-                throw new Error('No audio format found in Nayan API response');
-            }
         } else {
-            throw new Error('Invalid response from Nayan API');
+            throw new Error('Invalid response from Nayan AllDown API');
         }
     } catch (err) {
-        console.log(`[PLAY] Nayan API failed: ${err.message}`);
+        console.log(`[PLAY] Nayan AllDown API failed: ${err.message}`);
         throw err;
     }
 }
 
-// Fallback to PrinceTech API if Nayan fails
-async function getYoutubeMp3FromPrinceTech(ytUrl) {
-    // Extract video ID from YouTube URL
-    let videoId = '';
-    if (ytUrl.includes('youtu.be/')) {
-        videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
-    } else if (ytUrl.includes('youtube.com/watch')) {
-        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
-        videoId = urlParams.get('v');
-    }
-
-    if (!videoId) {
-        throw new Error('Invalid YouTube URL');
-    }
-
-    // PrinceTech API - FALLBACK
-    const apiUrl = `https://api.princetechn.com/api/download/yta?apikey=prince&url=https://youtu.be/${videoId}`;
-
-    try {
-        console.log(`[PLAY] Trying PrinceTech API (Fallback): ${apiUrl}`);
-        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-
-        if (res.data?.success === true && res.data?.result?.download_url) {
-            const audioUrl = res.data.result.download_url;
-            const title = res.data.result.title;
-            const duration = res.data.result.duration;
-            const quality = res.data.result.quality;
-            const thumbnail = res.data.result.thumbnail;
-
-            console.log(`[PLAY] PrinceTech API success: ${title} (${quality})`);
-            return {
-                download: audioUrl,
-                title: title,
-                duration: duration,
-                quality: quality,
-                thumbnail: thumbnail,
-                source: 'PrinceTech'
-            };
-        } else {
-            throw new Error('Invalid response from PrinceTech API');
-        }
-    } catch (err) {
-        console.log(`[PLAY] PrinceTech API failed: ${err.message}`);
-        throw new Error('All download APIs failed');
-    }
-}
-
-// Main function with priority: Nayan API first, then PrinceTech
+// Main function - only uses Nayan AllDown API
 async function getYoutubeMp3(ytUrl) {
     try {
-        // Try Nayan API first (from your JSON)
-        return await getYoutubeMp3FromNayan(ytUrl);
-    } catch (nayanError) {
-        console.log(`[PLAY] Nayan API failed, trying fallback...`);
-        // Fallback to PrinceTech API
-        try {
-            return await getYoutubeMp3FromPrinceTech(ytUrl);
-        } catch (princeError) {
-            throw new Error('No working API available');
-        }
+        return await getYoutubeAudioFromNayan(ytUrl);
+    } catch (error) {
+        throw new Error(`Failed to get audio: ${error.message}`);
     }
 }
 
@@ -222,10 +172,10 @@ async function playCommand(sock, chatId, message) {
             videoUrl = videoInfo.url;
 
             // Send short info message
-            const infoMsg = `🎵 *${videoInfo.title}*\n⏱️ *${videoInfo.timestamp}* | 👤 ${videoInfo.author.name}\n👁️ ${videoInfo.views?.toLocaleString() || 'N/A'} views\n\n📥 *Inapakua wimbo...*`;
+            const infoMsg = `🎵 *${videoInfo.title}*\n⏱️ *${videoInfo.timestamp}* | 👤 ${videoInfo.author.name}\n👁️ ${videoInfo.views?.toLocaleString() || 'N/A'} views\n\n📥 *Inapakua na kubadilisha video kuwa audio...*`;
             await sock.sendMessage(chatId, { text: infoMsg }, { quoted: message });
         } else {
-            await sock.sendMessage(chatId, { text: `📥 *Inapakua wimbo kutoka link yako...*` }, { quoted: message });
+            await sock.sendMessage(chatId, { text: `📥 *Inapakua video na kubadilisha kuwa audio kutoka link yako...*` }, { quoted: message });
         }
 
         // Download and send audio
@@ -242,52 +192,41 @@ async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = nul
     try {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
+        // Show processing message
+        const processMsg = await sock.sendMessage(chatId, { 
+            text: '🔄 *Inashughulikia...*\n📥 Kupakua video\n🎵 Kubadilisha kuwa audio\n⏳ Tafadhali subiri...' 
+        });
+
         const data = await getYoutubeMp3(ytUrl);
 
-        console.log(`[PLAY] Downloading from: ${data.source}`);
-        console.log(`[PLAY] Audio URL: ${data.download}`);
-        console.log(`[PLAY] Quality: ${data.quality}, Duration: ${data.duration}`);
-        console.log(`[PLAY] MimeType: ${data.mimeType || 'audio/mpeg'}`);
+        console.log(`[PLAY] Source: ${data.source}`);
+        console.log(`[PLAY] Audio buffer size: ${data.buffer.length} bytes`);
+        console.log(`[PLAY] Quality: ${data.quality}, Duration: ${data.duration}s`);
 
         // Use title from API or from search
         const title = data.title || videoInfo?.title || 'Audio';
-        const duration = data.duration || videoInfo?.timestamp || 'Unknown';
-        const author = data.author || videoInfo?.author?.name || 'YouTube';
-        const qualityText = data.bitrate ? `${data.quality} (${data.bitrate})` : data.quality;
+        const author = videoInfo?.author?.name || 'YouTube';
 
-        // Parse duration string (e.g., "3:33") to seconds
-        let durationSeconds = 180; // default 3 minutes
-        if (duration !== 'Unknown') {
-            const parts = duration.toString().split(':');
-            if (parts.length === 2) {
-                durationSeconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-            } else if (parts.length === 3) {
-                durationSeconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
-            }
-        }
-
-        // Determine mimetype based on format
-        let mimeType = 'audio/mpeg'; // default
-        if (data.mimeType) {
-            mimeType = data.mimeType.split(';')[0]; // Remove codecs part
-        } else if (data.download.includes('.opus')) {
-            mimeType = 'audio/opus';
-        } else if (data.download.includes('.m4a')) {
-            mimeType = 'audio/mp4';
-        }
+        // Format duration for display
+        const minutes = Math.floor(data.duration / 60);
+        const seconds = data.duration % 60;
+        const durationDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
         // Send audio with proper configuration for WhatsApp
         const audioMessage = {
-            audio: { url: data.download },
-            mimetype: mimeType,
+            audio: data.buffer,
+            mimetype: 'audio/mpeg',
             ptt: false,
-            seconds: durationSeconds,
-            caption: `🎵 *${title}*\n⏱️ ${duration} | 👤 ${author} | 📀 ${qualityText}\n📡 ${data.source}`,
-            fileName: `${title}.${mimeType.includes('opus') ? 'opus' : (mimeType.includes('mp4') ? 'm4a' : 'mp3')}`
+            seconds: data.duration,
+            caption: `🎵 *${title}*\n⏱️ ${durationDisplay} | 👤 ${author} | 📀 ${data.quality}\n📡 ${data.source}`,
+            fileName: `${title.substring(0, 50)}.mp3`
         };
 
         // Send audio
         await sock.sendMessage(chatId, audioMessage, { quoted: message });
+
+        // Delete processing message
+        await sock.sendMessage(chatId, { delete: processMsg.key });
 
         // Success reaction
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
@@ -297,37 +236,36 @@ async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = nul
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
 
         let errorMsg = "❌ *Download imefeli:* ";
-        if (e.message.includes('Nayan API failed')) {
-            errorMsg += "API ya Nayan haifanyi kazi. Jaribu tena baadae.";
-        } else if (e.message.includes('PrinceTech API failed')) {
+        if (e.message.includes('Nayan AllDown API failed')) {
             errorMsg += "API haifanyi kazi kwa sasa. Jaribu tena baadae.";
         } else if (e.message.includes('timeout')) {
             errorMsg += "Muda umekwisha. Jaribu tena.";
+        } else if (e.message.includes('ffmpeg')) {
+            errorMsg += "Hitilafu katika kubadilisha video kuwa audio. Hakikisha ffmpeg imesakinishwa.";
         } else {
             errorMsg += e.message || 'Jaribu tena baadae';
         }
 
-        await sock.sendMessage(chatId, { text: errorMsg }, { quoted: message });
+        await sock.sendMessage(chatId, { text: errorMsg });
     }
 }
 
-// Function to test Nayan API directly
+// Function to test Nayan AllDown API
 async function testNayanApi() {
     const testUrl = 'https://youtu.be/AhLaR-s8QMg';
-    console.log('Testing Nayan API with:', testUrl);
+    console.log('Testing Nayan AllDown API with:', testUrl);
 
     try {
-        const result = await getYoutubeMp3FromNayan(testUrl);
-        console.log('✅ Nayan API Test Successful:', result);
-        console.log('Audio Format Details:', {
-            quality: result.quality,
-            bitrate: result.bitrate,
-            mimeType: result.mimeType,
-            source: result.source
-        });
+        const result = await getYoutubeAudioFromNayan(testUrl);
+        console.log('✅ Nayan AllDown API Test Successful:');
+        console.log('Title:', result.title);
+        console.log('Duration:', result.duration, 'seconds');
+        console.log('Quality:', result.quality);
+        console.log('Buffer size:', result.buffer.length, 'bytes');
+        console.log('Source:', result.source);
         return result;
     } catch (err) {
-        console.error('❌ Nayan API Test Failed:', err.message);
+        console.error('❌ Nayan AllDown API Test Failed:', err.message);
         return null;
     }
 }
@@ -335,6 +273,5 @@ async function testNayanApi() {
 module.exports = playCommand;
 module.exports.handleAudioDownload = handleAudioDownload;
 module.exports.getYoutubeMp3 = getYoutubeMp3;
-module.exports.getYoutubeMp3FromNayan = getYoutubeMp3FromNayan;
-module.exports.getYoutubeMp3FromPrinceTech = getYoutubeMp3FromPrinceTech;
+module.exports.getYoutubeAudioFromNayan = getYoutubeAudioFromNayan;
 module.exports.testNayanApi = testNayanApi;
