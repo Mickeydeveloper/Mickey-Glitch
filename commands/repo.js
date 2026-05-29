@@ -3,7 +3,6 @@ const { sendInteractiveMessage } = require('gifted-btns');
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
-const axios = require('axios');
 
 const CONFIG = {
     FOOTER: '🌟 MICKEY GLITCH BOT • 2026 🌟',
@@ -32,30 +31,36 @@ async function createProjectZip() {
             archive.on('error', reject);
             archive.pipe(output);
             
-            // Add project files (exclude node_modules, temp, etc)
+            // Add project files
             const projectDir = path.join(__dirname, '..');
-            const excludeDirs = ['node_modules', 'temp', '.git', 'sessions', 'cache', 'logs'];
+            const excludeDirs = ['node_modules', 'temp', '.git', 'sessions', 'cache', 'logs', 'uploads'];
             
-            function addFiles(dirPath, archivePath = '') {
-                const items = fs.readdirSync(dirPath);
-                
-                for (const item of items) {
-                    const fullPath = path.join(dirPath, item);
-                    const stat = fs.statSync(fullPath);
-                    const relativePath = archivePath ? path.join(archivePath, item) : item;
+            function addDirectory(dirPath, archivePath = '') {
+                try {
+                    const items = fs.readdirSync(dirPath);
                     
-                    if (excludeDirs.includes(item) || item.startsWith('.')) continue;
-                    
-                    if (stat.isDirectory()) {
-                        archive.directory(fullPath, relativePath);
-                        addFiles(fullPath, relativePath);
-                    } else {
-                        archive.file(fullPath, { name: relativePath });
+                    for (const item of items) {
+                        const fullPath = path.join(dirPath, item);
+                        const stat = fs.statSync(fullPath);
+                        const relativePath = archivePath ? path.join(archivePath, item) : item;
+                        
+                        if (excludeDirs.includes(item) || item.startsWith('.')) continue;
+                        
+                        if (stat.isDirectory()) {
+                            try {
+                                archive.directory(fullPath, relativePath);
+                                addDirectory(fullPath, relativePath);
+                            } catch(e) {}
+                        } else {
+                            try {
+                                archive.file(fullPath, { name: relativePath });
+                            } catch(e) {}
+                        }
                     }
-                }
+                } catch(e) {}
             }
             
-            addFiles(projectDir);
+            addDirectory(projectDir);
             await archive.finalize();
             
         } catch (error) {
@@ -66,21 +71,29 @@ async function createProjectZip() {
 
 async function repoCommand(sock, chatId, m, body = '') {
     try {
-        // TAMBUA INPUT (Inasoma text au majibu ya buttons)
+        // SAFE CHECK - Prevent undefined errors
+        const safeM = m || {};
+        const safeKey = safeM.key || {};
+        
+        // TAMBUA INPUT
         let input = (
-            m.message?.conversation || 
-            m.message?.extendedTextMessage?.text || 
-            m.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
-            m.message?.buttonsResponseMessage?.selectedButtonId ||
+            safeM.message?.conversation || 
+            safeM.message?.extendedTextMessage?.text || 
+            safeM.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+            safeM.message?.buttonsResponseMessage?.selectedButtonId ||
             body || ''
         ).toLowerCase().trim();
 
+        console.log('📝 Repo Command Input:', input); // Debug
+
         // 1. HANDLE DOWNLOAD ZIP BUTTON
         if (input === 'download_zip' || input === '.download_zip') {
-            await sock.sendMessage(chatId, { react: { text: '📦', key: m.key } });
+            try {
+                await sock.sendMessage(chatId, { react: { text: '📦', key: safeKey } });
+            } catch(e) {}
             
             const processingMsg = await sock.sendMessage(chatId, {
-                text: '📦 *CREATING ZIP FILE...*\n\nPlease wait while I package the bot files...\n⏳ Compressing...'
+                text: '📦 *CREATING ZIP FILE...*\n\nPlease wait while I package the bot files...\n⏳ This may take 10-20 seconds...'
             });
             
             try {
@@ -92,8 +105,8 @@ async function repoCommand(sock, chatId, m, body = '') {
                     document: zipBuffer,
                     mimetype: 'application/zip',
                     fileName: zipInfo.name,
-                    caption: `✅ *ZIP FILE READY!*\n\n📦 *File:* ${zipInfo.name}\n💾 *Size:* ${fileSizeMB} MB\n📁 *Files:* Bot source code\n\n🔧 *Install:*\n1. Extract zip\n2. Run \`npm install\`\n3. Configure \`settings.js\`\n4. Run \`node index.js\``
-                }, { quoted: m });
+                    caption: `✅ *ZIP FILE READY!*\n\n📦 *File:* ${zipInfo.name}\n💾 *Size:* ${fileSizeMB} MB\n📁 *Files:* Complete bot source code\n\n🔧 *Installation:*\n1. Extract the zip file\n2. Run \`npm install\`\n3. Configure \`settings.js\`\n4. Run \`npm start\`\n\n🌟 *MICKEY GLITCH BOT v3.3*`
+                }, { quoted: safeM });
                 
                 // Cleanup
                 setTimeout(() => {
@@ -105,8 +118,7 @@ async function repoCommand(sock, chatId, m, body = '') {
             } catch (error) {
                 console.error('Zip error:', error);
                 await sock.sendMessage(chatId, {
-                    text: `❌ *FAILED TO CREATE ZIP!*\n\nError: ${error.message}\n\n📌 *Alternative:*\nClone from: ${CONFIG.REPO_URL}`,
-                    react: { text: '❌', key: m.key }
+                    text: `❌ *FAILED TO CREATE ZIP!*\n\nError: ${error.message}\n\n📌 *Alternative:*\nClone from: ${CONFIG.REPO_URL}\n\nOr contact owner for direct access.`
                 });
             }
             return;
@@ -115,15 +127,16 @@ async function repoCommand(sock, chatId, m, body = '') {
         // 2. HANDLE VIEW REPO BUTTON
         if (input === 'view_repo' || input === '.view_repo') {
             await sock.sendMessage(chatId, {
-                text: `📂 *GITHUB REPOSITORY*\n\n🔗 ${CONFIG.REPO_URL}\n\n🌟 Star & Fork the repo to support!\n\n📌 *Commands:*\n• .download_zip - Download source code\n• .repo - Show this menu`,
-                react: { text: '📂', key: m.key }
+                text: `📂 *GITHUB REPOSITORY*\n\n🔗 ${CONFIG.REPO_URL}\n\n🌟 Star & Fork the repo to support!\n\n📌 *Available Commands:*\n• *.repo* - Show this menu\n• *.download_zip* - Download source code\n• *.owner* - Contact owner`
             });
             return;
         }
 
         // 3. MAIN MENU - Ikipigwa ".repo"
         if (input === '.repo') {
-            await sock.sendMessage(chatId, { react: { text: '📂', key: m.key } });
+            try {
+                await sock.sendMessage(chatId, { react: { text: '📂', key: safeKey } });
+            } catch(e) {}
 
             const repoText = `╭━━━━━━━━━━━━━━━━━━╮
 ┃    📂 *REPO MENU* 📂
@@ -132,6 +145,7 @@ async function repoCommand(sock, chatId, m, body = '') {
 ┃ 🤖 *Bot:* MICKEY GLITCH
 ┃ 📦 *Version:* 3.3
 ┃ 📁 *Files:* Complete Source
+┃ 💾 *Size:* ~15-20 MB
 ┃
 ┃ 🔗 *GitHub:* 
 ┃ ${CONFIG.REPO_URL}
@@ -159,14 +173,13 @@ async function repoCommand(sock, chatId, m, body = '') {
                         })
                     }
                 ]
-            }, { quoted: m });
+            }, { quoted: safeM });
         }
 
     } catch (e) {
         console.error("Repo Command Error:", e);
         await sock.sendMessage(chatId, {
-            text: `❌ *Error!*\n\nUse .repo to access repository menu.`,
-            react: { text: '❌', key: m.key }
+            text: `❌ *Repo Command Error!*\n\n${e.message}\n\nUse .repo to access repository menu.`
         });
     }
 }
