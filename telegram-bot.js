@@ -843,4 +843,116 @@ async function handleUpdate(update) {
             const statsText = `📊 *SYSTEM STATS*\n━━━━━━━━━━━━━━━━━━━━━━\n⏱️ *Uptime:* ${hours}h ${minutes}m ${seconds}s\n💾 *RAM:* ${ramUsage} MB\n🖥️ *Server:* ${serverFreeRam}GB / ${totalRam}GB Free\n💻 *Platform:* ${os.platform()} (${os.arch()})\n👥 *Paired Chats:* ${pairedChats}`;
             return sendMsg(chatId, statsText);
 
-        case 'ch
+        case 'chats':
+            if (!isActiveOwner) return sendMsg(chatId, '🚷 Owner only command.');
+            const list = loadAllowedChats();
+            if (!list.length) return sendMsg(chatId, 'ℹ️ No paired chats.');
+            return sendMsg(chatId, `📝 *PAIRED CHATS (${list.length}):*\n\n` + list.map((id, index) => `${index + 1}. ID: \`${id}\``).join('\n'));
+
+        case 'exec':
+            if (!isActiveOwner) return sendMsg(chatId, '🚷 Owner only command!');
+            if (!fullArgs) return sendMsg(chatId, '⚠️ Usage: `/exec ls`');
+            await sendMsg(chatId, `💻 *Running command...*`);
+            try {
+                const { stdout, stderr } = await execAsync(fullArgs, { timeout: 30000 });
+                const output = stdout || stderr || 'No output.';
+                return sendMsg(chatId, `📤 *Output:*\n\`\`\`bash\n${output.substring(0, 3500)}\n\`\`\``);
+            } catch (e) {
+                return sendMsg(chatId, `❌ *Error:*\n\`\`\`bash\n${e.message.substring(0, 500)}\n\`\`\``);
+            }
+
+        case 'update':
+            await handleUpdateCommand(chatId, isActiveOwner, sendMsg);
+            return;
+
+        case 'broadcast':
+            await handleBroadcastCommand(chatId, isActiveOwner, rawText, sendMsg);
+            return;
+
+        case 'play':
+            await handlePlayCommand(chatId, fullArgs, sendMsg);
+            return;
+
+        case 'video':
+            await handleVideoCommand(chatId, fullArgs, sendMsg);
+            return;
+
+        case 'stickertelegram':
+            if (!args.length) return sendMsg(chatId, '⚠️ Usage: `/stickertelegram https://t.me/addstickers/PackName`');
+            const url = args[0].trim();
+            const match = url.match(/(?:https?:\/\/)?t\.me\/addstickers\/(.+)/i);
+            if (!match) return sendMsg(chatId, '❌ Invalid URL.');
+            const packName = match[1];
+            try {
+                const token = settings.telegram?.botToken?.trim();
+                const response = await axios.get(`${TELEGRAM_BASE_URL(token)}/getStickerSet`, { params: { name: packName }, ...AXIOS_DEFAULTS });
+                const stickerSet = response.data.result;
+                const stickers = stickerSet.stickers || [];
+                const text = `📦 *${stickerSet.title}*\n🆔 *Name:* ${stickerSet.name}\n🧩 *Count:* ${stickers.length}\n\n✨ *Mickey Glitch Bot*`;
+                await sendMsg(chatId, text);
+            } catch (error) { 
+                await sendMsg(chatId, '❌ Failed to get sticker pack.'); 
+            }
+            return;
+
+        default:
+            if (rawText.startsWith('/') || rawText.startsWith('.')) {
+                return sendMsg(chatId, `❌ Command '${commandText}' not found.\nUse /menu to see available commands.`);
+            }
+            return;
+    }
+}
+
+// ============================================================
+// 🚀 START TELEGRAM BOT
+// ============================================================
+
+async function startTelegramBot() {
+    const token = settings.telegram?.botToken?.trim();
+    if (!token) { 
+        logError('Telegram botToken not found in settings.js'); 
+        return null;
+    }
+
+    ensureTelegramDataFile();
+    await removeWebhookIfSet(token);
+    
+    logSuccess('Telegram bot starting...');
+    
+    // Start polling
+    let offset = 0;
+    
+    const pollUpdates = async () => {
+        try {
+            const response = await axios.get(`${TELEGRAM_BASE_URL(token)}/getUpdates`, {
+                params: { timeout: 30, offset: offset + 1 },
+                ...AXIOS_DEFAULTS
+            });
+            
+            const updates = response.data.result;
+            for (const update of updates) {
+                await handleUpdate(update);
+                offset = update.update_id;
+            }
+        } catch (err) {
+            logError(`Polling error: ${err.message}`);
+        }
+        
+        setTimeout(pollUpdates, 1000);
+    };
+    
+    pollUpdates();
+    
+    // Notify owner
+    const ownerId = String(settings.telegram?.ownerId || '').trim();
+    if (ownerId) {
+        const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
+        const startMsg = `✅ *MICKEY GLITCH BOT STARTED!*\n\n🟢 *Status:* Online\n💾 *RAM:* ${ramUsage} MB\n📅 *Time:* ${new Date().toLocaleString()}`;
+        await sendTelegramMessage(ownerId, startMsg);
+    }
+    
+    logSuccess('Telegram bot is running!');
+    return { sendMessage: sendTelegramMessage };
+}
+
+module.exports = { startTelegramBot };
