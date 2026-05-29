@@ -1,6 +1,6 @@
 /**
  * TELEGRAM BOT MODULE - MICKEY GLITCH
- * Updated with Full Features & Error Fixes
+ * Fixed Syntax Errors
  */
 
 const fs = require('fs');
@@ -55,16 +55,14 @@ function logInfo(text) { console.log(colors.blue('ℹ️ ' + text)); }
 function logDebug(text) { console.log(colors.cyan('🐛 ' + text)); }
 
 // ============================================================
-// 📱 TELEGRAM MEDIA FUNCTIONS WITH AD PREVIEW
+// 📱 TELEGRAM MEDIA FUNCTIONS
 // ============================================================
 
-// Send audio with ad preview (externalAdReply style)
 async function sendTelegramAudioWithPreview(chatId, audioUrl, title, thumbnailUrl, duration = '', quality = 'MP3 128kbps') {
     const token = settings.telegram?.botToken?.trim();
     if (!token || !chatId) return false;
 
     try {
-        // Create inline keyboard with buttons
         const keyboard = {
             inline_keyboard: [
                 [
@@ -80,7 +78,6 @@ async function sendTelegramAudioWithPreview(chatId, audioUrl, title, thumbnailUr
 
         const caption = `🎵 *${title.substring(0, 60)}*\n${duration ? `⏱️ *Duration:* ${duration}\n` : ''}🎚️ *Quality:* ${quality}\n📡 *Source:* Nayan API\n\n⚡ *Mickey Glitch Bot*`;
 
-        // Send photo as preview
         await axios.post(`${TELEGRAM_BASE_URL(token)}/sendPhoto`, {
             chat_id: String(chatId),
             photo: thumbnailUrl,
@@ -92,12 +89,10 @@ async function sendTelegramAudioWithPreview(chatId, audioUrl, title, thumbnailUr
         return true;
     } catch (error) {
         logError(`[AUDIO PREVIEW] ${error.message}`);
-        // Fallback: send audio only
         return await sendTelegramMedia(chatId, 'audio', audioUrl, `🎵 ${title}`);
     }
 }
 
-// Send video with ad preview
 async function sendTelegramVideoWithPreview(chatId, videoUrl, title, thumbnailUrl, duration = '', quality = 'HD') {
     const token = settings.telegram?.botToken?.trim();
     if (!token || !chatId) return false;
@@ -126,7 +121,6 @@ async function sendTelegramVideoWithPreview(chatId, videoUrl, title, thumbnailUr
             reply_markup: keyboard
         }, AXIOS_DEFAULTS);
 
-        // Send video file
         await axios.post(`${TELEGRAM_BASE_URL(token)}/sendVideo`, {
             chat_id: String(chatId),
             video: videoUrl,
@@ -142,14 +136,13 @@ async function sendTelegramVideoWithPreview(chatId, videoUrl, title, thumbnailUr
     }
 }
 
-// Basic send functions
 async function sendTelegramMessage(chatId, text, extra = {}) {
     const token = settings.telegram?.botToken?.trim();
     if (!token || !chatId) return false;
     try {
         await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
             chat_id: String(chatId),
-            text,
+            text: text,
             disable_web_page_preview: true,
             parse_mode: 'Markdown',
             ...extra
@@ -198,7 +191,7 @@ async function sendTelegramMedia(chatId, type, url, caption = '') {
 }
 
 // ============================================================
-// 🎵 YOUTUBE API FUNCTIONS (NAYAN ONLY)
+// 🎵 YOUTUBE API FUNCTIONS
 // ============================================================
 
 async function tryRequest(getter, attempts = 2) {
@@ -214,7 +207,6 @@ async function tryRequest(getter, attempts = 2) {
     throw lastErr;
 }
 
-// Extract video ID from YouTube URL
 function extractVideoId(ytUrl) {
     let videoId = '';
     if (ytUrl.includes('youtu.be/')) {
@@ -228,12 +220,10 @@ function extractVideoId(ytUrl) {
     return videoId;
 }
 
-// Get audio from Nayan APIs
 async function getYoutubeMp3(ytUrl) {
     const videoId = extractVideoId(ytUrl);
     if (!videoId) throw new Error('Invalid YouTube URL');
 
-    // Try Nayan YouTube API first
     try {
         const apiUrl = `https://nayan-video-downloader.vercel.app/youtube?url=https://youtu.be/${videoId}`;
         const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
@@ -271,7 +261,6 @@ async function getYoutubeMp3(ytUrl) {
         logDebug(`YouTube API audio failed: ${err.message}`);
     }
 
-    // Fallback to Nayan AllDown API
     try {
         const apiUrl = `https://nayan-video-downloader.vercel.app/alldown?url=https://youtu.be/${videoId}`;
         const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
@@ -296,12 +285,10 @@ async function getYoutubeMp3(ytUrl) {
     throw new Error('All audio APIs failed');
 }
 
-// Get video from Nayan APIs
 async function getYoutubeMp4(ytUrl) {
     const videoId = extractVideoId(ytUrl);
     if (!videoId) throw new Error('Invalid YouTube URL');
 
-    // Try Nayan AllDown API first
     try {
         const apiUrl = `https://nayan-video-downloader.vercel.app/alldown?url=https://youtu.be/${videoId}`;
         const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
@@ -323,7 +310,6 @@ async function getYoutubeMp4(ytUrl) {
         logDebug(`AllDown video failed: ${err.message}`);
     }
 
-    // Fallback to Nayan YouTube API
     try {
         const apiUrl = `https://nayan-video-downloader.vercel.app/youtube?url=https://youtu.be/${videoId}`;
         const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
@@ -374,7 +360,7 @@ async function getYoutubeMp4(ytUrl) {
 
 async function generatePairingCode(phoneNumber) {
     try {
-        const { version, isLatest } = await fetchLatestBaileysVersion();
+        const { version } = await fetchLatestBaileysVersion();
         const { state, saveCreds } = await useMultiFileAuthState(`./pairing-${phoneNumber}`);
 
         const sock = makeWASocket({
@@ -543,35 +529,30 @@ async function removeWebhookIfSet(token) {
 // ============================================================
 
 function formatHelpText() {
-    return `┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃      *MICKEY GLITCH BOT*        ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-🛡️ *PAIRING SYSTEM*
-┣ /pair <number> ➔ Connect WhatsApp
-┣ /unpair ➔ Disconnect this chat
-┗ /check ➔ Check pairing status
-
-🤖 *CORE COMMANDS*
-┣ /menu, /help ➔ Show all commands
-┣ /ping ➔ Check bot status
-┣ /alive ➔ System health
-┣ /owner ➔ Developer info
-┣ /stats ➔ RAM, CPU, Uptime
-
-🎵 *MEDIA & DOWNLOADS*
-┣ /play <song> ➔ Download Audio (YT)
-┣ /video <query> ➔ Download Video (YT)
-┣ /shazam ➔ Identify song (reply to audio)
-┗ /stickertelegram <link> ➔ Sticker info
-
-👑 *OWNER COMMANDS*
-┣ /chats ➔ Paired groups list
-┣ /update ➔ Update from GitHub
-┣ /exec <cmd> ➔ Run terminal command
-┗ /broadcast <msg> ➔ Send to all chats
-
-⏳ *Powered by Mickey Developer*`;
+    return "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n" +
+           "┃      *MICKEY GLITCH BOT*        ┃\n" +
+           "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n\n" +
+           "🛡️ *PAIRING SYSTEM*\n" +
+           "┣ /pair <number> ➔ Connect WhatsApp\n" +
+           "┣ /unpair ➔ Disconnect this chat\n" +
+           "┗ /check ➔ Check pairing status\n\n" +
+           "🤖 *CORE COMMANDS*\n" +
+           "┣ /menu, /help ➔ Show all commands\n" +
+           "┣ /ping ➔ Check bot status\n" +
+           "┣ /alive ➔ System health\n" +
+           "┣ /owner ➔ Developer info\n" +
+           "┣ /stats ➔ RAM, CPU, Uptime\n\n" +
+           "🎵 *MEDIA & DOWNLOADS*\n" +
+           "┣ /play <song> ➔ Download Audio (YT)\n" +
+           "┣ /video <query> ➔ Download Video (YT)\n" +
+           "┣ /shazam ➔ Identify song (reply to audio)\n" +
+           "┗ /stickertelegram <link> ➔ Sticker info\n\n" +
+           "👑 *OWNER COMMANDS*\n" +
+           "┣ /chats ➔ Paired groups list\n" +
+           "┣ /update ➔ Update from GitHub\n" +
+           "┣ /exec <cmd> ➔ Run terminal command\n" +
+           "┗ /broadcast <msg> ➔ Send to all chats\n\n" +
+           "⏳ *Powered by Mickey Developer*";
 }
 
 // ============================================================
@@ -674,7 +655,6 @@ async function handleShazamCommand(chatId, repliedMessage, sendMessage) {
 
         const result = await acr.identify(fs.readFileSync(tempAudio));
 
-        // Cleanup temp files
         if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
         if (fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
 
@@ -711,7 +691,7 @@ async function handleUpdateCommand(chatId, isActiveOwner, sendMessage) {
             setTimeout(() => { process.exit(0); }, 2000);
         } else { throw new Error(); }
     } catch (error) { 
-        await sendMessage(chatId, `❌ *Update failed.*`); 
+        await sendMessage(chatId, '❌ *Update failed.*'); 
     }
 }
 
@@ -737,7 +717,6 @@ async function handleBroadcastCommand(chatId, isActiveOwner, message, sendMessag
 // ============================================================
 
 async function handleUpdate(update) {
-    // Handle callback queries
     if (update.callback_query) {
         const callback = update.callback_query;
         const chatId = callback.message.chat.id;
@@ -748,7 +727,6 @@ async function handleUpdate(update) {
             await handlePlayCommand(chatId, trackTitle, (id, msg) => sendTelegramMessage(id, msg));
         }
         
-        // Answer callback
         const token = settings.telegram?.botToken?.trim();
         if (token) {
             try {
@@ -769,7 +747,6 @@ async function handleUpdate(update) {
 
     const sendMsg = async (id, txt, extra = {}) => sendTelegramMessage(id, txt, extra);
 
-    // Handle Shazam (reply to media)
     if (rawText.toLowerCase() === '/shazam' || rawText.toLowerCase() === '.shazam') {
         if (message.reply_to_message) { 
             await handleShazamCommand(chatId, message.reply_to_message, sendMsg); 
@@ -779,7 +756,6 @@ async function handleUpdate(update) {
         return;
     }
 
-    // Handle commands that don't need auth
     if (!rawText.startsWith('/') && !rawText.startsWith('.')) return;
 
     const cleanText = rawText.substring(1);
@@ -791,7 +767,6 @@ async function handleUpdate(update) {
     const allowed = isTelegramAuthorized(chatId);
     const isActiveOwner = isOwnerChat(chatId);
 
-    // Public commands (no auth needed)
     if (commandText === 'start' || commandText === 'menu' || commandText === 'help') {
         await sendMsg(chatId, formatHelpText());
         return;
@@ -815,7 +790,6 @@ async function handleUpdate(update) {
         return sendMsg(chatId, `👑 *Owner:* ${settings.botOwner || 'Mickey Developer'}\n📱 *WhatsApp:* wa.me/${settings.ownerNumber || '255612130873'}\n📢 *Channel:* t.me/mickeyglitch`);
     }
 
-    // Commands that need auth
     if (!allowed) {
         return sendMsg(chatId, '⚠️ *Chat not paired!*\n\nPlease use `/pair <number>` to connect your WhatsApp.');
     }
@@ -919,7 +893,6 @@ async function startTelegramBot() {
     
     logSuccess('Telegram bot starting...');
     
-    // Start polling
     let offset = 0;
     
     const pollUpdates = async () => {
@@ -943,11 +916,10 @@ async function startTelegramBot() {
     
     pollUpdates();
     
-    // Notify owner
     const ownerId = String(settings.telegram?.ownerId || '').trim();
     if (ownerId) {
         const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-        const startMsg = `✅ *MICKEY GLITCH BOT STARTED!*\n\n🟢 *Status:* Online\n💾 *RAM:* ${ramUsage} MB\n📅 *Time:* ${new Date().toLocaleString()}`;
+        const startMsg = "✅ *MICKEY GLITCH BOT STARTED!*\n\n🟢 *Status:* Online\n💾 *RAM:* " + ramUsage + " MB\n📅 *Time:* " + new Date().toLocaleString();
         await sendTelegramMessage(ownerId, startMsg);
     }
     
