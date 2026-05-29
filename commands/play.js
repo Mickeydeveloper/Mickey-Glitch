@@ -1,14 +1,8 @@
 const axios = require('axios');
 const yts = require('yt-search');
-const { toAudio } = require('./lib/converter');  // ← Path sahihi sasa
+const { toAudio } = require('./lib/converter');  // ← Converter mpya
 const fs = require('fs');
 const path = require('path');
-
-// Create temp directory if it doesn't exist
-const tempDir = path.join(__dirname, 'temp');
-if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-}
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -83,45 +77,27 @@ async function getYoutubeAudioFromNayan(ytUrl) {
             const videoBuffer = Buffer.from(videoResponse.data);
             console.log(`[PLAY] Video downloaded: ${videoBuffer.length} bytes`);
             
-            // Convert video to audio using ffmpeg
-            console.log(`[PLAY] Converting video to audio...`);
+            // Convert video to audio using FFmpeg.wasm
+            console.log(`[PLAY] Converting video to audio using FFmpeg.wasm...`);
             const audioBuffer = await toAudio(videoBuffer, 'mp4');
             
             console.log(`[PLAY] Conversion complete: ${audioBuffer.length} bytes`);
             
-            // Calculate duration (approximate from file size, or we can try to get from ffprobe)
+            // Try to get duration from the API response
             let durationSeconds = 180; // default 3 minutes
             
-            // Try to get duration using ffprobe if available
-            try {
-                const { exec } = require('child_process');
-                const tempFile = path.join(tempDir, `${Date.now()}.mp3`);
-                await fs.promises.writeFile(tempFile, audioBuffer);
-                
-                const durationCmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${tempFile}"`;
-                const durationResult = await new Promise((resolve, reject) => {
-                    exec(durationCmd, (error, stdout, stderr) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-                
-                if (durationResult && !isNaN(parseFloat(durationResult))) {
-                    durationSeconds = Math.round(parseFloat(durationResult));
-                }
-                
-                await fs.promises.unlink(tempFile).catch(() => {});
-            } catch (err) {
-                console.log(`[PLAY] Could not get duration: ${err.message}`);
+            // If duration is in the response
+            if (videoData.duration) {
+                durationSeconds = parseInt(videoData.duration);
             }
             
             return {
                 buffer: audioBuffer,
                 title: title,
                 duration: durationSeconds,
-                quality: '128kbps MP3',
+                quality: '128kbps MP3 (FFmpeg.wasm)',
                 thumbnail: thumbnail,
-                source: 'Nayan AllDown (Video to Audio)',
+                source: 'Nayan AllDown + FFmpeg.wasm',
                 mimeType: 'audio/mpeg'
             };
         } else {
@@ -194,7 +170,7 @@ async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = nul
 
         // Show processing message
         const processMsg = await sock.sendMessage(chatId, { 
-            text: '🔄 *Inashughulikia...*\n📥 Kupakua video\n🎵 Kubadilisha kuwa audio\n⏳ Tafadhali subiri...' 
+            text: '🔄 *Inashughulikia...*\n📥 Kupakua video\n🎵 Kubadilisha kuwa audio (FFmpeg.wasm)\n⏳ Tafadhali subiri...' 
         });
 
         const data = await getYoutubeMp3(ytUrl);
@@ -218,7 +194,7 @@ async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = nul
             mimetype: 'audio/mpeg',
             ptt: false,
             seconds: data.duration,
-            caption: `🎵 *${title}*\n⏱️ ${durationDisplay} | 👤 ${author} | 📀 ${data.quality}\n📡 ${data.source}`,
+            caption: `🎵 *${title.substring(0, 60)}*\n⏱️ ${durationDisplay} | 👤 ${author}\n🎚️ ${data.quality}\n📡 ${data.source}`,
             fileName: `${title.substring(0, 50)}.mp3`
         };
 
@@ -240,8 +216,8 @@ async function handleAudioDownload(sock, chatId, ytUrl, message, videoInfo = nul
             errorMsg += "API haifanyi kazi kwa sasa. Jaribu tena baadae.";
         } else if (e.message.includes('timeout')) {
             errorMsg += "Muda umekwisha. Jaribu tena.";
-        } else if (e.message.includes('ffmpeg')) {
-            errorMsg += "Hitilafu katika kubadilisha video kuwa audio. Hakikisha ffmpeg imesakinishwa.";
+        } else if (e.message.includes('FFmpeg')) {
+            errorMsg += "Hitilafu katika kubadilisha video kuwa audio. Jaribu tena.";
         } else {
             errorMsg += e.message || 'Jaribu tena baadae';
         }
