@@ -10,6 +10,10 @@ const CONFIG = {
 
 async function ownerCommand(sock, chatId, m, body = '') {
     try {
+        // SAFE CHECK - Prevent undefined errors
+        const safeM = m || {};
+        const safeKey = safeM.key || {};
+        
         // Get owner data
         const ownerNumber = (settings.ownerNumber || '255612130873').replace(/[^\d]/g, '');
         const ownerName = settings.botOwner || 'Mickey Developer';
@@ -18,12 +22,14 @@ async function ownerCommand(sock, chatId, m, body = '') {
 
         // TAMBUA INPUT (Inasoma text au majibu ya buttons)
         let input = (
-            m.message?.conversation || 
-            m.message?.extendedTextMessage?.text || 
-            m.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
-            m.message?.buttonsResponseMessage?.selectedButtonId ||
+            safeM.message?.conversation || 
+            safeM.message?.extendedTextMessage?.text || 
+            safeM.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+            safeM.message?.buttonsResponseMessage?.selectedButtonId ||
             body || ''
         ).toLowerCase().trim();
+
+        console.log('📝 Owner Command Input:', input); // Debug
 
         // 1. HANDLE VCARD BUTTON
         if (input === 'get_vcard' || input === '.get_vcard') {
@@ -44,11 +50,10 @@ END:VCARD`;
                     displayName: ownerName, 
                     contacts: [{ vcard }] 
                 }
-            }, { quoted: m });
+            }, { quoted: safeM });
             
             await sock.sendMessage(chatId, {
-                text: `✅ *VCARD SENT!*\n\nContact for *${ownerName}* has been saved.\n\nTap the contact to start chatting! 👑`,
-                react: { text: '📇', key: m.key }
+                text: `✅ *VCARD SENT!*\n\nContact for *${ownerName}* has been saved.\n\nTap the contact to start chatting! 👑`
             });
             return;
         }
@@ -56,8 +61,7 @@ END:VCARD`;
         // 2. HANDLE OWNER CHAT BUTTON
         if (input === 'owner_chat' || input === '.owner_chat') {
             await sock.sendMessage(chatId, {
-                text: `💬 *CHAT WITH OWNER*\n\nClick link below to start conversation:\n${waLink}\n\nOr save contact using 📇 VCARD button.`,
-                react: { text: '💬', key: m.key }
+                text: `💬 *CHAT WITH OWNER*\n\nClick link below to start conversation:\n${waLink}\n\nOr save contact using 📇 VCARD button.`
             });
             return;
         }
@@ -65,15 +69,17 @@ END:VCARD`;
         // 3. HANDLE CHANNEL BUTTON
         if (input === 'owner_channel' || input === '.owner_channel') {
             await sock.sendMessage(chatId, {
-                text: `📢 *JOIN CHANNEL*\n\nClick link to join official channel:\n${CONFIG.CHANNEL_LINK}\n\nStay updated with latest features! 🚀`,
-                react: { text: '📢', key: m.key }
+                text: `📢 *JOIN CHANNEL*\n\nClick link to join official channel:\n${CONFIG.CHANNEL_LINK}\n\nStay updated with latest features! 🚀`
             });
             return;
         }
 
         // 4. MAIN MENU - Ikipigwa ".owner"
         if (input === '.owner') {
-            await sock.sendMessage(chatId, { react: { text: '👑', key: m.key } });
+            // Safe reaction
+            try {
+                await sock.sendMessage(chatId, { react: { text: '👑', key: safeKey } });
+            } catch(e) {}
 
             const ownerText = `╭━━━━━━━━━━━━━━━━━━╮
 ┃    👑 *OWNER INFO* 👑
@@ -117,14 +123,13 @@ END:VCARD`;
                         })
                     }
                 ]
-            }, { quoted: m });
+            }, { quoted: safeM });
         }
 
     } catch (e) {
         console.error("Owner Command Error:", e);
         await sock.sendMessage(chatId, {
-            text: `❌ *Error!*\n\nUse .owner to get owner info.`,
-            react: { text: '❌', key: m.key }
+            text: `❌ *Owner Command Error!*\n\n${e.message}\n\nUse .owner to get owner info.`
         });
     }
 }
