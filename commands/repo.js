@@ -1,291 +1,372 @@
-/**
- * repo.js - Repository Information with Interactive Buttons
- * Shows GitHub repo info with CTA buttons for copy, open URL, and download ZIP
- */
-const axios = require('axios');
 const { sendInteractiveMessage } = require('gifted-btns');
+const settings = require('../settings');
 const fs = require('fs');
 const path = require('path');
+const archiver = require('archiver'); // Install: npm install archiver
 const { exec } = require('child_process');
 const util = require('util');
-const stream = require('stream');
-const { promisify } = require('util');
-const pipeline = promisify(stream.pipeline);
+const execPromise = util.promisify(exec);
 
-// Format date to readable format
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
+/**
+ * ownerCommand - MICKEY GLITCH BOT (IMPROVED)
+ * @version 3.2 (ZIP DOWNLOAD + VCARD FIXED)
+ * @author Quantum Base Developer
+ */
 
-// Get language color emoji
-function getLanguageEmoji(language) {
-    const emojis = {
-        'JavaScript': '🟨',
-        'TypeScript': '🔵',
-        'Python': '🟦',
-        'Java': '☕',
-        'Go': '🔵',
-        'Rust': '🦀',
-        'PHP': '💜',
-        'C++': '⚙️',
-        'Shell': '💻'
-    };
-    return emojis[language] || '📝';
-}
-
-// Function to download ZIP from GitHub
-async function downloadGitHubZip(repoUrl, chatId, sock, message) {
-    try {
-        // Extract owner and repo from URL
-        const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-        if (!match) throw new Error('Invalid GitHub URL');
+// Function to create zip file from project directory
+async function createProjectZip() {
+    return new Promise(async (resolve, reject) => {
+        const timestamp = Date.now();
+        const zipFileName = `MickeyGlitch_Bot_${timestamp}.zip`;
+        const zipFilePath = path.join(__dirname, '..', 'temp', zipFileName);
         
-        const owner = match[1];
-        const repo = match[2];
-        const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/main.zip`;
-        
-        // Try master branch if main fails
-        let finalZipUrl = zipUrl;
-        let branch = 'main';
-        
-        // Check if main branch exists
-        try {
-            await axios.head(zipUrl);
-        } catch (e) {
-            // Try master branch
-            const masterZipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/master.zip`;
-            try {
-                await axios.head(masterZipUrl);
-                finalZipUrl = masterZipUrl;
-                branch = 'master';
-            } catch (e2) {
-                throw new Error('Could not find main or master branch');
-            }
+        // Create temp directory if not exists
+        const tempDir = path.join(__dirname, '..', 'temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
         }
         
-        // Send initial message
-        await sock.sendMessage(chatId, {
-            text: `📥 *Downloading ${repo}.zip from ${branch} branch...*\n\nPlease wait, this may take a moment.`
-        }, { quoted: message });
-        
-        // Download the zip file
-        const response = await axios({
-            method: 'GET',
-            url: finalZipUrl,
-            responseType: 'stream',
-            headers: { 'User-Agent': 'MickeyBot' }
+        try {
+            // Method 1: Using archiver (better for large projects)
+            const output = fs.createWriteStream(zipFilePath);
+            const archive = archiver('zip', {
+                zlib: { level: 9 } // Maximum compression
+            });
+            
+            output.on('close', () => {
+                console.log(`✅ Zip created: ${zipFilePath} (${archive.pointer()} bytes)`);
+                resolve({ path: zipFilePath, size: archive.pointer(), name: zipFileName });
+            });
+            
+            archive.on('error', (err) => reject(err));
+            archive.pipe(output);
+            
+            // Add project files (exclude node_modules and temp)
+            const projectDir = path.join(__dirname, '..');
+            const excludeDirs = ['node_modules', 'temp', '.git', 'sessions', 'cache'];
+            
+            function addDirectory(dirPath, archivePath = '') {
+                const files = fs.readdirSync(dirPath);
+                
+                for (const file of files) {
+                    const fullPath = path.join(dirPath, file);
+                    const stat = fs.statSync(fullPath);
+                    const relativePath = archivePath ? path.join(archivePath, file) : file;
+                    
+                    // Skip excluded directories
+                    if (stat.isDirectory() && excludeDirs.includes(file)) {
+                        continue;
+                    }
+                    
+                    if (stat.isDirectory()) {
+                        archive.directory(fullPath, relativePath);
+                        addDirectory(fullPath, relativePath);
+                    } else {
+                        archive.file(fullPath, { name: relativePath });
+                    }
+                }
+            }
+            
+            // Add main files
+            const mainFiles = ['app.js', 'package.json', 'settings.js', 'config.js'];
+            for (const file of mainFiles) {
+                const filePath = path.join(projectDir, file);
+                if (fs.existsSync(filePath)) {
+                    archive.file(filePath, { name: file });
+                }
+            }
+            
+            // Add commands directory
+            const commandsDir = path.join(projectDir, 'commands');
+            if (fs.existsSync(commandsDir)) {
+                archive.directory(commandsDir, 'commands');
+            }
+            
+            // Add helpers directory
+            const helpersDir = path.join(projectDir, 'helpers');
+            if (fs.existsSync(helpersDir)) {
+                archive.directory(helpersDir, 'helpers');
+            }
+            
+            await archive.finalize();
+            
+        } catch (error) {
+            // Method 2: Using command line zip (fallback)
+            try {
+                const { stdout, stderr } = await execPromise(`cd ${path.join(__dirname, '..')} && zip -r ${zipFilePath} . -x "node_modules/*" "temp/*" ".git/*" "sessions/*" "*.zip"`);
+                console.log('Zip created via command line:', stdout);
+                resolve({ path: zipFilePath, size: fs.statSync(zipFilePath).size, name: zipFileName });
+            } catch (cmdError) {
+                reject(cmdError);
+            }
+        }
+    });
+}
+
+// Function to send zip file
+async function sendZipFile(sock, chatId, m) {
+    try {
+        // Send processing message
+        const processingMsg = await sock.sendMessage(chatId, {
+            text: '📦 *CREATING ZIP FILE...*\n\nPlease wait while I package the bot files...\n⏳ Compressing...',
+            react: { text: '📦', key: m.key }
         });
         
-        // Create temp file path
-        const tempDir = path.join(__dirname, '../temp');
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+        // Create the zip file
+        const zipInfo = await createProjectZip();
         
-        const zipPath = path.join(tempDir, `${repo}_${Date.now()}.zip`);
-        const writeStream = fs.createWriteStream(zipPath);
+        // Read the zip file
+        const zipBuffer = fs.readFileSync(zipInfo.path);
         
-        // Download and save
-        await pipeline(response.data, writeStream);
-        
-        // Get file size
-        const stats = fs.statSync(zipPath);
-        const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
+        // Calculate file size for display
+        const fileSizeMB = (zipInfo.size / (1024 * 1024)).toFixed(2);
         
         // Send the zip file
         await sock.sendMessage(chatId, {
-            document: { url: zipPath },
-            fileName: `${repo}.zip`,
+            document: zipBuffer,
             mimetype: 'application/zip',
-            caption: `✅ *Download Complete!*\n\n📦 *Repository:* ${owner}/${repo}\n📁 *Size:* ${fileSizeMB} MB\n🌿 *Branch:* ${branch}\n\n🔧 *How to use:*\n1. Extract the zip file\n2. Run \`npm install\`\n3. Run \`npm start\``
-        }, { quoted: message });
+            fileName: zipInfo.name,
+            caption: `✅ *ZIP FILE READY!*\n\n📦 *File:* ${zipInfo.name}\n💾 *Size:* ${fileSizeMB} MB\n📁 *Files included:* Complete bot source code\n\n🔧 *How to use:*\n1. Extract the zip file\n2. Run \`npm install\`\n3. Configure \`settings.js\`\n4. Run \`node app.js\`\n\n🌟 *MICKEY GLITCH BOT v3.2*`
+        }, { quoted: m });
         
         // Delete temp file after sending
         setTimeout(() => {
-            fs.unlink(zipPath, (err) => {
-                if (err) console.error('Error deleting temp zip:', err);
-            });
-        }, 60000); // Delete after 1 minute
-        
-        return true;
-        
-    } catch (error) {
-        console.error('Download ZIP Error:', error);
-        await sock.sendMessage(chatId, {
-            text: `❌ *Failed to download ZIP*\n\nError: ${error.message}`
-        }, { quoted: message });
-        return false;
-    }
-}
-
-// Alternative download method using direct link
-async function downloadZipAlternative(repoUrl, chatId, sock, message) {
-    try {
-        const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-        if (!match) throw new Error('Invalid GitHub URL');
-        
-        const owner = match[1];
-        const repo = match[2];
-        
-        // Use GitHub's direct download API
-        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/zipball`;
-        
-        const response = await axios({
-            method: 'GET',
-            url: apiUrl,
-            responseType: 'stream',
-            headers: { 
-                'User-Agent': 'MickeyBot',
-                'Accept': 'application/vnd.github.v3+json'
-            },
-            maxRedirects: 5
-        });
-        
-        const tempDir = path.join(__dirname, '../temp');
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-        
-        const zipPath = path.join(tempDir, `${repo}_${Date.now()}.zip`);
-        const writeStream = fs.createWriteStream(zipPath);
-        
-        await pipeline(response.data, writeStream);
-        
-        const stats = fs.statSync(zipPath);
-        const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
-        
-        await sock.sendMessage(chatId, {
-            document: { url: zipPath },
-            fileName: `${repo}.zip`,
-            mimetype: 'application/zip',
-            caption: `✅ *Download Complete!*\n\n📦 *Repository:* ${owner}/${repo}\n📁 *Size:* ${fileSizeMB} MB\n\n📥 *Use the downloaded file to deploy the bot*`
-        }, { quoted: message });
-        
-        setTimeout(() => {
-            fs.unlink(zipPath, (err) => {
-                if (err) console.error('Error deleting temp zip:', err);
-            });
-        }, 60000);
-        
-        return true;
-        
-    } catch (error) {
-        console.error('Alternative Download Error:', error);
-        return false;
-    }
-}
-
-// Main repo command function
-async function repoCommand(sock, chatId, message) {
-    if (!sock || !chatId) return;
-
-    try {
-        // Send loading reaction
-        await sock.sendMessage(chatId, { react: { text: '🔄', key: message.key } });
-
-        // Fetch repository data
-        const repoRes = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch', {
-            headers: { 'User-Agent': 'MickeyBot' }
-        });
-
-        const repo = repoRes.data;
-
-        // Build repository information text (reduced links)
-        const repoText = `✨ *${repo.name.toUpperCase()}*\n\n` +
-            `👤 *Owner:* ${repo.owner.login}\n` +
-            `⭐ *Stars:* ${repo.stargazers_count.toLocaleString()}\n` +
-            `🍴 *Forks:* ${repo.forks_count.toLocaleString()}\n` +
-            `👁️ *Watchers:* ${repo.watchers_count.toLocaleString()}\n` +
-            `🐛 *Open Issues:* ${repo.open_issues_count}\n\n` +
-            `${getLanguageEmoji(repo.language)} *Language:* ${repo.language || 'Not specified'}\n` +
-            `📜 *License:* ${repo.license?.name || 'N/A'}\n` +
-            `📅 *Last Updated:* ${formatDate(repo.updated_at)}\n\n` +
-            `📝 *Description:*\n${repo.description || 'No description available'}\n\n` +
-            `💡 *Type .menu to see all commands*`;
-
-        // Send interactive message with CTA buttons
-        await sendInteractiveMessage(sock, chatId, {
-            text: repoText,
-            footer: "Mickey Glitch Tech • Powered by Mickey Glitch",
-            interactiveButtons: [
-                {
-                    name: 'cta_copy',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '📋 Copy Repo Link',
-                        copy_code: repo.html_url
-                    })
-                },
-                {
-                    name: 'cta_url',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '🌐 Open Repository',
-                        url: repo.html_url
-                    })
-                },
-                {
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '📦 Download ZIP',
-                        id: 'repo_download_zip'
-                    })
-                }
-            ]
-        }, { quoted: message });
-
-        // Set up handler for download button
-        if (sock.ev) {
-            // Store the download function to be called when button is clicked
-            if (!global.repoDownloadHandler) {
-                global.repoDownloadHandler = async (buttonMessage) => {
-                    if (buttonMessage?.message?.buttonsResponseMessage?.selectedButtonId === 'repo_download_zip') {
-                        const userJid = buttonMessage.key.remoteJid;
-                        const userMessage = buttonMessage;
-                        
-                        await sock.sendMessage(userJid, { react: { text: '📥', key: userMessage.key } });
-                        
-                        // Try primary download method
-                        let success = await downloadGitHubZip(repo.html_url, userJid, sock, userMessage);
-                        
-                        // If primary fails, try alternative
-                        if (!success) {
-                            await sock.sendMessage(userJid, {
-                                text: "⚠️ Primary download failed, trying alternative method..."
-                            }, { quoted: userMessage });
-                            success = await downloadZipAlternative(repo.html_url, userJid, sock, userMessage);
-                        }
-                        
-                        if (!success) {
-                            await sock.sendMessage(userJid, {
-                                text: "❌ Both download methods failed. Please try again later or download manually from:\n" + repo.html_url
-                            }, { quoted: userMessage });
-                        }
-                    }
-                };
-                
-                // Listen for button responses
-                sock.ev.on('messages.upsert', async (chatUpdate) => {
-                    const msg = chatUpdate.messages[0];
-                    if (msg?.message?.buttonsResponseMessage && global.repoDownloadHandler) {
-                        await global.repoDownloadHandler(msg);
-                    }
-                });
+            try {
+                fs.unlinkSync(zipInfo.path);
+                console.log(`🗑️ Deleted temp file: ${zipInfo.path}`);
+            } catch (err) {
+                console.error('Error deleting temp file:', err);
             }
+        }, 5000);
+        
+        // Delete processing message
+        await sock.sendMessage(chatId, { delete: processingMsg.key });
+        
+        return true;
+    } catch (error) {
+        console.error('Zip creation error:', error);
+        await sock.sendMessage(chatId, {
+            text: `❌ *FAILED TO CREATE ZIP!*\n\nError: ${error.message}\n\nPlease try again or contact developer.`,
+            react: { text: '❌', key: m.key }
+        });
+        return false;
+    }
+}
+
+async function ownerCommand(sock, chatId, m, body = '') {
+    // Quick validation
+    if (!sock || !chatId) return console.error('❌ Missing parameters');
+
+    try {
+        // Get owner data with defaults
+        const ownerNumber = (settings.ownerNumber || '255612130873').replace(/[^\d]/g, '');
+        const ownerName = settings.botOwner || 'Mickey Developer';
+        const botName = settings.botName || 'MICKEY GLITCH';
+
+        // Pre-calculate links
+        const waLink = `https://wa.me/${ownerNumber}`;
+        const channelLink = 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610';
+        const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
+
+        // Handle commands
+        const cmd = (body || '').toLowerCase().trim();
+        
+        // Handle vcard request
+        if (cmd === 'get_vcard' || cmd === '.get_vcard' || cmd === 'get_vcard_command') {
+            const vcard = `BEGIN:VCARD
+VERSION:3.0
+FN:${ownerName}
+ORG:${botName}
+TITLE:BOT OWNER
+TEL;waid=${ownerNumber}:+${ownerNumber}
+TEL;TYPE=CELL:+${ownerNumber}
+EMAIL:${settings.botEmail || 'mickeyglitch@gmail.com'}
+URL:${waLink}
+NOTE:Bot Owner Contact - ${botName}
+X-WA-BIZ-NAME:${botName}
+X-WA-BIZ-DESC:Official WhatsApp Bot
+END:VCARD`;
+
+            await sock.sendMessage(chatId, {
+                contacts: { 
+                    displayName: ownerName, 
+                    contacts: [{ vcard }] 
+                }
+            }, { quoted: m });
+            
+            await sock.sendMessage(chatId, {
+                text: `✅ *VCARD SENT!*\n\nContact for *${ownerName}* has been saved to your phone.\n\nTap the contact to start chatting! 👑`,
+                react: { text: '📇', key: m.key }
+            }).catch(() => {});
+            
+            return;
+        }
+        
+        // Handle download zip request
+        if (cmd === 'download_zip' || cmd === '.download_zip' || cmd === 'get_zip' || cmd === '.get_zip') {
+            await sendZipFile(sock, chatId, m);
+            return;
         }
 
-        // Send success reaction
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+        // Quick reaction (non-blocking)
+        if (m?.key) {
+            sock.sendMessage(chatId, { react: { text: '👑', key: m.key } }).catch(() => {});
+        }
 
-    } catch (err) {
-        console.error('Repo Error:', err);
+        // ============ IMPROVED MESSAGE APPEARANCE ============
+        const ownerText = `╭━━━━━━━━━━━━━━━━━━╮
+┃    👑 *OWNER INFO* 👑
+┃━━━━━━━━━━━━━━━━━━
+┃
+┃ 🤖 *Bot:* ${botName}
+┃ 👨‍💻 *Owner:* ${ownerName}
+┃ 📞 *Contact:* +${ownerNumber}
+┃
+┃ ⏰ *Status:* Active
+┃ 🌐 *Version:* 3.2
+┃ 📦 *Features:* VCARD + ZIP
+┃
+╰━━━━━━━━━━━━━━━━━━╯
 
-        // Send error message
-        await sock.sendMessage(chatId, {
-            text: `❌ *Error fetching repo data.*\n\n_${err.message}_`
-        }, { quoted: message });
+📌 *Tap buttons below to connect*`;
 
-        // Send error reaction
-        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+        // ============ IMPROVED BUTTONS WITH VCARD & ZIP SUPPORT ============
+        try {
+            await sendInteractiveMessage(sock, chatId, {
+                text: ownerText,
+                footer: "🌟 MICKEY GLITCH BOT • 2026 🌟",
+                image: imageUrl,
+                interactiveButtons: [
+                    { 
+                        name: 'cta_url', 
+                        buttonParamsJson: JSON.stringify({ 
+                            display_text: '💬 DIRECT CHAT', 
+                            url: waLink 
+                        }) 
+                    },
+                    { 
+                        name: 'quick_reply', 
+                        buttonParamsJson: JSON.stringify({ 
+                            display_text: '📇 SAVE VCARD', 
+                            id: 'get_vcard'
+                        }) 
+                    },
+                    { 
+                        name: 'quick_reply', 
+                        buttonParamsJson: JSON.stringify({ 
+                            display_text: '📦 DOWNLOAD ZIP', 
+                            id: 'download_zip'  // Button ya kudownload zip
+                        }) 
+                    },
+                    { 
+                        name: 'cta_url', 
+                        buttonParamsJson: JSON.stringify({ 
+                            display_text: '📢 JOIN CHANNEL', 
+                            url: channelLink 
+                        }) 
+                    }
+                ]
+            });
+        } catch (interactiveError) {
+            console.error('Interactive message failed, using fallback:', interactiveError.message);
+
+            // ============ FALLBACK: Normal buttons ============
+            await sock.sendMessage(chatId, {
+                text: ownerText,
+                footer: "🌟 MICKEY GLITCH BOT • 2026 🌟",
+                buttons: [
+                    { 
+                        buttonId: 'owner_chat', 
+                        buttonText: { displayText: '💬 DIRECT CHAT' }, 
+                        type: 1 
+                    },
+                    { 
+                        buttonId: 'get_vcard',
+                        buttonText: { displayText: '📇 SAVE VCARD' }, 
+                        type: 1 
+                    },
+                    { 
+                        buttonId: 'download_zip',  // Button ID ya zip
+                        buttonText: { displayText: '📦 DOWNLOAD ZIP' }, 
+                        type: 1 
+                    },
+                    { 
+                        buttonId: 'owner_channel', 
+                        buttonText: { displayText: '📢 JOIN CHANNEL' }, 
+                        type: 1 
+                    }
+                ],
+                viewOnce: true,
+                contextInfo: {
+                    forwardingScore: 999,
+                    isForwarded: true,
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: '120363123456789@newsletter',
+                        newsletterName: 'MICKEY GLITCH',
+                        serverMessageId: 1
+                    }
+                }
+            }, { quoted: m });
+        }
+
+    } catch (e) {
+        console.error('Owner Error:', e);
+        const fallbackText = `╭━━━━━━━━━━━━━━━━━━╮
+┃ 👑 *OWNER INFO* 👑
+┃━━━━━━━━━━━━━━━━━━
+┃
+┃ 🤖 *Bot:* ${settings.botName || 'MICKEY GLITCH'}
+┃ 👨‍💻 *Owner:* ${settings.botOwner || 'Mickey Developer'}
+┃ 📞 *Contact:* wa.me/${settings.ownerNumber || '255612130873'}
+┃
+┃ 📢 *Channel:*
+┃ whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610
+┃
+╰━━━━━━━━━━━━━━━━━━╯
+
+📇 *Commands:*
+.get_vcard - Save owner contact
+.get_zip - Download bot source code`;
+
+        await sock.sendMessage(chatId, { 
+            text: fallbackText,
+            react: { text: '⚠️', key: m?.key }
+        }, { quoted: m }).catch(() => {});
     }
 }
 
-// Export download function for external use
-module.exports = repoCommand;
-module.exports.downloadZip = downloadGitHubZip;
-module.exports.downloadZipAlternative = downloadZipAlternative;
+// Handler for button events (VCARD & ZIP)
+async function handleButtonPress(sock, chatId, buttonId, m) {
+    if (buttonId === 'get_vcard') {
+        const ownerNumber = (settings.ownerNumber || '255612130873').replace(/[^\d]/g, '');
+        const ownerName = settings.botOwner || 'Mickey Developer';
+        const botName = settings.botName || 'MICKEY GLITCH';
+        
+        const vcard = `BEGIN:VCARD
+VERSION:3.0
+FN:${ownerName}
+ORG:${botName}
+TEL;waid=${ownerNumber}:+${ownerNumber}
+END:VCARD`;
+
+        await sock.sendMessage(chatId, {
+            contacts: { 
+                displayName: ownerName, 
+                contacts: [{ vcard }] 
+            }
+        }, { quoted: m });
+        
+        return true;
+    }
+    
+    if (buttonId === 'download_zip') {
+        await sendZipFile(sock, chatId, m);
+        return true;
+    }
+    
+    return false;
+}
+
+module.exports = ownerCommand;
+module.exports.handleButtonPress = handleButtonPress;
+module.exports.sendZipFile = sendZipFile;
