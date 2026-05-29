@@ -15,7 +15,7 @@ const settings = {
     access_key: '250b268b836bc2186fbf49c9a31f904d',
     access_secret: '2nArZpgRhyRoFCZuYMnlhqixwuSjei4QE14vMhkg'
   },
-  mode: "telegram", // "whatsapp" or "telegram"
+  mode: "whatsapp", // "whatsapp" or "telegram"
   telegram: {
     botToken: "",
     ownerId: "8188446621",
