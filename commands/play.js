@@ -44,7 +44,6 @@ async function getAudioFromAllDown(ytUrl) {
             
             if (!videoUrl) throw new Error('No download URL');
             
-            // Download the file
             const fileRes = await tryRequest(() => axios.get(videoUrl, {
                 ...AXIOS_DEFAULTS,
                 responseType: 'arraybuffer'
@@ -64,7 +63,7 @@ async function getAudioFromAllDown(ytUrl) {
     }
 }
 
-// Function to get audio from Nayan YouTube API (formats)
+// Function to get audio from Nayan YouTube API
 async function getAudioFromYoutubeAPI(ytUrl) {
     let videoId = '';
     if (ytUrl.includes('youtu.be/')) {
@@ -87,7 +86,6 @@ async function getAudioFromYoutubeAPI(ytUrl) {
             const thumbnail = res.data.data.data.thumbnail;
             const author = res.data.data.data.author;
             
-            // Find best audio format (opus > m4a)
             let bestAudio = null;
             let priority = 0;
             
@@ -107,7 +105,6 @@ async function getAudioFromYoutubeAPI(ytUrl) {
                 }
             }
             
-            // If no pure audio, get video_with_audio
             if (!bestAudio) {
                 for (const format of formats) {
                     if (format.type === 'video_with_audio' && format.mimeType?.includes('mp4')) {
@@ -140,16 +137,12 @@ async function getAudioFromYoutubeAPI(ytUrl) {
     }
 }
 
-// Main function - tries AllDown first, then YouTube API
 async function getYoutubeAudio(ytUrl) {
-    // Try AllDown API first
     try {
         console.log('[PLAY] Trying AllDown API...');
         return await getAudioFromAllDown(ytUrl);
     } catch (allDownErr) {
         console.log('[PLAY] AllDown failed, trying YouTube API...');
-        
-        // Try YouTube API as fallback
         try {
             return await getAudioFromYoutubeAPI(ytUrl);
         } catch (ytErr) {
@@ -173,8 +166,8 @@ async function playCommand(sock, chatId, message) {
 
         let videoUrl = query;
         let videoInfo = null;
+        let thumbnailUrl = '';
 
-        // Search if not YouTube URL
         if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
             const searchResults = await yts(query);
             const videos = searchResults?.videos;
@@ -186,30 +179,45 @@ async function playCommand(sock, chatId, message) {
 
             videoInfo = videos[0];
             videoUrl = videoInfo.url;
-
-            const infoMsg = `🎵 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()}\n\n⬇️ Processing...`;
-            await sock.sendMessage(chatId, { text: infoMsg });
+            thumbnailUrl = videoInfo.thumbnail;
+            
+            const infoText = `🎵 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()}\n\n⬇️ Downloading...`;
+            
+            if (thumbnailUrl) {
+                await sock.sendMessage(chatId, {
+                    image: { url: thumbnailUrl },
+                    caption: infoText
+                });
+            } else {
+                await sock.sendMessage(chatId, { text: infoText });
+            }
         } else {
             await sock.sendMessage(chatId, { text: '⬇️ Processing...' });
         }
 
-        const processMsg = await sock.sendMessage(chatId, { text: '⏳ Loading... 0%' });
+        const processMsg = await sock.sendMessage(chatId, { text: '⏳ Loading...' });
 
         const audioData = await getYoutubeAudio(videoUrl);
 
-        // Update progress
-        await sock.sendMessage(chatId, { text: '📤 Sending audio...', edit: processMsg.key });
+        await sock.sendMessage(chatId, { delete: processMsg.key });
 
+        // Send thumbnail as normal image (if available and not sent yet)
+        if (audioData.thumbnail && !thumbnailUrl) {
+            await sock.sendMessage(chatId, {
+                image: { url: audioData.thumbnail },
+                caption: `🎵 *${audioData.title.substring(0, 50)}*\n📡 ${audioData.source}`
+            });
+        }
+
+        // Send audio
         const audioMessage = {
             audio: audioData.buffer,
             mimetype: 'audio/mp4',
             ptt: false,
-            caption: `🎵 *${audioData.title.substring(0, 50)}*\n📡 ${audioData.source}`,
             fileName: `${audioData.title.substring(0, 40)}.mp4`
         };
 
         await sock.sendMessage(chatId, audioMessage);
-        await sock.sendMessage(chatId, { delete: processMsg.key });
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
