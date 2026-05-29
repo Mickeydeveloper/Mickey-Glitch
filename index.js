@@ -1,7 +1,7 @@
 /**
  * MICKEY GLITCH - A WhatsApp Bot
- * Clean & Optimized Version
- * [AUTO-START | SESSION DETECT | SMART MODE]
+ * [DUAL MODE: WhatsApp + Telegram Together]
+ * [AUTO-DETECT: If no Telegram token, start WhatsApp only]
  */
 
 require("dotenv").config();
@@ -26,7 +26,15 @@ const { handleAnticall } = require("./commands/anticall");
 const { getButtonId, isButtonResponse, autoDetectButtonCommand, isCommandId } = require("./lib/buttonLoader");
 const store = require("./lib/lightweight_store");
 const settings = require("./settings");
-const { startTelegramBot } = require("./telegram-bot");
+
+// Try to load telegram module (optional)
+let startTelegramBot = null;
+try {
+    const telegramModule = require("./telegram-bot");
+    startTelegramBot = telegramModule.startTelegramBot;
+} catch (err) {
+    console.log(chalk.yellow('⚠️ Telegram module not found, running WhatsApp only'));
+}
 
 // ============================================================
 // 🎨 COLORED UI COMPONENTS
@@ -46,21 +54,17 @@ const UI = {
         const bg = colors[bgColor] || chalk.bgCyan.black;
         console.log(bg(` ${text} `));
     },
-    box: (title, content, color = 'blue') => {
-        const colors = {
-            blue: chalk.blue, green: chalk.green, red: chalk.red,
-            yellow: chalk.yellow, cyan: chalk.cyan, magenta: chalk.magenta
-        };
-        const c = colors[color] || chalk.white;
-        console.log(c('┌' + '─'.repeat(58) + '┐'));
-        console.log(c(`│ ${chalk.bold(title)}`.padEnd(60) + '│'));
-        console.log(c('├' + '─'.repeat(58) + '┤'));
-        if (Array.isArray(content)) {
-            content.forEach(line => console.log(c(`│ ${line}`.padEnd(60) + '│')));
-        } else {
-            console.log(c(`│ ${content}`.padEnd(60) + '│'));
-        }
-        console.log(c('└' + '─'.repeat(58) + '┘'));
+    connectionBox: (status, details = '') => {
+        const statusColor = status === 'ONLINE' ? chalk.green : (status === 'CONNECTING' ? chalk.yellow : chalk.red);
+        const statusText = status === 'ONLINE' ? '🟢 ONLINE' : (status === 'CONNECTING' ? '🟡 CONNECTING' : '🔴 OFFLINE');
+        console.log('');
+        console.log(chalk.bgCyan.black.bold('╔' + '═'.repeat(70) + '╗'));
+        console.log(chalk.bgCyan.black.bold('║' + ' '.repeat(20) + '🔌 CONNECTION STATUS 🔌' + ' '.repeat(19) + '║'));
+        console.log(chalk.bgCyan.black.bold('╚' + '═'.repeat(70) + '╝'));
+        console.log('');
+        console.log(chalk.white.bold(`  📡 Status: ${statusColor.bold(statusText)}`));
+        if (details) console.log(chalk.white.bold(`  📝 Details: ${chalk.gray(details)}`));
+        console.log('');
     }
 };
 
@@ -123,50 +127,26 @@ function startAutoCleanup() {
 }
 
 // ============================================================
-// 🔍 SESSION DETECTION (AUTO-SKIP)
+// 🔍 SESSION DETECTION
 // ============================================================
 function isSessionExists() {
     try {
-        if (!fs.existsSync(CREDS_PATH)) {
-            return false;
-        }
+        if (!fs.existsSync(CREDS_PATH)) return false;
         const credsContent = fs.readFileSync(CREDS_PATH, 'utf8');
         const creds = JSON.parse(credsContent);
-        // Check if creds have valid registration
-        if (creds && creds.registered === true) {
-            return true;
-        }
-        // Also check if there are any session files
-        const sessionFiles = fs.readdirSync(SESSION_DIR);
-        return sessionFiles.length > 1; // More than just creds.json
+        return creds && creds.registered === true;
     } catch (err) {
         return false;
     }
 }
 
-function getSessionAge() {
-    try {
-        if (fs.existsSync(CREDS_PATH)) {
-            const stats = fs.statSync(CREDS_PATH);
-            const ageMs = Date.now() - stats.mtimeMs;
-            const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
-            const ageDays = Math.floor(ageHours / 24);
-            if (ageDays > 0) return `${ageDays} days ${ageHours % 24} hours`;
-            return `${ageHours} hours`;
-        }
-    } catch (err) {}
-    return 'Unknown';
-}
-
 // ============================================================
-// 📱 PAIRING INTERFACE (ONLY WHEN NO SESSION)
+// 📱 PAIRING INTERFACE
 // ============================================================
 let rl = null;
 
 function createReadlineInterface() {
-    if (rl) {
-        try { rl.close(); } catch(e) {}
-    }
+    if (rl) { try { rl.close(); } catch(e) {} }
     if (process.stdin.isTTY) {
         rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     }
@@ -191,13 +171,32 @@ function normalizeNumber(phoneNumber) {
 }
 
 // ============================================================
-// 🚀 MAIN BOT INITIALIZATION
+// 📱 SEND CONNECTION STATUS TO WHATSAPP OWNER
+// ============================================================
+async function sendWhatsAppStatus(sock, status, details = '') {
+    if (!sock) return;
+    try {
+        const ownerJid = settings.ownerNumber + "@s.whatsapp.net";
+        const statusText = status === 'connected' ? '🟢 ONLINE' : '🔴 OFFLINE';
+        const message = `🔌 *CONNECTION STATUS*\n\n📡 *Status:* ${statusText}\n📝 *Details:* ${details || 'No additional info'}\n⏱️ *Time:* ${new Date().toLocaleString()}\n\n🤖 *Mickey Glitch Bot*`;
+        
+        await sock.sendMessage(ownerJid, { text: message });
+        UI.info(`📱 Status sent to WhatsApp owner: ${statusText}`);
+    } catch (err) {
+        UI.debug(`Failed to send WhatsApp status: ${err.message}`);
+    }
+}
+
+// ============================================================
+// 🚀 WHATSAPP BOT INITIALIZATION
 // ============================================================
 const pinoLogger = pino({ level: process.env.LOG_LEVEL || 'warn' });
 global.botname = settings.botname || settings.botName || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
 global.themeemoji = '•';
 
-let telegramModule = null;
+let whatsappBot = null;
+let isWhatsAppRunning = false;
+let telegramModuleInstance = null;
 
 // Initialize store
 try {
@@ -211,30 +210,26 @@ setInterval(() => {
     } catch (err) {}
 }, settings.storeWriteInterval || 10000);
 
-// Log sudo users
-if (settings.sudoUsers && settings.sudoUsers.length) {
-    console.log(chalk.magenta('✔️ Permanent sudo users initialized:'), settings.sudoUsers);
-}
-
-async function startMickeyBot(retryCount = 0) {
+async function startWhatsAppBot(retryCount = 0) {
+    if (isWhatsAppRunning && whatsappBot) return whatsappBot;
+    
     try {
         ensureDirectories();
         autoCleanTempFiles();
         
-        UI.header('🚀 STARTING MICKEY GLITCH BOT 🚀', 'cyan');
+        UI.header('📱 STARTING WHATSAPP BOT 📱', 'green');
+        UI.connectionBox('CONNECTING', 'Establishing connection to WhatsApp...');
         
         const { version } = await fetchLatestBaileysVersion();
         UI.info(`📦 Baileys Version: ${chalk.green(version.join('.'))}`);
         
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
         
-        // Check if session is registered
         const isRegistered = state.creds?.registered === true;
         if (isRegistered) {
-            UI.success(`📁 Session found! Age: ${getSessionAge()}`);
-            UI.info('🔄 Auto-connecting to WhatsApp...');
+            UI.success('📁 Valid session found! Auto-connecting...');
         } else {
-            UI.info('📁 Session Status: New session will be created');
+            UI.info('📁 No session found. Pairing required...');
         }
         
         const msgRetryCounterCache = new NodeCache();
@@ -242,8 +237,8 @@ async function startMickeyBot(retryCount = 0) {
         const Mickey = makeWASocket({
             version,
             logger: pinoLogger,
-            printQRInTerminal: false, // Always false, use pairing code
-            browser: ["Ubuntu", "Chrome", "20.0.04"],
+            printQRInTerminal: false,
+            browser: ["Mickey Glitch", "Chrome", "120.0.0.0"],
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }).child({ level: 'silent' }))
@@ -254,13 +249,6 @@ async function startMickeyBot(retryCount = 0) {
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
             keepAliveIntervalMs: 30000,
-            patchMessageBeforeSending: (message) => {
-                const requiresPatch = !!(message.buttonsMessage || message.templateMessage || message.listMessage);
-                if (requiresPatch) {
-                    message = { viewOnceMessage: { message: { messageContextInfo: { deviceListMetadataVersion: 2, deviceListMetadata: {} }, ...message } } };
-                }
-                return message;
-            },
             getMessage: async (key) => {
                 if (!key || !key.id) return undefined;
                 const jid = key.remoteJid || key.participant || key.sender || '';
@@ -270,12 +258,12 @@ async function startMickeyBot(retryCount = 0) {
             msgRetryCounterCache
         });
         
+        whatsappBot = Mickey;
+        
         Mickey.ev.on("creds.update", saveCreds);
         store.bind(Mickey.ev);
         
-        // ============================================================
-        // EVENT HANDLERS
-        // ============================================================
+        // Message handler
         Mickey.ev.on("messages.upsert", async chatUpdate => {
             try {
                 const mek = chatUpdate.messages[0];
@@ -307,69 +295,72 @@ async function startMickeyBot(retryCount = 0) {
             }
         });
         
+        // Call handler
         Mickey.ev.on("call", async (callData) => {
             try {
                 if (handleAnticall) await handleAnticall(Mickey, { call: callData });
             } catch (err) { UI.debug(`Call error: ${err.message}`); }
         });
         
+        // Group participants handler
         Mickey.ev.on("group-participants.update", async (update) => {
             try {
                 if (handleGroupParticipantUpdate) await handleGroupParticipantUpdate(Mickey, update);
             } catch (err) { UI.debug(`Group update error: ${err.message}`); }
         });
         
+        // Connection handler
         Mickey.ev.on("connection.update", async (update) => {
             const { connection, lastDisconnect } = update;
             
             if (connection === "open") {
-                UI.success('\n✅ MICKEY GLITCH BOT IS NOW ONLINE!');
+                isWhatsAppRunning = true;
+                UI.connectionBox('ONLINE', 'Connected successfully!');
+                UI.success('\n✅ WHATSAPP BOT IS NOW ONLINE!');
+                
                 if (Mickey.user && Mickey.user.id) {
                     UI.info(`📱 Connected as: ${chalk.green.bold(Mickey.user.id.split(':')[0])}`);
                 }
                 UI.info(`💾 RAM Usage: ${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB`);
                 UI.divider();
                 
+                // Send status to WhatsApp owner
+                await sendWhatsAppStatus(Mickey, 'connected', 'Bot is online and ready!');
+                
                 if (rl) { try { rl.close(); } catch(e) {} rl = null; }
             }
             
             if (connection === "close") {
+                isWhatsAppRunning = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                UI.error(`\n❌ Connection closed!`);
+                const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
+                
+                UI.error(`\n❌ WhatsApp connection closed!`);
+                UI.connectionBox('OFFLINE', errorMessage);
+                
+                // Send status to WhatsApp owner
+                await sendWhatsAppStatus(Mickey, 'disconnected', errorMessage);
                 
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 
                 if (shouldReconnect && retryCount < 10) {
                     UI.warning(`🔄 Reconnecting... (Attempt ${retryCount + 1}/10)`);
                     await delay(Math.min(5000 + (retryCount * 1000), 30000));
-                    startMickeyBot(retryCount + 1);
+                    startWhatsAppBot(retryCount + 1);
                 } else if (statusCode === DisconnectReason.loggedOut) {
                     UI.error('🚫 Session expired! Please restart the bot.');
-                    UI.info('Delete session folder and restart to generate new session.');
-                } else if (retryCount >= 10) {
-                    UI.error('❌ Maximum reconnection attempts reached. Manual restart required.');
                 }
             }
         });
         
-        // ============================================================
-        // PAIRING CODE - ONLY IF NOT REGISTERED
-        // ============================================================
+        // Pairing code (only if not registered)
         if (!state.creds?.registered) {
-            UI.info('\n⏳ No valid session found. Pairing required...\n');
+            UI.info('\n⏳ Pairing required. Please wait...\n');
             
-            UI.box('📱 PHONE NUMBER REQUIRED', [
-                'FORMAT: 255XXXXXXXXX (Tanzania)',
-                'EXAMPLE: 255612130873',
-                '',
-                '💡 Hakikisha namba ni sahihi kabla ya kuendelea'
-            ], 'yellow');
-            
-            let num = await question(chalk.cyan.bold("\n📱 Enter your WhatsApp number: "));
+            let num = await question(chalk.cyan.bold("📱 Enter WhatsApp number (255XXXXXXXXX): "));
             num = normalizeNumber(num);
             
             if (!num) {
-                UI.error('Invalid phone number! Using owner number from settings.');
                 num = settings.ownerNumber || "255612130873";
             }
             
@@ -392,12 +383,9 @@ async function startMickeyBot(retryCount = 0) {
                         console.log(chalk.gray('    3. Bonyeza "Link a Device"'));
                         console.log(chalk.gray(`    4. Weka code hii: ${chalk.white.bold(code)}`));
                         console.log('');
-                        console.log(chalk.cyan.bold('  ⏳ Inasubiri muunganiko...'));
-                        console.log('');
                     }
                 } catch (e) { 
                     UI.error(`Pairing failed: ${e.message}`);
-                    UI.info('Please restart the bot and try again.');
                 }
             }, 3000);
         }
@@ -405,142 +393,98 @@ async function startMickeyBot(retryCount = 0) {
         return Mickey;
         
     } catch (err) {
-        UI.error(`Failed to start bot: ${err.message}`);
+        UI.error(`Failed to start WhatsApp bot: ${err.message}`);
         if (retryCount < 5) {
-            UI.warning(`Retrying in 10 seconds... (Attempt ${retryCount + 1}/5)`);
             await delay(10000);
-            return startMickeyBot(retryCount + 1);
+            return startWhatsAppBot(retryCount + 1);
         }
-        throw err;
+        return null;
     }
 }
 
 // ============================================================
-// 🎯 AUTO-INITIALIZATION (SMART MODE SELECTION)
+// 🎯 MAIN INITIALIZATION
 // ============================================================
 async function initializeBot() {
     console.log(chalk.green.bold('\n🚀 Initializing Mickey Glitch Bot...\n'));
     
     startAutoCleanup();
     
-    // Initialize Telegram bot (optional)
-    try {
-        telegramModule = await startTelegramBot();
-        if (telegramModule) {
-            UI.success('Telegram bot is running!');
-        }
-    } catch (err) {
-        UI.warning(`Telegram bot error: ${err.message}`);
+    // Log sudo users
+    if (settings.sudoUsers && settings.sudoUsers.length) {
+        console.log(chalk.magenta('✔️ Permanent sudo users initialized:'), settings.sudoUsers);
     }
     
-    // ============================================================
-    // SMART MODE SELECTION - AUTO SKIP IF SESSION EXISTS
-    // ============================================================
-    const sessionExists = isSessionExists();
-    const settingMode = settings.mode?.toLowerCase() === 'telegram' ? 'telegram' : 'whatsapp';
-    let startupMode = settingMode;
+    // Check if Telegram token exists
+    const hasTelegramToken = settings.telegram?.botToken && settings.telegram.botToken.trim().length > 0;
     
-    // If session exists and mode is whatsapp, auto-start WhatsApp without asking
-    if (sessionExists && settingMode === 'whatsapp') {
-        UI.success('📁 Valid session detected!');
-        UI.info('🔄 Auto-starting WhatsApp bot...');
-        startupMode = 'whatsapp';
-    }
-    // If session exists but mode is telegram, check if user wants to switch
-    else if (sessionExists && settingMode === 'telegram') {
-        UI.success('📁 Valid session detected!');
-        UI.info('ℹ️ Session exists but mode is set to Telegram.');
-        
-        // Only ask if we have terminal input
-        if (process.stdin.isTTY) {
-            console.log(chalk.cyan('\n┌─────────────────────────────────────────────────────────────┐'));
-            console.log(chalk.cyan('│                    STARTUP MODE SELECTION                    │'));
-            console.log(chalk.cyan('├─────────────────────────────────────────────────────────────┤'));
-            console.log(chalk.cyan('│  ') + chalk.white('1) WhatsApp Bot (Session available)') + chalk.cyan('                       │'));
-            console.log(chalk.cyan('│  ') + chalk.white('2) Telegram Bot (Monitor Mode)') + chalk.cyan('                           │'));
-            console.log(chalk.cyan('│  ') + chalk.white(`3) Use settings.js mode (${settingMode})`) + chalk.cyan('                         │'));
-            console.log(chalk.cyan('└─────────────────────────────────────────────────────────────┘'));
-            
-            const answer = (await question('\n📱 Chagua mode (1/2/3): ')).trim();
-            if (answer === '1') startupMode = 'whatsapp';
-            if (answer === '2') startupMode = 'telegram';
-        } else {
-            // No terminal, use settings mode
-            startupMode = settingMode;
-        }
-    }
-    // No session exists, need to ask for mode
-    else if (!sessionExists && process.stdin.isTTY) {
-        UI.warning('📁 No valid session found!');
-        console.log(chalk.cyan('\n┌─────────────────────────────────────────────────────────────┐'));
-        console.log(chalk.cyan('│                    STARTUP MODE SELECTION                    │'));
-        console.log(chalk.cyan('├─────────────────────────────────────────────────────────────┤'));
-        console.log(chalk.cyan('│  ') + chalk.white('1) WhatsApp Bot (Requires Pairing)') + chalk.cyan('                         │'));
-        console.log(chalk.cyan('│  ') + chalk.white('2) Telegram Bot (Monitor Mode)') + chalk.cyan('                           │'));
-        console.log(chalk.cyan('│  ') + chalk.white(`3) Use settings.js mode (${settingMode})`) + chalk.cyan('                         │'));
-        console.log(chalk.cyan('└─────────────────────────────────────────────────────────────┘'));
-        
-        const answer = (await question('\n📱 Chagua mode (1/2/3): ')).trim();
-        if (answer === '1') startupMode = 'whatsapp';
-        if (answer === '2') startupMode = 'telegram';
-    }
-    // No session and no terminal, use settings mode
-    else if (!sessionExists) {
-        UI.warning('📁 No valid session found! Using settings.js mode.');
-        startupMode = settingMode;
-    }
-    
-    // ============================================================
-    // START SELECTED MODE
-    // ============================================================
-    if (startupMode === 'telegram') {
-        UI.header('🤖 TELEGRAM BOT MODE 🤖', 'magenta');
-        if (!telegramModule) {
-            UI.error('Telegram bot not configured! Starting WhatsApp mode instead.');
-            await startMickeyBot();
-        } else {
-            UI.success('✅ Telegram bot is running!');
-            UI.info('Commands: /start, /status, /restart, /clearsession, /stats, /backup, /uptime, /info');
-            UI.info('WhatsApp bot is in standby mode. Use /startwhatsapp to activate.');
+    // Start Telegram bot ONLY IF token exists
+    let telegramStarted = false;
+    if (hasTelegramToken && startTelegramBot) {
+        try {
+            telegramModuleInstance = await startTelegramBot();
+            if (telegramModuleInstance) {
+                UI.success('🤖 Telegram bot is running!');
+                telegramStarted = true;
+            }
+        } catch (err) {
+            UI.warning(`Telegram bot error: ${err.message}`);
+            UI.info('Continuing with WhatsApp only...');
         }
     } else {
-        UI.header('📱 WHATSAPP BOT MODE 📱', 'green');
-        await startMickeyBot();
+        if (!hasTelegramToken) {
+            UI.warning('⚠️ Telegram bot token not found in settings!');
+        }
+        UI.info('📱 Running WhatsApp only mode...');
     }
     
-    // ============================================================
-    // GRACEFUL SHUTDOWN HANDLERS
-    // ============================================================
+    // Check if session exists
+    const sessionExists = isSessionExists();
+    
+    // Start WhatsApp bot (always)
+    if (sessionExists) {
+        UI.success('📁 Valid WhatsApp session detected!');
+        UI.info('🔄 Auto-starting WhatsApp bot...');
+        await startWhatsAppBot();
+    } else {
+        UI.warning('📁 No WhatsApp session found!');
+        UI.info('ℹ️ You will be prompted to enter phone number for pairing.');
+        await startWhatsAppBot();
+    }
+    
+    // Display final status
+    console.log('');
+    UI.divider();
+    console.log(chalk.cyan.bold('╔═══════════════════════════════════════════════════════════════╗'));
+    console.log(chalk.cyan.bold('║                    🚀 BOT STATUS 🚀                           ║'));
+    console.log(chalk.cyan.bold('╠═══════════════════════════════════════════════════════════════╣'));
+    console.log(chalk.cyan.bold('║  ') + chalk.white('🤖 WhatsApp Bot: ') + (isWhatsAppRunning ? chalk.green('🟢 RUNNING') : chalk.yellow('🟡 CONNECTING')) + chalk.cyan('                          ║'));
+    console.log(chalk.cyan.bold('║  ') + chalk.white('📱 Telegram Bot: ') + (telegramStarted ? chalk.green('🟢 RUNNING') : chalk.red('🔴 DISABLED (No Token)')) + chalk.cyan('                    ║'));
+    console.log(chalk.cyan.bold('║  ') + chalk.white('💾 RAM Usage: ') + chalk.yellow((process.memoryUsage().rss / 1024 / 1024).toFixed(2) + ' MB') + chalk.cyan('                               ║'));
+    console.log(chalk.cyan.bold('║  ') + chalk.white('📅 Time: ') + chalk.yellow(new Date().toLocaleString()) + chalk.cyan('                                    ║'));
+    console.log(chalk.cyan.bold('╚═══════════════════════════════════════════════════════════════╝'));
+    console.log('');
+    
+    // Graceful shutdown
     process.on('SIGINT', async () => {
         UI.warning('\n👋 Shutting down gracefully...');
-        if (rl) try { rl.close(); } catch(e) {}
-        UI.success('Bot stopped!');
-        process.exit(0);
-    });
-    
-    process.on('SIGTERM', async () => {
-        UI.warning('\n👋 Shutting down gracefully...');
-        if (rl) try { rl.close(); } catch(e) {}
+        if (whatsappBot) {
+            try { await whatsappBot.end(); } catch(e) {}
+        }
+        if (rl) { try { rl.close(); } catch(e) {} }
         UI.success('Bot stopped!');
         process.exit(0);
     });
     
     process.on('uncaughtException', (err) => {
         UI.error(`Uncaught Exception: ${err.message}`);
-        if (!err.message?.includes('ECONNRESET') && !err.message?.includes('read ECONNRESET')) {
-            UI.warning('Restarting in 5 seconds...');
+        if (!err.message?.includes('ECONNRESET')) {
             setTimeout(() => process.exit(1), 5000);
         }
     });
-    
-    process.on('unhandledRejection', (reason) => {
-        UI.error(`Unhandled Rejection: ${reason}`);
-    });
 }
 
-// ============================================================
-// START THE BOT
-// ============================================================
+// Start the bot
 initializeBot().catch(err => {
     UI.error(`Fatal error: ${err.message}`);
     process.exit(1);
