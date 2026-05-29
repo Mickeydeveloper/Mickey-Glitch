@@ -1,60 +1,5 @@
 const axios = require('axios');
 const yts = require('yt-search');
-const { createFFmpeg, fetchFile } = require('@ffmpeg/ffmpeg');
-
-let ffmpeg = null;
-let ffmpegLoading = false;
-
-async function getFFmpeg() {
-    if (ffmpeg) return ffmpeg;
-    if (ffmpegLoading) {
-        await new Promise(resolve => {
-            const check = setInterval(() => {
-                if (ffmpeg) {
-                    clearInterval(check);
-                    resolve();
-                }
-            }, 100);
-        });
-        return ffmpeg;
-    }
-    
-    ffmpegLoading = true;
-    try {
-        ffmpeg = createFFmpeg({ log: false });
-        console.log('[FFMPEG] Loading...');
-        await ffmpeg.load();
-        console.log('[FFMPEG] Ready!');
-    } catch (err) {
-        console.error('[FFMPEG] Error:', err);
-        throw err;
-    } finally {
-        ffmpegLoading = false;
-    }
-    return ffmpeg;
-}
-
-async function convertToAudio(buffer, ext = 'mp4') {
-    try {
-        const ff = await getFFmpeg();
-        const inputFile = `input.${ext}`;
-        const outputFile = `output.mp3`;
-        
-        ff.FS('writeFile', inputFile, buffer);
-        
-        await ff.run('-i', inputFile, '-vn', '-ac', '2', '-b:a', '96k', '-ar', '22050', '-f', 'mp3', outputFile);
-        
-        const outputData = ff.FS('readFile', outputFile);
-        
-        ff.FS('unlink', inputFile);
-        ff.FS('unlink', outputFile);
-        
-        return Buffer.from(outputData);
-    } catch (error) {
-        console.error('[FFMPEG] Error:', error);
-        throw new Error('Conversion failed');
-    }
-}
 
 const AXIOS_DEFAULTS = {
     timeout: 30000,
@@ -76,7 +21,8 @@ async function tryRequest(getter, attempts = 2) {
     throw lastErr;
 }
 
-async function getYoutubeAudio(ytUrl) {
+// Function to get audio from Nayan AllDown API
+async function getAudioFromAllDown(ytUrl) {
     let videoId = '';
     if (ytUrl.includes('youtu.be/')) {
         videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
@@ -90,50 +36,125 @@ async function getYoutubeAudio(ytUrl) {
     const apiUrl = `https://nayan-video-downloader.vercel.app/alldown?url=https://youtu.be/${videoId}`;
 
     try {
-        console.log(`[PLAY] Fetching: ${apiUrl}`);
         const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
 
         if (res.data?.status === true && res.data?.data) {
-            const videoData = res.data.data;
-            let videoUrl = videoData.high || videoData.low;
+            const data = res.data.data;
+            const videoUrl = data.high || data.low;
             
-            if (!videoUrl) throw new Error('No video URL');
+            if (!videoUrl) throw new Error('No download URL');
             
-            console.log(`[PLAY] Download: ${videoData.title}`);
-            
-            const videoResponse = await tryRequest(() => axios.get(videoUrl, {
+            // Download the file
+            const fileRes = await tryRequest(() => axios.get(videoUrl, {
                 ...AXIOS_DEFAULTS,
                 responseType: 'arraybuffer'
             }));
             
-            const videoBuffer = Buffer.from(videoResponse.data);
-            console.log(`[PLAY] Video: ${(videoBuffer.length / 1024 / 1024).toFixed(2)} MB`);
-            
-            // If video is too large, return error
-            if (videoBuffer.length > 50 * 1024 * 1024) {
-                throw new Error('Video too large (max 50MB)');
-            }
-            
-            const audioBuffer = await convertToAudio(videoBuffer, 'mp4');
-            console.log(`[PLAY] Audio: ${(audioBuffer.length / 1024 / 1024).toFixed(2)} MB`);
-            
-            let durationSeconds = 180;
-            if (videoData.duration) {
-                durationSeconds = parseInt(videoData.duration);
-            }
-            
             return {
-                buffer: audioBuffer,
-                title: videoData.title,
-                duration: durationSeconds,
-                quality: 'MP3'
+                buffer: Buffer.from(fileRes.data),
+                title: data.title,
+                thumbnail: data.thumbnail,
+                source: 'Nayan AllDown',
+                mimeType: 'audio/mp4'
             };
-        } else {
-            throw new Error('API failed');
         }
+        throw new Error('API response invalid');
     } catch (err) {
-        console.error(`[PLAY] Error:`, err.message);
-        throw new Error(err.message);
+        throw new Error(`AllDown failed: ${err.message}`);
+    }
+}
+
+// Function to get audio from Nayan YouTube API (formats)
+async function getAudioFromYoutubeAPI(ytUrl) {
+    let videoId = '';
+    if (ytUrl.includes('youtu.be/')) {
+        videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
+    } else if (ytUrl.includes('youtube.com/watch')) {
+        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
+        videoId = urlParams.get('v');
+    }
+
+    if (!videoId) throw new Error('Invalid URL');
+
+    const apiUrl = `https://nayan-video-downloader.vercel.app/youtube?url=https://youtu.be/${videoId}`;
+
+    try {
+        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
+
+        if (res.data?.status === true && res.data?.data?.data?.formats) {
+            const formats = res.data.data.data.formats;
+            const title = res.data.data.data.title;
+            const thumbnail = res.data.data.data.thumbnail;
+            const author = res.data.data.data.author;
+            
+            // Find best audio format (opus > m4a)
+            let bestAudio = null;
+            let priority = 0;
+            
+            for (const format of formats) {
+                if (format.type === 'audio') {
+                    let p = 0;
+                    if (format.formatId === '251') p = 100;
+                    else if (format.formatId === '250') p = 90;
+                    else if (format.formatId === '249') p = 85;
+                    else if (format.formatId === '140') p = 80;
+                    else if (format.formatId === '139') p = 70;
+                    
+                    if (p > priority) {
+                        priority = p;
+                        bestAudio = format;
+                    }
+                }
+            }
+            
+            // If no pure audio, get video_with_audio
+            if (!bestAudio) {
+                for (const format of formats) {
+                    if (format.type === 'video_with_audio' && format.mimeType?.includes('mp4')) {
+                        bestAudio = format;
+                        break;
+                    }
+                }
+            }
+            
+            if (bestAudio?.url) {
+                const fileRes = await tryRequest(() => axios.get(bestAudio.url, {
+                    ...AXIOS_DEFAULTS,
+                    responseType: 'arraybuffer'
+                }));
+                
+                return {
+                    buffer: Buffer.from(fileRes.data),
+                    title: title,
+                    thumbnail: thumbnail,
+                    author: author,
+                    quality: bestAudio.quality || bestAudio.label,
+                    source: 'Nayan YouTube API',
+                    mimeType: 'audio/mp4'
+                };
+            }
+        }
+        throw new Error('No audio format found');
+    } catch (err) {
+        throw new Error(`YouTube API failed: ${err.message}`);
+    }
+}
+
+// Main function - tries AllDown first, then YouTube API
+async function getYoutubeAudio(ytUrl) {
+    // Try AllDown API first
+    try {
+        console.log('[PLAY] Trying AllDown API...');
+        return await getAudioFromAllDown(ytUrl);
+    } catch (allDownErr) {
+        console.log('[PLAY] AllDown failed, trying YouTube API...');
+        
+        // Try YouTube API as fallback
+        try {
+            return await getAudioFromYoutubeAPI(ytUrl);
+        } catch (ytErr) {
+            throw new Error('All APIs failed');
+        }
     }
 }
 
@@ -153,6 +174,7 @@ async function playCommand(sock, chatId, message) {
         let videoUrl = query;
         let videoInfo = null;
 
+        // Search if not YouTube URL
         if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
             const searchResults = await yts(query);
             const videos = searchResults?.videos;
@@ -165,29 +187,25 @@ async function playCommand(sock, chatId, message) {
             videoInfo = videos[0];
             videoUrl = videoInfo.url;
 
-            const infoMsg = `🎵 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()} views\n\n⬇️ Processing...`;
+            const infoMsg = `🎵 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()}\n\n⬇️ Processing...`;
             await sock.sendMessage(chatId, { text: infoMsg });
         } else {
-            await sock.sendMessage(chatId, { text: '⬇️ Downloading & converting...' });
+            await sock.sendMessage(chatId, { text: '⬇️ Processing...' });
         }
 
-        const processMsg = await sock.sendMessage(chatId, { 
-            text: '⏳ *Processing...*\n▰▰▰▰▰▰▰▰▰▰ 0%' 
-        });
+        const processMsg = await sock.sendMessage(chatId, { text: '⏳ Loading... 0%' });
 
         const audioData = await getYoutubeAudio(videoUrl);
 
-        const minutes = Math.floor(audioData.duration / 60);
-        const seconds = audioData.duration % 60;
-        const durationText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        // Update progress
+        await sock.sendMessage(chatId, { text: '📤 Sending audio...', edit: processMsg.key });
 
         const audioMessage = {
             audio: audioData.buffer,
-            mimetype: 'audio/mpeg',
+            mimetype: 'audio/mp4',
             ptt: false,
-            seconds: audioData.duration,
-            caption: `🎵 *${audioData.title.substring(0, 50)}*\n⏱️ ${durationText}\n🎚️ ${audioData.quality}`,
-            fileName: `${audioData.title.substring(0, 40)}.mp3`
+            caption: `🎵 *${audioData.title.substring(0, 50)}*\n📡 ${audioData.source}`,
+            fileName: `${audioData.title.substring(0, 40)}.mp4`
         };
 
         await sock.sendMessage(chatId, audioMessage);
@@ -197,17 +215,7 @@ async function playCommand(sock, chatId, message) {
     } catch (err) {
         console.error('[PLAY] Error:', err);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-        
-        let errorMsg = '❌ *Error:* ';
-        if (err.message.includes('too large')) {
-            errorMsg += 'Video too large (max 50MB)';
-        } else if (err.message.includes('timeout')) {
-            errorMsg += 'Timeout, try again';
-        } else {
-            errorMsg += 'Try again later';
-        }
-        
-        await sock.sendMessage(chatId, { text: errorMsg });
+        await sock.sendMessage(chatId, { text: '❌ Error: Try again later' });
     }
 }
 
