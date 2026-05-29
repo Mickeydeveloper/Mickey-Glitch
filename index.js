@@ -1,7 +1,6 @@
 /**
  * MICKEY GLITCH - A WhatsApp Bot
  * Clean & Optimized Version
- * [With Telegram Module]
  */
 
 require("dotenv").config();
@@ -26,7 +25,7 @@ const { handleAnticall } = require("./commands/anticall");
 const { getButtonId, isButtonResponse, autoDetectButtonCommand, isCommandId } = require("./lib/buttonLoader");
 const store = require("./lib/lightweight_store");
 const settings = require("./settings");
-const { startTelegramBot } = require("./telegram-bot"); // Import telegram module
+const { startTelegramBot } = require("./telegram-bot");
 
 // ============================================================
 // 🎨 COLORED UI COMPONENTS
@@ -92,8 +91,6 @@ function backupSession() {
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const backupPath = path.join(SESSION_BACKUP_DIR, `session_${timestamp}`);
             fs.cpSync(SESSION_DIR, backupPath, { recursive: true });
-            
-            // Keep only last 5 backups
             const backups = fs.readdirSync(SESSION_BACKUP_DIR).filter(f => f.startsWith('session_')).sort().reverse();
             backups.slice(5).forEach(old => fs.rmSync(path.join(SESSION_BACKUP_DIR, old), { recursive: true, force: true }));
             UI.debug(`Session backed up: ${timestamp}`);
@@ -115,7 +112,7 @@ let rl = process.stdin.isTTY ? readline.createInterface({ input: process.stdin, 
 
 const question = (text) => {
     if (rl) return new Promise(resolve => rl.question(text, resolve));
-    return Promise.resolve(settings.ownerNumber || "255615858685");
+    return Promise.resolve(settings.ownerNumber || "255612130873");
 };
 
 function normalizeNumber(phoneNumber) {
@@ -128,11 +125,27 @@ function normalizeNumber(phoneNumber) {
 // 🚀 MAIN BOT INITIALIZATION
 // ============================================================
 const pinoLogger = pino({ level: process.env.LOG_LEVEL || 'warn' });
-global.botname = settings.botname || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
+global.botname = settings.botname || settings.botName || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
 global.themeemoji = '•';
 
 let telegramModule = null;
-let whatsappStatus = 'disconnected';
+
+// Initialize store
+try {
+    store.readFromFile();
+} catch (err) {
+    UI.warning(`Store read failed: ${err.message}`);
+}
+setInterval(() => {
+    try {
+        store.writeToFile();
+    } catch (err) {}
+}, settings.storeWriteInterval || 10000);
+
+// Log sudo users
+if (settings.sudoUsers && settings.sudoUsers.length) {
+    console.log(chalk.magenta('✔️ Permanent sudo users initialized:'), settings.sudoUsers);
+}
 
 async function startMickeyBot(retryCount = 0) {
     try {
@@ -156,7 +169,7 @@ async function startMickeyBot(retryCount = 0) {
             browser: ["Ubuntu", "Chrome", "20.0.04"],
             auth: {
                 creds: state.creds,
-                keys: require('@whiskeysockets/baileys').makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }).child({ level: 'silent' }))
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }).child({ level: 'silent' }))
             },
             markOnlineOnConnect: true,
             syncFullHistory: false,
@@ -182,11 +195,6 @@ async function startMickeyBot(retryCount = 0) {
         
         Mickey.ev.on("creds.update", saveCreds);
         store.bind(Mickey.ev);
-        
-        // Update telegram with WhatsApp instance
-        if (telegramModule) {
-            telegramModule.updateStatus(whatsappStatus);
-        }
         
         // ============================================================
         // EVENT HANDLERS
@@ -238,9 +246,6 @@ async function startMickeyBot(retryCount = 0) {
             const { connection, lastDisconnect } = update;
             
             if (connection === "open") {
-                whatsappStatus = 'connected';
-                if (telegramModule) telegramModule.updateStatus('connected');
-                
                 UI.success('\n✅ MICKEY GLITCH BOT IS NOW ONLINE!');
                 if (Mickey.user && Mickey.user.id) {
                     UI.info(`📱 Connected as: ${chalk.green.bold(Mickey.user.id.split(':')[0])}`);
@@ -252,9 +257,6 @@ async function startMickeyBot(retryCount = 0) {
             }
             
             if (connection === "close") {
-                whatsappStatus = 'disconnected';
-                if (telegramModule) telegramModule.updateStatus('disconnected');
-                
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 UI.error(`\n❌ Connection closed!`);
                 
@@ -311,8 +313,15 @@ async function initializeBot() {
     
     startAutoCleanup();
     
-    // Initialize Telegram bot module
-    telegramModule = await startTelegramBot();
+    // Initialize Telegram bot (no updateStatus function needed)
+    try {
+        telegramModule = await startTelegramBot();
+        if (telegramModule) {
+            UI.success('Telegram bot is running!');
+        }
+    } catch (err) {
+        UI.warning(`Telegram bot error: ${err.message}`);
+    }
     
     // Check startup mode
     const settingMode = settings.mode?.toLowerCase() === 'telegram' ? 'telegram' : 'whatsapp';
