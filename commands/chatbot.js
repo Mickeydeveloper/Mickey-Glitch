@@ -1,3 +1,8 @@
+/**
+ * MICKEY CHATBOT - Natural Human-like Conversations
+ * Removed: Rate Limiting, Stats, Quotes
+ */
+
 const fs = require('fs').promises;
 const path = require('path');
 const fetch = require('node-fetch');
@@ -8,11 +13,6 @@ const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
 const USER_PREFS_PATH = path.join(__dirname, '..', 'data', 'user_prefs.json');
 const CUSTOM_RESPONSES_PATH = path.join(__dirname, '..', 'data', 'custom_responses.json');
 const REMINDERS_PATH = path.join(__dirname, '..', 'data', 'reminders.json');
-const STATS_PATH = path.join(__dirname, '..', 'data', 'stats.json');
-const QUOTES_PATH = path.join(__dirname, '..', 'data', 'quotes.json');
-
-// Rate limiting
-const rateLimits = new Map();
 
 // Global variable for bot number (set automatically)
 let BOT_NUMBER = null;
@@ -26,7 +26,6 @@ function setBotNumber(number) {
 // Check if user is owner (bot itself)
 function isOwner(userId) {
     if (!BOT_NUMBER) return false;
-    // Remove @s.whatsapp.net suffix if present
     const cleanUserId = userId.split('@')[0];
     const cleanBotNumber = BOT_NUMBER.split('@')[0];
     return cleanUserId === cleanBotNumber;
@@ -134,53 +133,7 @@ async function saveReminders(reminders) {
     }
 }
 
-async function loadStats() {
-    try {
-        const data = await fs.readFile(STATS_PATH, 'utf8');
-        return JSON.parse(data);
-    } catch (e) { 
-        return {}; 
-    }
-}
-
-async function saveStats(stats) {
-    try {
-        await fs.mkdir(path.dirname(STATS_PATH), { recursive: true });
-        await fs.writeFile(STATS_PATH, JSON.stringify(stats, null, 2));
-    } catch (e) { 
-        console.error('Stats Save Err:', e); 
-    }
-}
-
-async function loadQuotes() {
-    try {
-        const data = await fs.readFile(QUOTES_PATH, 'utf8');
-        return JSON.parse(data);
-    } catch (e) {
-        const defaultQuotes = {
-            sw: [
-                "Maisha ni kama wimbi, zama na ibuke tena",
-                "Furaha haitoki kwenye pesa, inatoka moyoni",
-                "Kila siku ni fursa mpya kuanza upya",
-                "Usiogope kushindwa, ogopa kutojaribu",
-                "Mvumilivu hula mbivu"
-            ]
-        };
-        await saveQuotes(defaultQuotes);
-        return defaultQuotes;
-    }
-}
-
-async function saveQuotes(quotes) {
-    try {
-        await fs.mkdir(path.dirname(QUOTES_PATH), { recursive: true });
-        await fs.writeFile(QUOTES_PATH, JSON.stringify(quotes, null, 2));
-    } catch (e) { 
-        console.error('Quotes Save Err:', e); 
-    }
-}
-
-// ============ HUMAN-LIKE RESPONSES (Natural conversation) ============
+// ============ HUMAN-LIKE RESPONSES ============
 const humanResponses = {
     greetings: [
         "Oya mambo vipi mazee?",
@@ -189,7 +142,7 @@ const humanResponses = {
         "Mambo mambo! Unaendeleaje?",
         "Sema mkuu, niko hapa kusikiliza"
     ],
-    
+
     howAreYou: [
         "Poa tu mazee, shukrani. Na wewe mambo?",
         "Freshi kabisa! Siku inaenda poa, na wewe je?",
@@ -197,7 +150,7 @@ const humanResponses = {
         "Safi tu, hakuna story. Wewe mambo gani?",
         "Poa poa nikishinda tu. Wewe?"
     ],
-    
+
     thanks: [
         "Karibu mazee, raha yangu kabisa",
         "Ahsante kwa shukrani, naomba tena",
@@ -205,7 +158,7 @@ const humanResponses = {
         "Karibu sana mkuu",
         "Sawa kabisa, rafiki yako"
     ],
-    
+
     dontKnow: [
         "Sijui mazee, siyo eneo langu hilo",
         "Hapo nimeshindwa mkuu, samahani",
@@ -213,7 +166,7 @@ const humanResponses = {
         "Hapana, sijawahi kusikia hicho",
         "Leta swali lingine, hili nimeshindwa"
     ],
-    
+
     jokes: [
         "Nimesikia simu haicheki... Ina data chache! 😂",
         "Kwanini tombo anakimbia? Anafuata ndoto zake! 😅",
@@ -221,7 +174,7 @@ const humanResponses = {
         "Kwanini nyoka hajisalimii? Anajisikia mnyama! 🐍",
         "Unajua kwanini mchele haendi shule? Anachelewa! 🤣"
     ],
-    
+
     advice: [
         "Ukiwa na shida, usibebe mzigo peke yako. Sema tu na mtu",
         "Maisha ni mafupi mazee, furahia kila dakika",
@@ -229,7 +182,7 @@ const humanResponses = {
         "Kupata rafiki wa kweli ni kama dhahabu, usimpoteze",
         "Usilinganishe maisha yako na ya mtu mwingine"
     ],
-    
+
     love: [
         "Ah mapenzi! Sijui mengi mazee, lakini fanya moyo wako useme",
         "Mapenzi si mchezo mkuu. Hakikisha unampata anayekufaa",
@@ -237,27 +190,27 @@ const humanResponses = {
         "Mapenzi yana changamoto zake. Subiri uwe tayari",
         "Moyo unasema nini? Fanya hivyo, usiogope"
     ],
-    
+
     work: [
         "Endelea kujituma mazee. Bidii yako itakupeleka mbali",
         "Kazi ni nzuri, lakini pumzika pia. Usijichoshe",
         "Nakumbuka siku zangu za kazi. Furahia wakati huo",
         "Ukiwa na nidhamu, mafanikio yatakujia yenyewe"
     ],
-    
+
     problem: [
         "Usijali mazee, kila tatizo lina suluhisho",
         "Nimekuelewa. Wakati mgumu hupita, jipe muda",
         "Shida ni sehemu ya maisha. Usikate tamaa",
         "Ukipata nafasi, tembea kidogo. Hewa safi inasaidia"
     ],
-    
+
     time: [
         "Sasa ni {time} mazee. Umekuwa na shughuli nyingi?",
         "Saa {time} tu mkuu, una mpango gani?",
         "Sasa {time}, kuna nini mazee?"
     ],
-    
+
     date: [
         "Leo ni {date} mazee. Siku inaendeleaje?",
         "Tarehe {date} mkuu, una mpango gani leo?",
@@ -268,13 +221,12 @@ const humanResponses = {
 function getHumanResponse(category, params = {}) {
     let responses = humanResponses[category];
     if (!responses) return "Sijui niseme nini mazee";
-    
+
     let response = responses[Math.floor(Math.random() * responses.length)];
-    
-    // Replace placeholders
+
     if (params.time) response = response.replace('{time}', params.time);
     if (params.date) response = response.replace('{date}', params.date);
-    
+
     return response;
 }
 
@@ -288,67 +240,56 @@ function getTimeGreeting() {
 // ============ NATURAL RESPONSE DETECTION ============
 async function getHumanReply(text, userName) {
     const lowerText = text.toLowerCase().trim();
-    
-    // Just a greeting
+
     if (lowerText.match(/^(mambo|vipi|niaje|sema|yo|hi|hello|hey|sasa)$/i)) {
         return getHumanResponse('greetings');
     }
-    
-    // How are you
+
     if (lowerText.match(/^(habari|how are you|unaendelea aje|poa|fresh|hujambo|ujambo)/i)) {
         return getHumanResponse('howAreYou');
     }
-    
-    // Thank you
+
     if (lowerText.match(/^(asante|thanks|thank you|shukran|ahsante)/i)) {
         return getHumanResponse('thanks');
     }
-    
-    // Joke
+
     if (lowerText.match(/(joke|utani|cheka|funny|comedy)/i)) {
         return getHumanResponse('jokes');
     }
-    
-    // Advice
+
     if (lowerText.match(/(advice|ushauri|nasaha|help|nisaidie|shida|tatizo)/i)) {
         return getHumanResponse('problem');
     }
-    
-    // Love
+
     if (lowerText.match(/(mapenzi|love|boyfriend|girlfriend|crush|mpenzi|pendo)/i)) {
         return getHumanResponse('love');
     }
-    
-    // Work/School
+
     if (lowerText.match(/(kazi|work|school|shule|job|studies|masomo|biashara)/i)) {
         return getHumanResponse('work');
     }
-    
-    // Time
+
     if (lowerText.match(/(time|saa ngapi|what time|saa)/i)) {
         const now = new Date();
         const timeStr = now.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' });
         return getHumanResponse('time', { time: timeStr });
     }
-    
-    // Date
+
     if (lowerText.match(/(date|tarehe|what date|leo)/i)) {
         const now = new Date();
         const dateStr = now.toLocaleDateString('sw-TZ', { weekday: 'long', day: 'numeric', month: 'long' });
         return getHumanResponse('date', { date: dateStr });
     }
-    
-    // Goodbye
+
     if (lowerText.match(/(kwaheri|bye|goodbye|tutaonana|later)/i)) {
         const goodbyes = ["Kwaheri mazee, tutaonana! 👋", "Bye mkuu, kesho! 😎", "Later mazee, nitarudi!"];
         return goodbyes[Math.floor(Math.random() * goodbyes.length)];
     }
-    
-    // Very short message
+
     if (text.length < 5) {
         return getHumanResponse('greetings');
     }
-    
+
     return null;
 }
 
@@ -426,58 +367,10 @@ async function learnResponse(trigger, response, chatId) {
     }
 }
 
-// ============ STATS LOGGING ============
-async function logInteraction(chatId, type, duration) {
-    try {
-        const stats = await loadStats();
-        if (!stats[chatId]) stats[chatId] = { messages: 0, commands: 0, totalResponseTime: 0, avgResponseTime: 0 };
-
-        if (type === 'message') stats[chatId].messages++;
-        if (type === 'command') stats[chatId].commands++;
-
-        stats[chatId].totalResponseTime = (stats[chatId].totalResponseTime || 0) + duration;
-        stats[chatId].avgResponseTime = Math.floor(stats[chatId].totalResponseTime / stats[chatId].messages);
-
-        await saveStats(stats);
-    } catch (e) {
-        console.error('Log interaction error:', e);
-    }
-}
-
-// ============ RATE LIMITING ============
-function checkRateLimit(chatId) {
-    const now = Date.now();
-    const userLimits = rateLimits.get(chatId) || [];
-    const recentMessages = userLimits.filter(t => now - t < 3000);
-
-    if (recentMessages.length >= 2) {
-        return false;
-    }
-
-    recentMessages.push(now);
-    rateLimits.set(chatId, recentMessages);
-    return true;
-}
-
-// ============ QUOTE FUNCTIONS ============
-async function addQuote(quote) {
-    try {
-        const quotes = await loadQuotes();
-        if (!quotes.sw) quotes.sw = [];
-        quotes.sw.push(quote);
-        await saveQuotes(quotes);
-        return true;
-    } catch (e) {
-        console.error('Add quote error:', e);
-        return false;
-    }
-}
-
 // ============ MAIN CHATBOT HANDLER ============
 async function handleChatbotMessage(sock, chatId, m, userText = null) {
-    const startTime = Date.now();
     const senderId = m.key.remoteJid?.split('@')[0] || '';
-    
+
     try {
         if (!chatId || m.key?.fromMe) return;
 
@@ -486,18 +379,13 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
             setBotNumber(sock.user.id);
         }
 
-        if (!checkRateLimit(chatId)) {
-            const slowResponses = ["Pole pole mazee 😅", "Nenda taratibu kidogo mkuu", "Ah, unanichokoza? Subiri sekunde"];
-            return await sock.sendMessage(chatId, { text: slowResponses[Math.floor(Math.random() * slowResponses.length)] });
-        }
-
         const text = userText || extractText(m);
         if (!text) return;
 
         const userName = m.pushName || 'Mshkaji';
         const state = await loadState();
         const isGroup = chatId.endsWith('@g.us');
-        
+
         // Check if enabled
         let enabled = false;
         if (isGroup) {
@@ -505,11 +393,11 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
         } else {
             enabled = !!state.private;
         }
-        
+
         // Only owner can use toggle commands when disabled
-        if (!enabled && !text.startsWith('.chatbot') && !text.startsWith('.pref') && !text.startsWith('.stats') && !text.startsWith('.quote') && !text.startsWith('.learn') && !text.startsWith('.remind')) {
+        if (!enabled && !text.startsWith('.chatbot') && !text.startsWith('.pref') && !text.startsWith('.remind') && !text.startsWith('.learn')) {
             if (!isOwner(senderId)) {
-                return; // Ignore non-owner messages when disabled
+                return;
             }
         }
 
@@ -548,7 +436,6 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
             memory[chatId].chats.push({ role: "assistant", content: customReply });
             await saveMemory(memory);
             await sock.sendMessage(chatId, { text: customReply }, { quoted: m });
-            await logInteraction(chatId, 'message', Date.now() - startTime);
             return;
         }
 
@@ -558,7 +445,6 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
             memory[chatId].chats.push({ role: "assistant", content: humanReply });
             await saveMemory(memory);
             await sock.sendMessage(chatId, { text: humanReply }, { quoted: m });
-            await logInteraction(chatId, 'message', Date.now() - startTime);
             return;
         }
 
@@ -568,11 +454,10 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
             memory[chatId].chats.push({ role: "assistant", content: greeting });
             await saveMemory(memory);
             await sock.sendMessage(chatId, { text: greeting }, { quoted: m });
-            await logInteraction(chatId, 'message', Date.now() - startTime);
             return;
         }
 
-        // API for complex questions - but make it sound human
+        // API for complex questions
         const history = memory[chatId].chats
             .map(msg => `${msg.role === 'user' ? msg.name : 'Mickey'}: ${msg.content}`)
             .slice(-5)
@@ -602,8 +487,7 @@ Mickey:`;
 
         // Clean up any AI language
         reply = reply.replace(/I am an AI|I am a chatbot|I was created|As an AI|Mimi ni AI|Nimeundwa na|Mimi ni chatbot|Mickey AI|Glitch V\d/gi, "Mimi ni Mickey");
-        
-        // Shorten if too long
+
         if (reply.length > 200) {
             reply = reply.substring(0, 200) + "..."
         }
@@ -612,7 +496,6 @@ Mickey:`;
         await saveMemory(memory);
 
         await sock.sendMessage(chatId, { text: reply }, { quoted: m });
-        await logInteraction(chatId, 'message', Date.now() - startTime);
 
     } catch (e) { 
         console.error('Chatbot Error:', e);
@@ -633,36 +516,15 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
         const userName = m.pushName || 'Mshkaji';
         const senderId = m.key.remoteJid?.split('@')[0] || '';
 
-        // Set bot number if not set
         if (!BOT_NUMBER && sock.user) {
             setBotNumber(sock.user.id);
         }
 
         const isOwnerUser = isOwner(senderId);
         const ownerOnlyCommands = ['on', 'off', 'private', 'enable', 'disable'];
-        
+
         if (ownerOnlyCommands.includes(sub) && !isOwnerUser) {
             return await sock.sendMessage(chatId, { text: `Samahani ${userName}, wewe sio owner wa bot hii.` });
-        }
-
-        // Add quote
-        if (sub === 'addquote') {
-            const quote = args.slice(1).join(' ');
-            if (quote) {
-                const success = await addQuote(quote);
-                if (success) {
-                    return await sock.sendMessage(chatId, { text: `✅ Asante ${userName}! Nimeongeza nukuu yako.` });
-                }
-            }
-            return await sock.sendMessage(chatId, { text: `📝 Tumia: .addquote [nukuu yako]` });
-        }
-
-        // Get quote
-        if (sub === 'quote') {
-            const quotes = await loadQuotes();
-            const quoteList = quotes.sw || [];
-            const randomQuote = quoteList[Math.floor(Math.random() * quoteList.length)];
-            return await sock.sendMessage(chatId, { text: `💬 "${randomQuote}"` });
         }
 
         // Language preference
@@ -676,14 +538,6 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
                 return await sock.sendMessage(chatId, { text: `✅ Sawa ${userName}, nitaongea ${newLang === 'sw' ? 'Kiswahili' : 'English'}!` });
             }
             return await sock.sendMessage(chatId, { text: `📝 Tumia: .pref lang sw/en` });
-        }
-
-        // Stats
-        if (sub === 'stats') {
-            const stats = await loadStats();
-            const userStats = stats[chatId] || { messages: 0, commands: 0, avgResponseTime: 0 };
-            const statsMsg = `📊 *TAKWIMU ZAKU ${userName}*\n\n💬 Ujumbe: ${userStats.messages}\n⚡ Commands: ${userStats.commands}\n⏱️ Muda: ${userStats.avgResponseTime}ms`;
-            return await sock.sendMessage(chatId, { text: statsMsg });
         }
 
         // Learn command
@@ -739,9 +593,6 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
 
 ⚡ COMMANDS
 .pref lang sw/en - Badilisha lugha
-.stats - Takwimu zako
-.quote - Nukuu za hekima
-.addquote [nukuu] - Ongeza nukuu
 .remind [dakika] [text] - Kumbukumbu
 .learn [trigger] | [res] - Nifundishe
 
