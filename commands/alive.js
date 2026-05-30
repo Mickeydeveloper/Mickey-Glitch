@@ -43,7 +43,7 @@ const aliveCommand = async (sock, chatId, msg) => {
         const ramPercent = ((usedRam / totalRam) * 100).toFixed(1);
         const cpuModel = os.cpus()[0]?.model.split('@')[0].trim() || 'Generic CPU';
 
-        const imageUrl = 'https://water-billing-292n.onrender.com/1761205727440.png';
+        const imageUrl = 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png';
 
         // Message Template
         const statusMessage = `
