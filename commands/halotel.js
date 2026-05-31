@@ -8,9 +8,21 @@ const { sendInteractiveMessage } = require('gifted-btns');
 const axios = require('axios');
 const settings = require('./settings'); // Import settings object nzima
 
-// Kuchukua config kutoka settings.js
-const PTERO_CONFIG = settings.PTERO_CONFIG;
-const CONFIG = settings.CONFIG;
+// Safe fallbacks for CONFIG
+const CONFIG = settings.CONFIG || {
+    PRICE_PER_GB: 1000,
+    BANNER: "https://i.imgur.com/NDbZ8qT.jpeg",
+    PAYMENT_NO: "0712345678",
+    FOOTER: "© Mickey Glitch Business | Powered by Halotel",
+    ownerNumber: "255700000000"
+};
+
+const PTERO_CONFIG = settings.PTERO_CONFIG || {
+    PANEL_URL: "https://your-pterodactyl-panel.com",
+    API_KEY: "ptlc_your_api_key_here",
+    EGG_ID: 1,
+    LOCATION_ID: 1
+};
 
 // Orodha ya vifurushi vya bando la kawaida
 const PACKAGES = [
@@ -27,7 +39,7 @@ const PANEL_PACKAGES = [
         name: 'Panel 1GB', 
         price: 5000, 
         id: 'h_panel_1gb',
-        specs: { ram: '1', cpu: '100', disk: '10' } // Inasomwa kama GB na % baadae
+        specs: { ram: '1', cpu: '100', disk: '10' }
     },
     { 
         name: 'Number 1 Month', 
@@ -48,7 +60,9 @@ async function askMickeyBiz(query, userName, context = "") {
         const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando na panel za server zilizowekwa spesifikeshoni zake. Mteja ni ${userName}. Jibu kishkaji sana (Bongo Slang).`;
         const res = await axios.get(`https://apiskeith.top/ai/gpt?q=${encodeURIComponent(bizPrompt + query)}`);
         return res.data.data || res.data.result || "Lipia mwanangu tuwashe mitambo.";
-    } catch (e) { return "Nipo hapa! Lipia chap nikuwashie mitambo."; }
+    } catch (e) { 
+        return "Nipo hapa! Lipia chap nikuwashie mitambo."; 
+    }
 }
 
 /**
@@ -56,10 +70,18 @@ async function askMickeyBiz(query, userName, context = "") {
  */
 async function createPterodactylServer(userName, userJid, pkg) {
     try {
+        // Check if Pterodactyl is configured
+        if (!PTERO_CONFIG.API_KEY || PTERO_CONFIG.API_KEY === "ptlc_your_api_key_here") {
+            return { 
+                success: false, 
+                error: "Pterodactyl panel not configured. Please set up API_KEY in settings.js" 
+            };
+        }
+
         const cleanJid = userJid.split('@')[0];
-        const userPassword = Math.random().toString(36).slice(-10) + 'A1!'; // Auto-generate password
-        
-        // 1. Tengeneza User Account kwanza
+        const userPassword = Math.random().toString(36).slice(-10) + 'A1!';
+
+        // 1. Tengeneza User Account
         const userRes = await axios.post(`${PTERO_CONFIG.PANEL_URL}/api/application/users`, {
             username: `u_${cleanJid}`,
             email: `${cleanJid}@mickeybot.store`,
@@ -71,17 +93,18 @@ async function createPterodactylServer(userName, userJid, pkg) {
                 'Authorization': `Bearer ${PTERO_CONFIG.API_KEY}`, 
                 'Content-Type': 'application/json', 
                 'Accept': 'application/json' 
-            }
+            },
+            timeout: 10000
         });
 
         const pteroUserId = userRes.data.attributes.id;
 
-        // 2. Badilisha Specs kwenda Megabytes (Pterodactyl Limits)
+        // 2. Badilisha Specs kwenda Megabytes
         const ramMb = parseFloat(pkg.ram) * 1024; 
         const diskMb = parseFloat(pkg.disk) * 1024;
         const cpuLimit = parseInt(pkg.cpu);
 
-        // 3. Tengeneza Server (Node.js Environment)
+        // 3. Tengeneza Server
         const serverRes = await axios.post(`${PTERO_CONFIG.PANEL_URL}/api/application/servers`, {
             name: `Node-${userName.replace(/[^a-zA-Z0-9]/g, '')}`,
             user: pteroUserId,
@@ -97,7 +120,8 @@ async function createPterodactylServer(userName, userJid, pkg) {
                 'Authorization': `Bearer ${PTERO_CONFIG.API_KEY}`, 
                 'Content-Type': 'application/json', 
                 'Accept': 'application/json' 
-            }
+            },
+            timeout: 15000
         });
 
         return {
@@ -119,7 +143,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
         const userName = m.pushName || 'Mteja';
         const userJid = m.key.participant || m.key.remoteJid;
 
-        // TAMBUA INPUT (Inasoma text au majibu ya buttons)
+        // TAMBUA INPUT
         let input = (
             m.message?.conversation || 
             m.message?.extendedTextMessage?.text || 
@@ -136,7 +160,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
         // [UPANDE WA PANEL / SERVER LOGIC]
         // ==========================================
 
-        // A. Menu kuu ya Server (.halotel server)
+        // A. Menu kuu ya Server
         if (input === '.halotel server') {
             await sock.sendMessage(chatId, { react: { text: '🖥️', key: m.key } });
 
@@ -161,13 +185,12 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }, { quoted: m });
         }
 
-        // B. Kamata Oda ya Server iliyochaguliwa na kuitengeneza kiotomatiki
+        // B. Kamata Oda ya Server iliyochaguliwa
         const selectedPanel = PANEL_PACKAGES.find(p => p.id === input);
         if (selectedPanel) {
             await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
             await sock.sendMessage(chatId, { text: '⏳ *Tafadhali subiri kidogo, ninafanya mawasiliano na Pterodactyl kuandaa mitambo yako...*' });
 
-            // Inaita Pterodactyl kuunda user na server papo hapo
             const creation = await createPterodactylServer(userName, userJid, selectedPanel.specs);
 
             if (creation.success) {
@@ -175,21 +198,27 @@ async function halotelCommand(sock, chatId, m, body = '') {
                     text: `*PANEL YAKO IPO TAYARI!* 🎉\n\nMitambo imewashwa kiotomatiki kwenye panel. Hapa kuna login details zako:\n\n🔗 *Link:* ${creation.link}\n👤 *Username:* ${creation.username}\n🔑 *Password:* ${creation.password}\n\n⚙️ *Specs Zilizowekwa:* \n   • 🧠 *RAM:* ${selectedPanel.specs.ram} GB\n   • 🏎️ *CPU:* ${selectedPanel.specs.cpu}%\n   • 💾 *DISK:* ${selectedPanel.specs.disk} GB\n\n_Tafadhali ingia na ubadilishe password yako mara moja kwa usalama!_ 🚀`
                 }, { quoted: m });
             } else {
-                await sock.sendMessage(chatId, { text: `❌ Samahani mwanangu, mfumo umepata hitilafu kidogo wakati wa kuunda server yako kwenye panel. Admin amearifiwa.` }, { quoted: m });
-                // Inamtaarifu mmiliki wa bot kupitia namba iliyopo settings.js ya ownerNumber
-                const adminJid = `${settings.ownerNumber}@s.whatsapp.net`;
-                return await sock.sendMessage(adminJid, { text: `🚨 *PTERODACTYL ERROR!* \n\nBot imefeli kumtengenezea server mteja: *${userName}* (${userJid}).\nError Message: ${creation.error}` });
+                await sock.sendMessage(chatId, { text: `❌ Samahani mwanangu, mfumo umepata hitilafu: ${creation.error}\n\nAdmin amearifiwa. Tafadhali jaribu tena baadae.` }, { quoted: m });
+                
+                const adminJid = `${CONFIG.ownerNumber}@s.whatsapp.net`;
+                await sock.sendMessage(adminJid, { text: `🚨 *PTERODACTYL ERROR!* \n\nBot imefeli kumtengenezea server mteja: *${userName}* (${userJid}).\nError Message: ${creation.error}` });
             }
+            return;
         }
 
         // ==========================================
         // [UPANDE WA BANDO LA KAWAIDA LOGIC]
         // ==========================================
 
-        // C. Direct Package Handler (.halotel 10gb)
+        // C. Direct Package Handler
         if (input.includes('gb') && (input.startsWith('.halotel') || input.includes('h_pkg'))) {
-            const gbValue = input.match(/\d+/)[0]; 
-            const totalPrice = parseInt(gbValue) * CONFIG.PRICE_PER_GB;
+            const gbMatch = input.match(/\d+/);
+            if (!gbMatch) {
+                return await sock.sendMessage(chatId, { text: '❌ Tafadhali chagua kiasi sahihi cha GB. Mfano: .halotel 10gb' }, { quoted: m });
+            }
+            
+            const gbValue = parseInt(gbMatch[0]);
+            const totalPrice = gbValue * CONFIG.PRICE_PER_GB;
 
             await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
 
@@ -212,7 +241,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }, { quoted: m });
         }
 
-        // D. Menu Kuu ya Bando (.halotel pekee)
+        // D. Menu Kuu ya Bando
         if (input === '.halotel') {
             await sock.sendMessage(chatId, { react: { text: '🛒', key: m.key } });
 
@@ -237,7 +266,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }, { quoted: m });
         }
 
-        // AI Conversation ya kawaida isiyo na dot command
+        // AI Conversation ya kawaida
         if (input.length > 2 && !input.startsWith('.')) {
             const aiReply = await askMickeyBiz(input, userName);
             return await sock.sendMessage(chatId, { text: `💼 *MICKEY BIZ:* ${aiReply}` }, { quoted: m });
@@ -245,6 +274,9 @@ async function halotelCommand(sock, chatId, m, body = '') {
 
     } catch (e) {
         console.error("Halotel Command Error:", e);
+        await sock.sendMessage(chatId, { 
+            text: `❌ Samahani, kuna error: ${e.message}\n\nTafadhali jaribu tena baadae.` 
+        }, { quoted: m });
     }
 }
 
