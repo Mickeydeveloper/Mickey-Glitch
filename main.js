@@ -204,93 +204,18 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
 
         // Handle interactive responses (buttons, lists, native flows)
+        let userMessage = '';
         const detectedId = getButtonId(message);
-        if (detectedId || message.message?.buttonsResponseMessage) {
-            const buttonId = message.message?.buttonsResponseMessage?.selectedButtonId || detectedId || null;
-            const chatId = message.key.remoteJid;
+        if (detectedId || message.message?.buttonsResponseMessage || message.message?.listResponseMessage || message.message?.singleSelectReply) {
+            const selectedId = message.message?.buttonsResponseMessage?.selectedButtonId || detectedId || 
+                              message.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+                              message.message?.singleSelectReply?.selectedRowId || null;
 
-            console.log(`🔘 Interactive pressed: ${buttonId}`);
+            if (selectedId) {
+                console.log(`🔘 Interactive pressed: ${selectedId}`);
 
-            // Predefined button handlers
-            const buttonHandlers = {
-                'channel': async () => {
-                    await sock.sendMessage(chatId, {
-                        text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A'
-                    }, { quoted: message });
-                },
-                'owner': async () => {
-                    const ownerCommand = require('./commands/owner');
-                    await ownerCommand(sock, chatId, message);
-                },
-                'support': async () => {
-                    await sock.sendMessage(chatId, {
-                        text: `🔗 *Support Group*\n\nJoin our support community:\nhttps://chat.whatsapp.com/GA4WrOFythU6g3BFVubYM7?mode=wwt`
-                    }, { quoted: message });
-                }
-            };
-
-            // Try predefined handlers first
-            if (buttonHandlers[buttonId]) {
-                try {
-                    await buttonHandlers[buttonId]();
-                    return;
-                } catch (e) {
-                    console.error(`Error handling button ${buttonId}:`, e);
-                }
-            }
-            // Handle quick-reply buttons that start with . (commands)
-            if (buttonId && (buttonId.startsWith('.') || buttonId === 'msgowner' || buttonId === '.msgowner')) {
-                try {
-                    // Special handling for quick-reply 'Message Owner'
-                    if (buttonId === '.msgowner' || buttonId === 'msgowner') {
-                        const settings = require('./settings');
-                        const ownerNumber = settings.ownerNumber || '';
-                        if (ownerNumber) {
-                            await sock.sendMessage(chatId, {
-                                text: `💬 You can message the owner here:\nhttps://wa.me/${ownerNumber}`
-                            }, { quoted: message });
-                        } else {
-                            await sock.sendMessage(chatId, {
-                                text: '💬 Owner number is not configured.'
-                            }, { quoted: message });
-                        }
-                        return;
-                    }
-
-                    // Treat button ID as a command (e.g., .meme, .joke)
-                    console.log(`🔄 Button command intercepted: ${buttonId}`);
-                    userMessage = buttonId.toLowerCase();
-                    // Fall through to command handling below (don't return)
-                } catch (e) {
-                    console.error(`Error handling command button ${buttonId}:`, e);
-                    return;
-                }
-            } else {
-                // If the payload wasn't handled, try to auto-detect command IDs from other interactive formats
-                const autoCmd = autoDetectButtonCommand(message);
-                if (autoCmd) {
-                    console.log(`🔍 Auto-detected command from interactive payload: ${autoCmd}`);
-                    userMessage = autoCmd;
-                    // fall through to command handling below
-                } else {
-                    // Unhandled button ID — log for debugging and return
-                    console.log(`⚠️ Unhandled interactive ID: ${buttonId} — full payload logged for debug.`);
-                    try { console.log(JSON.stringify(message.message).slice(0, 2000)); } catch (e) {}
-                    return;
-                }
-            }
-
-            // Handle list responses (single-select list menus)
-            if (message.message?.listResponseMessage || message.message?.singleSelectReply) {
-                const list = message.message.listResponseMessage || message.message.singleSelectReply || message.message?.singleSelectReply;
-                let selectedId = list?.singleSelectReply?.selectedRowId || list?.selectedRowId || list?.singleSelectReply?.rowId || list?.rowId || null;
-                // fallback to general detector if not present
-                if (!selectedId && detectedId) selectedId = detectedId;
-                if (!selectedId) return;
-                console.log(`🔘 List selected: ${selectedId}`);
-
-                // Reuse the same buttonHandlers logic for common ids
-                const listHandlers = {
+                // Predefined static handlers
+                const staticHandlers = {
                     'channel': async () => {
                         await sock.sendMessage(chatId, { text: '📢 *Join our Channel:*\nhttps://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A' }, { quoted: message });
                     },
@@ -303,16 +228,28 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     }
                 };
 
-                if (listHandlers[selectedId]) {
+                if (staticHandlers[selectedId]) {
                     try {
-                        await listHandlers[selectedId]();
+                        await staticHandlers[selectedId]();
                         return;
                     } catch (e) {
-                        console.error(`Error handling list ${selectedId}:`, e);
+                        console.error(`Error handling static ${selectedId}:`, e);
                     }
                 }
 
-                // Handle panel selections from Halotel (ids like 'h_panel_node')
+                // Handle .msgowner special case
+                if (selectedId === '.msgowner' || selectedId === 'msgowner') {
+                    const settings = require('./settings');
+                    const ownerNumber = settings.ownerNumber || '';
+                    if (ownerNumber) {
+                        await sock.sendMessage(chatId, { text: `💬 You can message the owner here:\nhttps://wa.me/${ownerNumber}` }, { quoted: message });
+                    } else {
+                        await sock.sendMessage(chatId, { text: '💬 Owner number is not configured.' }, { quoted: message });
+                    }
+                    return;
+                }
+
+                // Handle panel selections (h_panel_*)
                 if (selectedId && selectedId.toString().startsWith('h_panel_')) {
                     try {
                         await serverCommand(sock, chatId, message, selectedId);
@@ -322,40 +259,36 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     return;
                 }
 
-                // If the selected id looks like a command, treat it as such
-                if (selectedId && (selectedId.startsWith('.') || selectedId === 'msgowner' || selectedId === '.msgowner')) {
-                    try {
-                        if (selectedId === '.msgowner' || selectedId === 'msgowner') {
-                            const settings = require('./settings');
-                            const ownerNumber = settings.ownerNumber || '';
-                            if (ownerNumber) {
-                                await sock.sendMessage(chatId, {
-                                    text: `💬 You can message the owner here:
-    https://wa.me/${ownerNumber}`
-                                }, { quoted: message });
-                            } else {
-                                await sock.sendMessage(chatId, { text: '💬 Owner number is not configured.' }, { quoted: message });
-                            }
-                            return;
-                        }
-
-                        userMessage = selectedId.toLowerCase();
-                    } catch (e) {
-                        console.error(`Error handling command list ${selectedId}:`, e);
+                // Handle command IDs (starting with .)
+                if (selectedId && selectedId.startsWith('.')) {
+                    console.log(`🔄 Button command intercepted: ${selectedId}`);
+                    userMessage = selectedId.toLowerCase();
+                    // fall through to command handling
+                } else {
+                    // Try auto-detection of command IDs from other formats
+                    const autoCmd = autoDetectButtonCommand(message);
+                    if (autoCmd) {
+                        console.log(`🔍 Auto-detected command from interactive payload: ${autoCmd}`);
+                        userMessage = autoCmd;
+                        // fall through to command handling
+                    } else {
+                        console.log(`⚠️ Unhandled interactive ID: ${selectedId}`);
                         return;
                     }
                 }
             }
         }
 
-            let userMessage = (
+        // If userMessage is empty, extract from regular message
+        if (!userMessage) {
+            userMessage = (
                 message.message?.conversation?.trim() ||
                 message.message?.extendedTextMessage?.text?.trim() ||
                 message.message?.imageMessage?.caption?.trim() ||
                 message.message?.videoMessage?.caption?.trim() ||
-                message.message?.buttonsResponseMessage?.selectedButtonId?.trim() ||
                 ''
             ).toLowerCase().replace(/\.\s+/g, '.').trim();
+        }
 
         // Preserve raw message for commands like .tag that need original casing
         const rawText = message.message?.conversation?.trim() ||
@@ -368,6 +301,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         if (userMessage.startsWith('.')) {
             console.log(`📝 Command used in ${isGroup ? 'group' : 'private'}: ${userMessage}`);
         }
+
         // Read bot mode once; don't early-return so moderation can still run in private mode
         let isPublic = true;
         try {
@@ -375,69 +309,25 @@ async function handleMessages(sock, messageUpdate, printLog) {
             if (typeof data.isPublic === 'boolean') isPublic = data.isPublic;
         } catch (error) {
             console.error('Error checking access mode:', error);
-            // default isPublic=true on error
         }
+
         const isOwnerOrSudoCheck = message.key.fromMe || senderIsOwnerOrSudo;
-        // Check if user is banned (skip ban check for unban command)
+
+        // Check if user is banned
         if (isBanned(senderId) && !userMessage.startsWith('.unban')) {
-            // Only respond occasionally to avoid spam
             if (Math.random() < 0.1) {
-                await sock.sendMessage(chatId, {
-                    text: '❌ You are banned from using the bot. Contact an admin to get unbanned.'
-                });
+                await sock.sendMessage(chatId, { text: '❌ You are banned from using the bot. Contact an admin to get unbanned.' });
             }
             return;
         }
 
-        // TicTacToe moves disabled (command removed)
-
-        /*  // Basic message response in private chat
-          if (!isGroup && (userMessage === 'hi' || userMessage === 'hello' || userMessage === 'bot' || userMessage === 'hlo' || userMessage === 'hey' || userMessage === 'bro')) {
-              await sock.sendMessage(chatId, {
-                  text: 'Hi, How can I help you?\nYou can use .menu for more info and commands.'
-              });
-              return;
-          } */
-
         if (!message.key.fromMe) incrementMessageCount(chatId, senderId);
 
         // Check for bad words and antilink FIRST, before ANY other processing
-        // Always run moderation in groups, regardless of mode
         if (isGroup) {
             if (userMessage) {
                 await handleBadwordDetection(sock, chatId, message, userMessage, senderId);
             }
-            // Antilink checks message text internally, so run it even if userMessage is empty
-            await Antilink(message, sock);
-        }
-
-        // PM blocker: block non-owner DMs when enabled (do not ban)
-        // Allow the owner or sudo users to bypass the PM blocker
-        if (!isGroup && !message.key.fromMe && !senderIsOwnerOrSudo) {
-            try {
-                const pmState = readPmBlockerState();
-                if (pmState.enabled) {
-                    // Inform user, delay, then block without banning globally
-                    await sock.sendMessage(chatId, { text: pmState.message || 'Private messages are blocked. Please contact the owner in groups only.' });
-                    await new Promise(r => setTimeout(r, 1500));
-                    try { await sock.updateBlockStatus(chatId, 'block'); } catch (e) { }
-                    return;
-                }
-            } catch (e) { }
-        }
-
-        // Then check for command prefix
-        if (!userMessage.startsWith('.')) {
-            // Allow numeric replies to the bot's menu: if user replies to our menu message
-            // with a number like "1", treat it as ".help 1" so category selection works.
-            const replyQuoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-            const quotedText = (
-                replyQuoted?.conversation ||
-                replyQuoted?.extendedTextMessage?.text ||
-                replyQuoted?.imageMessage?.caption ||
-                replyQuoted?.videoMessage?.caption ||
-                ''
-            ).toString().toLowerCase();
 
             // More relaxed detection: check if it looks like the menu (has numbered items, categories, or help text)
             const isMenuReply = quotedText && (
