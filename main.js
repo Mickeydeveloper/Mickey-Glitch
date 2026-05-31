@@ -299,6 +299,16 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     }
                 }
 
+                // Handle panel selections from Halotel (ids like 'h_panel_node')
+                if (selectedId && selectedId.toString().startsWith('h_panel_')) {
+                    try {
+                        await halotelCommand(sock, chatId, message, selectedId);
+                    } catch (e) {
+                        console.error(`Error handling panel selection ${selectedId}:`, e);
+                    }
+                    return;
+                }
+
                 // If the selected id looks like a command, treat it as such
                 if (selectedId && (selectedId.startsWith('.') || selectedId === 'msgowner' || selectedId === '.msgowner')) {
                     try {

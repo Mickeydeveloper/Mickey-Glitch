@@ -1,5 +1,6 @@
 const os = require('os');
 const { performance } = require('perf_hooks');
+const { sendInteractiveMessage } = require('gifted-btns');
 
 /**
  * Formats seconds into a human-readable string (d h m s)
@@ -22,7 +23,7 @@ const formatUptime = (seconds) => {
 /**
  * Main command handler
  */
-const aliveCommand = async (ctx) => {
+const aliveCommand = async (sock, chatId, message) => {
     const startTime = performance.now();
 
     try {
@@ -43,7 +44,7 @@ const aliveCommand = async (ctx) => {
         const imageUrl = 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png';
 
         const statusMessage = `╭━━━〔 *ＭＩＣＫＥＹ-Ｖ３* 〕━━━┈⊷
-┃ 👤 *User:* ${ctx._msg.pushName || 'Guest'}
+┃ 👤 *User:* ${message.pushName || 'Guest'}
 ┃ 🕒 *Time:* ${time} EAT
 ┃ 🚀 *Latency:* ${latency}ms
 ╰━━━━━━━━━━━━━━━━━━┈⊷
@@ -55,20 +56,39 @@ const aliveCommand = async (ctx) => {
 ┃ 🟢 *Status:* Online & Stable
 ╰━━━━━━━━━━━━━━━━━━┈⊷`;
 
-        // Tumia muundo uliotaka
-        await new ButtonV2(ctx.core)
-            .setTitle('🚀 ＭＩＣＫＥＹ-Ｖ３')
-            .setSubtitle('Mickey Glitch Technology')
-            .setBody(statusMessage)
-            .setFooter('© 2026 Mickey Glitch Technology')
-            .setThumbnail(imageUrl)
-            .addButton('🆘 Menu', '.menu')
-            .addButton('📡 Speed', '.ping')
-            .addButton('👑 Support', '.owner')
-            .send(ctx._msg.key.remoteJid);
+        await sendInteractiveMessage(sock, chatId, {
+            text: statusMessage,
+            contextInfo: {
+                externalAdReply: {
+                    title: '🚀 ＭＩＣＫＥＹ-Ｖ３',
+                    body: 'Mickey Glitch Technology',
+                    thumbnailUrl: imageUrl,
+                    sourceUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
+                    mediaType: 1,
+                    renderLargerThumbnail: true
+                }
+            },
+            interactiveButtons: [
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({ display_text: '🆘 Menu', id: '.menu' })
+                },
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({ display_text: '📡 Speed', id: '.ping' })
+                },
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({ display_text: '👑 Support', id: '.owner' })
+                }
+            ]
+        }, { quoted: message });
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);
+        try {
+            await sock.sendMessage(chatId, { text: '❌ Error fetching status.' }, { quoted: message });
+        } catch (e) { }
     }
 };
 
