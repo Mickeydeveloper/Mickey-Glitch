@@ -260,3 +260,5 @@ async function halotelCommand(sock, chatId, m, body = '') {
 }
 
 module.exports = halotelCommand;
+module.exports.createPterodactylServer = createPterodactylServer;
+module.exports.PANEL_PACKAGES = PANEL_PACKAGES;

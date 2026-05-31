@@ -87,6 +87,7 @@ const hideTagCommand = require('./commands/hidetag');
 const weatherCommand = require('./commands/weather');
 const reportCommand = require('./commands/report');
 const halotelCommand = require('./commands/halotel');
+const serverCommand = require('./commands/server');
 const kickCommand = require('./commands/kick');
 // quote command removed
 const { complimentCommand } = require('./commands/compliment');
@@ -302,7 +303,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 // Handle panel selections from Halotel (ids like 'h_panel_node')
                 if (selectedId && selectedId.toString().startsWith('h_panel_')) {
                     try {
-                        await halotelCommand(sock, chatId, message, selectedId);
+                        await serverCommand(sock, chatId, message, selectedId);
                     } catch (e) {
                         console.error(`Error handling panel selection ${selectedId}:`, e);
                     }
@@ -860,6 +861,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.halotel'):
                 await halotelCommand(sock, chatId, message, userMessage);
+                break;
+            case userMessage.startsWith('.server'):
+                await serverCommand(sock, chatId, message, userMessage);
                 break;
             // case userMessage.startsWith('.phone'): // removed - command not found
             //     const phoneQuery = userMessage.slice(6).trim();
