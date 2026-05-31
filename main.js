@@ -297,6 +297,17 @@ async function handleMessages(sock, messageUpdate, printLog) {
             message.message?.videoMessage?.caption?.trim() ||
             '';
 
+        // Safely extract quoted/replied-to message text (avoid undefined errors)
+        const replyQuoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
+            message.message?.contextInfo?.quotedMessage || null;
+        const quotedText = (
+            replyQuoted?.conversation?.trim() ||
+            replyQuoted?.extendedTextMessage?.text?.trim() ||
+            replyQuoted?.imageMessage?.caption?.trim() ||
+            replyQuoted?.videoMessage?.caption?.trim() ||
+            ''
+        ).toString();
+
         // Only log command usage
         if (userMessage.startsWith('.')) {
             console.log(`📝 Command used in ${isGroup ? 'group' : 'private'}: ${userMessage}`);

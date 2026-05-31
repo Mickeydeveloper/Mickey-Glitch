@@ -72,8 +72,11 @@ async function createPterodactylServer(userName, userJid, pkg) {
         const cleanJid = userJid.split('@')[0];
         const userPassword = Math.random().toString(36).slice(-10) + 'A1!';
 
+        // Remove trailing slash from PANEL_URL to avoid double slashes
+        const panelUrl = SAFE_PTERO.PANEL_URL.replace(/\/$/, '');
+
         // 1. Create user account
-        const userRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/users`, {
+        const userRes = await axios.post(`${panelUrl}/api/application/users`, {
             username: `u_${cleanJid}`,
             email: `${cleanJid}@mickeybot.store`,
             first_name: userName.replace(/[^a-zA-Z0-9]/g, '') || 'Mteja',
@@ -96,7 +99,7 @@ async function createPterodactylServer(userName, userJid, pkg) {
         const cpuLimit = parseInt(pkg.cpu);
 
         // 3. Create server
-        const serverRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/servers`, {
+        const serverRes = await axios.post(`${panelUrl}/api/application/servers`, {
             name: `Node-${userName.replace(/[^a-zA-Z0-9]/g, '')}`,
             user: pteroUserId,
             egg: SAFE_PTERO.EGG_ID,
@@ -117,14 +120,19 @@ async function createPterodactylServer(userName, userJid, pkg) {
 
         return {
             success: true,
-            link: SAFE_PTERO.PANEL_URL,
+            link: panelUrl,
             username: `u_${cleanJid}`,
             password: userPassword,
             serverName: serverRes.data.attributes.name
         };
 
     } catch (error) {
-        console.error("Pterodactyl Error:", error.response?.data || error.message);
+        console.error("Pterodactyl Error:", {
+            statusCode: error.response?.status,
+            data: error.response?.data,
+            message: error.message,
+            url: error.config?.url
+        });
         return { success: false, error: error.message };
     }
 }
