@@ -32,9 +32,9 @@ const settings = {
   // CONFIG MPYA ZA PTERODACTYL & HALOTEL BANDO
   // ==========================================
   PTERO_CONFIG: {
-    PANEL_URL: 'https://panel.yako.com', // Weka link ya panel yako hapa
-    API_KEY: 'ptla_XXXXXXXXXXXXXXXXXXXXXXXX', // Weka Application API Key yako (ptla_...)
-    LOCATION_ID: 1, 
+    PANEL_URL: 'https://panel.mickeypannel.dpdns.org/', // Weka link ya panel yako hapa
+    API_KEY: 'ptla_6TPdj5LSkKq1vCLbEJYBO1hy39vD2NBWqopJKc1Pgg0', // Weka Application API Key yako (ptla_...)
+    LOCATION_ID: 2, 
     EGG_ID: 15, // ID ya Egg ya Node.js
   },
   CONFIG: {
