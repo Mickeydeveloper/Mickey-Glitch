@@ -1,30 +1,32 @@
 /**
  * halotel.js - Mickey Glitch Business AI (Super Stable Version)
- * Kazi: Inatofautisha bando na Panel za Server zenye Specs (RAM, CPU, DISK) ukitumia gifted-btns.
- * Ushirikiano: Inasoma token na config zote kutoka kwenye settings.js kiotomatiki.
+ * KAZI: Inauza bando na panel za server automatically
  */
 
 const { sendInteractiveMessage } = require('gifted-btns');
 const axios = require('axios');
-const settings = require('./settings'); // Import settings object nzima
+const settings = require('./settings');
 
-// Safe fallbacks for CONFIG
-const CONFIG = settings.CONFIG || {
+// Kuchukua config kutoka settings yako
+const CONFIG = settings.CONFIG;
+const PTERO_CONFIG = settings.PTERO_CONFIG;
+
+// Safe fallback ikiwa config haipo (just in case)
+const SAFE_CONFIG = CONFIG || {
     PRICE_PER_GB: 1000,
-    BANNER: "https://i.imgur.com/NDbZ8qT.jpeg",
-    PAYMENT_NO: "0712345678",
-    FOOTER: "© Mickey Glitch Business | Powered by Halotel",
-    ownerNumber: "255700000000"
+    PAYMENT_NO: '0615944741',
+    BANNER: 'https://files.catbox.moe/ljabyq.png',
+    FOOTER: '🚀 Powered by Mickey Glitch Tech'
 };
 
-const PTERO_CONFIG = settings.PTERO_CONFIG || {
-    PANEL_URL: "https://your-pterodactyl-panel.com",
-    API_KEY: "ptlc_your_api_key_here",
-    EGG_ID: 1,
-    LOCATION_ID: 1
+const SAFE_PTERO = PTERO_CONFIG || {
+    PANEL_URL: 'https://panel.mickeypannel.dpdns.org/',
+    API_KEY: 'ptla_6TPdj5LSkKq1vCLbEJYBO1hy39vD2NBWqopJKc1Pgg0',
+    LOCATION_ID: 2,
+    EGG_ID: 15
 };
 
-// Orodha ya vifurushi vya bando la kawaida
+// Orodha ya vifurushi vya bando
 const PACKAGES = [
     { gb: 10, label: 'Standard Pack' },
     { gb: 15, label: 'Bronze Pack' },
@@ -33,7 +35,7 @@ const PACKAGES = [
     { gb: 50, label: 'Business Pack' }
 ];
 
-// Orodha ya bidhaa za Panel zenye CPU, RAM, na DISK
+// Orodha ya Panel Packages
 const PANEL_PACKAGES = [
     { 
         name: 'Panel 1GB', 
@@ -55,9 +57,9 @@ const PANEL_PACKAGES = [
     }
 ];
 
-async function askMickeyBiz(query, userName, context = "") {
+async function askMickeyBiz(query, userName) {
     try {
-        const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando na panel za server zilizowekwa spesifikeshoni zake. Mteja ni ${userName}. Jibu kishkaji sana (Bongo Slang).`;
+        const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando na panel. Mteja ni ${userName}. Jibu kwa mfumo wa biashara.`;
         const res = await axios.get(`https://apiskeith.top/ai/gpt?q=${encodeURIComponent(bizPrompt + query)}`);
         return res.data.data || res.data.result || "Lipia mwanangu tuwashe mitambo.";
     } catch (e) { 
@@ -65,24 +67,13 @@ async function askMickeyBiz(query, userName, context = "") {
     }
 }
 
-/**
- * Function ya kuunda User na Server kiotomatiki kwenye Pterodactyl Panel
- */
 async function createPterodactylServer(userName, userJid, pkg) {
     try {
-        // Check if Pterodactyl is configured
-        if (!PTERO_CONFIG.API_KEY || PTERO_CONFIG.API_KEY === "ptlc_your_api_key_here") {
-            return { 
-                success: false, 
-                error: "Pterodactyl panel not configured. Please set up API_KEY in settings.js" 
-            };
-        }
-
         const cleanJid = userJid.split('@')[0];
         const userPassword = Math.random().toString(36).slice(-10) + 'A1!';
 
-        // 1. Tengeneza User Account
-        const userRes = await axios.post(`${PTERO_CONFIG.PANEL_URL}/api/application/users`, {
+        // 1. Create user account
+        const userRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/users`, {
             username: `u_${cleanJid}`,
             email: `${cleanJid}@mickeybot.store`,
             first_name: userName.replace(/[^a-zA-Z0-9]/g, '') || 'Mteja',
@@ -90,7 +81,7 @@ async function createPterodactylServer(userName, userJid, pkg) {
             password: userPassword
         }, {
             headers: { 
-                'Authorization': `Bearer ${PTERO_CONFIG.API_KEY}`, 
+                'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`, 
                 'Content-Type': 'application/json', 
                 'Accept': 'application/json' 
             },
@@ -99,25 +90,25 @@ async function createPterodactylServer(userName, userJid, pkg) {
 
         const pteroUserId = userRes.data.attributes.id;
 
-        // 2. Badilisha Specs kwenda Megabytes
+        // 2. Convert specs to MB
         const ramMb = parseFloat(pkg.ram) * 1024; 
         const diskMb = parseFloat(pkg.disk) * 1024;
         const cpuLimit = parseInt(pkg.cpu);
 
-        // 3. Tengeneza Server
-        const serverRes = await axios.post(`${PTERO_CONFIG.PANEL_URL}/api/application/servers`, {
+        // 3. Create server
+        const serverRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/servers`, {
             name: `Node-${userName.replace(/[^a-zA-Z0-9]/g, '')}`,
             user: pteroUserId,
-            egg: PTERO_CONFIG.EGG_ID,
+            egg: SAFE_PTERO.EGG_ID,
             docker_image: "ghcr.io/pterodactyl/yolks:node_18", 
             startup: "node index.js", 
             limits: { memory: ramMb, swap: 0, disk: diskMb, io: 500, cpu: cpuLimit },
             feature_limits: { databases: 1, allocations: 1, backups: 1 },
-            deploy: { locations: [PTERO_CONFIG.LOCATION_ID], dedicated_ip: false, port_range: [] },
+            deploy: { locations: [SAFE_PTERO.LOCATION_ID], dedicated_ip: false, port_range: [] },
             environment: { INST: "npm install" } 
         }, {
             headers: { 
-                'Authorization': `Bearer ${PTERO_CONFIG.API_KEY}`, 
+                'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`, 
                 'Content-Type': 'application/json', 
                 'Accept': 'application/json' 
             },
@@ -126,14 +117,14 @@ async function createPterodactylServer(userName, userJid, pkg) {
 
         return {
             success: true,
-            link: PTERO_CONFIG.PANEL_URL,
+            link: SAFE_PTERO.PANEL_URL,
             username: `u_${cleanJid}`,
             password: userPassword,
             serverName: serverRes.data.attributes.name
         };
 
     } catch (error) {
-        console.error("Pterodactyl Automation Error:", error.response?.data || error.message);
+        console.error("Pterodactyl Error:", error.response?.data || error.message);
         return { success: false, error: error.message };
     }
 }
@@ -143,7 +134,6 @@ async function halotelCommand(sock, chatId, m, body = '') {
         const userName = m.pushName || 'Mteja';
         const userJid = m.key.participant || m.key.remoteJid;
 
-        // TAMBUA INPUT
         let input = (
             m.message?.conversation || 
             m.message?.extendedTextMessage?.text || 
@@ -156,11 +146,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             input = '.halotel';
         }
 
-        // ==========================================
-        // [UPANDE WA PANEL / SERVER LOGIC]
-        // ==========================================
-
-        // A. Menu kuu ya Server
+        // ============= PANEL MENU =============
         if (input === '.halotel server') {
             await sock.sendMessage(chatId, { react: { text: '🖥️', key: m.key } });
 
@@ -172,9 +158,9 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }));
 
             return await sendInteractiveMessage(sock, chatId, {
-                image: { url: CONFIG.BANNER },
+                image: { url: SAFE_CONFIG.BANNER },
                 text: `Inakuwaje *${userName}*! 👋\n\nKaribu kwenye *ZERO TR4SH STORE* 🖥️\nHapa kuna server zenye nguvu kwa ajili ya bot zako.\n\nChagua package yenye specs unazotaka hapa chini nikuwashe VPS: 👇`,
-                footer: CONFIG.FOOTER,
+                footer: SAFE_CONFIG.FOOTER,
                 interactiveButtons: [{
                     name: "single_select",
                     buttonParamsJson: JSON.stringify({
@@ -185,7 +171,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }, { quoted: m });
         }
 
-        // B. Kamata Oda ya Server iliyochaguliwa
+        // ============= PANEL ORDER =============
         const selectedPanel = PANEL_PACKAGES.find(p => p.id === input);
         if (selectedPanel) {
             await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
@@ -198,19 +184,12 @@ async function halotelCommand(sock, chatId, m, body = '') {
                     text: `*PANEL YAKO IPO TAYARI!* 🎉\n\nMitambo imewashwa kiotomatiki kwenye panel. Hapa kuna login details zako:\n\n🔗 *Link:* ${creation.link}\n👤 *Username:* ${creation.username}\n🔑 *Password:* ${creation.password}\n\n⚙️ *Specs Zilizowekwa:* \n   • 🧠 *RAM:* ${selectedPanel.specs.ram} GB\n   • 🏎️ *CPU:* ${selectedPanel.specs.cpu}%\n   • 💾 *DISK:* ${selectedPanel.specs.disk} GB\n\n_Tafadhali ingia na ubadilishe password yako mara moja kwa usalama!_ 🚀`
                 }, { quoted: m });
             } else {
-                await sock.sendMessage(chatId, { text: `❌ Samahani mwanangu, mfumo umepata hitilafu: ${creation.error}\n\nAdmin amearifiwa. Tafadhali jaribu tena baadae.` }, { quoted: m });
-                
-                const adminJid = `${CONFIG.ownerNumber}@s.whatsapp.net`;
-                await sock.sendMessage(adminJid, { text: `🚨 *PTERODACTYL ERROR!* \n\nBot imefeli kumtengenezea server mteja: *${userName}* (${userJid}).\nError Message: ${creation.error}` });
+                await sock.sendMessage(chatId, { text: `❌ Samahani, mfumo umepata hitilafu: ${creation.error}` }, { quoted: m });
             }
             return;
         }
 
-        // ==========================================
-        // [UPANDE WA BANDO LA KAWAIDA LOGIC]
-        // ==========================================
-
-        // C. Direct Package Handler
+        // ============= DATA PACKAGE (GB) =============
         if (input.includes('gb') && (input.startsWith('.halotel') || input.includes('h_pkg'))) {
             const gbMatch = input.match(/\d+/);
             if (!gbMatch) {
@@ -218,7 +197,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }
             
             const gbValue = parseInt(gbMatch[0]);
-            const totalPrice = gbValue * CONFIG.PRICE_PER_GB;
+            const totalPrice = gbValue * SAFE_CONFIG.PRICE_PER_GB;
 
             await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
 
@@ -228,34 +207,34 @@ async function halotelCommand(sock, chatId, m, body = '') {
                 {
                     name: "cta_copy",
                     buttonParamsJson: JSON.stringify({
-                        display_text: `📋 Copy No: ${CONFIG.PAYMENT_NO}`,
-                        copy_code: CONFIG.PAYMENT_NO
+                        display_text: `📋 Copy No: ${SAFE_CONFIG.PAYMENT_NO}`,
+                        copy_code: SAFE_CONFIG.PAYMENT_NO
                     })
                 }
             ];
 
             return await sendInteractiveMessage(sock, chatId, {
                 text: `✨ *MICKEY BIZ - ODA YAKO*\n\n${aiInstruction}\n\n📊 *DATA:* ${gbValue}GB\n💰 *BEI:* TSh ${totalPrice.toLocaleString()}\n📌 *MTANDAO:* Halotel\n\nUkishalipa, tuma screenshot hapa chap! 🚀`,
-                footer: CONFIG.FOOTER,
+                footer: SAFE_CONFIG.FOOTER,
                 interactiveButtons: paymentButtons
             }, { quoted: m });
         }
 
-        // D. Menu Kuu ya Bando
+        // ============= MAIN MENU =============
         if (input === '.halotel') {
             await sock.sendMessage(chatId, { react: { text: '🛒', key: m.key } });
 
             const rows = PACKAGES.map(p => ({
                 header: `${p.gb}GB`,
                 title: p.label,
-                description: `TSh ${(p.gb * CONFIG.PRICE_PER_GB).toLocaleString()}`,
+                description: `TSh ${(p.gb * SAFE_CONFIG.PRICE_PER_GB).toLocaleString()}`,
                 id: `.halotel ${p.gb}gb`
             }));
 
             return await sendInteractiveMessage(sock, chatId, {
-                image: { url: CONFIG.BANNER },
+                image: { url: SAFE_CONFIG.BANNER },
                 text: `Mambo vipi *${userName}*! 👋\n\nChagua bando lako la *Halotel* hapa chini nikupe namba ya malipo chap! 👇\n\n_(Kama unataka Panel za Server, andika *.halotel server*)_`,
-                footer: CONFIG.FOOTER,
+                footer: SAFE_CONFIG.FOOTER,
                 interactiveButtons: [{
                     name: "single_select",
                     buttonParamsJson: JSON.stringify({
@@ -266,7 +245,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }, { quoted: m });
         }
 
-        // AI Conversation ya kawaida
+        // ============= AI CHAT =============
         if (input.length > 2 && !input.startsWith('.')) {
             const aiReply = await askMickeyBiz(input, userName);
             return await sock.sendMessage(chatId, { text: `💼 *MICKEY BIZ:* ${aiReply}` }, { quoted: m });
@@ -275,7 +254,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
     } catch (e) {
         console.error("Halotel Command Error:", e);
         await sock.sendMessage(chatId, { 
-            text: `❌ Samahani, kuna error: ${e.message}\n\nTafadhali jaribu tena baadae.` 
+            text: `❌ Samahani, kuna error: ${e.message}` 
         }, { quoted: m });
     }
 }
