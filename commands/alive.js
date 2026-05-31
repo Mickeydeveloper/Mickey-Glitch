@@ -1,6 +1,5 @@
 const os = require('os');
 const { performance } = require('perf_hooks');
-const { ButtonV2 } = require('gifted-btns'); // Hakikisha umeseti ButtonV2 kutoka gifted-btns
 
 /**
  * Formats seconds into a human-readable string (d h m s)
@@ -23,9 +22,7 @@ const formatUptime = (seconds) => {
 /**
  * Main command handler
  */
-const aliveCommand = async (sock, chatId, msg) => {
-    if (!sock) return;
-
+const aliveCommand = async (ctx) => {
     const startTime = performance.now();
 
     try {
@@ -46,7 +43,7 @@ const aliveCommand = async (sock, chatId, msg) => {
         const imageUrl = 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png';
 
         const statusMessage = `╭━━━〔 *ＭＩＣＫＥＹ-Ｖ３* 〕━━━┈⊷
-┃ 👤 *User:* ${msg.pushName || 'Guest'}
+┃ 👤 *User:* ${ctx._msg.pushName || 'Guest'}
 ┃ 🕒 *Time:* ${time} EAT
 ┃ 🚀 *Latency:* ${latency}ms
 ╰━━━━━━━━━━━━━━━━━━┈⊷
@@ -58,9 +55,9 @@ const aliveCommand = async (sock, chatId, msg) => {
 ┃ 🟢 *Status:* Online & Stable
 ╰━━━━━━━━━━━━━━━━━━┈⊷`;
 
-        // Tumia ButtonV2 muundo (Hapa tunatumia sock kama core)
-        await new ButtonV2(sock)
-            .setTitle('SYSTEM ACTIVE')
+        // Tumia muundo uliotaka
+        await new ButtonV2(ctx.core)
+            .setTitle('🚀 ＭＩＣＫＥＹ-Ｖ３')
             .setSubtitle('Mickey Glitch Technology')
             .setBody(statusMessage)
             .setFooter('© 2026 Mickey Glitch Technology')
@@ -68,7 +65,7 @@ const aliveCommand = async (sock, chatId, msg) => {
             .addButton('🆘 Menu', '.menu')
             .addButton('📡 Speed', '.ping')
             .addButton('👑 Support', '.owner')
-            .send(chatId);
+            .send(ctx._msg.key.remoteJid);
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);
