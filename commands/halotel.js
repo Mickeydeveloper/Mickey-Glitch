@@ -1,6 +1,6 @@
 /**
  * halotel.js - Mickey Glitch Business AI (Super Stable Version)
- * Kazi: Inatofautisha bando za kawaida na kuuza Panel za Server ukitumia gifted-btns.
+ * Kazi: Inatofautisha bando na Panel za Server zenye Specs (RAM, CPU, DISK) ukitumia gifted-btns.
  */
 
 const { sendInteractiveMessage } = require('gifted-btns');
@@ -14,7 +14,7 @@ const CONFIG = {
     PAYMENT_NO: '0615944741'
 };
 
-// Orodha ya vifurushi vya bando la kawaida
+// Vifurushi vya bando la kawaida
 const PACKAGES = [
     { gb: 10, label: 'Standard Pack' },
     { gb: 15, label: 'Bronze Pack' },
@@ -23,16 +23,31 @@ const PACKAGES = [
     { gb: 50, label: 'Business Pack' }
 ];
 
-// Orodha ya bidhaa za Panel (Kama zilivyo kwenye picha yako)
+// Orodha ya bidhaa za Panel zilizoboreshwa zenye CPU, RAM, na DISK
 const PANEL_PACKAGES = [
-    { name: 'Panel 1GB', price: 5000, id: 'h_panel_1gb' },
-    { name: 'Number 1 Month', price: 3000, id: 'h_panel_num1m' },
-    { name: 'Node/Bot Server', price: 15000, id: 'h_panel_node' }
+    { 
+        name: 'Panel 1GB', 
+        price: 5000, 
+        id: 'h_panel_1gb',
+        specs: { ram: '1 GB', cpu: '100% (1 Core)', disk: '10 GB SSD' }
+    },
+    { 
+        name: 'Number 1 Month', 
+        price: 3000, 
+        id: 'h_panel_num1m',
+        specs: { ram: '512 MB', cpu: '50% (Shared)', disk: '5 GB SSD' }
+    },
+    { 
+        name: 'Node/Bot Server', 
+        price: 15000, 
+        id: 'h_panel_node',
+        specs: { ram: '4 GB', cpu: '200% (2 Cores)', disk: '40 GB NVMe' }
+    }
 ];
 
 async function askMickeyBiz(query, userName, context = "") {
     try {
-        const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando na panel za server. Mteja ni ${userName}. Jibu kishkaji sana (Bongo Slang).`;
+        const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando na panel za server zilizowekwa spesifikeshoni zake. Mteja ni ${userName}. Jibu kishkaji sana (Bongo Slang).`;
         const res = await axios.get(`https://apiskeith.top/ai/gpt?q=${encodeURIComponent(bizPrompt + query)}`);
         return res.data.data || res.data.result || "Lipia mwanangu tuwashe mitambo.";
     } catch (e) { return "Nipo hapa! Lipia chap nikuwashie mitambo."; }
@@ -43,7 +58,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
         const userName = m.pushName || 'Mteja';
         const userJid = m.key.participant || m.key.remoteJid;
 
-        // 1. TAMBUA INPUT (Inasoma text au majibu ya buttons)
+        // 1. TAMBUA INPUT
         let input = (
             m.message?.conversation || 
             m.message?.extendedTextMessage?.text || 
@@ -52,7 +67,6 @@ async function halotelCommand(sock, chatId, m, body = '') {
             body || ''
         ).toLowerCase().trim();
 
-        // Kama mteja kaandika 'halotel' bila doti, iweke doti ili isomeke kwenye menu ya kawaida
         if (input === 'halotel') {
             input = '.halotel';
         }
@@ -61,37 +75,37 @@ async function halotelCommand(sock, chatId, m, body = '') {
         // [UPANDE WA PANEL / SERVER LOGIC]
         // ==========================================
 
-        // A. Kama mteja amepiga command ya ".halotel server"
+        // A. Menu kuu ya Server (.halotel server)
         if (input === '.halotel server') {
             await sock.sendMessage(chatId, { react: { text: '🖥️', key: m.key } });
 
             const panelRows = PANEL_PACKAGES.map(p => ({
                 header: p.name,
-                title: `Chagua ${p.name}`,
-                description: `TSh ${p.price.toLocaleString()}`,
-                id: p.id // Hii inatumiwa kukamata oda chini
+                title: `RAM: ${p.specs.ram} | CPU: ${p.specs.cpu}`,
+                description: `💾 Disk: ${p.specs.disk} — TSh ${p.price.toLocaleString()}`,
+                id: p.id 
             }));
 
             return await sendInteractiveMessage(sock, chatId, {
                 image: { url: CONFIG.BANNER },
-                text: `Inakuwaje *${userName}*! 👋\n\nKaribu kwenye *ZERO TR4SH STORE* 🖥️\nHapa unaweza kujipatia Panel na Bot Server za uhakika.\n\nChagua unachohitaji hapa chini nikupe utaratibu wa kulipia chap! 👇`,
+                text: `Inakuwaje *${userName}*! 👋\n\nKaribu kwenye *ZERO TR4SH STORE* 🖥️\nHapa kuna server zenye nguvu kwa ajili ya bot zako.\n\nChagua package yenye specs unazotaka hapa chini: 👇`,
                 footer: CONFIG.FOOTER,
                 interactiveButtons: [{
                     name: "single_select",
                     buttonParamsJson: JSON.stringify({
-                        title: "🛒 ORODHA YA PANEL",
+                        title: "🛒 CHAGUA SERVER SPECS",
                         sections: [{ title: "SERVER & PANELS", rows: panelRows }]
                     })
                 }]
             }, { quoted: m });
         }
 
-        // B. Kamata Oda ya Panel iliyochaguliwa (Mfano: h_panel_1gb)
+        // B. Kamata Oda ya Server iliyochaguliwa yenye Specs zake
         const selectedPanel = PANEL_PACKAGES.find(p => p.id === input);
         if (selectedPanel) {
             await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
 
-            const aiInstruction = await askMickeyBiz(`Mteja kachagua ${selectedPanel.name}. Mpe maelekezo ya malipo ya TSh ${selectedPanel.price}.`, userName);
+            const aiInstruction = await askMickeyBiz(`Mteja kachagua ${selectedPanel.name} yenye RAM ${selectedPanel.specs.ram} na CPU ${selectedPanel.specs.cpu}. Mpe maelekezo ya malipo ya TSh ${selectedPanel.price}.`, userName);
 
             const paymentButtons = [
                 {
@@ -104,7 +118,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             ];
 
             return await sendInteractiveMessage(sock, chatId, {
-                text: `✨ *ZERO STORE - ODA YA SERVER*\n\n${aiInstruction}\n\n🖥️ *BIDHAA:* ${selectedPanel.name}\n💰 *BEI:* TSh ${selectedPanel.price.toLocaleString()}\n📌 *HALI:* Inasubiri Malipo\n\nUkishalipa, tuma screenshot ya muamala hapa, kisha bot itatengeneza vitu vyako papo hapo! 🚀`,
+                text: `✨ *ZERO STORE - INFO ZA SERVER*\n\n${aiInstruction}\n\n🖥️ *BIDHAA:* ${selectedPanel.name}\n⚙️ *SPECS:* \n   • 🧠 *RAM:* ${selectedPanel.specs.ram}\n   • 🏎️ *CPU:* ${selectedPanel.specs.cpu}\n   • 💾 *DISK:* ${selectedPanel.specs.disk}\n\n💰 *BEI:* TSh ${selectedPanel.price.toLocaleString()}\n📌 *HALI:* Inasubiri Malipo\n\nUkishalipa, tuma screenshot ya muamala hapa nikuwashe VPS yako! 🚀`,
                 footer: CONFIG.FOOTER,
                 interactiveButtons: paymentButtons
             }, { quoted: m });
@@ -115,7 +129,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
         // [UPANDE WA BANDO LA KAWAIDA LOGIC]
         // ==========================================
 
-        // C. [DIRECT PACKAGE HANDLER] - Inakamata ".halotel 10gb" au "h_pkg_10"
+        // C. Direct Package Handler (.halotel 10gb)
         if (input.includes('gb') && (input.startsWith('.halotel') || input.includes('h_pkg'))) {
             const gbValue = input.match(/\d+/)[0]; 
             const totalPrice = parseInt(gbValue) * CONFIG.PRICE_PER_GB;
@@ -141,7 +155,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }, { quoted: m });
         }
 
-        // D. [MAIN MENU] - Ikipigwa ".halotel" pekee (Au "halotel" ya kawaida)
+        // D. Menu Kuu ya Bando (.halotel pekee)
         if (input === '.halotel') {
             await sock.sendMessage(chatId, { react: { text: '🛒', key: m.key } });
 
@@ -166,7 +180,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }, { quoted: m });
         }
 
-        // 4. [AI CONVERSATION]
+        // AI Conversation
         if (input.length > 2 && !input.startsWith('.')) {
             const aiReply = await askMickeyBiz(input, userName);
             return await sock.sendMessage(chatId, { text: `💼 *MICKEY BIZ:* ${aiReply}` }, { quoted: m });
