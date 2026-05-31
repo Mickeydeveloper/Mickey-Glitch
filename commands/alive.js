@@ -1,6 +1,6 @@
 const os = require('os');
 const { performance } = require('perf_hooks');
-const { sendButtons } = require('gifted-btns');
+const { ButtonV2 } = require('gifted-btns'); // Hakikisha umeseti ButtonV2 kutoka gifted-btns
 
 /**
  * Formats seconds into a human-readable string (d h m s)
@@ -24,7 +24,7 @@ const formatUptime = (seconds) => {
  * Main command handler
  */
 const aliveCommand = async (sock, chatId, msg) => {
-    if (!sock?.sendMessage) return;
+    if (!sock) return;
 
     const startTime = performance.now();
 
@@ -45,9 +45,7 @@ const aliveCommand = async (sock, chatId, msg) => {
 
         const imageUrl = 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png';
 
-        // Message Template
-        const statusMessage = `
-╭━━━〔 *ＭＩＣＫＥＹ-Ｖ３* 〕━━━┈⊷
+        const statusMessage = `╭━━━〔 *ＭＩＣＫＥＹ-Ｖ３* 〕━━━┈⊷
 ┃ 👤 *User:* ${msg.pushName || 'Guest'}
 ┃ 🕒 *Time:* ${time} EAT
 ┃ 🚀 *Latency:* ${latency}ms
@@ -58,22 +56,19 @@ const aliveCommand = async (sock, chatId, msg) => {
 ┃ 🧠 *RAM:* ${usedRam.toFixed(2)}GB / ${totalRam.toFixed(0)}GB (${ramPercent}%)
 ┃ 🔧 *CPU:* ${cpuModel}
 ┃ 🟢 *Status:* Online & Stable
-╰━━━━━━━━━━━━━━━━━━┈⊷
+╰━━━━━━━━━━━━━━━━━━┈⊷`;
 
-*© 2026 Mickey Glitch Technology*`.trim();
-
-        // Send interactive response directly
-        await sendButtons(sock, chatId, {
-            title: 'SYSTEM ACTIVE',
-            text: statusMessage,
-            footer: 'Powered by Mickey Glitch Tech',
-            image: { url: imageUrl },
-            buttons: [
-                { id: '.menu', text: '🆘 Menu' },
-                { id: '.ping', text: '📡 Speed' },
-                { id: '.owner', text: '👑 Support' }
-            ]
-        }, { quoted: msg });
+        // Tumia ButtonV2 muundo (Hapa tunatumia sock kama core)
+        await new ButtonV2(sock)
+            .setTitle('SYSTEM ACTIVE')
+            .setSubtitle('Mickey Glitch Technology')
+            .setBody(statusMessage)
+            .setFooter('© 2026 Mickey Glitch Technology')
+            .setThumbnail(imageUrl)
+            .addButton('🆘 Menu', '.menu')
+            .addButton('📡 Speed', '.ping')
+            .addButton('👑 Support', '.owner')
+            .send(chatId);
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);
@@ -81,7 +76,3 @@ const aliveCommand = async (sock, chatId, msg) => {
 };
 
 module.exports = aliveCommand;
-module.exports.buttonHandlers = {
-    // Buttons .menu, .ping, .owner are handled by command prefix system in main.js
-    // No special handlers needed - they're treated as commands
-};
