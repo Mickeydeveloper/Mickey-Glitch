@@ -88,6 +88,7 @@ const weatherCommand = require('./commands/weather');
 const reportCommand = require('./commands/report');
 const halotelCommand = require('./commands/halotel');
 const serverCommand = require('./commands/server');
+const { getButtonId, autoDetectButtonCommand } = require('./lib/buttonLoader');
 const kickCommand = require('./commands/kick');
 // quote command removed
 const { complimentCommand } = require('./commands/compliment');
@@ -202,12 +203,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const senderIsSudo = await isSudo(senderId);
         const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
 
-        // Handle all button responses (static + command buttons)
-        if (message.message?.buttonsResponseMessage) {
-            const buttonId = message.message.buttonsResponseMessage.selectedButtonId;
+        // Handle interactive responses (buttons, lists, native flows)
+        const detectedId = getButtonId(message);
+        if (detectedId || message.message?.buttonsResponseMessage) {
+            const buttonId = message.message?.buttonsResponseMessage?.selectedButtonId || detectedId || null;
             const chatId = message.key.remoteJid;
 
-            console.log(`🔘 Button pressed: ${buttonId}`);
+            console.log(`🔘 Interactive pressed: ${buttonId}`);
 
             // Predefined button handlers
             const buttonHandlers = {
@@ -236,7 +238,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     console.error(`Error handling button ${buttonId}:`, e);
                 }
             }
-
             // Handle quick-reply buttons that start with . (commands)
             if (buttonId && (buttonId.startsWith('.') || buttonId === 'msgowner' || buttonId === '.msgowner')) {
                 try {
@@ -265,15 +266,26 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     return;
                 }
             } else {
-                // Unhandled button ID
-                console.log(`⚠️ Unhandled button: ${buttonId}`);
-                return;
+                // If the payload wasn't handled, try to auto-detect command IDs from other interactive formats
+                const autoCmd = autoDetectButtonCommand(message);
+                if (autoCmd) {
+                    console.log(`🔍 Auto-detected command from interactive payload: ${autoCmd}`);
+                    userMessage = autoCmd;
+                    // fall through to command handling below
+                } else {
+                    // Unhandled button ID — log for debugging and return
+                    console.log(`⚠️ Unhandled interactive ID: ${buttonId} — full payload logged for debug.`);
+                    try { console.log(JSON.stringify(message.message).slice(0, 2000)); } catch (e) {}
+                    return;
+                }
             }
 
             // Handle list responses (single-select list menus)
             if (message.message?.listResponseMessage || message.message?.singleSelectReply) {
                 const list = message.message.listResponseMessage || message.message.singleSelectReply || message.message?.singleSelectReply;
-                const selectedId = list?.singleSelectReply?.selectedRowId || list?.selectedRowId || list?.singleSelectReply?.rowId || list?.rowId || null;
+                let selectedId = list?.singleSelectReply?.selectedRowId || list?.selectedRowId || list?.singleSelectReply?.rowId || list?.rowId || null;
+                // fallback to general detector if not present
+                if (!selectedId && detectedId) selectedId = detectedId;
                 if (!selectedId) return;
                 console.log(`🔘 List selected: ${selectedId}`);
 
