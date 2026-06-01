@@ -73,6 +73,27 @@ const DATA_PACKAGES = [
     { gb: 50, label: 'Business Pack', price: 50000 }
 ];
 
+// In-memory pending requests store (simple Map)
+const pendingRequests = new Map();
+
+function storePendingRequest(chatId, userName, selectedPackage, specs) {
+    pendingRequests.set(chatId, {
+        userName,
+        package: selectedPackage,
+        specs,
+        step: 'awaiting_email',
+        createdAt: Date.now()
+    });
+}
+
+function getPendingRequest(chatId) {
+    return pendingRequests.get(chatId);
+}
+
+function removePendingRequest(chatId) {
+    return pendingRequests.delete(chatId);
+}
+
 // Generate random email for Pterodactyl account
 function generateRandomEmail(userName, userJid) {
     const cleanJid = userJid.split('@')[0];
@@ -101,7 +122,8 @@ async function askMickeyBiz(query, userName) {
     }
 }
 
-async function createPterodactylServer(userName, userJid, pkg) {
+// Create server along with a new user (kept for backward compatibility)
+async function createPterodactylServerWithUserCreation(userName, userJid, pkg) {
     try {
         const cleanJid = userJid.split('@')[0];
         const userEmail = generateRandomEmail(userName, userJid);
@@ -183,6 +205,81 @@ async function createPterodactylServer(userName, userJid, pkg) {
     }
 }
 
+// Create a Pterodactyl user (used by server.js flow)
+async function createPterodactylUser(email, userName) {
+    try {
+        const password = generateRandomPassword();
+        const userRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/users`, {
+            username: `user_${email.split('@')[0]}_${Date.now().toString().slice(-6)}`,
+            email: email,
+            first_name: (userName || 'Mteja').replace(/[^a-zA-Z0-9]/g, '') || 'Mteja',
+            last_name: 'Client',
+            password: password
+        }, {
+            headers: {
+                'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            timeout: 15000
+        });
+
+        return { success: true, userId: userRes.data.attributes.id, username: userRes.data.attributes.username };
+    } catch (err) {
+        console.error('Create Pterodactyl User Error:', err.response?.data || err.message);
+        return { success: false, error: err.response?.data?.errors?.[0]?.detail || err.message };
+    }
+}
+
+// Create a Pterodactyl server for an existing userId (used by server.js flow)
+async function createPterodactylServer(userId, userName, specs, email) {
+    try {
+        const serverName = `srv_${specs.ram}GB_${(email || 'user').split('@')[0]}_${Date.now().toString().slice(-4)}`;
+
+        const ramMb = parseFloat(specs.ram) * 1024;
+        const diskMb = parseFloat(specs.disk) * 1024;
+        const cpuLimit = parseInt(specs.cpu);
+
+        const serverRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/servers`, {
+            name: serverName,
+            user: userId,
+            egg: SAFE_PTERO.EGG_ID,
+            docker_image: "ghcr.io/pterodactyl/yolks:node_18",
+            startup: "node index.js",
+            limits: { 
+                memory: ramMb, 
+                swap: 0, 
+                disk: diskMb, 
+                io: 500, 
+                cpu: cpuLimit 
+            },
+            feature_limits: { 
+                databases: specs.databases || 1, 
+                allocations: 1, 
+                backups: specs.backups || 1 
+            },
+            deploy: { 
+                locations: [SAFE_PTERO.LOCATION_ID], 
+                dedicated_ip: false, 
+                port_range: [] 
+            },
+            environment: { INST: "npm install" }
+        }, {
+            headers: { 
+                'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`, 
+                'Content-Type': 'application/json', 
+                'Accept': 'application/json' 
+            },
+            timeout: 20000
+        });
+
+        return { success: true, link: SAFE_PTERO.PANEL_URL, serverId: serverRes.data.attributes.id };
+    } catch (err) {
+        console.error('Create Pterodactyl Server Error:', err.response?.data || err.message);
+        return { success: false, error: err.response?.data?.errors?.[0]?.detail || err.message };
+    }
+}
+
 async function halotelCommand(sock, chatId, m, body = '') {
     try {
         const userName = m.pushName || 'Mteja';
@@ -241,8 +338,8 @@ async function halotelCommand(sock, chatId, m, body = '') {
                     text: `🔄 *Processing Your Request*\n\n${selectedPackage.emoji} *${selectedPackage.name} PACKAGE SELECTED*\n💰 Amount: TSh ${selectedPackage.price.toLocaleString()}\n\n⏳ Creating your server automatically...\n📧 Generating account credentials...\n\n*This will take about 30-60 seconds*` 
                 }, { quoted: m });
 
-                // Create server automatically
-                const creation = await createPterodactylServer(userName, userJid, selectedPackage);
+                // Create server automatically (creates user + server)
+                const creation = await createPterodactylServerWithUserCreation(userName, userJid, selectedPackage);
 
                 if (creation.success) {
                     const successMessage = `✅ *SERVER CREATED SUCCESSFULLY!* 🎉\n\n${selectedPackage.emoji} *Package:* ${selectedPackage.name}\n💰 *Amount:* TSh ${selectedPackage.price.toLocaleString()}\n\n*🔐 LOGIN CREDENTIALS:*\n━━━━━━━━━━━━━━━━━━━\n🌐 *Panel URL:* ${creation.panelUrl}\n📧 *Email:* ${creation.email}\n🔑 *Password:* ${creation.password}\n👤 *Username:* ${creation.username}\n━━━━━━━━━━━━━━━━━━━\n\n*📊 SERVER SPECS:*\n• 🧠 RAM: ${selectedPackage.specs.ram} GB\n• 🏎️ CPU: ${selectedPackage.specs.cpu}%\n• 💾 DISK: ${selectedPackage.specs.disk} GB\n• 🗄️ Databases: ${selectedPackage.databases}\n• 💾 Backups: ${selectedPackage.backups}\n\n*⚠️ IMPORTANT:*\n1. Save these credentials safely\n2. Change your password after first login\n3. Contact admin if you face any issues\n\n*Thank you for choosing Mickey Glitch Server Hosting!* 🚀`;
@@ -375,4 +472,16 @@ async function halotelCommand(sock, chatId, m, body = '') {
     }
 }
 
-module.exports = halotelCommand;
+module.exports = {
+    PANEL_PACKAGES: SERVER_PACKAGES,
+    createPterodactylUser,
+    createPterodactylServer,
+    storePendingRequest,
+    getPendingRequest,
+    removePendingRequest,
+    BANNER: SAFE_CONFIG.BANNER,
+    FOOTER: SAFE_CONFIG.FOOTER,
+    OWNER_NUMBER: settings.ownerNumber,
+    PANEL_URL: SAFE_PTERO.PANEL_URL,
+    halotelCommand
+};
