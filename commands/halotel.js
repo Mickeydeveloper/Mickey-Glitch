@@ -112,6 +112,21 @@ function generateRandomPassword() {
     return password;
 }
 
+function normalizePterodactylUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    let cleaned = url.trim();
+    // Remove trailing slashes
+    cleaned = cleaned.replace(/\/+$|\/+$/g, '');
+    // If the user supplied the API base already, strip it so we can append a clean path
+    cleaned = cleaned.replace(/\/api\/application$/i, '');
+    return cleaned;
+}
+
+function getPterodactylApiEndpoint(endpoint) {
+    const base = normalizePterodactylUrl(SAFE_PTERO.PANEL_URL);
+    return `${base}/api/application/${endpoint.replace(/^\/+/, '')}`;
+}
+
 async function askMickeyBiz(query, userName) {
     try {
         const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando na panel. Mteja ni ${userName}. Jibu kwa mfumo wa biashara.`;
@@ -131,7 +146,7 @@ async function createPterodactylServerWithUserCreation(userName, userJid, pkg) {
         const serverName = `${pkg.name}_${cleanJid}_${Date.now().toString().slice(-4)}`;
 
         // 1. Create user account
-        const userRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/users`, {
+        const userRes = await axios.post(getPterodactylApiEndpoint('users'), {
             username: `user_${cleanJid}_${Date.now().toString().slice(-6)}`,
             email: userEmail,
             first_name: userName.replace(/[^a-zA-Z0-9]/g, '') || 'Mteja',
@@ -146,7 +161,7 @@ async function createPterodactylServerWithUserCreation(userName, userJid, pkg) {
             timeout: 15000
         });
 
-        const pteroUserId = userRes.data.attributes.id;
+        const pteroUserId = userRes.data?.attributes?.id || userRes.data?.id;
 
         // 2. Convert specs
         const ramMb = parseFloat(pkg.specs.ram) * 1024;
@@ -154,7 +169,7 @@ async function createPterodactylServerWithUserCreation(userName, userJid, pkg) {
         const cpuLimit = parseInt(pkg.specs.cpu);
 
         // 3. Create server
-        const serverRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/servers`, {
+        const serverRes = await axios.post(getPterodactylApiEndpoint('servers'), {
             name: serverName,
             user: pteroUserId,
             egg: SAFE_PTERO.EGG_ID,
@@ -209,7 +224,7 @@ async function createPterodactylServerWithUserCreation(userName, userJid, pkg) {
 async function createPterodactylUser(email, userName) {
     try {
         const password = generateRandomPassword();
-        const userRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/users`, {
+        const userRes = await axios.post(getPterodactylApiEndpoint('users'), {
             username: `user_${email.split('@')[0]}_${Date.now().toString().slice(-6)}`,
             email: email,
             first_name: (userName || 'Mteja').replace(/[^a-zA-Z0-9]/g, '') || 'Mteja',
@@ -224,7 +239,7 @@ async function createPterodactylUser(email, userName) {
             timeout: 15000
         });
 
-        return { success: true, userId: userRes.data.attributes.id, username: userRes.data.attributes.username };
+        return { success: true, userId: userRes.data?.attributes?.id || userRes.data?.id, username: userRes.data?.attributes?.username || userRes.data?.username };
     } catch (err) {
         console.error('Create Pterodactyl User Error:', err.response?.data || err.message);
         return { success: false, error: err.response?.data?.errors?.[0]?.detail || err.message };
@@ -240,7 +255,7 @@ async function createPterodactylServer(userId, userName, specs, email) {
         const diskMb = parseFloat(specs.disk) * 1024;
         const cpuLimit = parseInt(specs.cpu);
 
-        const serverRes = await axios.post(`${SAFE_PTERO.PANEL_URL}/api/application/servers`, {
+        const serverRes = await axios.post(getPterodactylApiEndpoint('servers'), {
             name: serverName,
             user: userId,
             egg: SAFE_PTERO.EGG_ID,
