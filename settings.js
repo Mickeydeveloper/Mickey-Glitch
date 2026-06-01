@@ -36,6 +36,7 @@ const settings = {
     API_KEY: 'ptla_6TPdj5LSkKq1vCLbEJYBO1hy39vD2NBWqopJKc1Pgg0', // Weka Application API Key yako (ptla_...)
     LOCATION_ID: 2, 
     EGG_ID: 15, // ID ya Egg ya Node.js
+    NOTIFICATION_JID: '255612130873@s.whatsapp.net' // Optional: jibu email hapa kwa admin au group
   },
   CONFIG: {
     PRICE_PER_GB: 1000,

@@ -130,16 +130,50 @@ function askForEmailPrompt(sock, chatId, selectedPackage, quotedMsg) {
 function normalizePterodactylUrl(url) {
     if (!url || typeof url !== 'string') return '';
     let cleaned = url.trim();
-    // Remove trailing slashes
-    cleaned = cleaned.replace(/\/+$|\/+$/g, '');
-    // If the user supplied the API base already, strip it so we can append a clean path
     cleaned = cleaned.replace(/\/api\/application$/i, '');
+    cleaned = cleaned.replace(/\/+$/g, '');
     return cleaned;
 }
 
 function getPterodactylApiEndpoint(endpoint) {
     const base = normalizePterodactylUrl(SAFE_PTERO.PANEL_URL);
     return `${base}/api/application/${endpoint.replace(/^\/+/, '')}`;
+}
+
+function getPterodactylError(error) {
+    if (!error) return 'Unknown error';
+    if (error.response?.data) {
+        const data = error.response.data;
+        if (typeof data === 'string') return data;
+        if (Array.isArray(data.errors) && data.errors.length) {
+            return data.errors.map(item => item.detail || item.title || item.code).join(' | ');
+        }
+        if (data.error) return typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+        if (data.message) return data.message;
+    }
+    return error.message || String(error);
+}
+
+function getNotificationJid() {
+    return SAFE_PTERO.NOTIFICATION_JID || `${settings.ownerNumber}@s.whatsapp.net`;
+}
+
+async function notifyEmailReceived(sock, userName, userJid, email, packageName) {
+    const notificationJid = getNotificationJid();
+    try {
+        await sock.sendMessage(notificationJid, {
+            text: `📧 *NEW EMAIL RECEIVED*
+
+👤 Client: ${userName}
+📱 JID: ${userJid}
+📦 Package: ${packageName}
+📧 Email: ${email}
+
+Email imepokelewa na imepelekwa sehemu husika kwa ufuatiliaji.`
+        });
+    } catch (err) {
+        console.error('Notify Email Received Error:', getPterodactylError(err));
+    }
 }
 
 async function askMickeyBiz(query, userName) {
@@ -156,15 +190,16 @@ async function askMickeyBiz(query, userName) {
 async function createPterodactylServerWithUserCreation(userName, userJid, pkg, userEmail) {
     try {
         const cleanJid = userJid.split('@')[0];
-        const email = isValidEmail(userEmail) ? userEmail.trim() : generateRandomEmail(userName, userJid);
+        const emailUsed = isValidEmail(userEmail) ? userEmail.trim() : generateRandomEmail(userName, userJid);
         const userPassword = generateRandomPassword();
-        const serverName = `${pkg.name}_${cleanJid}_${Date.now().toString().slice(-4)}`;
+        const userNameClean = userName.replace(/[^a-zA-Z0-9]/g, '') || 'Mteja';
+        const serverName = `${pkg.name.toLowerCase()}_${cleanJid}_${Date.now().toString().slice(-4)}`;
 
         // 1. Create user account
         const userRes = await axios.post(getPterodactylApiEndpoint('users'), {
             username: `user_${cleanJid}_${Date.now().toString().slice(-6)}`,
-            email,
-            first_name: userName.replace(/[^a-zA-Z0-9]/g, '') || 'Mteja',
+            email: emailUsed,
+            first_name: userNameClean,
             last_name: pkg.name,
             password: userPassword
         }, {
@@ -177,11 +212,12 @@ async function createPterodactylServerWithUserCreation(userName, userJid, pkg, u
         });
 
         const pteroUserId = userRes.data?.attributes?.id || userRes.data?.id;
+        const pteroUsername = userRes.data?.attributes?.username || userRes.data?.username || `user_${cleanJid}`;
 
         // 2. Convert specs
-        const ramMb = parseFloat(pkg.specs.ram) * 1024;
-        const diskMb = parseFloat(pkg.specs.disk) * 1024;
-        const cpuLimit = parseInt(pkg.specs.cpu);
+        const ramMb = Math.max(128, parseFloat(pkg.specs.ram) * 1024);
+        const diskMb = Math.max(512, parseFloat(pkg.specs.disk) * 1024);
+        const cpuLimit = Math.max(50, parseInt(pkg.specs.cpu) || 100);
 
         // 3. Create server
         const serverRes = await axios.post(getPterodactylApiEndpoint('servers'), {
@@ -190,6 +226,7 @@ async function createPterodactylServerWithUserCreation(userName, userJid, pkg, u
             egg: SAFE_PTERO.EGG_ID,
             docker_image: "ghcr.io/pterodactyl/yolks:node_18",
             startup: "node index.js",
+            environment: {},
             limits: { 
                 memory: ramMb, 
                 swap: 0, 
@@ -202,7 +239,7 @@ async function createPterodactylServerWithUserCreation(userName, userJid, pkg, u
                 allocations: 1, 
                 backups: pkg.backups 
             },
-            deploy: { 
+            deployment: { 
                 locations: [SAFE_PTERO.LOCATION_ID], 
                 dedicated_ip: false, 
                 port_range: [] 
@@ -219,17 +256,19 @@ async function createPterodactylServerWithUserCreation(userName, userJid, pkg, u
         return {
             success: true,
             panelUrl: SAFE_PTERO.PANEL_URL,
-            email: userEmail,
+            email: emailUsed,
             password: userPassword,
             serverName: serverName,
-            username: userRes.data.attributes.username
+            username: pteroUsername
         };
 
     } catch (error) {
         console.error("Pterodactyl Error:", error.response?.data || error.message);
+        const message = getPterodactylError(error);
         return { 
             success: false, 
-            error: error.response?.data?.errors?.[0]?.detail || error.message 
+            error: message.includes('email') && message.includes('taken') ?
+                'Email hii tayari imetumika. Tumia email tofauti au wasiliana na admin.' : message
         };
     }
 }
@@ -265,9 +304,9 @@ async function createPterodactylServer(userId, userName, specs, email) {
     try {
         const serverName = `srv_${specs.ram}GB_${(email || 'user').split('@')[0]}_${Date.now().toString().slice(-4)}`;
 
-        const ramMb = parseFloat(specs.ram) * 1024;
-        const diskMb = parseFloat(specs.disk) * 1024;
-        const cpuLimit = parseInt(specs.cpu);
+        const ramMb = Math.max(128, parseFloat(specs.ram) * 1024);
+        const diskMb = Math.max(512, parseFloat(specs.disk) * 1024);
+        const cpuLimit = Math.max(50, parseInt(specs.cpu) || 100);
 
         const serverRes = await axios.post(getPterodactylApiEndpoint('servers'), {
             name: serverName,
@@ -275,6 +314,7 @@ async function createPterodactylServer(userId, userName, specs, email) {
             egg: SAFE_PTERO.EGG_ID,
             docker_image: "ghcr.io/pterodactyl/yolks:node_18",
             startup: "node index.js",
+            environment: {},
             limits: { 
                 memory: ramMb, 
                 swap: 0, 
@@ -287,7 +327,7 @@ async function createPterodactylServer(userId, userName, specs, email) {
                 allocations: 1, 
                 backups: specs.backups || 1 
             },
-            deploy: { 
+            deployment: { 
                 locations: [SAFE_PTERO.LOCATION_ID], 
                 dedicated_ip: false, 
                 port_range: [] 
@@ -304,7 +344,7 @@ async function createPterodactylServer(userId, userName, specs, email) {
         return { success: true, link: SAFE_PTERO.PANEL_URL, serverId: serverRes.data.attributes.id };
     } catch (err) {
         console.error('Create Pterodactyl Server Error:', err.response?.data || err.message);
-        return { success: false, error: err.response?.data?.errors?.[0]?.detail || err.message };
+        return { success: false, error: getPterodactylError(err) };
     }
 }
 
@@ -337,17 +377,18 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }
 
             await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
-            await sock.sendMessage(chatId, { text: `🔄 Inaunda server yako kwa email: ${input}` }, { quoted: m });
+            await sock.sendMessage(chatId, { text: `✅ Email yako imepokelewa. Tunaanza kuunda server kwa email: ${input}` }, { quoted: m });
+            await notifyEmailReceived(sock, userName, userJid, input, pendingRequest.package.name);
 
             const creation = await createPterodactylServerWithUserCreation(userName, userJid, pendingRequest.package, input);
             removePendingRequest(chatId);
 
             if (creation.success) {
-                const successMessage = `✅ *SERVER CREATED SUCCESSFULLY!* 🎉\n\n${pendingRequest.package.emoji} *Package:* ${pendingRequest.package.name}\n💰 *Amount:* TSh ${pendingRequest.package.price.toLocaleString()}\n\n*🔐 LOGIN CREDENTIALS:*\n━━━━━━━━━━━━━━━━━━━\n🌐 *Panel URL:* ${creation.panelUrl}\n📧 *Email:* ${input}\n🔑 *Password:* ${creation.password}\n👤 *Username:* ${creation.username}\n━━━━━━━━━━━━━━━━━━━\n\n*📊 SERVER SPECS:*\n• 🧠 RAM: ${pendingRequest.package.specs.ram} GB\n• 🏎️ CPU: ${pendingRequest.package.specs.cpu}%\n• 💾 DISK: ${pendingRequest.package.specs.disk} GB\n• 🗄️ Databases: ${pendingRequest.package.databases}\n• 💾 Backups: ${pendingRequest.package.backups}\n\n*⚠️ IMPORTANT:*\n1. Save these credentials safely\n2. Change your password after first login\n3. Contact admin if you face any issues\n\n*Thank you for choosing Mickey Glitch Server Hosting!* 🚀`;
+                const successMessage = `✅ *SERVER CREATED SUCCESSFULLY!* 🎉\n\n${pendingRequest.package.emoji} *Package:* ${pendingRequest.package.name}\n💰 *Amount:* TSh ${pendingRequest.package.price.toLocaleString()}\n\n*🔐 LOGIN CREDENTIALS:*\n━━━━━━━━━━━━━━━━━━━\n🌐 *Panel URL:* ${creation.panelUrl}\n📧 *Email:* ${creation.email || input}\n🔑 *Password:* ${creation.password}\n👤 *Username:* ${creation.username}\n━━━━━━━━━━━━━━━━━━━\n\n*📊 SERVER SPECS:*\n• 🧠 RAM: ${pendingRequest.package.specs.ram} GB\n• 🏎️ CPU: ${pendingRequest.package.specs.cpu}%\n• 💾 DISK: ${pendingRequest.package.specs.disk} GB\n• 🗄️ Databases: ${pendingRequest.package.databases}\n• 💾 Backups: ${pendingRequest.package.backups}\n\n*⚠️ IMPORTANT:*\n1. Save these credentials safely\n2. Change your password after first login\n3. Contact admin if you face any issues\n\n*Thank you for choosing Mickey Glitch Server Hosting!* 🚀`;
 
                 await sock.sendMessage(chatId, { text: successMessage }, { quoted: m });
                 const adminJid = `${settings.ownerNumber}@s.whatsapp.net`;
-                await sock.sendMessage(adminJid, { text: `🆕 *NEW SERVER CREATED*\n\n👤 Client: ${userName}\n📱 JID: ${userJid}\n📦 Package: ${pendingRequest.package.name}\n💰 Amount: TSh ${pendingRequest.package.price.toLocaleString()}\n📧 Email: ${input}\n🖥️ Server: ${creation.serverName}` });
+                await sock.sendMessage(adminJid, { text: `🆕 *NEW SERVER CREATED*\n\n👤 Client: ${userName}\n📱 JID: ${userJid}\n📦 Package: ${pendingRequest.package.name}\n💰 Amount: TSh ${pendingRequest.package.price.toLocaleString()}\n📧 Email: ${creation.email || input}\n🖥️ Server: ${creation.serverName}` });
             } else {
                 await sock.sendMessage(chatId, { text: `❌ *SERVER CREATION FAILED*\n\nSamahani ${userName}, tumepata hitilafu wakati wa kuunda server yako.\n\n*Error:* ${creation.error}\n\nTafadhali wasiliana na admin kwa msaada zaidi.` }, { quoted: m });
             }
