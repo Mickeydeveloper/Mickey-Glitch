@@ -29,24 +29,32 @@ const PANEL_PACKAGES = [
     }
 ];
 
+// ========== PTERODACTYL CONFIG FROM SETTINGS ==========
+const PTERO_CONFIG = settings.PTERO_CONFIG || {};
+const PANEL_URL = PTERO_CONFIG.PANEL_URL || 'https://panel.mickeypannel.dpdns.org';
+const API_KEY = PTERO_CONFIG.API_KEY;
+const LOCATION_ID = PTERO_CONFIG.LOCATION_ID || 1;
+const EGG_ID = PTERO_CONFIG.EGG_ID || 15;
+
+// ========== CONFIG FROM SETTINGS ==========
+const CONFIG = settings.CONFIG || {};
+const BANNER = CONFIG.BANNER || 'https://files.catbox.moe/ljabyq.png';
+const FOOTER = CONFIG.FOOTER || '🚀 Powered by Mickey Glitch Tech';
+const OWNER_NUMBER = settings.ownerNumber || '255612130873';
+
 // ========== CREATE USER IN PTERODACTYL ==========
 async function createPterodactylUser(email, userName, userJid) {
     try {
-        const { url, apiKey } = settings.PTERODACTYL;
-        
-        if (!url || !apiKey) {
-            return { success: false, error: 'Pterodactyl panel not configured' };
+        if (!API_KEY) {
+            return { success: false, error: 'Pterodactyl API Key haijapatikana kwenye settings' };
         }
         
-        // Username kwa ajili ya panel (unique)
         const username = `user_${userJid.replace(/[^0-9]/g, '').slice(-8)}`;
         const first_name = userName.split(' ')[0] || userName;
         const last_name = userName.split(' ')[1] || 'User';
-        
-        // Random password (itabadilishwa na user)
         const password = Math.random().toString(36).slice(-12) + 'A1!@';
         
-        const response = await axios.post(`${url}/api/application/users`, {
+        const response = await axios.post(`${PANEL_URL}/api/application/users`, {
             email: email,
             username: username,
             first_name: first_name,
@@ -54,7 +62,7 @@ async function createPterodactylUser(email, userName, userJid) {
             password: password
         }, {
             headers: {
-                'Authorization': `Bearer ${apiKey}`,
+                'Authorization': `Bearer ${API_KEY}`,
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             }
@@ -67,18 +75,16 @@ async function createPterodactylUser(email, userName, userJid) {
                 username: username,
                 email: email,
                 password: password,
-                message: `User ${email} imeundwa kikamilifu kwenye panel!`
+                message: `User ${email} imeundwa kikamilifu!`
             };
         }
         
-        return { success: false, error: 'User creation failed' };
+        return { success: false, error: 'User creation failed - hakuna response' };
         
     } catch (error) {
         console.error('Create User Error:', error.response?.data || error.message);
         
-        // Kama user tayari exists
         if (error.response?.data?.errors?.[0]?.code === 'DuplicateEntryException') {
-            // Tafuta user ID
             const search = await searchPterodactylUser(email);
             if (search.success) {
                 return {
@@ -102,10 +108,8 @@ async function createPterodactylUser(email, userName, userJid) {
 // ========== SEARCH USER ==========
 async function searchPterodactylUser(email) {
     try {
-        const { url, apiKey } = settings.PTERODACTYL;
-        
-        const response = await axios.get(`${url}/api/application/users?filter[email]=${email}`, {
-            headers: { 'Authorization': `Bearer ${apiKey}` }
+        const response = await axios.get(`${PANEL_URL}/api/application/users?filter[email]=${email}`, {
+            headers: { 'Authorization': `Bearer ${API_KEY}` }
         });
         
         if (response.data.data && response.data.data.length > 0) {
@@ -127,25 +131,18 @@ async function searchPterodactylUser(email) {
 // ========== CREATE SERVER FOR USER ==========
 async function createPterodactylServer(userId, userName, specs, userEmail) {
     try {
-        const { url, apiKey } = settings.PTERODACTYL;
-        
-        // Egg ID - Badilisha kulingana na egg yako (Minecraft, Discord Bot, nk)
-        // Unaweza kupata hizi kutoka panel yako
-        const eggId = 1; // Tafuta Egg ID yako hapa
-        const locationId = 1; // Tafuta Location ID yako
-        
         const serverName = `${userName}'s Server - ${new Date().toLocaleDateString()}`;
         
-        const response = await axios.post(`${url}/api/application/servers`, {
+        const response = await axios.post(`${PANEL_URL}/api/application/servers`, {
             name: serverName,
             user: userId,
-            egg: eggId,
-            docker_image: "ghcr.io/pterodactyl/yolks:java_17",
-            startup: "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar server.jar",
+            egg: EGG_ID,
+            docker_image: "ghcr.io/pterodactyl/yolks:nodejs_18",
+            startup: "npm start",
             environment: {
-                SERVER_MEMORY: specs.ram * 1024,
-                SERVER_JARFILE: "server.jar",
-                BUNGEE_CORD: false
+                USER: "nodejs",
+                STARTUP_CMD: "npm start",
+                NODE_VERSION: "18"
             },
             limits: {
                 memory: specs.ram * 1024,
@@ -164,7 +161,7 @@ async function createPterodactylServer(userId, userName, specs, userEmail) {
             }
         }, {
             headers: {
-                'Authorization': `Bearer ${apiKey}`,
+                'Authorization': `Bearer ${API_KEY}`,
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             }
@@ -172,19 +169,18 @@ async function createPterodactylServer(userId, userName, specs, userEmail) {
         
         if (response.data && response.data.attributes) {
             const serverId = response.data.attributes.identifier;
-            const serverLink = `${url}/server/${serverId}`;
+            const serverLink = `${PANEL_URL}/server/${serverId}`;
             
             return {
                 success: true,
                 link: serverLink,
                 serverId: serverId,
                 name: serverName,
-                // Pterodactyl itatuma email automatically kwa userEmail
                 emailSent: true
             };
         }
         
-        return { success: false, error: 'Server creation failed' };
+        return { success: false, error: 'Server creation failed - hakuna response' };
         
     } catch (error) {
         console.error('Create Server Error:', error.response?.data || error.message);
@@ -205,7 +201,7 @@ function storePendingRequest(userJid, userName, selectedPackage, specs) {
         specs,
         step: 'awaiting_email',
         createdAt: Date.now(),
-        expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
+        expiresAt: Date.now() + 10 * 60 * 1000
     });
 }
 
@@ -239,5 +235,9 @@ module.exports = {
     storePendingRequest,
     getPendingRequest,
     removePendingRequest,
-    updatePendingRequestStep
+    updatePendingRequestStep,
+    BANNER,
+    FOOTER,
+    OWNER_NUMBER,
+    PANEL_URL
 };
