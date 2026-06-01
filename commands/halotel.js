@@ -191,8 +191,7 @@ async function createPterodactylServerWithUserCreation(userName, userJid, pkg) {
                 locations: [SAFE_PTERO.LOCATION_ID], 
                 dedicated_ip: false, 
                 port_range: [] 
-            },
-            environment: { INST: "npm install" }
+            }
         }, {
             headers: { 
                 'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`, 
@@ -277,8 +276,7 @@ async function createPterodactylServer(userId, userName, specs, email) {
                 locations: [SAFE_PTERO.LOCATION_ID], 
                 dedicated_ip: false, 
                 port_range: [] 
-            },
-            environment: { INST: "npm install" }
+            }
         }, {
             headers: { 
                 'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`, 
