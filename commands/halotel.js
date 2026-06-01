@@ -112,6 +112,21 @@ function generateRandomPassword() {
     return password;
 }
 
+function isValidEmail(email) {
+    return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function askForEmailPrompt(sock, chatId, selectedPackage, quotedMsg) {
+    const text = `📧 *Tafadhali tuma barua pepe yako ili tuendelee na ombi la server.*\n\n` +
+                 `📦 Package: *${selectedPackage.name}*\n` +
+                 `💰 Bei: TSh ${selectedPackage.price.toLocaleString()}\n\n` +
+                 `✏️ Tuma email yako sahihi kama: *jina@example.com*\n` +
+                 `❌ Au tuma *cancel* kuondoa ombi.
+`;
+
+    return sock.sendMessage(chatId, { text }, { quoted: quotedMsg });
+}
+
 function normalizePterodactylUrl(url) {
     if (!url || typeof url !== 'string') return '';
     let cleaned = url.trim();
@@ -138,17 +153,17 @@ async function askMickeyBiz(query, userName) {
 }
 
 // Create server along with a new user (kept for backward compatibility)
-async function createPterodactylServerWithUserCreation(userName, userJid, pkg) {
+async function createPterodactylServerWithUserCreation(userName, userJid, pkg, userEmail) {
     try {
         const cleanJid = userJid.split('@')[0];
-        const userEmail = generateRandomEmail(userName, userJid);
+        const email = isValidEmail(userEmail) ? userEmail.trim() : generateRandomEmail(userName, userJid);
         const userPassword = generateRandomPassword();
         const serverName = `${pkg.name}_${cleanJid}_${Date.now().toString().slice(-4)}`;
 
         // 1. Create user account
         const userRes = await axios.post(getPterodactylApiEndpoint('users'), {
             username: `user_${cleanJid}_${Date.now().toString().slice(-6)}`,
-            email: userEmail,
+            email,
             first_name: userName.replace(/[^a-zA-Z0-9]/g, '') || 'Mteja',
             last_name: pkg.name,
             password: userPassword
@@ -310,6 +325,35 @@ async function halotelCommand(sock, chatId, m, body = '') {
             input = '.halotel';
         }
 
+        const pendingRequest = getPendingRequest(chatId);
+        if (pendingRequest && pendingRequest.step === 'awaiting_email') {
+            if (input === 'cancel') {
+                removePendingRequest(chatId);
+                return await sock.sendMessage(chatId, { text: '✅ OMBI la server limeghairiwa. Tuma .halotel kuanza tena.' }, { quoted: m });
+            }
+
+            if (!isValidEmail(input)) {
+                return await sock.sendMessage(chatId, { text: '❌ Tafadhali tuma email sahihi kama jina@example.com.' }, { quoted: m });
+            }
+
+            await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
+            await sock.sendMessage(chatId, { text: `🔄 Inaunda server yako kwa email: ${input}` }, { quoted: m });
+
+            const creation = await createPterodactylServerWithUserCreation(userName, userJid, pendingRequest.package, input);
+            removePendingRequest(chatId);
+
+            if (creation.success) {
+                const successMessage = `✅ *SERVER CREATED SUCCESSFULLY!* 🎉\n\n${pendingRequest.package.emoji} *Package:* ${pendingRequest.package.name}\n💰 *Amount:* TSh ${pendingRequest.package.price.toLocaleString()}\n\n*🔐 LOGIN CREDENTIALS:*\n━━━━━━━━━━━━━━━━━━━\n🌐 *Panel URL:* ${creation.panelUrl}\n📧 *Email:* ${input}\n🔑 *Password:* ${creation.password}\n👤 *Username:* ${creation.username}\n━━━━━━━━━━━━━━━━━━━\n\n*📊 SERVER SPECS:*\n• 🧠 RAM: ${pendingRequest.package.specs.ram} GB\n• 🏎️ CPU: ${pendingRequest.package.specs.cpu}%\n• 💾 DISK: ${pendingRequest.package.specs.disk} GB\n• 🗄️ Databases: ${pendingRequest.package.databases}\n• 💾 Backups: ${pendingRequest.package.backups}\n\n*⚠️ IMPORTANT:*\n1. Save these credentials safely\n2. Change your password after first login\n3. Contact admin if you face any issues\n\n*Thank you for choosing Mickey Glitch Server Hosting!* 🚀`;
+
+                await sock.sendMessage(chatId, { text: successMessage }, { quoted: m });
+                const adminJid = `${settings.ownerNumber}@s.whatsapp.net`;
+                await sock.sendMessage(adminJid, { text: `🆕 *NEW SERVER CREATED*\n\n👤 Client: ${userName}\n📱 JID: ${userJid}\n📦 Package: ${pendingRequest.package.name}\n💰 Amount: TSh ${pendingRequest.package.price.toLocaleString()}\n📧 Email: ${input}\n🖥️ Server: ${creation.serverName}` });
+            } else {
+                await sock.sendMessage(chatId, { text: `❌ *SERVER CREATION FAILED*\n\nSamahani ${userName}, tumepata hitilafu wakati wa kuunda server yako.\n\n*Error:* ${creation.error}\n\nTafadhali wasiliana na admin kwa msaada zaidi.` }, { quoted: m });
+            }
+            return;
+        }
+
         // ============= SERVER PACKAGE SELECTION (BUTTONS) =============
         if (input === '.halotel server') {
             await sock.sendMessage(chatId, { react: { text: '🖥️', key: m.key } });
@@ -344,31 +388,8 @@ async function halotelCommand(sock, chatId, m, body = '') {
             const selectedPackage = SERVER_PACKAGES.find(pkg => pkg.id === packageId);
             
             if (selectedPackage) {
-                await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
-                
-                // Sending status message
-                await sock.sendMessage(chatId, { 
-                    text: `🔄 *Processing Your Request*\n\n${selectedPackage.emoji} *${selectedPackage.name} PACKAGE SELECTED*\n💰 Amount: TSh ${selectedPackage.price.toLocaleString()}\n\n⏳ Creating your server automatically...\n📧 Generating account credentials...\n\n*This will take about 30-60 seconds*` 
-                }, { quoted: m });
-
-                // Create server automatically (creates user + server)
-                const creation = await createPterodactylServerWithUserCreation(userName, userJid, selectedPackage);
-
-                if (creation.success) {
-                    const successMessage = `✅ *SERVER CREATED SUCCESSFULLY!* 🎉\n\n${selectedPackage.emoji} *Package:* ${selectedPackage.name}\n💰 *Amount:* TSh ${selectedPackage.price.toLocaleString()}\n\n*🔐 LOGIN CREDENTIALS:*\n━━━━━━━━━━━━━━━━━━━\n🌐 *Panel URL:* ${creation.panelUrl}\n📧 *Email:* ${creation.email}\n🔑 *Password:* ${creation.password}\n👤 *Username:* ${creation.username}\n━━━━━━━━━━━━━━━━━━━\n\n*📊 SERVER SPECS:*\n• 🧠 RAM: ${selectedPackage.specs.ram} GB\n• 🏎️ CPU: ${selectedPackage.specs.cpu}%\n• 💾 DISK: ${selectedPackage.specs.disk} GB\n• 🗄️ Databases: ${selectedPackage.databases}\n• 💾 Backups: ${selectedPackage.backups}\n\n*⚠️ IMPORTANT:*\n1. Save these credentials safely\n2. Change your password after first login\n3. Contact admin if you face any issues\n\n*Thank you for choosing Mickey Glitch Server Hosting!* 🚀`;
-
-                    await sock.sendMessage(chatId, { text: successMessage }, { quoted: m });
-                    
-                    // Also send credentials to admin
-                    const adminJid = `${settings.ownerNumber}@s.whatsapp.net`;
-                    await sock.sendMessage(adminJid, { 
-                        text: `🆕 *NEW SERVER CREATED*\n\n👤 Client: ${userName}\n📱 JID: ${userJid}\n📦 Package: ${selectedPackage.name}\n💰 Amount: TSh ${selectedPackage.price.toLocaleString()}\n📧 Email: ${creation.email}\n🖥️ Server: ${creation.serverName}` 
-                    });
-                } else {
-                    await sock.sendMessage(chatId, { 
-                        text: `❌ *SERVER CREATION FAILED*\n\nSamahani ${userName}, tumepata hitilafu wakati wa kuunda server yako.\n\n*Error:* ${creation.error}\n\nTafadhali wasiliana na admin kwa msaada zaidi.` 
-                    }, { quoted: m });
-                }
+                storePendingRequest(chatId, userName, selectedPackage, selectedPackage.specs);
+                return await askForEmailPrompt(sock, chatId, selectedPackage, m);
             }
             return;
         }
