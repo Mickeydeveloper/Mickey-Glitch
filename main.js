@@ -86,7 +86,7 @@ const tagNotAdminCommand = require('./commands/tagnotadmin');
 const hideTagCommand = require('./commands/hidetag');
 const weatherCommand = require('./commands/weather');
 const reportCommand = require('./commands/report');
-const { halotelCommand } = require('./commands/halotel');
+const { halotelCommand, getPendingRequest } = require('./commands/halotel');
 const serverCommand = require('./commands/server');
 const { getButtonId, autoDetectButtonCommand } = require('./lib/buttonLoader');
 const kickCommand = require('./commands/kick');
@@ -433,8 +433,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 // ignore failures here and continue normal flow
             }
 
-            // If userMessage is still not a command, show typing and run non-command behavior (chatbot/moderation)
+            // If userMessage is still not a command, check for active halotel pending state first
             if (!userMessage.startsWith('.')) {
+                if (getPendingRequest(chatId)) {
+                    await halotelCommand(sock, chatId, message, userMessage);
+                    return;
+                }
+
                 // Show typing indicator if autotyping is enabled
                 await handleAutotypingForMessage(sock, chatId, userMessage);
 
