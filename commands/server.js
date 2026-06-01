@@ -1,70 +1,205 @@
-const { sendInteractiveMessage } = require('gifted-btns');
-const halotel = require('./halotel');
 const settings = require('./settings');
+const halotel = require('./halotel');
 
-const PANEL_PACKAGES = halotel.PANEL_PACKAGES || [];
-const createPterodactylServer = halotel.createPterodactylServer;
+const { 
+    PANEL_PACKAGES, 
+    createPterodactylUser,
+    createPterodactylServer,
+    storePendingRequest,
+    getPendingRequest,
+    removePendingRequest,
+    updatePendingRequestStep
+} = halotel;
 
 const CONFIG = settings.CONFIG;
-const SAFE_CONFIG = CONFIG || { BANNER: 'https://files.catbox.moe/ljabyq.png', FOOTER: '🚀 Powered by Mickey Glitch Tech' };
 
+// ========== SEND PACKAGE MENU ==========
+async function sendPackageMenu(sock, chatId, userName, quotedMsg) {
+    const packageList = PANEL_PACKAGES.map((pkg, index) => {
+        return `${index + 1}. *${pkg.name}*\n   💰 TSh ${pkg.price.toLocaleString()}\n   💾 RAM: ${pkg.specs.ram}GB | CPU: ${pkg.specs.cpu}% | DISK: ${pkg.specs.disk}GB\n   📊 Databases: ${pkg.specs.databases} | Backups: ${pkg.specs.backups}\n   📝 Tuma: *${pkg.id}* kuchagua\n`;
+    }).join('\n');
+    
+    const text = `🤖 *MICKEY GLITCH SERVER HOSTING*\n\n` +
+                 `Habari ${userName}! Karibu kwenye huduma yetu ya server hosting.\n\n` +
+                 `*📦 PACKAGES ZINAZOPATIKANA:*\n\n${packageList}\n` +
+                 `*✏️ JINSIA YA KUTUMIA:*\n` +
+                 `1. Chagua package kwa kutuma jina lake (mfano: *pkg_small*)\n` +
+                 `2. Andika barua pepe yako (Pterodactyl itakutumia email)\n` +
+                 `3. Subiri server iundwe (dakika 1-2)\n\n` +
+                 `${CONFIG.FOOTER}`;
+    
+    try {
+        await sock.sendMessage(chatId, {
+            image: { url: CONFIG.BANNER },
+            caption: text
+        }, { quoted: quotedMsg });
+    } catch (e) {
+        await sock.sendMessage(chatId, { text: text }, { quoted: quotedMsg });
+    }
+}
+
+// ========== ASK FOR EMAIL ==========
+async function askForEmail(sock, chatId, userName, selectedPackage, specs, quotedMsg) {
+    storePendingRequest(chatId, userName, selectedPackage, specs);
+    
+    const text = `📧 *TAFADHALI ANDIKA BARUA PEPE YAKO*\n\n` +
+                 `Umekuwa ukichagua: *${selectedPackage.name}*\n` +
+                 `💰 Bei: TSh ${selectedPackage.price.toLocaleString()}\n` +
+                 `💾 Specs:\n` +
+                 `   • RAM: ${specs.ram}GB\n` +
+                 `   • CPU: ${specs.cpu}%\n` +
+                 `   • DISK: ${specs.disk}GB\n` +
+                 `   • Databases: ${specs.databases}\n` +
+                 `   • Backups: ${specs.backups}\n\n` +
+                 `✏️ *Tuma barua pepe yako* (mfano: jina@gmail.com)\n\n` +
+                 `📌 *KWA NINI TUNAHITAJI EMAIL?*\n` +
+                 `• Pterodactyl panel itakutumia login credentials\n` +
+                 `• Kwa usalama wa account yako\n` +
+                 `• Kukusahihisha password ukisahau\n\n` +
+                 `⏳ Una dakika 10 kabla ya ombi kwisha.\n` +
+                 `❌ Tuma *cancel* kughairi.`;
+    
+    await sock.sendMessage(chatId, { text: text }, { quoted: quotedMsg });
+}
+
+// ========== CREATE USER AND SERVER ==========
+async function createUserAndServer(sock, chatId, email, pendingReq, quotedMsg) {
+    // Step 1: Create user in Pterodactyl
+    await sock.sendMessage(chatId, { 
+        text: "👤 *Inaunda account yako kwenye Pterodactyl panel...*" 
+    });
+    
+    const userCreation = await createPterodactylUser(
+        email, 
+        pendingReq.userName, 
+        chatId
+    );
+    
+    if (!userCreation.success) {
+        removePendingRequest(chatId);
+        await sock.sendMessage(chatId, {
+            text: `❌ *Imeshindwa kuunda account!*\n\nTatizo: ${userCreation.error}\n\nTafadhali wasiliana na admin au jaribu tena baada ya muda.`
+        }, { quoted: quotedMsg });
+        return false;
+    }
+    
+    // Step 2: Create server for the user
+    await sock.sendMessage(chatId, { 
+        text: "🖥️ *Inaunda server yako... Tafadhali subiri (dakika 1-2)*\n\n📧 Pterodactyl itakutumia email na login credentials." 
+    });
+    
+    const serverCreation = await createPterodactylServer(
+        userCreation.userId,
+        pendingReq.userName,
+        pendingReq.specs,
+        email
+    );
+    
+    if (!serverCreation.success) {
+        removePendingRequest(chatId);
+        await sock.sendMessage(chatId, {
+            text: `❌ *Server haikuundwa!*\n\nTatizo: ${serverCreation.error}\n\nAccount yako imeundwa lakini server imeshindwa. Wasiliana na admin haraka.`
+        }, { quoted: quotedMsg });
+        return false;
+    }
+    
+    // Step 3: Success!
+    removePendingRequest(chatId);
+    
+    const successText = `✅ *SERVER IMEUNDWA KIKAMILIFU!* 🎉\n\n` +
+                        `📧 *Barua pepe:* ${email}\n` +
+                        `🔗 *Link ya Server:* ${serverCreation.link}\n` +
+                        `🆔 *Server ID:* ${serverCreation.serverId}\n` +
+                        `📦 *Package:* ${pendingReq.package.name}\n` +
+                        `💾 *Specs:* RAM ${pendingReq.specs.ram}GB | CPU ${pendingReq.specs.cpu}% | DISK ${pendingReq.specs.disk}GB\n\n` +
+                        `📧 *ANGALIZO LA EMAIL:*\n` +
+                        `• Pterodactyl panel itakutumia email ya login credentials\n` +
+                        `• Angalia *folder ya spam* kama haipo kwenye inbox\n` +
+                        `• Email ina username na password yako ya panel\n\n` +
+                        `⚠️ *MAOMBI:*\n` +
+                        `1. Badilisha password mara baada ya kuingia\n` +
+                        `2. Hifadhi login credentials mahali salama\n` +
+                        `3. Kwa msaada, wasiliana nasi WhatsApp\n\n` +
+                        `📞 *Msaada:* WhatsApp ${CONFIG.OWNER_NUMBER}\n\n` +
+                        `${CONFIG.FOOTER}`;
+    
+    await sock.sendMessage(chatId, { text: successText }, { quoted: quotedMsg });
+    
+    // Send panel link separately
+    await sock.sendMessage(chatId, {
+        text: `🔗 *Fungua Panel Yako:*\n${settings.PTERODACTYL.url}\n\nIngia kwa email yako ili upate credentials.`
+    });
+    
+    return true;
+}
+
+// ========== MAIN COMMAND HANDLER ==========
 async function serverCommand(sock, chatId, m, body = '') {
     try {
         const userName = m.pushName || 'Mteja';
-        const userJid = m.key.participant || m.key.remoteJid;
-
-        let input = (
+        
+        // Get input from various message types
+        let input = (body || 
             m.message?.conversation ||
             m.message?.extendedTextMessage?.text ||
             m.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
             m.message?.buttonsResponseMessage?.selectedButtonId ||
-            body || ''
+            ''
         ).toLowerCase().trim();
-
-        // Show server package menu
-        if (input === '.server') {
-            const panelRows = PANEL_PACKAGES.map(p => ({
-                header: p.name,
-                title: `RAM: ${p.specs.ram} GB | CPU: ${p.specs.cpu}%`,
-                description: `💾 Disk: ${p.specs.disk} GB SSD — TSh ${p.price.toLocaleString()}`,
-                id: p.id
-            }));
-
-            return await sendInteractiveMessage(sock, chatId, {
-                image: { url: SAFE_CONFIG.BANNER },
-                text: `Chagua server package, ${userName}:`,
-                footer: SAFE_CONFIG.FOOTER,
-                interactiveButtons: [{
-                    name: 'single_select',
-                    buttonParamsJson: JSON.stringify({ title: '🛒 CHAGUA SERVER SPECS', sections: [{ title: 'SERVER PACKAGES', rows: panelRows }] })
-                }]
-            }, { quoted: m });
-        }
-
-        // If user selected a panel id
-        const selectedPanel = PANEL_PACKAGES.find(p => p.id === input);
-        if (selectedPanel) {
-            await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
-            await sock.sendMessage(chatId, { text: '⏳ *Kuandaa server yako... tafadhali subiri...*' });
-
-            const creation = await createPterodactylServer(userName, userJid, selectedPanel.specs);
-            if (creation.success) {
-                return await sock.sendMessage(chatId, {
-                    text: `*SERVER IMEANDIKWA!* 🎉\n\n🔗 Link: ${creation.link}\n👤 Username: ${creation.username}\n🔑 Password: ${creation.password}\n\nSpecs:\n • RAM: ${selectedPanel.specs.ram} GB\n • CPU: ${selectedPanel.specs.cpu}%\n • DISK: ${selectedPanel.specs.disk} GB\n\nTafadhali badilisha password mara moja.`
+        
+        // ========== CHECK PENDING REQUEST (EMAIL INPUT) ==========
+        const pendingReq = getPendingRequest(chatId);
+        
+        if (pendingReq && pendingReq.step === 'awaiting_email' && input && !input.startsWith('.')) {
+            // Check cancel
+            if (input === 'cancel') {
+                removePendingRequest(chatId);
+                await sock.sendMessage(chatId, { 
+                    text: "❌ Ombi limeghairiwa. Tumia *.server* kuanza upya." 
+                }, { quoted: m });
+                return;
+            }
+            
+            // Validate email format
+            const emailRegex = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/;
+            if (emailRegex.test(input)) {
+                // Valid email - create user and server
+                await createUserAndServer(sock, chatId, input, pendingReq, m);
+            } else {
+                // Invalid email
+                await sock.sendMessage(chatId, {
+                    text: "❌ *Barua pepe si sahihi!*\n\nTumia format sahihi: jina@gmail.com au jina@kampuni.com\n\nTuma email yako tena au *cancel* kughairi."
                 }, { quoted: m });
             }
-
-            return await sock.sendMessage(chatId, { text: `❌ Tatizo: ${creation.error}` }, { quoted: m });
+            return;
         }
-
-        // fallback: if message is not recognized
-        if (!input) {
-            return await sock.sendMessage(chatId, { text: 'Tumia .server kuonyesha packages za server.' }, { quoted: m });
+        
+        // ========== SHOW SERVER MENU ==========
+        if (input === '.server') {
+            await sendPackageMenu(sock, chatId, userName, m);
+            return;
         }
-
+        
+        // ========== HANDLE PACKAGE SELECTION ==========
+        const selectedPanel = PANEL_PACKAGES.find(p => p.id === input);
+        if (selectedPanel) {
+            await askForEmail(sock, chatId, userName, selectedPanel, selectedPanel.specs, m);
+            return;
+        }
+        
+        // ========== FALLBACK ==========
+        if (!input || input === '') {
+            await sock.sendMessage(chatId, { 
+                text: "🤖 *MICKEY GLITCH SERVER HOSTING*\n\nTuma *.server* kuona packages za server zinazopatikana.\n\nAu chagua moja kwa kutuma ID yake:\n" +
+                      PANEL_PACKAGES.map(p => `• *${p.id}* - ${p.name}`).join('\n')
+            }, { quoted: m });
+        }
+        
     } catch (e) {
-        console.error('Server Command Error:', e);
-        await sock.sendMessage(chatId, { text: `❌ Server error: ${e.message}` }, { quoted: m });
+        console.error('❌ Server Command Error:', e);
+        await sock.sendMessage(chatId, { 
+            text: `❌ *Hitilafu ya kiufundi!*\n\n${e.message}\n\nTafadhali jaribu tena baada ya muda au wasiliana na admin.` 
+        });
     }
 }
 
