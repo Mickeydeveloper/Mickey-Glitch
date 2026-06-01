@@ -259,8 +259,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     return;
                 }
 
-                // Handle command IDs (starting with .)
-                if (selectedId && selectedId.startsWith('.')) {
+                // Handle halotel interactive IDs that are not raw command strings
+                if (selectedId === 'show_data_menu' || selectedId.toString().startsWith('server_') || selectedId.toString().startsWith('data_')) {
+                    console.log(`🔄 Routed interactive ID directly to halotel: ${selectedId}`);
+                    await halotelCommand(sock, chatId, message, selectedId.toString().toLowerCase());
+                    return;
+                } else if (selectedId && selectedId.startsWith('.')) {
                     console.log(`🔄 Button command intercepted: ${selectedId}`);
                     userMessage = selectedId.toLowerCase();
                     // fall through to command handling
