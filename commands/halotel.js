@@ -17,7 +17,7 @@ const SAFE_CONFIG = CONFIG || {
     PAYMENT_NO: '0615944741',
     BANNER: 'https://files.catbox.moe/ljabyq.png',
     FOOTER: '🚀 Powered by Mickey Glitch Tech',
-    ADMIN_NUMBER: '255715555555', // Weka number yako ya admin
+    ADMIN_NUMBER: '255615944741', // Weka number yako ya admin
     API_KEY: 'your_api_key_here'
 };
 
@@ -87,9 +87,9 @@ function generateOrderId() {
 const SERVER_PACKAGES = [
     { 
         name: 'SMALL', 
-        price: 15000, 
+        price: 3000, 
         id: 'pkg_small',
-        specs: { ram: '1', cpu: '50', disk: '10' },
+        specs: { ram: '1', cpu: '10', disk: '10' },
         databases: 1,
         backups: 1,
         emoji: '🚀',
@@ -97,9 +97,9 @@ const SERVER_PACKAGES = [
     },
     { 
         name: 'MEDIUM', 
-        price: 35000, 
+        price: 5000, 
         id: 'pkg_medium',
-        specs: { ram: '2', cpu: '100', disk: '25' },
+        specs: { ram: '3', cpu: '100', disk: '25' },
         databases: 2,
         backups: 2,
         emoji: '⚡',
@@ -107,7 +107,7 @@ const SERVER_PACKAGES = [
     },
     { 
         name: 'LARGE', 
-        price: 65000, 
+        price: 6500, 
         id: 'pkg_large',
         specs: { ram: '4', cpu: '200', disk: '50' },
         databases: 3,
@@ -117,7 +117,7 @@ const SERVER_PACKAGES = [
     },
     { 
         name: 'PRO', 
-        price: 120000, 
+        price: 10000, 
         id: 'pkg_pro',
         specs: { ram: '8', cpu: '400', disk: '100' },
         databases: 5,
