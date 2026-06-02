@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
+const { PassThrough } = require('stream');
 
 // ==========================================
 // CLASS YA BUTTONV2 (Kipande ulichopewa)
@@ -70,29 +71,20 @@ const CONFIG = {
     REPO_URL: 'https://github.com/MICKEYGLITCH/Mickey-Glitch-Bot'
 };
 
-// Function ya kutengeneza Zip ya Bot
-async function createProjectZip() {
-    return new Promise(async (resolve, reject) => {
-        const timestamp = Date.now();
-        const zipFileName = `MickeyGlitch_Bot_${timestamp}.zip`;
-        const zipFilePath = path.join(__dirname, '../temp', zipFileName);
-        const tempDir = path.join(__dirname, '../temp');
+// Function ya kutengeneza Zip ya Bot kama stream (haina kuandika disk)
+function createProjectZipStream() {
+    const timestamp = Date.now();
+    const zipFileName = `MickeyGlitch_Bot_${timestamp}.zip`;
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    const passthrough = new PassThrough();
 
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
+    // Pipe archive output to pass-through so we can stream it directly
+    archive.on('error', err => passthrough.emit('error', err));
+    archive.pipe(passthrough);
 
+    // Start adding files asynchronously (don't block)
+    (async () => {
         try {
-            const output = fs.createWriteStream(zipFilePath);
-            const archive = archiver('zip', { zlib: { level: 9 } });
-
-            output.on('close', () => {
-                resolve({ path: zipFilePath, size: archive.pointer(), name: zipFileName });
-            });
-
-            archive.on('error', reject);
-            archive.pipe(output);
-
             const projectDir = path.join(__dirname, '..');
             const excludeDirs = ['node_modules', 'temp', '.git', 'sessions', 'cache', 'logs', 'uploads'];
 
@@ -107,22 +99,24 @@ async function createProjectZip() {
                         if (excludeDirs.includes(item) || item.startsWith('.')) continue;
 
                         if (stat.isDirectory()) {
-                            archive.directory(fullPath, relativePath);
                             addDirectory(fullPath, relativePath);
                         } else {
                             archive.file(fullPath, { name: relativePath });
                         }
                     }
-                } catch(e) {}
+                } catch (e) {
+                    // ignore individual file errors
+                }
             }
 
             addDirectory(projectDir);
             await archive.finalize();
-
-        } catch (error) {
-            reject(error);
+        } catch (err) {
+            try { archive.destroy(); } catch(e) {}
         }
-    });
+    })();
+
+    return { stream: passthrough, name: zipFileName };
 }
 
 // Main Command Handler
@@ -151,36 +145,29 @@ async function repoCommand(sock, chatId, m, body = '') {
         if (input === 'download_zip') input = '.download_zip';
         if (input === 'view_repo') input = '.view_repo';
 
-        // 1. HANDLE DOWNLOAD ZIP BUTTON
+        // 1. HANDLE DOWNLOAD ZIP BUTTON (streamed - haina kuandika disk)
         if (input === '.download_zip') {
             try { await sock.sendMessage(chatId, { react: { text: '📦', key: safeKey } }); } catch(e) {}
 
             const processingMsg = await sock.sendMessage(chatId, {
-                text: '📦 *CREATING ZIP FILE...*\n\nTafadhali subiri ninaandaa ma-file ya bot...\n⏳ Hii inaweza kuchukua sekunde 10-20...'
+                text: '📦 *INATENGENEZWA...*\n\nNinaandaa archive ya bot (haitahifadhiwa kwenye disk). Tafadhali subiri...'
             });
 
             try {
-                const zipInfo = await createProjectZip();
-                const zipBuffer = fs.readFileSync(zipInfo.path);
-                const fileSizeMB = (zipInfo.size / (1024 * 1024)).toFixed(2);
+                const zipStreamInfo = createProjectZipStream();
 
                 await sock.sendMessage(chatId, {
-                    document: zipBuffer,
+                    document: zipStreamInfo.stream,
                     mimetype: 'application/zip',
-                    fileName: zipInfo.name,
-                    caption: `✅ *ZIP FILE READY!*\n\n📦 *File:* ${zipInfo.name}\n💾 *Size:* ${fileSizeMB} MB\n📁 *Files:* Complete bot source code\n\n🌟 *MICKEY GLITCH BOT*`
+                    fileName: zipStreamInfo.name,
+                    caption: `✅ *ZIP STREAM READY!*\n\n📦 *File:* ${zipStreamInfo.name}\n📁 *Files:* Complete bot source code (streamed)`
                 }, { quoted: safeM });
 
-                setTimeout(() => {
-                    try { fs.unlinkSync(zipInfo.path); } catch(e) {}
-                }, 5000);
-
-                await sock.sendMessage(chatId, { delete: processingMsg.key });
-
+                try { await sock.sendMessage(chatId, { delete: processingMsg.key }); } catch(e) {}
             } catch (error) {
-                console.error('Zip error:', error);
+                console.error('Zip stream error:', error);
                 await sock.sendMessage(chatId, {
-                    text: `❌ *FAILED TO CREATE ZIP!*\n\nError: ${error.message}\n\n📌 Clone kutoka GitHub: ${CONFIG.REPO_URL}`
+                    text: `❌ *HAIKUWEZA KUANDAA ARCHIVE!*\n\nError: ${error.message || error}\n\n📌 Clone kutoka GitHub: ${CONFIG.REPO_URL}`
                 });
             }
             return;
@@ -189,7 +176,7 @@ async function repoCommand(sock, chatId, m, body = '') {
         // 2. HANDLE VIEW REPO BUTTON
         if (input === '.view_repo') {
             return await sock.sendMessage(chatId, {
-                text: `📂 *GITHUB REPOSITORY*\n\n🔗 ${CONFIG.REPO_URL}\n\n🌟 Star & Fork nifungulie njia mwanangu!`
+                text: `📂 *GITHUB REPOSITORY*\n\n🔗 ${CONFIG.REPO_URL}\n\n🌟 Star & Fork kwenda kutoa support!`
             }, { quoted: safeM });
         }
 
@@ -197,21 +184,8 @@ async function repoCommand(sock, chatId, m, body = '') {
         if (input === '.repo') {
             try { await sock.sendMessage(chatId, { react: { text: '📂', key: safeKey } }); } catch(e) {}
 
-            const statusMessage = `╭━━━━━━━━━━━━━━━━━━╮
-┃    📂 *REPO MENU* 📂
-┃━━━━━━━━━━━━━━━━━━
-┃
-┃ 🤖 *Bot:* MICKEY GLITCH
-┃ 📦 *Version:* 3.3
-┃ 📁 *Files:* Complete Source
-┃ 💾 *Size:* ~15-20 MB
-┃
-┃ 🔗 *GitHub:* 
-┃ ${CONFIG.REPO_URL}
-┃
-╰━━━━━━━━━━━━━━━━━━╯`.trim();
+            const statusMessage = `╭━━━━━━━━━━━━━━━━━━╮\n┃    📂 *REPO MENU* 📂\n┃━━━━━━━━━━━━━━━━━━\n┃\n┃ 🤖 *Bot:* MICKEY GLITCH\n┃ 📦 *Version:* 3.3\n┃ 📁 *Files:* Complete Source\n┃ 💾 *Size:* ~15-20 MB\n┃\n┃ 🔗 *GitHub:* \n┃ ${CONFIG.REPO_URL}\n┃\n╰━━━━━━━━━━━━━━━━━━╯`.trim();
 
-            // KUITA BUTTONV2 KIOTOMATIKI BILA ERROR
             return await new ButtonV2(ctx.core)
                 .setTitle('🚀 Artoria')
                 .setSubtitle('Artoria Pendragon')

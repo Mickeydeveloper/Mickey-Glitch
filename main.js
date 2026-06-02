@@ -436,9 +436,17 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
             // If userMessage is still not a command, check for active halotel pending state first
             if (!userMessage.startsWith('.')) {
-                if (getPendingRequest(chatId)) {
-                    await halotelCommand(sock, chatId, message, userMessage);
-                    return;
+                // Safe check for pending request (will not fail if getPendingRequest is undefined)
+                try {
+                    if (getPendingRequest && typeof getPendingRequest === 'function') {
+                        const pendingReq = getPendingRequest(chatId);
+                        if (pendingReq) {
+                            await halotelCommand(sock, chatId, message, userMessage);
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error checking pending request:', e.message);
                 }
 
                 // Show typing/recording indicators if enabled

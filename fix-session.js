@@ -27,6 +27,8 @@ const SESSION_DIR = path.join(process.cwd(), 'session');
 const BACKUP_DIR = path.join(process.cwd(), 'session_backups');
 const CREDS_PATH = path.join(SESSION_DIR, 'creds.json');
 const BACKUP_CREDS_PATH = path.join(BACKUP_DIR, `creds_backup_${Date.now()}.json`);
+const DATA_DIR = path.join(process.cwd(), 'data');
+const PENDING_REQUESTS_CACHE = path.join(DATA_DIR, '.pending-requests');
 
 // ─────────────────────────────────────────────────────
 // 📋 HELPER FUNCTIONS
@@ -166,6 +168,16 @@ function cleanCorruptedKeys() {
     if (!fs.existsSync(SESSION_DIR)) {
         log.warn('Session folder not found');
         return 0;
+    }
+    
+    // Clear pending requests cache if it exists
+    try {
+        if (fs.existsSync(PENDING_REQUESTS_CACHE)) {
+            fs.unlinkSync(PENDING_REQUESTS_CACHE);
+            log.success('Cleared pending requests cache');
+        }
+    } catch (e) {
+        // ignore
     }
     
     const files = fs.readdirSync(SESSION_DIR);
