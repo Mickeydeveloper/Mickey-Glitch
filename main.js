@@ -1083,6 +1083,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await autotypingCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
+            case userMessage.startsWith('.autorecording'):
+                await autorecordingCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
             case userMessage.startsWith('.autoread'):
                 await autoreadCommand(sock, chatId, message);
                 commandExecuted = true;
@@ -1157,8 +1161,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // If a command was executed, show typing status after command execution
         if (commandExecuted !== false) {
-            // Command was executed, now show typing status after command execution
+            // Command was executed, now show typing/recording status after command execution
             await showTypingAfterCommand(sock, chatId);
+            try {
+                await showRecordingAfterCommand(sock, chatId);
+            } catch (e) {
+                // ignore if autorecording not available or errors
+            }
         }
 
         // Function to handle .groupjid command
