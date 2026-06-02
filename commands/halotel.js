@@ -1,6 +1,6 @@
 /**
- * halotel.js - Mickey Glitch Business AI with Buttons & Auto Email
- * KAZI: Inauza bando na panel za server kwa buttons
+ * halotel.js - Mickey Glitch Business AI with Buttons & Payment-Only Server Flow
+ * KAZI: Inauza bando, server specs, na data bundles kwa buttons
  */
 
 const { sendInteractiveMessage } = require('gifted-btns');
@@ -8,20 +8,12 @@ const axios = require('axios');
 const settings = require('./settings');
 
 const CONFIG = settings.CONFIG;
-const PTERO_CONFIG = settings.PTERO_CONFIG;
 
 const SAFE_CONFIG = CONFIG || {
     PRICE_PER_GB: 1000,
     PAYMENT_NO: '0615944741',
     BANNER: 'https://files.catbox.moe/ljabyq.png',
     FOOTER: '🚀 Powered by Mickey Glitch Tech'
-};
-
-const SAFE_PTERO = PTERO_CONFIG || {
-    PANEL_URL: 'https://panel.mickeypannel.dpdns.org/',
-    API_KEY: 'ptla_6TPdj5LSkKq1vCLbEJYBO1hy39vD2NBWqopJKc1Pgg0',
-    LOCATION_ID: 2,
-    EGG_ID: 15
 };
 
 // Server Packages (Updated)
@@ -73,34 +65,7 @@ const DATA_PACKAGES = [
     { gb: 50, label: 'Business Pack', price: 50000 }
 ];
 
-// In-memory pending requests store (simple Map)
-const pendingRequests = new Map();
 
-function storePendingRequest(chatId, userName, selectedPackage, specs) {
-    pendingRequests.set(chatId, {
-        userName,
-        package: selectedPackage,
-        specs,
-        step: 'awaiting_email',
-        createdAt: Date.now()
-    });
-}
-
-function getPendingRequest(chatId) {
-    return pendingRequests.get(chatId);
-}
-
-function removePendingRequest(chatId) {
-    return pendingRequests.delete(chatId);
-}
-
-// Generate random email for Pterodactyl account
-function generateRandomEmail(userName, userJid) {
-    const cleanJid = userJid.split('@')[0];
-    const randomStr = Math.random().toString(36).substring(2, 8);
-    const timestamp = Date.now().toString().slice(-6);
-    return `${cleanJid}_${randomStr}${timestamp}@mickeybot.store`;
-}
 
 // Generate random password
 function generateRandomPassword() {
@@ -112,68 +77,24 @@ function generateRandomPassword() {
     return password;
 }
 
-function isValidEmail(email) {
-    return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-}
 
-function askForEmailPrompt(sock, chatId, selectedPackage, quotedMsg) {
-    const text = `📧 *Tafadhali tuma barua pepe yako ili tuendelee na ombi la server.*\n\n` +
-                 `📦 Package: *${selectedPackage.name}*\n` +
-                 `💰 Bei: TSh ${selectedPackage.price.toLocaleString()}\n\n` +
-                 `✏️ Tuma email yako sahihi kama: *jina@example.com*\n` +
-                 `❌ Au tuma *cancel* kuondoa ombi.
-`;
 
-    return sock.sendMessage(chatId, { text }, { quoted: quotedMsg });
-}
-
-function normalizePterodactylUrl(url) {
-    if (!url || typeof url !== 'string') return '';
-    let cleaned = url.trim();
-    cleaned = cleaned.replace(/\/api\/application$/i, '');
-    cleaned = cleaned.replace(/\/+$/g, '');
-    return cleaned;
-}
-
-function getPterodactylApiEndpoint(endpoint) {
-    const base = normalizePterodactylUrl(SAFE_PTERO.PANEL_URL);
-    return `${base}/api/application/${endpoint.replace(/^\/+/, '')}`;
-}
-
-function getPterodactylError(error) {
-    if (!error) return 'Unknown error';
-    if (error.response?.data) {
-        const data = error.response.data;
-        if (typeof data === 'string') return data;
-        if (Array.isArray(data.errors) && data.errors.length) {
-            return data.errors.map(item => item.detail || item.title || item.code).join(' | ');
+function sendServerPaymentDetails(sock, chatId, selectedPackage, quotedMsg) {
+    const paymentButtons = [
+        {
+            name: "cta_copy",
+            buttonParamsJson: JSON.stringify({
+                display_text: `📋 Copy Number: ${SAFE_CONFIG.PAYMENT_NO}`,
+                copy_code: SAFE_CONFIG.PAYMENT_NO
+            })
         }
-        if (data.error) return typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
-        if (data.message) return data.message;
-    }
-    return error.message || String(error);
-}
+    ];
 
-function getNotificationJid() {
-    return SAFE_PTERO.NOTIFICATION_JID || `${settings.ownerNumber}@s.whatsapp.net`;
-}
-
-async function notifyEmailReceived(sock, userName, userJid, email, packageName) {
-    const notificationJid = getNotificationJid();
-    try {
-        await sock.sendMessage(notificationJid, {
-            text: `📧 *NEW EMAIL RECEIVED*
-
-👤 Client: ${userName}
-📱 JID: ${userJid}
-📦 Package: ${packageName}
-📧 Email: ${email}
-
-Email imepokelewa na imepelekwa sehemu husika kwa ufuatiliaji.`
-        });
-    } catch (err) {
-        console.error('Notify Email Received Error:', getPterodactylError(err));
-    }
+    return sendInteractiveMessage(sock, chatId, {
+        text: `✨ *MICKEY BIZ - SERVER ORDER*\n\n📦 *Package:* ${selectedPackage.name}\n💰 *Amount:* TSh ${selectedPackage.price.toLocaleString()}\n\n*SPECIFICATIONS:*\n• 🧠 RAM: ${selectedPackage.specs.ram}GB\n• 🏎️ CPU: ${selectedPackage.specs.cpu}%\n• 💾 DISK: ${selectedPackage.specs.disk}GB\n• 🗄️ Databases: ${selectedPackage.databases}\n• 💾 Backups: ${selectedPackage.backups}\n\n*PAYMENT DETAILS:*\n💳 *Number:* ${SAFE_CONFIG.PAYMENT_NO}\n💵 *Amount:* TSh ${selectedPackage.price.toLocaleString()}\n\n*Baada ya malipo:*\n1. Tuma screenshot ya malipo hapa.\n2. Admin atawasiliana nawe kwa muendelezo.\n3. Hii ni huduma ya server specifications pekee, bila uundaji wa moja kwa moja.\n\n🚀 Powered by Mickey Glitch Tech`,
+        footer: SAFE_CONFIG.FOOTER,
+        interactiveButtons: paymentButtons
+    }, { quoted: quotedMsg });
 }
 
 async function askMickeyBiz(query, userName) {
@@ -183,168 +104,6 @@ async function askMickeyBiz(query, userName) {
         return res.data.data || res.data.result || "Lipia mwanangu tuwashe mitambo.";
     } catch (e) { 
         return "Nipo hapa! Lipia chap nikuwashie mitambo."; 
-    }
-}
-
-// Create server along with a new user (kept for backward compatibility)
-async function createPterodactylServerWithUserCreation(userName, userJid, pkg, userEmail) {
-    try {
-        const cleanJid = userJid.split('@')[0];
-        const emailUsed = isValidEmail(userEmail) ? userEmail.trim() : generateRandomEmail(userName, userJid);
-        const userPassword = generateRandomPassword();
-        const userNameClean = userName.replace(/[^a-zA-Z0-9]/g, '') || 'Mteja';
-        const serverName = `${pkg.name.toLowerCase()}_${cleanJid}_${Date.now().toString().slice(-4)}`;
-
-        // 1. Create user account
-        const userRes = await axios.post(getPterodactylApiEndpoint('users'), {
-            username: `user_${cleanJid}_${Date.now().toString().slice(-6)}`,
-            email: emailUsed,
-            first_name: userNameClean,
-            last_name: pkg.name,
-            password: userPassword
-        }, {
-            headers: { 
-                'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`, 
-                'Content-Type': 'application/json', 
-                'Accept': 'application/json' 
-            },
-            timeout: 15000
-        });
-
-        const pteroUserId = userRes.data?.attributes?.id || userRes.data?.id;
-        const pteroUsername = userRes.data?.attributes?.username || userRes.data?.username || `user_${cleanJid}`;
-
-        // 2. Convert specs
-        const ramMb = Math.max(128, parseFloat(pkg.specs.ram) * 1024);
-        const diskMb = Math.max(512, parseFloat(pkg.specs.disk) * 1024);
-        const cpuLimit = Math.max(50, parseInt(pkg.specs.cpu) || 100);
-
-        // 3. Create server
-        const serverRes = await axios.post(getPterodactylApiEndpoint('servers'), {
-            name: serverName,
-            user: pteroUserId,
-            egg: SAFE_PTERO.EGG_ID,
-            docker_image: "ghcr.io/pterodactyl/yolks:node_18",
-            startup: "node index.js",
-            environment: {},
-            limits: { 
-                memory: ramMb, 
-                swap: 0, 
-                disk: diskMb, 
-                io: 500, 
-                cpu: cpuLimit 
-            },
-            feature_limits: { 
-                databases: pkg.databases, 
-                allocations: 1, 
-                backups: pkg.backups 
-            },
-            deployment: { 
-                locations: [SAFE_PTERO.LOCATION_ID], 
-                dedicated_ip: false, 
-                port_range: [] 
-            }
-        }, {
-            headers: { 
-                'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`, 
-                'Content-Type': 'application/json', 
-                'Accept': 'application/json' 
-            },
-            timeout: 20000
-        });
-
-        return {
-            success: true,
-            panelUrl: SAFE_PTERO.PANEL_URL,
-            email: emailUsed,
-            password: userPassword,
-            serverName: serverName,
-            username: pteroUsername
-        };
-
-    } catch (error) {
-        console.error("Pterodactyl Error:", error.response?.data || error.message);
-        const message = getPterodactylError(error);
-        return { 
-            success: false, 
-            error: message.includes('email') && message.includes('taken') ?
-                'Email hii tayari imetumika. Tumia email tofauti au wasiliana na admin.' : message
-        };
-    }
-}
-
-// Create a Pterodactyl user (used by server.js flow)
-async function createPterodactylUser(email, userName) {
-    try {
-        const password = generateRandomPassword();
-        const userRes = await axios.post(getPterodactylApiEndpoint('users'), {
-            username: `user_${email.split('@')[0]}_${Date.now().toString().slice(-6)}`,
-            email: email,
-            first_name: (userName || 'Mteja').replace(/[^a-zA-Z0-9]/g, '') || 'Mteja',
-            last_name: 'Client',
-            password: password
-        }, {
-            headers: {
-                'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            timeout: 15000
-        });
-
-        return { success: true, userId: userRes.data?.attributes?.id || userRes.data?.id, username: userRes.data?.attributes?.username || userRes.data?.username };
-    } catch (err) {
-        console.error('Create Pterodactyl User Error:', err.response?.data || err.message);
-        return { success: false, error: err.response?.data?.errors?.[0]?.detail || err.message };
-    }
-}
-
-// Create a Pterodactyl server for an existing userId (used by server.js flow)
-async function createPterodactylServer(userId, userName, specs, email) {
-    try {
-        const serverName = `srv_${specs.ram}GB_${(email || 'user').split('@')[0]}_${Date.now().toString().slice(-4)}`;
-
-        const ramMb = Math.max(128, parseFloat(specs.ram) * 1024);
-        const diskMb = Math.max(512, parseFloat(specs.disk) * 1024);
-        const cpuLimit = Math.max(50, parseInt(specs.cpu) || 100);
-
-        const serverRes = await axios.post(getPterodactylApiEndpoint('servers'), {
-            name: serverName,
-            user: userId,
-            egg: SAFE_PTERO.EGG_ID,
-            docker_image: "ghcr.io/pterodactyl/yolks:node_18",
-            startup: "node index.js",
-            environment: {},
-            limits: { 
-                memory: ramMb, 
-                swap: 0, 
-                disk: diskMb, 
-                io: 500, 
-                cpu: cpuLimit 
-            },
-            feature_limits: { 
-                databases: specs.databases || 1, 
-                allocations: 1, 
-                backups: specs.backups || 1 
-            },
-            deployment: { 
-                locations: [SAFE_PTERO.LOCATION_ID], 
-                dedicated_ip: false, 
-                port_range: [] 
-            }
-        }, {
-            headers: { 
-                'Authorization': `Bearer ${SAFE_PTERO.API_KEY}`, 
-                'Content-Type': 'application/json', 
-                'Accept': 'application/json' 
-            },
-            timeout: 20000
-        });
-
-        return { success: true, link: SAFE_PTERO.PANEL_URL, serverId: serverRes.data.attributes.id };
-    } catch (err) {
-        console.error('Create Pterodactyl Server Error:', err.response?.data || err.message);
-        return { success: false, error: getPterodactylError(err) };
     }
 }
 
@@ -365,41 +124,11 @@ async function halotelCommand(sock, chatId, m, body = '') {
             input = '.halotel';
         }
 
-        const pendingRequest = getPendingRequest(chatId);
-        if (pendingRequest && pendingRequest.step === 'awaiting_email') {
-            if (input === 'cancel') {
-                removePendingRequest(chatId);
-                return await sock.sendMessage(chatId, { text: '✅ OMBI la server limeghairiwa. Tuma .halotel kuanza tena.' }, { quoted: m });
-            }
-
-            if (!isValidEmail(input)) {
-                return await sock.sendMessage(chatId, { text: '❌ Tafadhali tuma email sahihi kama jina@example.com.' }, { quoted: m });
-            }
-
-            await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
-            await sock.sendMessage(chatId, { text: `✅ Email yako imepokelewa. Tunaanza kuunda server kwa email: ${input}` }, { quoted: m });
-            await notifyEmailReceived(sock, userName, userJid, input, pendingRequest.package.name);
-
-            const creation = await createPterodactylServerWithUserCreation(userName, userJid, pendingRequest.package, input);
-            removePendingRequest(chatId);
-
-            if (creation.success) {
-                const successMessage = `✅ *SERVER CREATED SUCCESSFULLY!* 🎉\n\n${pendingRequest.package.emoji} *Package:* ${pendingRequest.package.name}\n💰 *Amount:* TSh ${pendingRequest.package.price.toLocaleString()}\n\n*🔐 LOGIN CREDENTIALS:*\n━━━━━━━━━━━━━━━━━━━\n🌐 *Panel URL:* ${creation.panelUrl}\n📧 *Email:* ${creation.email || input}\n🔑 *Password:* ${creation.password}\n👤 *Username:* ${creation.username}\n━━━━━━━━━━━━━━━━━━━\n\n*📊 SERVER SPECS:*\n• 🧠 RAM: ${pendingRequest.package.specs.ram} GB\n• 🏎️ CPU: ${pendingRequest.package.specs.cpu}%\n• 💾 DISK: ${pendingRequest.package.specs.disk} GB\n• 🗄️ Databases: ${pendingRequest.package.databases}\n• 💾 Backups: ${pendingRequest.package.backups}\n\n*⚠️ IMPORTANT:*\n1. Save these credentials safely\n2. Change your password after first login\n3. Contact admin if you face any issues\n\n*Thank you for choosing Mickey Glitch Server Hosting!* 🚀`;
-
-                await sock.sendMessage(chatId, { text: successMessage }, { quoted: m });
-                const adminJid = `${settings.ownerNumber}@s.whatsapp.net`;
-                await sock.sendMessage(adminJid, { text: `🆕 *NEW SERVER CREATED*\n\n👤 Client: ${userName}\n📱 JID: ${userJid}\n📦 Package: ${pendingRequest.package.name}\n💰 Amount: TSh ${pendingRequest.package.price.toLocaleString()}\n📧 Email: ${creation.email || input}\n🖥️ Server: ${creation.serverName}` });
-            } else {
-                await sock.sendMessage(chatId, { text: `❌ *SERVER CREATION FAILED*\n\nSamahani ${userName}, tumepata hitilafu wakati wa kuunda server yako.\n\n*Error:* ${creation.error}\n\nTafadhali wasiliana na admin kwa msaada zaidi.` }, { quoted: m });
-            }
-            return;
-        }
 
         // ============= SERVER PACKAGE SELECTION (BUTTONS) =============
         if (input === '.halotel server') {
             await sock.sendMessage(chatId, { react: { text: '🖥️', key: m.key } });
 
-            // Create interactive buttons for each package
             const serverButtons = SERVER_PACKAGES.map(pkg => ({
                 name: "quick_reply",
                 buttonParamsJson: JSON.stringify({
@@ -408,12 +137,12 @@ async function halotelCommand(sock, chatId, m, body = '') {
                 })
             }));
 
-            const text = `🤖 *${userName} - SERVER HOSTING*\n\nHabari ${userName}! Karibu kwenye huduma yetu ya server hosting.\n\n*📦 PACKAGES ZINAZOPATIKANA:*\n\n${SERVER_PACKAGES.map(pkg => 
-                `${pkg.emoji} *${pkg.name} - ${pkg.name === 'SMALL' ? 'Kuanzia' : pkg.name === 'MEDIUM' ? 'Bora' : pkg.name === 'LARGE' ? 'Biashara' : 'Unlimited'}*\n` +
+            const text = `🤖 *${userName} - SERVER HOSTING*\n\nKaribu kwenye huduma yetu ya server hosting. Chagua package ya server specification hapa chini.\n\n*PACKAGES ZINAZOPATIKANA:*\n\n${SERVER_PACKAGES.map(pkg => 
+                `${pkg.emoji} *${pkg.name}*\n` +
                 `   💰 TSh ${pkg.price.toLocaleString()}\n` +
                 `   💾 RAM: ${pkg.specs.ram}GB | CPU: ${pkg.specs.cpu}% | DISK: ${pkg.specs.disk}GB\n` +
                 `   📊 Databases: ${pkg.databases} | Backups: ${pkg.backups}\n`
-            ).join('\n')}\n*✏️ BONYEZA BUTTON HAPA CHINI KUCHAGUA PACKAGE:*\n\n🚀 Powered by Mickey Glitch Tech`;
+            ).join('\n')}\n\n*✏️ BONYEZA PACKAGE ULIYOIPENDA KUENDELEA NA MALIPO.*\n\n🚀 Powered by Mickey Glitch Tech`;
 
             return await sendInteractiveMessage(sock, chatId, {
                 image: { url: SAFE_CONFIG.BANNER },
@@ -427,10 +156,8 @@ async function halotelCommand(sock, chatId, m, body = '') {
         if (input.startsWith('server_')) {
             const packageId = input.replace('server_', '');
             const selectedPackage = SERVER_PACKAGES.find(pkg => pkg.id === packageId);
-            
             if (selectedPackage) {
-                storePendingRequest(chatId, userName, selectedPackage, selectedPackage.specs);
-                return await askForEmailPrompt(sock, chatId, selectedPackage, m);
+                return await sendServerPaymentDetails(sock, chatId, selectedPackage, m);
             }
             return;
         }
@@ -504,7 +231,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
 
             return await sendInteractiveMessage(sock, chatId, {
                 image: { url: SAFE_CONFIG.BANNER },
-                text: `🏪 *MICKEY GLITCH STORE*\n\nMambo vipi *${userName}*! 👋\n\nKaribu kwenye duka letu. Tunauza:\n\n🖥️ *SERVER HOSTING* - Pterodactyl panels\n📱 *DATA BUNDLES* - Halotel internet packages\n\nChagua huduma unayoitaka kwa kubonyeza button hapo chini:\n\n🚀 Powered by Mickey Glitch Tech`,
+                text: `🏪 *MICKEY GLITCH STORE*\n\nMambo vipi *${userName}*! 👋\n\nKaribu kwenye duka letu. Tunauza:\n\n🖥️ *SERVER HOSTING* - Server specifications na malipo\n📱 *DATA BUNDLES* - Halotel internet packages\n\nChagua huduma unayoitaka kwa kubonyeza button hapo chini:\n\n🚀 Powered by Mickey Glitch Tech`,
                 footer: SAFE_CONFIG.FOOTER,
                 interactiveButtons: mainButtons
             }, { quoted: m });
@@ -548,15 +275,5 @@ async function halotelCommand(sock, chatId, m, body = '') {
 }
 
 module.exports = {
-    PANEL_PACKAGES: SERVER_PACKAGES,
-    createPterodactylUser,
-    createPterodactylServer,
-    storePendingRequest,
-    getPendingRequest,
-    removePendingRequest,
-    BANNER: SAFE_CONFIG.BANNER,
-    FOOTER: SAFE_CONFIG.FOOTER,
-    OWNER_NUMBER: settings.ownerNumber,
-    PANEL_URL: SAFE_PTERO.PANEL_URL,
     halotelCommand
 };
