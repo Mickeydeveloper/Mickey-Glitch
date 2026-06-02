@@ -136,7 +136,6 @@ const DATA_PACKAGES = [
     { gb: 50, label: 'Business Pack', price: 50000, deliveryTime: '10 minutes' }
 ];
 
-<<<<<<< HEAD
 // ========== PENDING REQUEST STORAGE (IN-MEMORY) ==========
 const pendingRequests = new Map();
 
@@ -204,8 +203,6 @@ async function createPterodactylServer(userId, userName, specs, email) {
     }
 }
 
-=======
->>>>>>> 6dc7e902a8ff557c4f58d0638aa0d67c68961ea8
 // Generate random password
 function generateRandomPassword() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$';
