@@ -1,6 +1,6 @@
 /**
  * Knight Bot - A WhatsApp Bot
- * Autorecording Command - Shows fake recording status
+ * Autorecording Command - Shows fake recording status continuously
  */
 
 const fs = require('fs');
@@ -23,7 +23,7 @@ async function autorecordingCommand(sock, chatId, message) {
     try {
         const senderId = message.key.participant || message.key.remoteJid;
         const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
-        
+
         if (!message.key.fromMe && !isOwner) {
             await sock.sendMessage(chatId, {
                 text: '❌ This command is only available for the owner!'
@@ -35,10 +35,10 @@ async function autorecordingCommand(sock, chatId, message) {
         const args = message.message?.conversation?.trim().split(' ').slice(1) || 
                     message.message?.extendedTextMessage?.text?.trim().split(' ').slice(1) || 
                     [];
-        
+
         // Initialize or read config
         const config = initConfig();
-        
+
         // Toggle based on argument or toggle current state if no argument
         if (args.length > 0) {
             const action = args[0].toLowerCase();
@@ -56,15 +56,15 @@ async function autorecordingCommand(sock, chatId, message) {
             // Toggle current state
             config.enabled = !config.enabled;
         }
-        
+
         // Save updated configuration
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-        
+
         // Send confirmation message
         await sock.sendMessage(chatId, {
             text: `✅ Auto-recording has been ${config.enabled ? 'enabled' : 'disabled'}!`
         });
-        
+
     } catch (error) {
         console.error('Error in autorecording command:', error);
         await sock.sendMessage(chatId, {
@@ -84,97 +84,107 @@ function isAutorecordingEnabled() {
     }
 }
 
-// Function to handle autorecording for regular messages
-async function handleAutorecordingForMessage(sock, chatId, userMessage) {
-    if (isAutorecordingEnabled()) {
-        try {
-            // Subscribe to presence updates for this chat
-            await sock.presenceSubscribe(chatId);
-            
-            // Send available status first
-            await sock.sendPresenceUpdate('available', chatId);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Then send the recording status
-            await sock.sendPresenceUpdate('recording', chatId);
-            
-            // Simulate recording time based on message length with increased minimum time
-            const recordingDelay = Math.max(3000, Math.min(8000, userMessage.length * 150));
-            await new Promise(resolve => setTimeout(resolve, recordingDelay));
-            
-            // Send recording again to ensure it stays visible
-            await sock.sendPresenceUpdate('recording', chatId);
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            // Finally send paused status
-            await sock.sendPresenceUpdate('paused', chatId);
-            
-            return true; // Indicates recording was shown
-        } catch (error) {
-            console.error('❌ Error sending recording indicator:', error);
-            return false; // Indicates recording failed
-        }
-    }
-    return false; // Autorecording is disabled
-}
-
-// Function to handle autorecording for commands - BEFORE command execution
-async function handleAutorecordingForCommand(sock, chatId) {
-    if (isAutorecordingEnabled()) {
-        try {
-            // Subscribe to presence updates for this chat
-            await sock.presenceSubscribe(chatId);
-            
-            // Send available status first
-            await sock.sendPresenceUpdate('available', chatId);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Then send the recording status
-            await sock.sendPresenceUpdate('recording', chatId);
-            
-            // Keep recording indicator active for commands with increased duration
-            const commandRecordingDelay = 3000;
-            await new Promise(resolve => setTimeout(resolve, commandRecordingDelay));
-            
-            // Send recording again to ensure it stays visible
-            await sock.sendPresenceUpdate('recording', chatId);
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            // Finally send paused status
-            await sock.sendPresenceUpdate('paused', chatId);
-            
-            return true; // Indicates recording was shown
-        } catch (error) {
-            console.error('❌ Error sending command recording indicator:', error);
-            return false; // Indicates recording failed
-        }
-    }
-    return false; // Autorecording is disabled
-}
-
-// Function to show recording status AFTER command execution
-async function showRecordingAfterCommand(sock, chatId) {
+// Start continuous recording (keeps recording status always on)
+async function startContinuousRecording(sock, chatId) {
     if (isAutorecordingEnabled()) {
         try {
             // Subscribe to presence updates
             await sock.presenceSubscribe(chatId);
             
-            // Show recording status briefly
+            // Send recording status continuously
             await sock.sendPresenceUpdate('recording', chatId);
-            
-            // Keep recording visible for a short time
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Then pause
-            await sock.sendPresenceUpdate('paused', chatId);
             
             return true;
         } catch (error) {
-            console.error('❌ Error sending post-command recording indicator:', error);
+            console.error('❌ Error starting continuous recording:', error);
             return false;
         }
     }
-    return false; // Autorecording is disabled
+    return false;
+}
+
+// Keep recording status active - call this repeatedly
+async function keepRecordingActive(sock, chatId) {
+    if (isAutorecordingEnabled()) {
+        try {
+            // Refresh recording status every 3 seconds to keep it active
+            setInterval(async () => {
+                if (isAutorecordingEnabled()) {
+                    await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
+                }
+            }, 3000);
+            return true;
+        } catch (error) {
+            console.error('❌ Error keeping recording active:', error);
+            return false;
+        }
+    }
+    return false;
+}
+
+// Handle message with continuous recording
+async function handleAutorecordingForMessage(sock, chatId, userMessage) {
+    if (isAutorecordingEnabled()) {
+        try {
+            // Start continuous recording
+            await startContinuousRecording(sock, chatId);
+            
+            // Keep it active
+            await keepRecordingActive(sock, chatId);
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Error in handleAutorecordingForMessage:', error);
+            return false;
+        }
+    }
+    return false;
+}
+
+// Handle commands with continuous recording - BEFORE command execution
+async function handleAutorecordingForCommand(sock, chatId) {
+    if (isAutorecordingEnabled()) {
+        try {
+            // Start continuous recording
+            await startContinuousRecording(sock, chatId);
+            
+            // Keep it active
+            await keepRecordingActive(sock, chatId);
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Error in handleAutorecordingForCommand:', error);
+            return false;
+        }
+    }
+    return false;
+}
+
+// Show continuous recording status AFTER command execution
+async function showRecordingAfterCommand(sock, chatId) {
+    if (isAutorecordingEnabled()) {
+        try {
+            // Just keep recording active continuously
+            await startContinuousRecording(sock, chatId);
+            await keepRecordingActive(sock, chatId);
+            return true;
+        } catch (error) {
+            console.error('❌ Error in showRecordingAfterCommand:', error);
+            return false;
+        }
+    }
+    return false;
+}
+
+// Function to stop recording
+async function stopRecording(sock, chatId) {
+    try {
+        await sock.sendPresenceUpdate('paused', chatId);
+        return true;
+    } catch (error) {
+        console.error('Error stopping recording:', error);
+        return false;
+    }
 }
 
 module.exports = {
@@ -182,5 +192,8 @@ module.exports = {
     isAutorecordingEnabled,
     handleAutorecordingForMessage,
     handleAutorecordingForCommand,
-    showRecordingAfterCommand
+    showRecordingAfterCommand,
+    startContinuousRecording,
+    keepRecordingActive,
+    stopRecording
 };
