@@ -244,7 +244,7 @@ async function startMickeyBot() {
         Mickey.ev.on("creds.update", saveCreds);
         store.bind(Mickey.ev);
 
-        // --- Message Handler ---
+        // --- Message Handler with Decrypt Error Recovery ---
         Mickey.ev.on("messages.upsert", async chatUpdate => {
             try {
                 const mek = chatUpdate.messages[0];
@@ -269,21 +269,41 @@ async function startMickeyBot() {
                 }
 
                 if (handleMessages) await handleMessages(Mickey, chatUpdate, true);
-            } catch (err) {}
+            } catch (err) {
+                // Gracefully handle decrypt errors without crashing
+                if (err.message?.includes('decrypt') || err.message?.includes('session')) {
+                    console.log(chalk.dim(`  [Session] Decrypt error (normal): ${err.message?.substring(0, 50)}`));
+                } else if (err.message) {
+                    console.log(chalk.yellow(`  [Message Handler] ${err.message?.substring(0, 60)}...`));
+                }
+            }
         });
 
-        // --- Call Handler ---
+        // --- Call Handler with Error Recovery ---
         Mickey.ev.on("call", async (callData) => {
             try {
                 if (handleAnticall) await handleAnticall(Mickey, { call: callData });
-            } catch (err) {}
+            } catch (err) {
+                console.log(chalk.dim(`  [Call Handler] Error: ${err.message?.substring(0, 40)}`));
+            }
         });
 
-        // --- Group Participant Handler ---
+        // --- Group Participant Handler with Error Recovery ---
         Mickey.ev.on("group-participants.update", async (update) => {
             try {
                 if (handleGroupParticipantUpdate) await handleGroupParticipantUpdate(Mickey, update);
-            } catch (err) {}
+            } catch (err) {
+                console.log(chalk.dim(`  [Group Update] Error: ${err.message?.substring(0, 40)}`));
+            }
+        });
+
+        // --- Error Event Handler ---
+        Mickey.ev.on("error", (err) => {
+            if (err.message?.includes('decrypt') || err.message?.includes('no session')) {
+                console.log(chalk.dim(`  [Session Error] ${err.message?.substring(0, 50)}... (non-critical)`));
+            } else {
+                console.log(chalk.yellow(`  [Error] ${err.message}`));
+            }
         });
 
         // --- Connection Handler ---
@@ -339,7 +359,16 @@ async function startMickeyBot() {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const errorMessage = lastDisconnect?.error?.message || 'Unknown';
                 
-                UI.warning(`Link disrupted: ${errorMessage.substring(0, 50)}`);
+                // Check if it's a decrypt/session error (non-fatal)
+                const isDecryptError = errorMessage?.includes('decrypt') || 
+                                      errorMessage?.includes('no session') ||
+                                      errorMessage?.includes('session');
+                
+                if (isDecryptError) {
+                    UI.info(`Session error (recoverable): ${errorMessage.substring(0, 40)}...`);
+                } else {
+                    UI.warning(`Link disrupted: ${errorMessage.substring(0, 50)}`);
+                }
                 
                 if (statusCode === DisconnectReason.loggedOut) {
                     UI.error('Session structure revoked (Logged Out). Flashing memory...');
@@ -348,14 +377,20 @@ async function startMickeyBot() {
                     return startMickeyBot();
                 }
                 
-                if (reconnectAttempts < 15) {
-                    const delayTime = Math.min(5000 + (reconnectAttempts * 1000), 30000);
+                if (statusCode === DisconnectReason.connectionClosed || statusCode === DisconnectReason.connectionLost) {
+                    UI.info('Connection lost, attempting reconnect...');
+                }
+                
+                // Exponential backoff with max limit
+                if (reconnectAttempts < 20) {
+                    const delayTime = Math.min(3000 + (reconnectAttempts * 1500), 45000);
                     reconnectAttempts++;
-                    console.log(chalk.cyan(`  🔄 [RECONNECT] Attempting re-entry in ${delayTime/1000}s... (${reconnectAttempts}/15)`));
+                    console.log(chalk.cyan(`  🔄 [RECONNECT] Attempting re-entry in ${(delayTime/1000).toFixed(1)}s... (${reconnectAttempts}/20)`));
                     await delay(delayTime);
                     return startMickeyBot();
                 } else {
                     UI.error('Max reconnection threshold reached. Manual restart mandatory.');
+                    process.exit(1);
                 }
             }
         });

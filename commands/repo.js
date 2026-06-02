@@ -3,73 +3,63 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
+const { sendInteractiveMessage } = require('gifted-btns');
 
 // ==========================================
-// CLASS YA BUTTONV2 (Kipande ulichopewa)
+// CONFIG
 // ==========================================
-class ButtonV2 {
-    constructor(core) {
-        this.core = core; // Hapa core ni sock (WhatsApp Connection)
-        this.title = '';
-        this.subtitle = '';
-        this.body = '';
-        this.footer = '';
-        this.thumbnail = '';
-        this.buttons = [];
-    }
-
-    setTitle(title) { this.title = title; return this; }
-    setSubtitle(subtitle) { this.subtitle = subtitle; return this; }
-    setBody(body) { this.body = body; return this; }
-    setFooter(footer) { this.footer = footer; return this; }
-    setThumbnail(url) { this.thumbnail = url; return this; }
-    
-    addButton(displayText, commandId) {
-        this.buttons.push({
-            name: "quick_reply",
-            buttonParamsJson: JSON.stringify({
-                display_text: displayText,
-                id: commandId
-            })
-        });
-        return this;
-    }
-
-    async send(jid) {
-        if (!this.core?.sendMessage) {
-            console.error("❌ ButtonV2 Error: Core connection (sock) is missing or invalid.");
-            return;
-        }
-
-        // Muundo thabiti wa WhatsApp Interactive Message unaokubalika sasa hivi
-        const interactiveMessage = {
-            viewOnceMessage: {
-                message: {
-                    interactiveMessage: {
-                        header: {
-                            title: this.title,
-                            hasMediaAttachment: !!this.thumbnail,
-                            ...(this.thumbnail ? { imageMessage: { url: this.thumbnail } } : {})
-                        },
-                        body: { text: this.body },
-                        footer: { text: this.footer },
-                        nativeFlowMessage: {
-                            buttons: this.buttons,
-                            messageVersion: 1
-                        }
-                    }
-                }
-            }
-        };
-
-        return await this.core.sendMessage(jid, interactiveMessage);
-    }
-}
-
 const CONFIG = {
     FOOTER: '🌟 MICKEY GLITCH BOT • 2026 🌟',
     REPO_URL: 'https://github.com/MICKEYGLITCH/Mickey-Glitch-Bot'
 };
+
+// ==========================================
+// SEND INTERACTIVE MESSAGE (Using gifted-btns)
+// ==========================================
+async function sendRepoMenu(sock, chatId, quotedMsg, userJid) {
+    try {
+        const statusMessage = `╭━━━━━━━━━━━━━━━━━━╮
+┃    📂 *REPO MENU* 📂
+┃━━━━━━━━━━━━━━━━━━
+┃
+┃ 🤖 *Bot:* MICKEY GLITCH
+┃ 📦 *Version:* 3.3
+┃ 📁 *Files:* Complete Source
+┃ 💾 *Size:* ~15-20 MB
+┃
+┃ 🔗 *GitHub:* 
+┃ ${CONFIG.REPO_URL}
+┃
+╰━━━━━━━━━━━━━━━━━━╯`;
+
+        const buttons = [
+            {
+                name: "quick_reply",
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📦 Download Zip',
+                    id: 'download_zip'
+                })
+            },
+            {
+                name: "quick_reply",
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📂 View Repo',
+                    id: 'view_repo'
+                })
+            }
+        ];
+
+        return await sendInteractiveMessage(sock, chatId, {
+            image: { url: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png' },
+            text: statusMessage,
+            footer: CONFIG.FOOTER,
+            interactiveButtons: buttons
+        }, { quoted: quotedMsg });
+    } catch (error) {
+        console.error('Error sending repo menu:', error);
+        throw error;
+    }
+}
 
 // Function ya kutengeneza Zip ya Bot kama stream (haina kuandika disk)
 function createProjectZipStream() {
@@ -184,21 +174,22 @@ async function repoCommand(sock, chatId, m, body = '') {
         if (input === '.repo') {
             try { await sock.sendMessage(chatId, { react: { text: '📂', key: safeKey } }); } catch(e) {}
 
-            const statusMessage = `╭━━━━━━━━━━━━━━━━━━╮\n┃    📂 *REPO MENU* 📂\n┃━━━━━━━━━━━━━━━━━━\n┃\n┃ 🤖 *Bot:* MICKEY GLITCH\n┃ 📦 *Version:* 3.3\n┃ 📁 *Files:* Complete Source\n┃ 💾 *Size:* ~15-20 MB\n┃\n┃ 🔗 *GitHub:* \n┃ ${CONFIG.REPO_URL}\n┃\n╰━━━━━━━━━━━━━━━━━━╯`.trim();
-
-            return await new ButtonV2(ctx.core)
-                .setTitle('🚀 Artoria')
-                .setSubtitle('Artoria Pendragon')
-                .setBody(statusMessage)
-                .setFooter(CONFIG.FOOTER)
-                .setThumbnail('https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png')
-                .addButton('📦 Download Zip', 'download_zip')
-                .addButton('📂 View Repo', 'view_repo')
-                .send(userJid);
+            try {
+                await sendRepoMenu(sock, chatId, safeM, userJid);
+            } catch (error) {
+                console.error('Failed to send repo menu:', error);
+                await sock.sendMessage(chatId, {
+                    text: `📂 *GITHUB REPOSITORY*\n\n🔗 https://github.com/MICKEYGLITCH/Mickey-Glitch-Bot\n\n🌟 Star & Fork kwenda kutoa support!`
+                }, { quoted: safeM });
+            }
+            return;
         }
 
     } catch (e) {
         console.error("Repo Command Error:", e);
+        await sock.sendMessage(chatId, {
+            text: `❌ Error processing repo command: ${e.message?.substring(0, 50) || 'Unknown error'}`
+        }).catch(err => console.error('Failed to send error message:', err));
     }
 }
 
