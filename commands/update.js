@@ -1,4 +1,5 @@
 const { exec } = require('child_process');
+const { execSync } = require('child_process');
 const fs = require('fs-extra'); 
 const path = require('path');
 const axios = require('axios');
@@ -6,8 +7,51 @@ const chalk = require('chalk');
 
 /**
  * @project: MICKEY GLITCH
- * @command: UPDATE (Fixed Edition)
+ * @command: UPDATE (Fixed Edition - With Fallback Extraction)
  */
+
+// Helper: Try different extraction methods
+async function extractZipFile(zipPath, extractPath) {
+    return new Promise((resolve, reject) => {
+        // Method 1: Try unzip command (Linux/Mac)
+        exec(`unzip -o "${zipPath}" -d "${extractPath}"`, (err) => {
+            if (!err) {
+                console.log(chalk.green('✓ Extracted using unzip'));
+                return resolve(true);
+            }
+
+            console.log(chalk.yellow('⚠ unzip failed, trying 7z...'));
+
+            // Method 2: Try 7z command (Windows/Linux)
+            exec(`7z x "${zipPath}" -o"${extractPath}" -y`, (err2) => {
+                if (!err2) {
+                    console.log(chalk.green('✓ Extracted using 7z'));
+                    return resolve(true);
+                }
+
+                console.log(chalk.yellow('⚠ 7z failed, trying tar...'));
+
+                // Method 3: Try tar command (for .tar.gz, etc)
+                exec(`tar -xzf "${zipPath}" -C "${extractPath}"`, (err3) => {
+                    if (!err3) {
+                        console.log(chalk.green('✓ Extracted using tar'));
+                        return resolve(true);
+                    }
+
+                    // All methods failed
+                    reject(new Error(
+                        'EXTRACTION_FAILED: Unzip, 7z, na tar zote hazifanya kazi.\n' +
+                        'Panel yako inaweza kuwa na restrictions kwenye extraction tools.\n' +
+                        'Suluhisho:\n' +
+                        '1. Contact hosting provider kuomba unzip/7z permissions\n' +
+                        '2. Jaribu manual update kutoka GitHub\n' +
+                        '3. Deploy bot kwenye panel inayoruhusu extraction'
+                    ));
+                });
+            });
+        });
+    });
+}
 
 async function updateCommand(sock, chatId, message, zipUrl) {
     try {
@@ -51,17 +95,16 @@ async function updateCommand(sock, chatId, message, zipUrl) {
             writer.on('error', reject);
         });
 
-        // Extraction
+        // Extraction - with fallback methods
         await sock.sendMessage(chatId, { text: "📦 *Mchakato wa ku-update umeanza...*" });
 
-        exec(`unzip -o ${zipPath} -d ${extractPath}`, (err) => {
-            if (err) {
-                console.log(chalk.red("Unzip failed!"));
-                return sock.sendMessage(chatId, { text: "❌ *Unzip Failed:* Hakikisha Panel yako inaruhusu amri ya unzip." });
-            }
-
+        try {
+            await extractZipFile(zipPath, extractPath);
+            
             const folders = fs.readdirSync(extractPath);
-            if (folders.length === 0) return;
+            if (folders.length === 0) {
+                throw new Error('Extracted folder is empty');
+            }
             
             const rootFolder = path.join(extractPath, folders[0]); 
             const ignore = ['node_modules', 'session', 'auth_info_baileys', '.git', 'settings.js', 'config.js', '.env'];
@@ -75,13 +118,27 @@ async function updateCommand(sock, chatId, message, zipUrl) {
 
             fs.removeSync(tmpDir);
 
-            sock.sendMessage(chatId, { text: "✅ *Update Imekamilika kwa mafanikio!*\n\nBot inajizima na kuwaka upya." });
+            await sock.sendMessage(chatId, { text: "✅ *Update Imekamilika kwa mafanikio!*\n\nBot inajizima na kuwaka upya." });
             console.log(chalk.green.bold('📢 UPDATE SUCCESSFUL!'));
 
             setTimeout(() => {
                 process.exit(1); 
             }, 3000);
-        });
+        } catch (extractErr) {
+            console.error(chalk.red('Extraction Error:'), extractErr.message);
+            fs.removeSync(tmpDir);
+            
+            // Provide helpful error message
+            const errorMsg = extractErr.message.includes('EXTRACTION_FAILED')
+                ? extractErr.message
+                : `❌ *Extraction Imefeli:* ${extractErr.message}\n\n` +
+                  '*Suluhisho:*\n' +
+                  '• Hakikisha panel inaruhusu unzip/7z commands\n' +
+                  '• Jaribu `.repo` command kudownload bot kwenye local\n' +
+                  '• Sitiki kwenye hosting provider';
+            
+            await sock.sendMessage(chatId, { text: errorMsg }).catch(() => {});
+        }
 
     } catch (err) {
         console.error(chalk.red("Update Error:"), err.message);
