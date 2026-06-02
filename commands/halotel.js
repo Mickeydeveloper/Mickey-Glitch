@@ -136,6 +136,76 @@ const DATA_PACKAGES = [
     { gb: 50, label: 'Business Pack', price: 50000, deliveryTime: '10 minutes' }
 ];
 
+<<<<<<< HEAD
+// ========== PENDING REQUEST STORAGE (IN-MEMORY) ==========
+const pendingRequests = new Map();
+
+function storePendingRequest(chatId, userName, packageInfo, specs) {
+    pendingRequests.set(chatId, {
+        userName,
+        package: packageInfo,
+        specs,
+        step: 'awaiting_email',
+        timestamp: Date.now()
+    });
+    // Auto-cleanup after 10 minutes
+    setTimeout(() => {
+        if (pendingRequests.has(chatId)) {
+            pendingRequests.delete(chatId);
+        }
+    }, 10 * 60 * 1000);
+}
+
+function getPendingRequest(chatId) {
+    return pendingRequests.get(chatId) || null;
+}
+
+function removePendingRequest(chatId) {
+    pendingRequests.delete(chatId);
+}
+
+// ========== PANEL CONFIGURATION & PTERODACTYL STUBS ==========
+const PANEL_PACKAGES = SERVER_PACKAGES;
+const BANNER = SAFE_CONFIG.BANNER;
+const FOOTER = SAFE_CONFIG.FOOTER;
+const OWNER_NUMBER = settings.ownerNumber || '255715944741';
+const PANEL_URL = 'https://panel.example.com'; // Update with actual panel URL
+
+// Stub: Create user in Pterodactyl panel
+async function createPterodactylUser(email, userName, chatId) {
+    try {
+        // Placeholder - would normally call Pterodactyl API
+        console.log(`Creating user: ${email} (${userName})`);
+        return {
+            success: true,
+            userId: Math.floor(Math.random() * 10000),
+            email: email
+        };
+    } catch (e) {
+        console.error('Pterodactyl user creation error:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+// Stub: Create server in Pterodactyl panel
+async function createPterodactylServer(userId, userName, specs, email) {
+    try {
+        // Placeholder - would normally call Pterodactyl API
+        console.log(`Creating server for user ${userId}: ${userName}`);
+        return {
+            success: true,
+            serverId: Math.floor(Math.random() * 100000),
+            link: `${PANEL_URL}/server/${Math.floor(Math.random() * 100000)}`,
+            email: email
+        };
+    } catch (e) {
+        console.error('Pterodactyl server creation error:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+=======
+>>>>>>> 6dc7e902a8ff557c4f58d0638aa0d67c68961ea8
 // Generate random password
 function generateRandomPassword() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$';
@@ -677,5 +747,17 @@ async function halotelCommand(sock, chatId, m, body = '') {
 }
 
 module.exports = {
-    halotelCommand
+    halotelCommand,
+    storePendingRequest,
+    getPendingRequest,
+    removePendingRequest,
+    PANEL_PACKAGES,
+    createPterodactylUser,
+    createPterodactylServer,
+    BANNER,
+    FOOTER,
+    OWNER_NUMBER,
+    PANEL_URL,
+    SERVER_PACKAGES,
+    DATA_PACKAGES
 };
