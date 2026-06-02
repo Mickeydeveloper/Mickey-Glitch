@@ -103,6 +103,7 @@ const MENU = [
         items: [
             { cmd: '.autostatus', desc: 'Auto status', eg: '.autostatus on' },
             { cmd: '.autotyping', desc: 'Auto type', eg: '.autotyping on' },
+            { cmd: '.autorecording', desc: 'Auto record', eg: '.autorecording on' },
             { cmd: '.autoread', desc: 'Auto read', eg: '.autoread on' },
             { cmd: '.areact', desc: 'Auto react', eg: '.areact on' }
         ]
