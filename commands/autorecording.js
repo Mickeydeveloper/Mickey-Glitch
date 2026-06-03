@@ -1,82 +1,109 @@
 /**
- * Knight Bot - A WhatsApp Bot
+ 
  * Autorecording Command - Shows fake recording status on ALL chats
  * Ikiwa ON, recording itaonekana kwenye kila chat automatically
  */
 
 const fs = require('fs');
 const path = require('path');
-const isOwnerOrSudo = require('../lib/isOwner');
 
 // Path to store the configuration
 const configPath = path.join(__dirname, '..', 'data', 'autorecording.json');
 
-// Store active recording intervals per chat
+// Store active recording timeouts per chat
 const activeRecordings = new Map();
+let sockGlobal = null; // Store socket reference globally
 
 // Initialize configuration file if it doesn't exist
 function initConfig() {
     if (!fs.existsSync(configPath)) {
+        const dir = path.dirname(configPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
         fs.writeFileSync(configPath, JSON.stringify({ enabled: false }, null, 2));
     }
     return JSON.parse(fs.readFileSync(configPath));
+}
+
+// Save configuration
+function saveConfig(config) {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+}
+
+// Check if user is owner (simplified version)
+async function isOwner(senderId) {
+    try {
+        const ownerPath = path.join(__dirname, '..', 'config', 'owner.json');
+        if (fs.existsSync(ownerPath)) {
+            const ownerData = JSON.parse(fs.readFileSync(ownerPath));
+            const owners = ownerData.owners || [];
+            return owners.includes(senderId.split('@')[0]) || senderId.includes(ownerData.ownerNumber);
+        }
+        // If no owner config, check if it's from me
+        return false;
+    } catch (error) {
+        console.error('Error checking owner:', error);
+        return false;
+    }
 }
 
 // Toggle autorecording feature
 async function autorecordingCommand(sock, chatId, message) {
     try {
         const senderId = message.key.participant || message.key.remoteJid;
-        const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
+        const isOwnerUser = await isOwner(senderId);
 
-        if (!message.key.fromMe && !isOwner) {
+        if (!message.key.fromMe && !isOwnerUser) {
             await sock.sendMessage(chatId, {
                 text: '❌ This command is only available for the owner!'
             });
             return;
         }
 
+        // Store socket globally
+        sockGlobal = sock;
+
         // Get command arguments
-        const args = message.message?.conversation?.trim().split(' ').slice(1) || 
-                    message.message?.extendedTextMessage?.text?.trim().split(' ').slice(1) || 
-                    [];
+        let args = [];
+        if (message.message?.conversation) {
+            args = message.message.conversation.trim().split(' ').slice(1);
+        } else if (message.message?.extendedTextMessage?.text) {
+            args = message.message.extendedTextMessage.text.trim().split(' ').slice(1);
+        }
 
         // Initialize or read config
         const config = initConfig();
 
-        // Toggle based on argument or toggle current state if no argument
+        // Toggle based on argument
         if (args.length > 0) {
             const action = args[0].toLowerCase();
             if (action === 'on' || action === 'enable') {
                 config.enabled = true;
+                saveConfig(config);
+                await sock.sendMessage(chatId, {
+                    text: '✅ Auto-recording has been ENABLED!\n📱 Recording status itaonekana kwenye chat zote.'
+                });
+                // Start recording on all chats
+                await startRecordingOnAllChats(sock);
             } else if (action === 'off' || action === 'disable') {
                 config.enabled = false;
-                // Stop all active recordings when disabling
+                saveConfig(config);
+                // Stop all active recordings
                 await stopAllRecordings(sock);
+                await sock.sendMessage(chatId, {
+                    text: '✅ Auto-recording has been DISABLED!\n📱 Recording status haitaonekana tena.'
+                });
             } else {
                 await sock.sendMessage(chatId, {
-                    text: '❌ Invalid option! Use: .autorecording on/off'
+                    text: '❌ Invalid option!\n📝 Usage: .autorecording on/off\n💡 Current status: ' + (config.enabled ? 'ON' : 'OFF')
                 });
-                return;
             }
         } else {
-            // Toggle current state
-            config.enabled = !config.enabled;
-            if (!config.enabled) {
-                await stopAllRecordings(sock);
-            }
-        }
-
-        // Save updated configuration
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-        // Send confirmation message
-        await sock.sendMessage(chatId, {
-            text: `✅ Auto-recording has been ${config.enabled ? 'enabled' : 'disabled'}!`
-        });
-
-        // If enabled, start recording on all chats
-        if (config.enabled) {
-            await startRecordingOnAllChats(sock);
+            // Show current status
+            await sock.sendMessage(chatId, {
+                text: `📱 Auto-recording status: ${config.enabled ? '✅ ENABLED' : '❌ DISABLED'}\n\n📝 Usage: .autorecording on/off`
+            });
         }
 
     } catch (error) {
@@ -98,45 +125,45 @@ function isAutorecordingEnabled() {
     }
 }
 
-// Start recording on a single chat (short duration)
+// Start recording on a single chat
 async function startRecordingOnChat(sock, chatId) {
     if (!isAutorecordingEnabled()) return false;
-    
+
     try {
-        // Clear existing interval for this chat
+        // Clear existing timeout for this chat
         if (activeRecordings.has(chatId)) {
-            clearInterval(activeRecordings.get(chatId));
+            clearTimeout(activeRecordings.get(chatId));
             activeRecordings.delete(chatId);
         }
-        
+
         // Subscribe to presence updates
         await sock.presenceSubscribe(chatId).catch(() => {});
-        
-        // Show recording for 2 seconds only (shorter time)
-        await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
-        
-        // Auto-pause after 2 seconds
-        setTimeout(async () => {
-            if (isAutorecordingEnabled()) {
-                await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
+
+        // Function to show recording
+        const showRecording = async () => {
+            if (!isAutorecordingEnabled()) return;
+            
+            try {
+                await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
+                
+                // Automatically pause after 3 seconds
+                setTimeout(async () => {
+                    if (isAutorecordingEnabled()) {
+                        await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
+                    }
+                }, 3000);
+            } catch (e) {
+                console.error(`Error updating recording for ${chatId}:`, e);
             }
-        }, 2000);
-        
-        // Set interval to show recording every 5 seconds (short burst)
+        };
+
+        // Show recording immediately
+        await showRecording();
+
+        // Set interval to show recording every 8 seconds
         const interval = setInterval(async () => {
             if (isAutorecordingEnabled()) {
-                try {
-                    await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
-                    
-                    // Auto-pause after 2 seconds
-                    setTimeout(async () => {
-                        if (isAutorecordingEnabled()) {
-                            await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
-                        }
-                    }, 2000);
-                } catch (e) {
-                    console.error(`Error updating recording for ${chatId}:`, e);
-                }
+                await showRecording();
             } else {
                 // Stop interval if disabled
                 if (activeRecordings.has(chatId)) {
@@ -144,13 +171,13 @@ async function startRecordingOnChat(sock, chatId) {
                     activeRecordings.delete(chatId);
                 }
             }
-        }, 5000); // Every 5 seconds
-        
+        }, 8000);
+
         activeRecordings.set(chatId, interval);
         return true;
-        
+
     } catch (error) {
-        console.error(`❌ Error starting recording for ${chatId}:`, error);
+        console.error(`Error starting recording for ${chatId}:`, error);
         return false;
     }
 }
@@ -158,28 +185,35 @@ async function startRecordingOnChat(sock, chatId) {
 // Start recording on all active chats
 async function startRecordingOnAllChats(sock) {
     if (!isAutorecordingEnabled()) return;
-    
+
     try {
-        // Get all active chats from sock
-        const allChats = await sock.groupFetchAllParticipating?.() || {};
-        const chatIds = Object.keys(allChats);
+        // Get all groups
+        let groupIds = [];
+        try {
+            const groups = await sock.groupFetchAllParticipating();
+            if (groups) {
+                groupIds = Object.keys(groups);
+            }
+        } catch (e) {
+            console.error('Error fetching groups:', e);
+        }
+
+        // Get all private chats (this is tricky in Baileys)
+        // Alternative: We'll record on groups and when messages come to private chats
         
-        // Also add common chats
-        const commonChats = ['status@broadcast'];
-        
-        const allChatIds = [...chatIds, ...commonChats];
-        
-        console.log(`🟢 Starting autorecording on ${allChatIds.length} chats...`);
-        
-        // Start recording on each chat
+        const allChatIds = [...groupIds];
+
+        console.log(`🟢 Starting autorecording on ${allChatIds.length} groups...`);
+
+        // Start recording on each group
         for (const chatId of allChatIds) {
             await startRecordingOnChat(sock, chatId);
             // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        
-        console.log(`✅ Autorecording active on ${activeRecordings.size} chats`);
-        
+
+        console.log(`✅ Autorecording active on ${activeRecordings.size} groups`);
+
     } catch (error) {
         console.error('Error starting recording on all chats:', error);
     }
@@ -192,11 +226,11 @@ async function stopRecordingOnChat(sock, chatId) {
             clearInterval(activeRecordings.get(chatId));
             activeRecordings.delete(chatId);
         }
-        
+
         // Set status to paused
         await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
         return true;
-        
+
     } catch (error) {
         console.error(`Error stopping recording for ${chatId}:`, error);
         return false;
@@ -206,101 +240,67 @@ async function stopRecordingOnChat(sock, chatId) {
 // Stop all recordings
 async function stopAllRecordings(sock) {
     console.log('🔴 Stopping all autorecordings...');
-    
+
     for (const [chatId, interval] of activeRecordings) {
         clearInterval(interval);
         try {
             await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
         } catch (e) {}
     }
-    
+
     activeRecordings.clear();
     console.log('✅ All recordings stopped');
 }
 
-// Handle message with short recording burst
+// Handle incoming message - show recording briefly
 async function handleAutorecordingForMessage(sock, chatId, userMessage) {
-    if (isAutorecordingEnabled()) {
-        try {
-            // Quick recording burst (1.5 seconds only)
-            await sock.presenceSubscribe(chatId).catch(() => {});
-            await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
-            
-            // Short delay based on message length (max 2 seconds)
-            const shortDelay = Math.min(1500, userMessage.length * 30);
-            await new Promise(resolve => setTimeout(resolve, shortDelay));
-            
-            // Pause
-            await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
-            
-            return true;
-        } catch (error) {
-            console.error('❌ Error in handleAutorecordingForMessage:', error);
-            return false;
-        }
+    if (!isAutorecordingEnabled()) return false;
+    
+    try {
+        // Show recording for 2 seconds when message arrives
+        await sock.presenceSubscribe(chatId).catch(() => {});
+        await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
+        
+        // Short delay based on message length
+        const delay = Math.min(2000, (userMessage?.length || 10) * 50);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        // Pause after "recording"
+        await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
+        
+        return true;
+    } catch (error) {
+        console.error('Error in handleAutorecordingForMessage:', error);
+        return false;
     }
-    return false;
 }
 
-// Handle commands with short recording
-async function handleAutorecordingForCommand(sock, chatId) {
-    if (isAutorecordingEnabled()) {
-        try {
-            // Very short recording burst (1 second)
-            await sock.presenceSubscribe(chatId).catch(() => {});
-            await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
-            
-            // Short delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Pause
-            await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
-            
-            return true;
-        } catch (error) {
-            console.error('❌ Error in handleAutorecordingForCommand:', error);
-            return false;
-        }
-    }
-    return false;
-}
-
-// Show recording after command (short)
+// Show recording after command execution
 async function showRecordingAfterCommand(sock, chatId) {
-    if (isAutorecordingEnabled()) {
-        try {
-            await sock.presenceSubscribe(chatId).catch(() => {});
-            await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
-            
-            // Short burst
-            await new Promise(resolve => setTimeout(resolve, 800));
-            await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
-            
-            return true;
-        } catch (error) {
-            console.error('❌ Error in showRecordingAfterCommand:', error);
-            return false;
-        }
-    }
-    return false;
-}
-
-// Listen for new chats and auto-start recording
-async function onNewChat(sock, chatId) {
-    if (isAutorecordingEnabled()) {
-        await startRecordingOnChat(sock, chatId);
+    if (!isAutorecordingEnabled()) return false;
+    
+    try {
+        await sock.presenceSubscribe(chatId).catch(() => {});
+        await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await sock.sendPresenceUpdate('paused', chatId).catch(() => {});
+        
+        return true;
+    } catch (error) {
+        console.error('Error in showRecordingAfterCommand:', error);
+        return false;
     }
 }
 
+// Export all functions
 module.exports = {
     autorecordingCommand,
     isAutorecordingEnabled,
     handleAutorecordingForMessage,
-    handleAutorecordingForCommand,
     showRecordingAfterCommand,
     startRecordingOnChat,
     startRecordingOnAllChats,
     stopRecordingOnChat,
-    stopAllRecordings,
-    onNewChat
+    stopAllRecordings
 };
