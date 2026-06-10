@@ -26,6 +26,7 @@ const { handleAnticall } = require("./commands/anticall");
 const { getButtonId, isButtonResponse, autoDetectButtonCommand, isCommandId } = require("./lib/buttonLoader");
 const store = require("./lib/lightweight_store");
 const settings = require("./settings");
+const MickeyHelper = require("./lib/Mickey");
 
 // Try to load telegram module
 let startTelegramBot = null;
@@ -42,7 +43,9 @@ try {
 const pinoLogger = pino({ level: 'silent' });
 
 // --- Global Settings ---
-global.botname = settings.botname || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
+const _botName = settings.botName || settings.botname || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
+global.botname = _botName;
+global.botName = _botName;
 global.themeemoji = '•';
 
 // ────────────────────────────────────────────────
@@ -327,25 +330,11 @@ async function startMickeyBot() {
                 console.log(chalk.cyan('  └────────────────'));
                 UI.divider();
 
-                // 🔌 RAW URL YA PICHA YA WATER BILLING KUTOKA GITHUB REPO YAKO MPYA
-                const currentTanzaniaTime = new Date().toLocaleString('en-US', { timeZone: 'Africa/Dar_es_Salaam' });
-                const connectionText = `🔌 *CONNECTION STATUS*\n\n` +
-                                       `📡 *Status:* 🟢 ONLINE\n` +
-                                       `📝 *Details:* Bot is online and ready!\n` +
-                                       `⏱️ *Time:* ${currentTanzaniaTime}\n\n` +
-                                       `🤖 *Mickey Glitch Bot*`;
-
+                // Connection notification and auto-join handled by helper
                 try {
-                    await Mickey.sendMessage(myNumber, {
-                        image: { url: "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg" },
-                        caption: connectionText
-                    });
-                    UI.success('Connection layout and GitHub image transmitted successfully!');
+                    await MickeyHelper.handleConnection(Mickey, UI);
                 } catch (e) {
-                    try {
-                        await Mickey.sendMessage(myNumber, { text: connectionText });
-                    } catch (err) {}
-                    UI.warning('Could not pull image from GitHub, text payload dispatched instead.');
+                    UI.warning('Connection helper failed: ' + (e.message || e));
                 }
                 
                 if (rl) {
