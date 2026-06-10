@@ -58,7 +58,7 @@
     "node-id3": "^0.2.3",
     "node-webpmux": "^3.1.0",
     "node-youtube-music": "^0.10.3",
-    "azampay": "^1.1.2"
+    "azampay": "^0.0.5"
     "@google/generative-ai": "^0.24.1",
     "pdf-parse": "^1.1.1",
     "performance-now": "^2.1.0",
