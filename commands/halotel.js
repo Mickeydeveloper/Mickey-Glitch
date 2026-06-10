@@ -1,10 +1,10 @@
 /**
- * halotel.js - Mickey Glitch Business AI with Flutterwave Native Payment Flows
- * Inauza bando na server kwa kutumia Flutterwave Verification Engine (No Webhooks)
+ * halotel.js - Mickey Glitch Business AI with AzamPay Integration
+ * Inauza bando na server kwa kutumia AzamPay Push Engine (No Webhooks)
  */
 
 const { sendInteractiveMessage } = require('gifted-btns');
-const Flutterwave = require('flutterwave-node-v3');
+const Azampay = require('azampay');
 const fs = require('fs');
 const path = require('path');
 const settings = require('./settings');
@@ -14,8 +14,13 @@ const CONFIG = settings.CONFIG || {};
 const BANNER = CONFIG.BANNER || 'https://files.catbox.moe/ljabyq.png';
 const FOOTER = CONFIG.FOOTER || '🚀 Powered by Mickey Glitch Tech';
 
-// Initialize Flutterwave SDK
-const flw = new Flutterwave(CONFIG.FLW_PUBLIC_KEY, CONFIG.FLW_SECRET_KEY);
+// Initialize AzamPay SDK
+const azampay = new Azampay({
+    appName: CONFIG.AZAM_APP_NAME || 'MickeyBiz',
+    clientId: CONFIG.AZAM_CLIENT_ID || 'your-client-id',
+    clientSecret: CONFIG.AZAM_CLIENT_SECRET || 'your-client-secret',
+    env: CONFIG.AZAM_ENV || 'sandbox' // 'sandbox' kwa majaribio, 'production' kwa live
+});
 
 // Database Setup ya JSON kufuatilia Oda
 const ORDERS_FILE = path.join(__dirname, '..', 'data', 'halotel_orders.json');
@@ -35,7 +40,7 @@ const DATA_PACKAGES = [
     { gb: 50, price: 50000, label: 'Business Pack' }
 ];
 
-// Functions za kusaidia kuhifadhi data
+// Helper Functions
 function saveOrder(order) {
     const orders = JSON.parse(fs.readFileSync(ORDERS_FILE));
     orders.push(order);
@@ -118,12 +123,15 @@ async function halotelCommand(sock, chatId, m, body = '') {
             }, { quoted: m });
         }
 
-        // 💳 4. SHUGHULIKIA OMBI LA MALIPO YA FLUTTERWAVE (STK PUSH)
+        // 💳 4. SHUGHULIKIA OMBI LA MALIPO YA AZAMPAY (MNO CHECKOUT)
         if (lowerInput.startsWith('buy_server_') || lowerInput.startsWith('buy_data_')) {
             let selectedItem, type, packageName;
             
-            // Safisha namba ya mteja ianze na 255 (Inaondoa @s.whatsapp.net n.k.)
-            const cleanNumber = userJid.split('@')[0].replace(/[^0-9]/g, '').replace(/^0/, '255');
+            // Safisha namba ya mteja (Inaondoa herufi zote, inabakiza namba safi tu kama 0612130873)
+            let cleanNumber = userJid.split('@')[0].replace(/[^0-9]/g, '');
+            if (cleanNumber.startsWith('255')) {
+                cleanNumber = '0' + cleanNumber.slice(3); // AzamPay wanapendelea muundo wa 0xxx...
+            }
 
             if (lowerInput.startsWith('buy_server_')) {
                 type = 'server';
@@ -132,69 +140,80 @@ async function halotelCommand(sock, chatId, m, body = '') {
             } else {
                 type = 'data';
                 selectedItem = DATA_PACKAGES.find(p => p.gb === parseInt(input.replace('buy_data_', '')));
-                packageName = `${selectedItem?.gb}GB Data Bundle`;
+                packageName = `${selectedItem?.gb}GB Data`;
             }
 
             if (!selectedItem) return await sock.sendMessage(chatId, { text: "❌ Kifurushi hakikupatikana!" });
 
-            const orderId = 'MCK' + Date.now().toString().slice(-6);
+            const orderId = 'ORD' + Date.now().toString().slice(-6);
             
+            // Tambua mtandao wa mteja kiotomatiki kwa ajili ya AzamPay Provider map
+            let providerName = 'Tigo'; 
+            if (cleanNumber.startsWith('061') || cleanNumber.startsWith('062')) providerName = 'Halopesa';
+            else if (cleanNumber.startsWith('074') || cleanNumber.startsWith('075') || cleanNumber.startsWith('076')) providerName = 'Mpesa';
+            else if (cleanNumber.startsWith('078') || cleanNumber.startsWith('068') || cleanNumber.startsWith('069')) providerName = 'Airtel';
+            else if (cleanNumber.startsWith('065') || cleanNumber.startsWith('067') || cleanNumber.startsWith('071')) providerName = 'Tigo';
+
             // Hifadhi oda kwenye mfumo kama inasubiri malipo
             saveOrder({ id: orderId, userJid, type, package: packageName, price: selectedItem.price, status: 'pending_payment', createdAt: new Date().toISOString() });
 
-            await sock.sendMessage(chatId, { text: `⏳ *Ombi la Malipo Limeandaliwa:*\n\nTafadhali angalia simu yako ya *${cleanNumber}* sasa hivi. Utaona ujumbe wa kukatwa TSh ${selectedItem.price.toLocaleString()} kwa ajili ya *${packageName}*. Weka PIN kukamilisha.` });
+            await sock.sendMessage(chatId, { text: `⏳ *AzamPay Request:*\n\nTafadhali angalia simu yako ya *${cleanNumber}* sasa hivi. Utaona ujumbe wa kuweka PIN ili kulipia TSh ${selectedItem.price.toLocaleString()} kwa ajili ya *${packageName}*.` });
 
             try {
-                // Sukuma STK Push kwenda kwa mteja kupitia Flutterwave
-                const response = await flw.MobileMoney.tz({
-                    phone_number: cleanNumber,
-                    amount: selectedItem.price,
-                    currency: 'TZS',
-                    email: 'mickeybiz@glitchbot.com',
-                    tx_ref: orderId,
-                    fullname: userName
+                // Sukuma STK Push kwenda kwa mteja kupitia package ya 'azampay'
+                const response = await azampay.mnoCheckout({
+                    accountNumber: cleanNumber,
+                    amount: selectedItem.price.toString(), // Package ya azampay inataka amount kama string
+                    currency: "TZS",
+                    externalId: orderId,
+                    provider: providerName
                 });
 
-                if (response.status !== 'success') {
+                if (!response || response.success === false) {
                     updateOrderStatus(orderId, 'failed');
-                    return await sock.sendMessage(chatId, { text: `❌ Ombi limeshindwa kutumwa: ${response.message}` });
+                    return await sock.sendMessage(chatId, { text: `❌ Ombi limeshindwa: ${response?.message || 'Mvamio wa mtandao'}` });
                 }
 
                 // 🔄 IN-BOT VERIFICATION ENGINE (POLLING)
-                // Inakagua kila baada ya sekunde 5 kama mteja amelipa bila kuhitaji Webhooks
+                // Inatumia ile function ya azampay.getTransactionStatus kuuliza kama mteja amelipa kila baada ya sekunde 5
                 let checks = 0;
                 let isPaid = false;
 
                 const checkInterval = setInterval(async () => {
                     checks++;
                     
-                    // Uliza server za Flutterwave hali ya muamala kwa kutumia Transaction ID yao
-                    const checkStatus = await flw.Transaction.verify({ id: response.data.id });
+                    try {
+                        // Kagua hali ya muamala AzamPay kwa kutumia externalId (orderId)
+                        const checkStatus = await azampay.getTransactionStatus(orderId);
 
-                    if (checkStatus.data.status === "successful" && checkStatus.data.amount >= selectedItem.price) {
-                        isPaid = true;
-                        clearInterval(checkInterval); // Zima injini ya kukagua
-                        updateOrderStatus(orderId, 'completed');
+                        // AzamPay inarudisha status kama 'SUCCESS' muamala ukikamilika
+                        if (checkStatus && checkStatus.status === 'SUCCESS') {
+                            isPaid = true;
+                            clearInterval(checkInterval);
+                            updateOrderStatus(orderId, 'completed');
 
-                        // 🎉 MPE MTEJA HUDUMA KIKAMILIFU APA
-                        return await sock.sendMessage(chatId, { 
-                            text: `🎉 *MALIPO YAMETHIBITISHWA KIOTOMATIKI!*\n\nAsante *${userName}*, malipo yako ya TSh ${selectedItem.price.toLocaleString()} yamepokelewa.\n\nHuduma yako ya *${packageName}* imewezeshwa sasa hivi kwenye mfumo wetu! 🚀` 
-                        });
+                            // 🎉 MPE MTEJA HUDUMA KIKAMILIFU HAPA
+                            return await sock.sendMessage(chatId, { 
+                                text: `🎉 *MALIPO YAMETHIBITISHWA KIOTOMATIKI!*\n\nAsante *${userName}*, malipo yako ya TSh ${selectedItem.price.toLocaleString()} yamepokelewa.\n\nHuduma yako ya *${packageName}* imewezeshwa sasa hivi kwenye mfumo wetu! 🚀` 
+                            });
+                        }
+                    } catch (checkErr) {
+                        console.log("Kusubiri malipo..."); // Log ndogo ya server kama haijatiki bado
                     }
 
-                    // Kama dakika 1 imeisha (mizunguko 12 × sekunde 5) na mteja hajaweka PIN
+                    // Kama sekunde 60 zimeisha (checks 12 × sekunde 5) na mteja hajaweka PIN
                     if (checks >= 12 && !isPaid) {
                         clearInterval(checkInterval);
                         updateOrderStatus(orderId, 'timeout');
-                        return await sock.sendMessage(chatId, { text: `⏱️ *Muda wa Malipo Umeisha:* Ombi lako la malipo ${orderId} limeghairiwa kwa sababu umechelewa kuweka PIN ya simu yako.` });
+                        return await sock.sendMessage(chatId, { text: `⏱️ *Muda Umeisha:* Ombi la malipo ${orderId} limeghairiwa kwa sababu umechelewa kuweka PIN ya simu yako.` });
                     }
 
                 }, 5000); // Inakagua kila sekunde 5
 
             } catch (err) {
-                console.error("Flutterwave API Error:", err);
+                console.error("AzamPay API Error:", err);
                 updateOrderStatus(orderId, 'error');
-                await sock.sendMessage(chatId, { text: `❌ Hitilafu imetokea wakati wa kuunganisha malipo. Jaribu tena.` });
+                await sock.sendMessage(chatId, { text: `❌ Hitilafu imetokea wakati wa kuunganisha AzamPay. Hakikisha akaunti yako ipo sawa.` });
             }
             return;
         }
