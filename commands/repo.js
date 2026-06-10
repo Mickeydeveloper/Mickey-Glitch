@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
+const axios = require('axios');
+const settings = require('../settings');
 const { sendInteractiveMessage } = require('gifted-btns');
 
 // ==========================================
@@ -10,7 +12,7 @@ const { sendInteractiveMessage } = require('gifted-btns');
 // ==========================================
 const CONFIG = {
     FOOTER: '🌟 MICKEY GLITCH BOT • 2026 🌟',
-    REPO_URL: 'https://github.com/MICKEYGLITCH/Mickey-Glitch-Bot'
+    REPO_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch'
 };
 
 // ==========================================
@@ -19,18 +21,18 @@ const CONFIG = {
 async function sendRepoMenu(sock, chatId, quotedMsg, userJid) {
     try {
         const statusMessage = `╭━━━━━━━━━━━━━━━━━━╮
-┃    📂 *REPO MENU* 📂
-┃━━━━━━━━━━━━━━━━━━
-┃
-┃ 🤖 *Bot:* MICKEY GLITCH
-┃ 📦 *Version:* 3.3
-┃ 📁 *Files:* Complete Source
-┃ 💾 *Size:* ~15-20 MB
-┃
-┃ 🔗 *GitHub:* 
-┃ ${CONFIG.REPO_URL}
-┃
-╰━━━━━━━━━━━━━━━━━━╯`;
+    ┃    📂 *REPO MENU* 📂
+    ┃━━━━━━━━━━━━━━━━━━
+    ┃
+    ┃ 🤖 *Bot:* ${settings.botName || settings.botname || 'Mickey Glitch'}
+    ┃ 📦 *Version:* ${settings.version || '3.3'}
+    ┃ 📁 *Files:* Complete Source
+    ┃ 💾 *Size:* ~15-20 MB
+    ┃
+    ┃ 🔗 *GitHub:* 
+    ┃ ${settings.updateZipUrl || CONFIG.REPO_URL}
+    ┃
+    ╰━━━━━━━━━━━━━━━━━━╯`;
 
         const buttons = [
             {
@@ -53,6 +55,14 @@ async function sendRepoMenu(sock, chatId, quotedMsg, userJid) {
             image: { url: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png' },
             text: statusMessage,
             footer: CONFIG.FOOTER,
+            contextInfo: {
+                externalAdReply: {
+                    title: `${settings.botName || settings.botname || 'Mickey Glitch'} • Repository`,
+                    body: 'View or download the project on GitHub',
+                    thumbnailUrl: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png',
+                    sourceUrl: settings.updateZipUrl || CONFIG.REPO_URL
+                }
+            },
             interactiveButtons: buttons
         }, { quoted: quotedMsg });
     } catch (error) {
@@ -144,6 +154,27 @@ async function repoCommand(sock, chatId, m, body = '') {
             });
 
             try {
+                // First try fetching remote GitHub zip if configured
+                const remoteZipUrl = settings.updateZipUrl || (CONFIG.REPO_URL ? `${CONFIG.REPO_URL.replace(/\/+$/,'')}/archive/refs/heads/main.zip` : null);
+                if (remoteZipUrl) {
+                    try {
+                        const resp = await axios.get(remoteZipUrl, { responseType: 'arraybuffer', timeout: 120000 });
+                        const buf = Buffer.from(resp.data);
+                        const remoteName = `MickeyGlitch_GitHub_${Date.now()}.zip`;
+                        await sock.sendMessage(chatId, {
+                            document: buf,
+                            mimetype: 'application/zip',
+                            fileName: remoteName,
+                            caption: `✅ *ZIP READY (GitHub)*\n\n📦 *File:* ${remoteName}\n📁 *Files:* Complete bot source code (from GitHub)`
+                        }, { quoted: safeM });
+                        try { await sock.sendMessage(chatId, { delete: processingMsg.key }); } catch(e) {}
+                        return;
+                    } catch (fetchErr) {
+                        console.warn('Remote zip fetch failed, falling back to local archive:', fetchErr.message || fetchErr);
+                    }
+                }
+
+                // Fallback: stream local project archive
                 const zipStreamInfo = createProjectZipStream();
 
                 await sock.sendMessage(chatId, {
