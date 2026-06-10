@@ -4,7 +4,7 @@
  */
 
 const { sendInteractiveMessage } = require('gifted-btns');
-const Azampay = require('azampay');
+const azampaySDK = require('azampay');
 const fs = require('fs');
 const path = require('path');
 const settings = require('./settings');
@@ -14,13 +14,31 @@ const CONFIG = settings.CONFIG || {};
 const BANNER = CONFIG.BANNER || 'https://files.catbox.moe/ljabyq.png';
 const FOOTER = CONFIG.FOOTER || '🚀 Powered by Mickey Glitch Tech';
 
-// Initialize AzamPay SDK
-const azampay = new Azampay({
-    appName: CONFIG.AZAM_APP_NAME || 'MickeyBiz',
-    clientId: CONFIG.AZAM_CLIENT_ID || 'your-client-id',
-    clientSecret: CONFIG.AZAM_CLIENT_SECRET || 'your-client-secret',
-    env: CONFIG.AZAM_ENV || 'sandbox' // 'sandbox' kwa majaribio, 'production' kwa live
-});
+// AzamPay environment helper
+const AZAMPAY_ENV = CONFIG.AZAM_ENV && CONFIG.AZAM_ENV.toString().toUpperCase() === 'PRODUCTION' ? 'LIVE' : 'SANDBOX';
+const AZAMPAY_API_KEY = CONFIG.AZAM_API_KEY || '';
+
+async function createAzamPayClient() {
+    const getToken = azampaySDK.getToken || azampaySDK.default?.getToken;
+    if (!getToken) {
+        throw new Error('AzamPay SDK exports are not available. Ensure azampay package is installed correctly.');
+    }
+
+    const tokenResponse = await getToken({
+        appName: CONFIG.AZAM_APP_NAME || 'MickeyBiz',
+        clientId: CONFIG.AZAM_CLIENT_ID || 'your-client-id',
+        clientSecret: CONFIG.AZAM_CLIENT_SECRET || 'your-client-secret',
+        apiKey: AZAMPAY_API_KEY,
+        env: AZAMPAY_ENV
+    });
+
+    if (!tokenResponse || tokenResponse.success !== true) {
+        const message = tokenResponse?.message || 'Unable to acquire AzamPay token';
+        throw new Error(message);
+    }
+
+    return tokenResponse;
+}
 
 // Database Setup ya JSON kufuatilia Oda
 const ORDERS_FILE = path.join(__dirname, '..', 'data', 'halotel_orders.json');
@@ -160,8 +178,10 @@ async function halotelCommand(sock, chatId, m, body = '') {
             await sock.sendMessage(chatId, { text: `⏳ *AzamPay Request:*\n\nTafadhali angalia simu yako ya *${cleanNumber}* sasa hivi. Utaona ujumbe wa kuweka PIN ili kulipia TSh ${selectedItem.price.toLocaleString()} kwa ajili ya *${packageName}*.` });
 
             try {
+                const azamPayClient = await createAzamPayClient();
+
                 // Sukuma STK Push kwenda kwa mteja kupitia package ya 'azampay'
-                const response = await azampay.mnoCheckout({
+                const response = await azamPayClient.mnoCheckout({
                     accountNumber: cleanNumber,
                     amount: selectedItem.price.toString(), // Package ya azampay inataka amount kama string
                     currency: "TZS",
@@ -175,7 +195,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
                 }
 
                 // 🔄 IN-BOT VERIFICATION ENGINE (POLLING)
-                // Inatumia ile function ya azampay.getTransactionStatus kuuliza kama mteja amelipa kila baada ya sekunde 5
+                // Inatumia ile function ya azampay.transactionStatus kuuliza kama mteja amelipa kila baada ya sekunde 5
                 let checks = 0;
                 let isPaid = false;
 
@@ -184,7 +204,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
                     
                     try {
                         // Kagua hali ya muamala AzamPay kwa kutumia externalId (orderId)
-                        const checkStatus = await azampay.getTransactionStatus(orderId);
+                        const checkStatus = await azamPayClient.transactionStatus({ reference: orderId, bankName: providerName });
 
                         // AzamPay inarudisha status kama 'SUCCESS' muamala ukikamilika
                         if (checkStatus && checkStatus.status === 'SUCCESS') {
