@@ -29,13 +29,15 @@ const settings = {
   updateZipUrl: "https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip",
 
   // ==========================================
-  // CONFIG YA HALOTEL BANDO & FLUTTERWAVE
+  // CONFIG YA HALOTEL BANDO & AZAMPAY
   // ==========================================
   CONFIG: {
-    // FLUTTERWAVE KEYS (Weka zile za kwako kutoka dashboard.flutterwave.com)
-    FLW_PUBLIC_KEY: 'FLWPUBK_TEST-xxxxxxxxx-X', 
-    FLW_SECRET_KEY: 'FLWSECK_TEST-xxxxxxxxx-X',
-    
+    // AZAMPAY KEYS (Weka kutoka dev.azampay.co.tz)
+    AZAM_APP_NAME: 'JINA_LA_APP_YAKO',
+    AZAM_CLIENT_ID: 'CLIENT_ID_YAKO',
+    AZAM_CLIENT_SECRET: 'CLIENT_SECRET_YAKO',
+    AZAM_ENV: 'sandbox', // Badilisha kuwa 'production' ukiwa LIVE
+
     PRICE_PER_GB: 1000,
     BANNER: 'https://files.catbox.moe/ljabyq.png',
     FOOTER: '🚀 Powered by Mickey Glitch Tech'
