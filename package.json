@@ -60,6 +60,7 @@
     "node-youtube-music": "^0.10.3",
     "azampay": "^0.0.5",
     "@google/generative-ai": "^0.24.1",
+    "adm-zip": "^0.5.11",
     "pdf-parse": "^1.1.1",
     "performance-now": "^2.1.0",
     "phin": "^3.7.1",

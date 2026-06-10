@@ -3,6 +3,7 @@ const { execSync } = require('child_process');
 const fs = require('fs-extra'); 
 const path = require('path');
 const axios = require('axios');
+const AdmZip = require('adm-zip');
 const chalk = require('chalk');
 
 /**
@@ -13,7 +14,17 @@ const chalk = require('chalk');
 // Helper: Try different extraction methods
 async function extractZipFile(zipPath, extractPath) {
     return new Promise((resolve, reject) => {
-        // Method 1: Try unzip command (Linux/Mac)
+        // Method 1: Try AdmZip JS extraction first (no external unzip required)
+        try {
+            const zip = new AdmZip(zipPath);
+            zip.extractAllTo(extractPath, true);
+            console.log(chalk.green('✓ Extracted using AdmZip'));
+            return resolve(true);
+        } catch (admErr) {
+            console.log(chalk.yellow('⚠ AdmZip JS extraction failed, trying native unzip/7z...'), admErr.message);
+        }
+
+        // Method 2: Try unzip command (Linux/Mac)
         exec(`unzip -o "${zipPath}" -d "${extractPath}"`, (err) => {
             if (!err) {
                 console.log(chalk.green('✓ Extracted using unzip'));
@@ -22,7 +33,7 @@ async function extractZipFile(zipPath, extractPath) {
 
             console.log(chalk.yellow('⚠ unzip failed, trying 7z...'));
 
-            // Method 2: Try 7z command (Windows/Linux)
+            // Method 3: Try 7z command (Windows/Linux)
             exec(`7z x "${zipPath}" -o"${extractPath}" -y`, (err2) => {
                 if (!err2) {
                     console.log(chalk.green('✓ Extracted using 7z'));
@@ -31,7 +42,7 @@ async function extractZipFile(zipPath, extractPath) {
 
                 console.log(chalk.yellow('⚠ 7z failed, trying tar...'));
 
-                // Method 3: Try tar command (for .tar.gz, etc)
+                // Method 4: Try tar command (for .tar.gz, etc)
                 exec(`tar -xzf "${zipPath}" -C "${extractPath}"`, (err3) => {
                     if (!err3) {
                         console.log(chalk.green('✓ Extracted using tar'));
@@ -40,7 +51,7 @@ async function extractZipFile(zipPath, extractPath) {
 
                     // All methods failed
                     reject(new Error(
-                        'EXTRACTION_FAILED: Unzip, 7z, na tar zote hazifanya kazi.\n' +
+                        'EXTRACTION_FAILED: AdmZip, unzip, 7z, na tar zote hazifanya kazi.\n' +
                         'Panel yako inaweza kuwa na restrictions kwenye extraction tools.\n' +
                         'Suluhisho:\n' +
                         '1. Contact hosting provider kuomba unzip/7z permissions\n' +

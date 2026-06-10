@@ -119,6 +119,41 @@ function createProjectZipStream() {
     return { stream: passthrough, name: zipFileName };
 }
 
+// Create a single-file JS installer that writes out all project files (useful on panels without unzip)
+function createProjectInstallerBuffer() {
+    const projectDir = path.join(__dirname, '..');
+    const excludeDirs = ['node_modules', 'temp', '.git', 'sessions', 'cache', 'logs', 'uploads'];
+    const files = [];
+
+    function collect(dir, base = '') {
+        try {
+            const items = fs.readdirSync(dir);
+            for (const item of items) {
+                if (item.startsWith('.')) continue;
+                if (excludeDirs.includes(item)) continue;
+                const full = path.join(dir, item);
+                const rel = base ? path.join(base, item) : item;
+                const stat = fs.statSync(full);
+                if (stat.isDirectory()) collect(full, rel);
+                else {
+                    const data = fs.readFileSync(full);
+                    files.push({ path: rel.replace(/\\/g, '/'), data: data.toString('base64'), mode: stat.mode });
+                }
+            }
+        } catch (e) {}
+    }
+
+    collect(projectDir);
+
+    // Build installer script
+    const header = `#!/usr/bin/env node\n// Self-extracting installer for Mickey Glitch\n// Run: node install_mickey.js\nconst fs = require('fs');\nconst path = require('path');\n`;
+    const fileArray = `const files = ${JSON.stringify(files, null, 2)};\n`;
+    const writer = `\n(async function(){\n  for (const f of files) {\n    const outPath = path.join(process.cwd(), f.path);\n    const dir = path.dirname(outPath);\n    try { fs.mkdirSync(dir, { recursive: true }); } catch(e) {}\n    try { fs.writeFileSync(outPath, Buffer.from(f.data, 'base64')); } catch(e) { console.error('Failed to write', outPath, e); }\n  }\n  console.log('Extraction complete.');\n})();\n`;
+
+    const script = header + fileArray + writer;
+    return { buffer: Buffer.from(script, 'utf8'), name: `install_mickey_${Date.now()}.js` };
+}
+
 // Main Command Handler
 async function repoCommand(sock, chatId, m, body = '') {
     try {
@@ -183,6 +218,19 @@ async function repoCommand(sock, chatId, m, body = '') {
                     fileName: zipStreamInfo.name,
                     caption: `✅ *ZIP STREAM READY!*\n\n📦 *File:* ${zipStreamInfo.name}\n📁 *Files:* Complete bot source code (streamed)`
                 }, { quoted: safeM });
+
+                // Also provide a self-extracting JS installer for panels without unzip
+                try {
+                    const installer = createProjectInstallerBuffer();
+                    await sock.sendMessage(chatId, {
+                        document: installer.buffer,
+                        mimetype: 'application/javascript',
+                        fileName: installer.name,
+                        caption: `✅ *INSTALLER READY!*\n\n📄 *File:* ${installer.name}\n\nRun ` + "`node " + installer.name + "`" + ` on the panel to extract files.`
+                    }, { quoted: safeM });
+                } catch (instErr) {
+                    console.warn('Installer creation failed:', instErr.message || instErr);
+                }
 
                 try { await sock.sendMessage(chatId, { delete: processingMsg.key }); } catch(e) {}
             } catch (error) {
