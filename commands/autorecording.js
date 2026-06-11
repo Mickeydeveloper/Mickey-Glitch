@@ -112,7 +112,10 @@ function isAutorecordingEnabled() {
     }
 }
 
-// MAIN FUNCTION: Show recording when a message is RECEIVED
+/**
+ * MAIN FUNCTION: Show recording when a message is RECEIVED
+ * This is the primary function that handles auto-recording
+ */
 async function showRecordingOnMessageReceived(sock, chatId, messageText = '') {
     if (!isAutorecordingEnabled()) return false;
 
@@ -131,7 +134,7 @@ async function showRecordingOnMessageReceived(sock, chatId, messageText = '') {
 
         // Duration based on message length (1-3 seconds)
         let duration = 2000; // default 2 seconds
-        
+
         if (messageText && messageText.length > 0) {
             duration = Math.min(3000, Math.max(1000, messageText.length * 20));
         }
@@ -145,13 +148,19 @@ async function showRecordingOnMessageReceived(sock, chatId, messageText = '') {
         }, duration);
 
         activeRecordings.set(chatId, timeout);
-        
+
         return true;
 
     } catch (error) {
         console.error(`Error showing recording for ${chatId}:`, error);
         return false;
     }
+}
+
+// ALIAS FUNCTION: This fixes the "handleAutorecordingForMessage is not a function" error
+// This is the function name that your message handler is looking for
+async function handleAutorecordingForMessage(sock, chatId, messageText = '') {
+    return showRecordingOnMessageReceived(sock, chatId, messageText);
 }
 
 // Stop recording on a specific chat
@@ -169,10 +178,11 @@ async function stopRecording(sock, chatId) {
     }
 }
 
-// Export functions
+// Export functions with BOTH names to support different calling conventions
 module.exports = {
-    autorecordingCommand,
-    isAutorecordingEnabled,
-    showRecordingOnMessageReceived,  // Call this when message is RECEIVED
-    stopRecording
+    autorecordingCommand,           // For .autorecording command
+    isAutorecordingEnabled,         // Check status
+    showRecordingOnMessageReceived, // Original function name
+    handleAutorecordingForMessage,  // FIXED: This is the missing function!
+    stopRecording                    // Stop recording manually
 };
