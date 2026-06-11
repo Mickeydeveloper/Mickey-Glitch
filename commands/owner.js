@@ -3,7 +3,7 @@ const { sendInteractiveMessage } = require('gifted-btns');
 const fs = require('fs');
 const path = require('path');
 
-// CONFIGURATION - Easy to customize
+// CONFIGURATION
 const CONFIG = {
     BANNER: 'https://water-billing-292n.onrender.com/1761205727440.png',
     FOOTER: '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐',
@@ -20,7 +20,6 @@ function loadSettings() {
         }
     } catch (e) {}
     
-    // Default settings if file not found
     return {
         ownerNumber: '255612130873',
         botOwner: '𝐌𝐈𝐂𝐊𝐄𝐘 𝐃𝐄𝐕𝐄𝐋𝐎𝐏𝐄𝐑',
@@ -29,13 +28,11 @@ function loadSettings() {
     };
 }
 
-// Safe number formatter
 function formatNumber(num) {
     if (!num) return '255612130873';
     return num.toString().replace(/[^\d]/g, '');
 }
 
-// Generate fancy vCard
 function generateVCard(ownerName, ownerNumber, botName, email) {
     return `BEGIN:VCARD
 VERSION:3.0
@@ -48,20 +45,22 @@ TEL;TYPE=CELL;TYPE=VOICE;TYPE=pref:+${ownerNumber}
 EMAIL;TYPE=work:${email || 'mickeyglitch@gmail.com'}
 URL:https://wa.me/${ownerNumber}
 NOTE:🌟 Official Owner of ${botName} Bot 🌟\\n\\n💫 Status: Active & Online\\n⚡ Power: Full Access\\n🎮 Role: Creator
-X-SOCIALPROFILE;TYPE=twitter:https://twitter.com/mickeyglitch
-X-SOCIALPROFILE;TYPE=github:https://github.com/Mickeydeveloper
 REV:${new Date().toISOString()}
 END:VCARD`;
 }
 
-// Main command handler
-async function ownerCommand(sock, chatId, m, body = '') {
+async function ownerCommand(sock, chatId, message, body = '') {
     try {
-        // ========== SAFETY CHECKS ==========
-        const safeM = m || {};
-        const safeKey = safeM.key || { remoteJid: chatId };
+        // ========== SAFETY CHECKS - FIXED ==========
+        // Check if message exists and has the required properties
+        const safeMessage = message || {};
+        const messageKey = safeMessage.key || { remoteJid: chatId };
         
-        // Load settings safely
+        // Get sender info safely
+        let sender = messageKey.participant || messageKey.remoteJid || chatId;
+        let fromMe = messageKey.fromMe || false;
+        
+        // Load settings
         const settings = loadSettings();
         const ownerNumber = formatNumber(settings.ownerNumber);
         const ownerName = settings.botOwner || '𝐌𝐈𝐂𝐊𝐄𝐘 𝐃𝐄𝐕𝐄𝐋𝐎𝐏𝐄𝐑';
@@ -69,43 +68,47 @@ async function ownerCommand(sock, chatId, m, body = '') {
         const botEmail = settings.botEmail || 'mickeyglitch@gmail.com';
         const waLink = `https://wa.me/${ownerNumber}`;
         
-        // ========== INPUT DETECTION (Multiple formats) ==========
+        // ========== INPUT DETECTION - FIXED ==========
         let input = '';
         
-        // Try to get input from multiple sources
+        // Try to get input safely without causing errors
         if (body && typeof body === 'string') {
             input = body.toLowerCase().trim();
-        } else if (safeM.message?.conversation) {
-            input = safeM.message.conversation.toLowerCase().trim();
-        } else if (safeM.message?.extendedTextMessage?.text) {
-            input = safeM.message.extendedTextMessage.text.toLowerCase().trim();
-        } else if (safeM.message?.buttonsResponseMessage?.selectedButtonId) {
-            input = safeM.message.buttonsResponseMessage.selectedButtonId.toLowerCase().trim();
-        } else if (safeM.message?.listResponseMessage?.singleSelectReply?.selectedRowId) {
-            input = safeM.message.listResponseMessage.singleSelectReply.selectedRowId.toLowerCase().trim();
-        } else if (safeM.message?.templateButtonReplyMessage?.selectedId) {
-            input = safeM.message.templateButtonReplyMessage.selectedId.toLowerCase().trim();
         }
         
-        // Remove dot prefix if exists for button IDs
+        if (!input && safeMessage.message) {
+            try {
+                if (safeMessage.message.conversation) {
+                    input = safeMessage.message.conversation.toLowerCase().trim();
+                } else if (safeMessage.message.extendedTextMessage?.text) {
+                    input = safeMessage.message.extendedTextMessage.text.toLowerCase().trim();
+                } else if (safeMessage.message.buttonsResponseMessage?.selectedButtonId) {
+                    input = safeMessage.message.buttonsResponseMessage.selectedButtonId.toLowerCase().trim();
+                } else if (safeMessage.message.listResponseMessage?.singleSelectReply?.selectedRowId) {
+                    input = safeMessage.message.listResponseMessage.singleSelectReply.selectedRowId.toLowerCase().trim();
+                }
+            } catch(e) {
+                console.log('Error reading message:', e);
+            }
+        }
+        
+        // Remove dot prefix
         input = input.replace(/^\./, '');
         
-        console.log('👑 Owner Command Triggered:', { input, chatId });
+        console.log('👑 Owner Command:', { input, chatId, fromMe });
         
-        // ========== HANDLE VCARD REQUEST ==========
+        // ========== HANDLE VCARD ==========
         if (input === 'get_vcard' || input === 'vcard' || input === 'save_contact') {
             try {
                 const vcard = generateVCard(ownerName, ownerNumber, botName, botEmail);
                 
-                // Send vCard as contact
                 await sock.sendMessage(chatId, {
                     contacts: { 
                         displayName: ownerName, 
                         contacts: [{ vcard }] 
                     }
-                }, { quoted: safeM });
+                });
                 
-                // Send confirmation message
                 await sock.sendMessage(chatId, {
                     text: `╭━━━━━━━━━━━━━━━━━━━━╮
 ┃  ✅ *𝐂𝐎𝐍𝐓𝐀𝐂𝐓 𝐒𝐀𝐕𝐄𝐃* ✅
@@ -120,29 +123,21 @@ async function ownerCommand(sock, chatId, m, body = '') {
 ┃ ✨ Tap the contact card
 ┃    to save and chat!
 ┃
-╰━━━━━━━━━━━━━━━━━━━━╯`,
-                    contextInfo: {
-                        externalAdReply: {
-                            title: `${botName} • OWNER`,
-                            body: `Contact: ${ownerName}`,
-                            thumbnailUrl: CONFIG.BANNER,
-                            mediaType: 1
-                        }
-                    }
+╰━━━━━━━━━━━━━━━━━━━━╯`
                 });
-                
             } catch (vcardError) {
                 console.error('VCARD Error:', vcardError);
                 await sock.sendMessage(chatId, {
-                    text: `❌ *Failed to send vCard*\n\nSend *${ownerNumber}* manually or use:\n${waLink}`
+                    text: `❌ Failed to send vCard\n\nSend *${ownerNumber}* manually or use:\n${waLink}`
                 });
             }
             return;
         }
         
-        // ========== HANDLE CHAT REQUEST ==========
+        // ========== HANDLE CHAT ==========
         if (input === 'owner_chat' || input === 'chat' || input === 'contact') {
-            const chatMsg = `╭━━━━━━━━━━━━━━━━━━━━╮
+            await sock.sendMessage(chatId, {
+                text: `╭━━━━━━━━━━━━━━━━━━━━╮
 ┃  💬 *𝐂𝐇𝐀𝐓 𝐖𝐈𝐓𝐇 𝐎𝐖𝐍𝐄𝐑* 💬
 ┣━━━━━━━━━━━━━━━━━━━━┛
 ┃
@@ -157,15 +152,15 @@ async function ownerCommand(sock, chatId, m, body = '') {
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
-_Owner is usually online within minutes!_ ⏰`;
-
-            await sock.sendMessage(chatId, { text: chatMsg });
+_Owner is usually online within minutes!_ ⏰`
+            });
             return;
         }
         
-        // ========== HANDLE CHANNEL REQUEST ==========
+        // ========== HANDLE CHANNEL ==========
         if (input === 'owner_channel' || input === 'channel' || input === 'update') {
-            const channelMsg = `╭━━━━━━━━━━━━━━━━━━━━╮
+            await sock.sendMessage(chatId, {
+                text: `╭━━━━━━━━━━━━━━━━━━━━╮
 ┃  📢 *𝐎𝐅𝐅𝐈𝐂𝐈𝐀𝐋 𝐂𝐇𝐀𝐍𝐍𝐄𝐋* 📢
 ┣━━━━━━━━━━━━━━━━━━━━┛
 ┃
@@ -181,15 +176,15 @@ _Owner is usually online within minutes!_ ⏰`;
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
-_Subscribe to never miss an update!_ 🔔`;
-
-            await sock.sendMessage(chatId, { text: channelMsg });
+_Subscribe to never miss an update!_ 🔔`
+            });
             return;
         }
         
-        // ========== HANDLE SUPPORT GROUP ==========
+        // ========== HANDLE SUPPORT ==========
         if (input === 'support' || input === 'group' || input === 'support_group') {
-            const supportMsg = `╭━━━━━━━━━━━━━━━━━━━━╮
+            await sock.sendMessage(chatId, {
+                text: `╭━━━━━━━━━━━━━━━━━━━━╮
 ┃  👥 *𝐒𝐔𝐏𝐏𝐎𝐑𝐓 𝐆𝐑𝐎𝐔𝐏* 👥
 ┣━━━━━━━━━━━━━━━━━━━━┛
 ┃
@@ -205,23 +200,22 @@ _Subscribe to never miss an update!_ 🔔`;
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
-_Be respectful and enjoy!_ 🌟`;
-            
-            await sock.sendMessage(chatId, { text: supportMsg });
+_Be respectful and enjoy!_ 🌟`
+            });
             return;
         }
         
-        // ========== HANDLE RUNTIME / STATS ==========
+        // ========== HANDLE STATS ==========
         if (input === 'stats' || input === 'runtime' || input === 'info') {
             const uptime = process.uptime();
             const days = Math.floor(uptime / 86400);
             const hours = Math.floor((uptime % 86400) / 3600);
             const minutes = Math.floor((uptime % 3600) / 60);
             const seconds = Math.floor(uptime % 60);
-            
             const uptimeStr = `${days}d ${hours}h ${minutes}m ${seconds}s`;
             
-            const statsMsg = `╭━━━━━━━━━━━━━━━━━━━━╮
+            await sock.sendMessage(chatId, {
+                text: `╭━━━━━━━━━━━━━━━━━━━━╮
 ┃  📊 *𝐁𝐎𝐓 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒* 📊
 ┣━━━━━━━━━━━━━━━━━━━━┛
 ┃
@@ -233,22 +227,20 @@ _Be respectful and enjoy!_ 🌟`;
 ┃ ⚡ *Status:* 🟢 ONLINE
 ┃ 📦 *Version:* 3.3.0
 ┃
-╰━━━━━━━━━━━━━━━━━━━━╯`;
-            
-            await sock.sendMessage(chatId, { text: statsMsg });
+╰━━━━━━━━━━━━━━━━━━━━╯`
+            });
             return;
         }
         
-        // ========== MAIN MENU - .owner command ==========
+        // ========== MAIN MENU ==========
         if (input === 'owner' || input === '.owner' || input === 'menu' || input === '') {
-            // Send reaction
+            // Send reaction (safe)
             try {
                 await sock.sendMessage(chatId, { 
-                    react: { text: '👑', key: safeKey } 
+                    react: { text: '👑', key: messageKey } 
                 });
-            } catch(e) { /* Ignore reaction errors */ }
+            } catch(e) {}
             
-            // Fancy owner info text
             const ownerText = `╔════════════════════════════╗
 ║      👑 *𝐎𝐖𝐍𝐄𝐑 𝐈𝐍𝐅𝐎* 👑      ║
 ╠════════════════════════════╣
@@ -276,7 +268,6 @@ _Be respectful and enjoy!_ 🌟`;
 ║     to connect instantly!   ║
 ╚════════════════════════════╝`;
 
-            // Send interactive message
             return await sendInteractiveMessage(sock, chatId, {
                 image: { url: CONFIG.BANNER },
                 text: ownerText,
@@ -318,19 +309,18 @@ _Be respectful and enjoy!_ 🌟`;
                         })
                     }
                 ]
-            }, { quoted: safeM });
+            });
         }
         
-        // ========== FALLBACK: If unknown input but command triggered ==========
+        // Unknown command
         await sock.sendMessage(chatId, {
-            text: `❌ *Unknown option!*\n\n📝 *Usage:* .owner\n\nThen tap the buttons below 👇`
+            text: `❌ *Unknown command!*\n\n📝 *Use:* .owner\n\nThen tap the buttons below 👇`
         });
         
     } catch (error) {
-        // ========== ERROR HANDLING ==========
         console.error("❌ Owner Command Error:", error);
         
-        // Try to send error message safely
+        // Send clean error message without breaking
         try {
             await sock.sendMessage(chatId, {
                 text: `╭━━━━━━━━━━━━━━━━━━━━╮
@@ -339,18 +329,17 @@ _Be respectful and enjoy!_ 🌟`;
 ┃
 ┃ 🔴 *Something went wrong!*
 ┃
-┃ 📝 *Error:* ${error.message.substring(0, 100)}
+┃ 📝 *Error:* ${error.message || 'Unknown error'}
 ┃
-┃ 💡 *Try:*
-┃ • Use .owner again
-┃ • Check connection
-┃ • Contact support
+┃ 💡 *Solution:*
+┃ • Restart the bot
+┃ • Check message format
+┃ • Use .owner to retry
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━╯`
             });
         } catch(e) {
-            // Ultimate fallback
-            console.error("Fatal: Cannot send error message", e);
+            console.error("Cannot send error message:", e);
         }
     }
 }
