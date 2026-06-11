@@ -3,7 +3,9 @@ const { sendInteractiveMessage } = require('gifted-btns');
 const fs = require('fs');
 const path = require('path');
 
-// CONFIGURATION
+// ==========================================
+// CONFIG
+// ==========================================
 const CONFIG = {
     BANNER: 'https://water-billing-292n.onrender.com/1761205727440.png',
     FOOTER: '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐',
@@ -11,12 +13,21 @@ const CONFIG = {
     SUPPORT_GROUP: 'https://chat.whatsapp.com/YourGroupLink'
 };
 
-// Load settings with fallback
+// ==========================================
+// SAFE SETTINGS LOADER
+// ==========================================
 function loadSettings() {
     try {
         const settingsPath = path.join(__dirname, '..', 'settings.js');
         if (fs.existsSync(settingsPath)) {
-            return require('../settings');
+            const settings = require('../settings');
+            return {
+                ownerNumber: settings.ownerNumber || '255612130873',
+                botOwner: settings.botOwner || '𝐌𝐈𝐂𝐊𝐄𝐘 𝐃𝐄𝐕𝐄𝐋𝐎𝐏𝐄𝐑',
+                botName: settings.botName || settings.botname || '𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇',
+                botEmail: settings.botEmail || 'mickeyglitch@gmail.com',
+                version: settings.version || '3.3.0'
+            };
         }
     } catch (e) {}
     
@@ -24,15 +35,22 @@ function loadSettings() {
         ownerNumber: '255612130873',
         botOwner: '𝐌𝐈𝐂𝐊𝐄𝐘 𝐃𝐄𝐕𝐄𝐋𝐎𝐏𝐄𝐑',
         botName: '𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇',
-        botEmail: 'mickeyglitch@gmail.com'
+        botEmail: 'mickeyglitch@gmail.com',
+        version: '3.3.0'
     };
 }
 
+// ==========================================
+// FORMAT NUMBER
+// ==========================================
 function formatNumber(num) {
     if (!num) return '255612130873';
     return num.toString().replace(/[^\d]/g, '');
 }
 
+// ==========================================
+// GENERATE VCARD
+// ==========================================
 function generateVCard(ownerName, ownerNumber, botName, email) {
     return `BEGIN:VCARD
 VERSION:3.0
@@ -49,29 +67,109 @@ REV:${new Date().toISOString()}
 END:VCARD`;
 }
 
+// ==========================================
+// SEND INTERACTIVE MENU - CTA BUTTONS
+// ==========================================
+async function sendOwnerMenu(sock, chatId, quotedMsg) {
+    try {
+        const settings = loadSettings();
+        const ownerNumber = formatNumber(settings.ownerNumber);
+        const waLink = `https://wa.me/${ownerNumber}`;
+        
+        const ownerText = `╔════════════════════════════╗
+║      👑 *𝐎𝐖𝐍𝐄𝐑 𝐈𝐍𝐅𝐎* 👑      ║
+╠════════════════════════════╣
+║                            ║
+║  🤖 *Bot Name*             ║
+║  › ${settings.botName}     ║
+║                            ║
+║  👨‍💻 *Developer*            ║
+║  › ${settings.botOwner}    ║
+║                            ║
+║  📞 *Contact*              ║
+║  › +${ownerNumber}         ║
+║                            ║
+║  📧 *Email*                ║
+║  › ${settings.botEmail}    ║
+║                            ║
+║  ⏰ *Status*               ║
+║  › 🟢 Active & Online      ║
+║                            ║
+║  🌐 *Version*              ║
+║  › ${settings.version}     ║
+║                            ║
+╠════════════════════════════╣
+║  📌 *Tap buttons below*     ║
+╚════════════════════════════╝`;
+
+        // CTA BUTTONS - 3 tu
+        const interactiveMessage = {
+            image: { url: CONFIG.BANNER },
+            text: ownerText,
+            footer: CONFIG.FOOTER,
+            contextInfo: {
+                externalAdReply: {
+                    title: `${settings.botName} • Owner Info`,
+                    body: `Contact: ${settings.botOwner}`,
+                    thumbnailUrl: CONFIG.BANNER,
+                    mediaType: 1,
+                    renderLargerThumbnail: true
+                }
+            },
+            interactiveButtons: [
+                {
+                    name: "cta_copy",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "📋 𝐂𝐎𝐏𝐘 𝐍𝐔𝐌𝐁𝐄𝐑",
+                        id: "owner_copy",
+                        copy_text: ownerNumber
+                    })
+                },
+                {
+                    name: "cta_url",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "💬 𝐂𝐇𝐀𝐓 𝐎𝐖𝐍𝐄𝐑",
+                        id: "owner_chat",
+                        url: waLink
+                    })
+                },
+                {
+                    name: "quick_reply",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "📇 𝐒𝐀𝐕𝐄 𝐂𝐎𝐍𝐓𝐀𝐂𝐓",
+                        id: "owner_save"
+                    })
+                }
+            ]
+        };
+
+        return await sendInteractiveMessage(sock, chatId, interactiveMessage, { quoted: quotedMsg });
+    } catch (error) {
+        console.error('Error sending owner menu:', error);
+        throw error;
+    }
+}
+
+// ==========================================
+// MAIN COMMAND HANDLER
+// ==========================================
 async function ownerCommand(sock, chatId, message, body = '') {
     try {
-        // ========== SAFETY CHECKS - FIXED ==========
-        // Check if message exists and has the required properties
+        // SAFETY CHECKS
         const safeMessage = message || {};
-        const messageKey = safeMessage.key || { remoteJid: chatId };
-        
-        // Get sender info safely
-        let sender = messageKey.participant || messageKey.remoteJid || chatId;
-        let fromMe = messageKey.fromMe || false;
+        const safeKey = safeMessage.key || { remoteJid: chatId };
         
         // Load settings
         const settings = loadSettings();
         const ownerNumber = formatNumber(settings.ownerNumber);
-        const ownerName = settings.botOwner || '𝐌𝐈𝐂𝐊𝐄𝐘 𝐃𝐄𝐕𝐄𝐋𝐎𝐏𝐄𝐑';
-        const botName = settings.botName || '𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇';
-        const botEmail = settings.botEmail || 'mickeyglitch@gmail.com';
+        const ownerName = settings.botOwner;
+        const botName = settings.botName;
+        const botEmail = settings.botEmail;
         const waLink = `https://wa.me/${ownerNumber}`;
         
-        // ========== INPUT DETECTION - FIXED ==========
+        // INPUT DETECTION
         let input = '';
         
-        // Try to get input safely without causing errors
         if (body && typeof body === 'string') {
             input = body.toLowerCase().trim();
         }
@@ -84,58 +182,64 @@ async function ownerCommand(sock, chatId, message, body = '') {
                     input = safeMessage.message.extendedTextMessage.text.toLowerCase().trim();
                 } else if (safeMessage.message.buttonsResponseMessage?.selectedButtonId) {
                     input = safeMessage.message.buttonsResponseMessage.selectedButtonId.toLowerCase().trim();
-                } else if (safeMessage.message.listResponseMessage?.singleSelectReply?.selectedRowId) {
-                    input = safeMessage.message.listResponseMessage.singleSelectReply.selectedRowId.toLowerCase().trim();
                 }
-            } catch(e) {
-                console.log('Error reading message:', e);
-            }
+            } catch(e) {}
         }
         
-        // Remove dot prefix
-        input = input.replace(/^\./, '');
+        // Button ID mapping
+        const buttonActions = {
+            'owner_copy': 'copy',
+            'owner_chat': 'chat',
+            'owner_save': 'save',
+            'copy_number': 'copy',
+            'chat_owner': 'chat',
+            'save_contact': 'save',
+            'get_vcard': 'save'
+        };
         
-        console.log('👑 Owner Command:', { input, chatId, fromMe });
+        let action = buttonActions[input] || input;
         
-        // ========== HANDLE VCARD ==========
-        if (input === 'get_vcard' || input === 'vcard' || input === 'save_contact') {
+        console.log('👑 Owner Command:', { input, action });
+        
+        // ==========================================
+        // HANDLE COPY NUMBER (CTA COPY)
+        // ==========================================
+        if (action === 'copy' || action === '.copy_number') {
             try {
-                const vcard = generateVCard(ownerName, ownerNumber, botName, botEmail);
-                
-                await sock.sendMessage(chatId, {
-                    contacts: { 
-                        displayName: ownerName, 
-                        contacts: [{ vcard }] 
-                    }
+                await sock.sendMessage(chatId, { 
+                    react: { text: '📋', key: safeKey } 
                 });
-                
-                await sock.sendMessage(chatId, {
-                    text: `╭━━━━━━━━━━━━━━━━━━━━╮
-┃  ✅ *𝐂𝐎𝐍𝐓𝐀𝐂𝐓 𝐒𝐀𝐕𝐄𝐃* ✅
+            } catch(e) {}
+            
+            await sock.sendMessage(chatId, {
+                text: `╭━━━━━━━━━━━━━━━━━━━━╮
+┃  📋 *𝐍𝐔𝐌𝐁𝐄𝐑 𝐂𝐎𝐏𝐈𝐄𝐃* 📋
 ┣━━━━━━━━━━━━━━━━━━━━┛
 ┃
-┃ 👑 *𝐎𝐰𝐧𝐞𝐫:* ${ownerName}
-┃ 📞 *𝐍𝐮𝐦𝐛𝐞𝐫:* +${ownerNumber}
-┃ 🤖 *𝐁𝐨𝐭:* ${botName}
+┃ 👑 *Owner:* ${ownerName}
+┃ 📞 *Number:* +${ownerNumber}
 ┃
-┃ 💾 *𝐕𝐂𝐀𝐑𝐃 𝐬𝐞𝐧𝐭!*
+┃ ✅ *Number copied to clipboard!*
 ┃
-┃ ✨ Tap the contact card
-┃    to save and chat!
+┃ 💬 *Start chatting now*
 ┃
-╰━━━━━━━━━━━━━━━━━━━━╯`
-                });
-            } catch (vcardError) {
-                console.error('VCARD Error:', vcardError);
-                await sock.sendMessage(chatId, {
-                    text: `❌ Failed to send vCard\n\nSend *${ownerNumber}* manually or use:\n${waLink}`
-                });
-            }
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+📌 *Tap CHAT OWNER button to start*`
+            }, { quoted: safeMessage });
             return;
         }
         
-        // ========== HANDLE CHAT ==========
-        if (input === 'owner_chat' || input === 'chat' || input === 'contact') {
+        // ==========================================
+        // HANDLE CHAT OWNER (CTA URL)
+        // ==========================================
+        if (action === 'chat' || action === '.chat_owner') {
+            try {
+                await sock.sendMessage(chatId, { 
+                    react: { text: '💬', key: safeKey } 
+                });
+            } catch(e) {}
+            
             await sock.sendMessage(chatId, {
                 text: `╭━━━━━━━━━━━━━━━━━━━━╮
 ┃  💬 *𝐂𝐇𝐀𝐓 𝐖𝐈𝐓𝐇 𝐎𝐖𝐍𝐄𝐑* 💬
@@ -147,180 +251,111 @@ async function ownerCommand(sock, chatId, message, body = '') {
 ┃ ⚡ *Click link below:*
 ┃ ${waLink}
 ┃
-┃ 📱 *Or save contact using*
-┃    📇 *VCARD button*
+┃ 💡 *Owner is usually online*
+┃    within minutes!
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
-_Owner is usually online within minutes!_ ⏰`
-            });
+_✨ Feel free to reach out for help or collaboration!_`
+            }, { quoted: safeMessage });
             return;
         }
         
-        // ========== HANDLE CHANNEL ==========
-        if (input === 'owner_channel' || input === 'channel' || input === 'update') {
-            await sock.sendMessage(chatId, {
-                text: `╭━━━━━━━━━━━━━━━━━━━━╮
-┃  📢 *𝐎𝐅𝐅𝐈𝐂𝐈𝐀𝐋 𝐂𝐇𝐀𝐍𝐍𝐄𝐋* 📢
-┣━━━━━━━━━━━━━━━━━━━━┛
-┃
-┃ 📡 *𝐉𝐨𝐢𝐧 𝐟𝐨𝐫:*
-┃
-┃ • Latest updates 🆕
-┃ • New features ⚡
-┃ • Bot news 📰
-┃ • Giveaways 🎁
-┃
-┃ 🔗 *𝐋𝐢𝐧𝐤:*
-┃ ${CONFIG.CHANNEL_LINK}
-┃
-╰━━━━━━━━━━━━━━━━━━━━╯
-
-_Subscribe to never miss an update!_ 🔔`
-            });
-            return;
-        }
-        
-        // ========== HANDLE SUPPORT ==========
-        if (input === 'support' || input === 'group' || input === 'support_group') {
-            await sock.sendMessage(chatId, {
-                text: `╭━━━━━━━━━━━━━━━━━━━━╮
-┃  👥 *𝐒𝐔𝐏𝐏𝐎𝐑𝐓 𝐆𝐑𝐎𝐔𝐏* 👥
-┣━━━━━━━━━━━━━━━━━━━━┛
-┃
-┃ 🤝 *𝐉𝐨𝐢𝐧 𝐭𝐡𝐞 𝐜𝐨𝐦𝐦𝐮𝐧𝐢𝐭𝐲*
-┃
-┃ • Ask questions ❓
-┃ • Report bugs 🐛
-┃ • Suggest features 💡
-┃ • Get help 🆘
-┃
-┃ 🔗 *𝐋𝐢𝐧𝐤:*
-┃ ${CONFIG.SUPPORT_GROUP}
-┃
-╰━━━━━━━━━━━━━━━━━━━━╯
-
-_Be respectful and enjoy!_ 🌟`
-            });
-            return;
-        }
-        
-        // ========== HANDLE STATS ==========
-        if (input === 'stats' || input === 'runtime' || input === 'info') {
-            const uptime = process.uptime();
-            const days = Math.floor(uptime / 86400);
-            const hours = Math.floor((uptime % 86400) / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            const seconds = Math.floor(uptime % 60);
-            const uptimeStr = `${days}d ${hours}h ${minutes}m ${seconds}s`;
-            
-            await sock.sendMessage(chatId, {
-                text: `╭━━━━━━━━━━━━━━━━━━━━╮
-┃  📊 *𝐁𝐎𝐓 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒* 📊
-┣━━━━━━━━━━━━━━━━━━━━┛
-┃
-┃ 🤖 *Bot:* ${botName}
-┃ 👑 *Owner:* ${ownerName}
-┃ ⏱️ *Uptime:* ${uptimeStr}
-┃ 📅 *Started:* ${new Date(Date.now() - uptime * 1000).toLocaleString()}
-┃
-┃ ⚡ *Status:* 🟢 ONLINE
-┃ 📦 *Version:* 3.3.0
-┃
-╰━━━━━━━━━━━━━━━━━━━━╯`
-            });
-            return;
-        }
-        
-        // ========== MAIN MENU ==========
-        if (input === 'owner' || input === '.owner' || input === 'menu' || input === '') {
-            // Send reaction (safe)
+        // ==========================================
+        // HANDLE SAVE CONTACT (VCARD)
+        // ==========================================
+        if (action === 'save' || action === '.save_contact' || action === 'get_vcard') {
             try {
                 await sock.sendMessage(chatId, { 
-                    react: { text: '👑', key: messageKey } 
+                    react: { text: '📇', key: safeKey } 
                 });
             } catch(e) {}
             
-            const ownerText = `╔════════════════════════════╗
-║      👑 *𝐎𝐖𝐍𝐄𝐑 𝐈𝐍𝐅𝐎* 👑      ║
-╠════════════════════════════╣
-║                            ║
-║  🤖 *Bot Name*             ║
-║  › ${botName}              ║
-║                            ║
-║  👨‍💻 *Developer*            ║
-║  › ${ownerName}            ║
-║                            ║
-║  📞 *Contact*               ║
-║  › +${ownerNumber}         ║
-║                            ║
-║  📧 *Email*                 ║
-║  › ${botEmail}             ║
-║                            ║
-║  ⏰ *Status*                ║
-║  › 🟢 Active & Online      ║
-║                            ║
-║  🌐 *Version*               ║
-║  › 3.3.0 - Stable         ║
-║                            ║
-╠════════════════════════════╣
-║  📌 *Tap buttons below*     ║
-║     to connect instantly!   ║
-╚════════════════════════════╝`;
-
-            return await sendInteractiveMessage(sock, chatId, {
-                image: { url: CONFIG.BANNER },
-                text: ownerText,
-                footer: CONFIG.FOOTER,
-                interactiveButtons: [
-                    { 
-                        name: "quick_reply",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "💬 CHAT OWNER",
-                            id: "owner_chat"
-                        })
-                    },
-                    { 
-                        name: "quick_reply",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📇 SAVE VCARD",
-                            id: "get_vcard"
-                        })
-                    },
-                    { 
-                        name: "quick_reply",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📢 JOIN CHANNEL",
-                            id: "owner_channel"
-                        })
-                    },
-                    { 
-                        name: "quick_reply",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "👥 SUPPORT",
-                            id: "support"
-                        })
-                    },
-                    { 
-                        name: "quick_reply",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📊 STATS",
-                            id: "stats"
-                        })
+            try {
+                const vcard = generateVCard(ownerName, ownerNumber, botName, botEmail);
+                
+                // Send vCard as contact
+                await sock.sendMessage(chatId, {
+                    contacts: { 
+                        displayName: ownerName, 
+                        contacts: [{ vcard }] 
                     }
-                ]
+                }, { quoted: safeMessage });
+                
+                // Send confirmation message
+                await sock.sendMessage(chatId, {
+                    text: `╭━━━━━━━━━━━━━━━━━━━━╮
+┃  ✅ *𝐂𝐎𝐍𝐓𝐀𝐂𝐓 𝐒𝐀𝐕𝐄𝐃* ✅
+┣━━━━━━━━━━━━━━━━━━━━┛
+┃
+┃ 👑 *Owner:* ${ownerName}
+┃ 📞 *Number:* +${ownerNumber}
+┃ 🤖 *Bot:* ${botName}
+┃
+┃ 💾 *VCARD sent successfully!*
+┃
+┃ ✨ Tap the contact card
+┃    to save and chat!
+┃
+╰━━━━━━━━━━━━━━━━━━━━╯`
+                });
+                
+            } catch (vcardError) {
+                console.error('VCARD Error:', vcardError);
+                await sock.sendMessage(chatId, {
+                    text: `❌ *Failed to send vCard*\n\n📞 *Manual contact:*\n+${ownerNumber}\n\n💬 *Chat link:*\n${waLink}`
+                }, { quoted: safeMessage });
+            }
+            return;
+        }
+        
+        // ==========================================
+        // MAIN MENU (.owner)
+        // ==========================================
+        if (action === '.owner' || action === 'owner' || action === 'menu' || action === '') {
+            // Send reaction
+            try {
+                await sock.sendMessage(chatId, { 
+                    react: { text: '👑', key: safeKey } 
+                });
+            } catch(e) {}
+            
+            try {
+                await sendOwnerMenu(sock, chatId, safeMessage);
+            } catch (error) {
+                console.error('Menu error:', error);
+                // Fallback menu
+                await sock.sendMessage(chatId, {
+                    text: `╭━━━━━━━━━━━━━━━━━━━━╮
+┃  👑 *𝐎𝐖𝐍𝐄𝐑 𝐈𝐍𝐅𝐎* 👑
+┣━━━━━━━━━━━━━━━━━━━━┛
+┃
+┃ 👨‍💻 *Name:* ${ownerName}
+┃ 📞 *Number:* +${ownerNumber}
+┃ 📧 *Email:* ${botEmail}
+┃
+┃ 📌 *Commands:*
+┃ • .copy_number
+┃ • .chat_owner  
+┃ • .save_contact
+┃
+╰━━━━━━━━━━━━━━━━━━━━╯`
+                }, { quoted: safeMessage });
+            }
+            return;
+        }
+        
+        // ==========================================
+        // IF NOT MATCHED
+        // ==========================================
+        if (action && action !== '') {
+            await sock.sendMessage(chatId, {
+                text: `❌ *Unknown option: ${action}*\n\n📝 *Use .owner to see available options*`
             });
         }
         
-        // Unknown command
-        await sock.sendMessage(chatId, {
-            text: `❌ *Unknown command!*\n\n📝 *Use:* .owner\n\nThen tap the buttons below 👇`
-        });
-        
     } catch (error) {
         console.error("❌ Owner Command Error:", error);
-        
-        // Send clean error message without breaking
         try {
             await sock.sendMessage(chatId, {
                 text: `╭━━━━━━━━━━━━━━━━━━━━╮
@@ -329,18 +364,15 @@ _Be respectful and enjoy!_ 🌟`
 ┃
 ┃ 🔴 *Something went wrong!*
 ┃
-┃ 📝 *Error:* ${error.message || 'Unknown error'}
+┃ 📝 *Error:* ${error.message?.substring(0, 100) || 'Unknown'}
 ┃
-┃ 💡 *Solution:*
-┃ • Restart the bot
-┃ • Check message format
-┃ • Use .owner to retry
+┃ 💡 *Try:*
+┃ • Use .owner again
+┃ • Check connection
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━╯`
             });
-        } catch(e) {
-            console.error("Cannot send error message:", e);
-        }
+        } catch(e) {}
     }
 }
 
