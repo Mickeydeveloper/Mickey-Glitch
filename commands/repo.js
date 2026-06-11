@@ -7,18 +7,19 @@ const axios = require('axios');
 const { sendInteractiveMessage } = require('gifted-btns');
 
 // ==========================================
-// CONFIG
+// CONFIGURATION
 // ==========================================
 const CONFIG = {
     FOOTER: '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐',
     REPO_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
     BANNER: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png',
+    ZIP_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip',
     EXCLUDE_DIRS: ['node_modules', 'temp', '.git', 'sessions', 'cache', 'logs', 'uploads', 'tmp', 'backup'],
     MAX_ZIP_SIZE: 50 * 1024 * 1024
 };
 
 // ==========================================
-// SAFE SETTINGS LOADER
+// LOAD SETTINGS
 // ==========================================
 function loadSettings() {
     try {
@@ -32,7 +33,9 @@ function loadSettings() {
                 ownerNumber: settings.ownerNumber || '255612130873'
             };
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error('Settings load error:', e);
+    }
     return {
         botName: '𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇',
         version: '3.3.0',
@@ -42,61 +45,105 @@ function loadSettings() {
 }
 
 // ==========================================
-// SEND INTERACTIVE MENU - CTA BUTTONS
+// GET REPO STATS FROM GITHUB API
+// ==========================================
+async function getRepoStats() {
+    try {
+        const response = await axios({
+            method: 'GET',
+            url: 'https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch',
+            timeout: 5000,
+            headers: {
+                'User-Agent': 'Mickey-Glitch-Bot',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        
+        if (response.status === 200 && response.data) {
+            return {
+                stars: response.data.stargazers_count || 0,
+                forks: response.data.forks_count || 0,
+                watchers: response.data.watchers_count || 0,
+                size: response.data.size || 0,
+                updated: response.data.updated_at || new Date().toISOString()
+            };
+        }
+    } catch (error) {
+        console.error('GitHub API error:', error.message);
+    }
+    
+    return {
+        stars: 20,
+        forks: 50,
+        watchers: 10,
+        size: 15000,
+        updated: new Date().toISOString()
+    };
+}
+
+// ==========================================
+// SEND INTERACTIVE MENU WITH CTA BUTTONS
 // ==========================================
 async function sendRepoMenu(sock, chatId, quotedMsg) {
     try {
         const settings = loadSettings();
+        const stats = await getRepoStats();
         
-        const statusMessage = `╔════════════════════════════╗
-║      📂 *𝐑𝐄𝐏𝐎 𝐌𝐄𝐍𝐔* 📂      ║
-╠════════════════════════════╣
-║                            ║
-║  🤖 *Bot Name*             ║
-║  › ${settings.botName}     ║
-║                            ║
-║  📦 *Version*              ║
-║  › ${settings.version}     ║
-║                            ║
-║  📁 *Files*                ║
-║  › Complete Source Code   ║
-║                            ║
-║  💾 *Size*                 ║
-║  › ~15-20 MB (zipped)     ║
-║                            ║
-╠════════════════════════════╣
-║  📌 *Tap buttons below*     ║
-╚════════════════════════════╝`;
+        const menuText = `╔════════════════════════════════════════╗
+║         📂 *𝐑𝐄𝐏𝐎𝐒𝐈𝐓𝐎𝐑𝐘 𝐌𝐄𝐍𝐔* 📂         ║
+╠════════════════════════════════════════╣
+║                                        ║
+║  🤖 *Bot:* ${settings.botName}                    ║
+║  📦 *Version:* ${settings.version}                      ║
+║                                        ║
+║  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ║
+║                                        ║
+║  📊 *GitHub Stats:*                    ║
+║  • ⭐ Stars: ${stats.stars}                           ║
+║  • 🔱 Forks: ${stats.forks}                           ║
+║  • 👁️ Watchers: ${stats.watchers}                      ║
+║                                        ║
+║  📁 *Repository Info:*                 ║
+║  • Size: ~${Math.floor(stats.size / 1024)} MB                    ║
+║  • Language: JavaScript 100%          ║
+║  • License: MIT                       ║
+║                                        ║
+║  🔗 *Repository URL:*                  ║
+║  ${CONFIG.REPO_URL} ║
+║                                        ║
+╠════════════════════════════════════════╣
+║  📌 *Tap buttons below to interact*     ║
+╚════════════════════════════════════════╝`;
 
-        // CTA BUTTONS - 3 tu
         const interactiveMessage = {
             image: { url: CONFIG.BANNER },
-            text: statusMessage,
+            text: menuText,
             footer: CONFIG.FOOTER,
             contextInfo: {
                 externalAdReply: {
-                    title: `${settings.botName} • Repository`,
-                    body: 'View or download project on GitHub',
+                    title: `${settings.botName} • GitHub Repository`,
+                    body: `⭐ ${stats.stars} Stars | 🔱 ${stats.forks} Forks`,
                     thumbnailUrl: CONFIG.BANNER,
                     sourceUrl: CONFIG.REPO_URL,
                     mediaType: 1,
-                    renderLargerThumbnail: true
+                    renderLargerThumbnail: true,
+                    showAdAttribution: true
                 }
             },
             interactiveButtons: [
                 {
                     name: "cta_copy",
                     buttonParamsJson: JSON.stringify({
-                        display_text: "📋 𝐂𝐎𝐏𝐘 𝐑𝐄𝐏𝐎",
-                        id: "repo_copy",
+                        display_text: "📋 𝐂𝐎𝐏𝐘 𝐑𝐄𝐏𝐎 𝐔𝐑𝐋",
+                        id: "repo_copy_url",
                         copy_text: CONFIG.REPO_URL
                     })
                 },
                 {
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
-                        display_text: "🔗 𝐎𝐏𝐄𝐍 𝐑𝐄𝐏𝐎",
-                        id: "repo_open",
+                        display_text: "🔗 𝐎𝐏𝐄𝐍 𝐎𝐍 𝐆𝐈𝐓𝐇𝐔𝐁",
+                        id: "repo_open_url",
                         url: CONFIG.REPO_URL
                     })
                 },
@@ -104,7 +151,14 @@ async function sendRepoMenu(sock, chatId, quotedMsg) {
                     name: "quick_reply",
                     buttonParamsJson: JSON.stringify({
                         display_text: "📦 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐙𝐈𝐏",
-                        id: "repo_download"
+                        id: "repo_download_zip"
+                    })
+                },
+                {
+                    name: "quick_reply",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "📊 𝐕𝐈𝐄𝐖 𝐒𝐓𝐀𝐓𝐒",
+                        id: "repo_view_stats"
                     })
                 }
             ]
@@ -115,6 +169,38 @@ async function sendRepoMenu(sock, chatId, quotedMsg) {
         console.error('Error sending repo menu:', error);
         throw error;
     }
+}
+
+// ==========================================
+// SEND SIMPLE TEXT MENU (FALLBACK)
+// ==========================================
+async function sendTextMenu(sock, chatId, quotedMsg) {
+    const stats = await getRepoStats();
+    
+    const textMenu = `╔════════════════════════════════════════╗
+║         📂 *𝐑𝐄𝐏𝐎𝐒𝐈𝐓𝐎𝐑𝐘 𝐌𝐄𝐍𝐔* 📂         ║
+╠════════════════════════════════════════╣
+║                                        ║
+║  📊 *GitHub Stats:*                    ║
+║  • ⭐ Stars: ${stats.stars}                           ║
+║  • 🔱 Forks: ${stats.forks}                           ║
+║  • 👁️ Watchers: ${stats.watchers}                      ║
+║                                        ║
+║  🔗 *Repository URL:*                  ║
+║  ${CONFIG.REPO_URL}
+║                                        ║
+║  📦 *Download ZIP:*                    ║
+║  ${CONFIG.ZIP_URL}
+║                                        ║
+╠════════════════════════════════════════╣
+║  📌 *Commands:*                        ║
+║  • .copy_repo - Copy URL              ║
+║  • .view_repo - Open GitHub           ║
+║  • .download_zip - Get source code    ║
+║  • .repo_stats - View statistics      ║
+╚════════════════════════════════════════╝`;
+
+    await sock.sendMessage(chatId, { text: textMenu }, { quoted: quotedMsg });
 }
 
 // ==========================================
@@ -173,17 +259,15 @@ function createProjectZipStream() {
 // ==========================================
 async function downloadFromGitHub(sock, chatId, quotedMsg) {
     try {
-        const apiUrl = 'https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch/zipball/main';
-        
         const response = await axios({
             method: 'GET',
-            url: apiUrl,
+            url: CONFIG.ZIP_URL,
             responseType: 'arraybuffer',
             timeout: 120000,
             maxContentLength: CONFIG.MAX_ZIP_SIZE,
             headers: {
-                'Accept': 'application/vnd.github.v3+json',
-                'User-Agent': 'Mickey-Glitch-Bot'
+                'User-Agent': 'Mickey-Glitch-Bot',
+                'Accept': 'application/zip'
             }
         });
         
@@ -196,12 +280,15 @@ async function downloadFromGitHub(sock, chatId, quotedMsg) {
                 mimetype: 'application/zip',
                 fileName: zipName,
                 caption: `╭━━━━━━━━━━━━━━━━━━━━╮
-┃  ✅ *𝐙𝐈𝐏 𝐑𝐄𝐀𝐃𝐘* ✅
+┃  ✅ *𝐙𝐈𝐏 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐃* ✅
 ┣━━━━━━━━━━━━━━━━━━━━┛
 ┃
 ┃ 📦 *File:* ${zipName}
 ┃ 📊 *Size:* ${(zipBuffer.length / 1024 / 1024).toFixed(2)} MB
 ┃ 📁 *Source:* GitHub (Official)
+┃
+┃ 🌟 *Latest version from*
+┃    main branch
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━╯`
             }, { quoted: quotedMsg });
@@ -215,74 +302,48 @@ async function downloadFromGitHub(sock, chatId, quotedMsg) {
 }
 
 // ==========================================
-// CREATE INSTALLER SCRIPT
+// VIEW STATS (Text Response)
 // ==========================================
-function createInstallerScript() {
-    const projectDir = path.join(__dirname, '..');
-    const files = [];
-    
-    function collectFiles(dir, base = '') {
-        try {
-            const items = fs.readdirSync(dir);
-            for (const item of items) {
-                if (item.startsWith('.') || CONFIG.EXCLUDE_DIRS.includes(item)) continue;
-                
-                const fullPath = path.join(dir, item);
-                const relativePath = base ? path.join(base, item) : item;
-                
-                try {
-                    const stat = fs.statSync(fullPath);
-                    if (stat.isDirectory()) {
-                        collectFiles(fullPath, relativePath);
-                    } else {
-                        if (stat.size > 5 * 1024 * 1024) continue;
-                        const data = fs.readFileSync(fullPath);
-                        files.push({
-                            path: relativePath.replace(/\\/g, '/'),
-                            data: data.toString('base64'),
-                            size: stat.size
-                        });
-                    }
-                } catch(e) {}
-            }
-        } catch(e) {}
-    }
-    
-    collectFiles(projectDir);
-    
-    const script = `#!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
-
-const files = ${JSON.stringify(files, null, 2)};
-
-console.log('📦 Extracting ${files.length} files...');
-
-let extracted = 0;
-for (const file of files) {
-    const outputPath = path.join(process.cwd(), file.path);
-    const outputDir = path.dirname(outputPath);
-    
+async function viewRepoStats(sock, chatId, quotedMsg, safeKey) {
     try {
-        if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-        }
-        fs.writeFileSync(outputPath, Buffer.from(file.data, 'base64'));
-        extracted++;
-        process.stdout.write('\\r📁 Extracted: ' + extracted + '/' + files.length);
-    } catch(e) {
-        console.error('\\n❌ Failed:', file.path, e.message);
+        await sock.sendMessage(chatId, { react: { text: '📊', key: safeKey } }).catch(() => {});
+        
+        const stats = await getRepoStats();
+        const updatedDate = new Date(stats.updated).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+        
+        const statsText = `╔════════════════════════════════════════╗
+║        📊 *𝐑𝐄𝐏𝐎𝐒𝐈𝐓𝐎𝐑𝐘 𝐒𝐓𝐀𝐓𝐒* 📊        ║
+╠════════════════════════════════════════╣
+║                                        ║
+║  📈 *GitHub Metrics:*                  ║
+║  • ⭐ Stars: ${stats.stars}                           ║
+║  • 🔱 Forks: ${stats.forks}                           ║
+║  • 👁️ Watchers: ${stats.watchers}                      ║
+║                                        ║
+║  📁 *Repository Info:*                 ║
+║  • Size: ~${Math.floor(stats.size / 1024)} MB                    ║
+║  • Language: JavaScript 100%          ║
+║  • License: MIT                       ║
+║                                        ║
+║  🕐 *Last Updated:*                    ║
+║  ${updatedDate}
+║                                        ║
+║  🔗 *Repository:*                      ║
+║  ${CONFIG.REPO_URL}
+║                                        ║
+╠════════════════════════════════════════╣
+║  💡 *Use .repo for full menu*           ║
+╚════════════════════════════════════════╝`;
+        
+        await sock.sendMessage(chatId, { text: statsText }, { quoted: quotedMsg });
+    } catch (error) {
+        console.error('Stats view error:', error);
+        await sock.sendMessage(chatId, { text: '❌ Failed to fetch repository stats' });
     }
-}
-
-console.log('\\n✅ Extraction complete!');
-console.log('🚀 Run: npm install && npm start');
-`;
-    
-    return {
-        buffer: Buffer.from(script, 'utf8'),
-        name: `mickey_installer_${Date.now()}.js`
-    };
 }
 
 // ==========================================
@@ -293,7 +354,7 @@ async function repoCommand(sock, chatId, message, body = '') {
         const safeMessage = message || {};
         const safeKey = safeMessage.key || { remoteJid: chatId };
         
-        // INPUT DETECTION
+        // ========== INPUT DETECTION ==========
         let input = '';
         
         if (body && typeof body === 'string') {
@@ -308,73 +369,63 @@ async function repoCommand(sock, chatId, message, body = '') {
                     input = safeMessage.message.extendedTextMessage.text.toLowerCase().trim();
                 } else if (safeMessage.message.buttonsResponseMessage?.selectedButtonId) {
                     input = safeMessage.message.buttonsResponseMessage.selectedButtonId.toLowerCase().trim();
+                } else if (safeMessage.message.listResponseMessage?.singleSelectReply?.selectedRowId) {
+                    input = safeMessage.message.listResponseMessage.singleSelectReply.selectedRowId.toLowerCase().trim();
                 }
-            } catch(e) {}
+            } catch(e) {
+                console.error('Input detection error:', e);
+            }
         }
         
-        // Button ID mapping
-        const buttonActions = {
-            'repo_copy': 'copy',
-            'repo_open': 'open', 
-            'repo_download': 'download',
-            'copy_repo': 'copy',
-            'open_repo': 'open',
-            'download_zip': 'download'
-        };
+        // Remove dot prefix for comparison
+        const cleanInput = input.replace(/^\./, '');
         
-        let action = buttonActions[input] || input;
+        console.log('📂 Repo Command:', { input: cleanInput, chatId });
         
-        console.log('📂 Repo Command:', { input, action });
-        
-        // ==========================================
-        // HANDLE COPY REPO (CTA COPY)
-        // ==========================================
-        if (action === 'copy' || action === '.copy_repo') {
+        // ========== HANDLE COPY REPO URL (CTA Copy) ==========
+        if (cleanInput === 'repo_copy_url' || cleanInput === 'copy_repo' || cleanInput === 'copy') {
             try {
-                await sock.sendMessage(chatId, { 
-                    react: { text: '📋', key: safeKey } 
-                });
+                await sock.sendMessage(chatId, { react: { text: '📋', key: safeKey } }).catch(() => {});
             } catch(e) {}
             
             await sock.sendMessage(chatId, {
                 text: `╭━━━━━━━━━━━━━━━━━━━━╮
-┃  📋 *𝐑𝐄𝐏𝐎 𝐂𝐎𝐏𝐈𝐄𝐃* 📋
+┃  📋 *𝐑𝐄𝐏𝐎 𝐔𝐑𝐋 𝐂𝐎𝐏𝐈𝐄𝐃* 📋
 ┣━━━━━━━━━━━━━━━━━━━━┛
 ┃
-┃ 🔗 *URL:* 
-┃ ${CONFIG.REPO_URL}
+┃ ✅ *URL has been copied!*
 ┃
-┃ ✅ *URL copied to clipboard!*
+┃ 🔗 ${CONFIG.REPO_URL}
 ┃
-┃ 📌 *Paste anywhere to share*
+┃ 💡 *Paste anywhere to share*
+┃    or use in your browser
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━╯
-
-💡 *Or use:*
+                
+📌 *Clone command:*
 git clone ${CONFIG.REPO_URL}`
             }, { quoted: safeMessage });
             return;
         }
         
-        // ==========================================
-        // HANDLE OPEN REPO (CTA URL)
-        // ==========================================
-        if (action === 'open' || action === '.open_repo') {
+        // ========== HANDLE OPEN REPO (CTA URL) ==========
+        if (cleanInput === 'repo_open_url' || cleanInput === 'view_repo' || cleanInput === 'open') {
             try {
-                await sock.sendMessage(chatId, { 
-                    react: { text: '🔗', key: safeKey } 
-                });
+                await sock.sendMessage(chatId, { react: { text: '🔗', key: safeKey } }).catch(() => {});
             } catch(e) {}
             
             await sock.sendMessage(chatId, {
                 text: `╭━━━━━━━━━━━━━━━━━━━━╮
-┃  🔗 *𝐎𝐏𝐄𝐍 𝐑𝐄𝐏𝐎* 🔗
+┃  🔗 *𝐎𝐏𝐄𝐍 𝐆𝐈𝐓𝐇𝐔𝐁* 🔗
 ┣━━━━━━━━━━━━━━━━━━━━┛
 ┃
-┃ 📂 *GitHub Repository:*
+┃ 📂 *Repository URL:*
 ┃ ${CONFIG.REPO_URL}
 ┃
-┃ 🌟 *Star & Fork to support!*
+┃ 🌟 *Don't forget to:*
+┃ • ⭐ Star the repo
+┃ • 🔱 Fork it
+┃ • 👁️ Watch for updates
 ┃
 ┃ 📌 *Click the link above*
 ┃    to open in browser
@@ -384,14 +435,10 @@ git clone ${CONFIG.REPO_URL}`
             return;
         }
         
-        // ==========================================
-        // HANDLE DOWNLOAD ZIP
-        // ==========================================
-        if (action === 'download' || action === '.download_zip' || action === 'download_zip') {
+        // ========== HANDLE DOWNLOAD ZIP ==========
+        if (cleanInput === 'repo_download_zip' || cleanInput === 'download_zip' || cleanInput === 'download') {
             try {
-                await sock.sendMessage(chatId, { 
-                    react: { text: '📦', key: safeKey } 
-                });
+                await sock.sendMessage(chatId, { react: { text: '📦', key: safeKey } }).catch(() => {});
             } catch(e) {}
             
             const processingMsg = await sock.sendMessage(chatId, {
@@ -400,14 +447,105 @@ git clone ${CONFIG.REPO_URL}`
 ┣━━━━━━━━━━━━━━━━━━━━┛
 ┃
 ┃ 🔄 *Creating download package*
-┃ ⏳ Please wait...
+┃ ⏳ Please wait a moment...
+┃
+┃ 📌 *Fetching from GitHub...*
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━╯`
             });
             
             try {
-                // Try GitHub first
+                // Try GitHub direct download first
                 const githubSuccess = await downloadFromGitHub(sock, chatId, safeMessage);
                 
                 if (githubSuccess) {
-                    try { await sock.sendMessage(
+                    try { await sock.sendMessage(chatId, { delete: processingMsg.key }); } catch(e) {}
+                    return;
+                }
+                
+                // If GitHub fails, send direct link
+                await sock.sendMessage(chatId, {
+                    text: `╭━━━━━━━━━━━━━━━━━━━━╮
+┃  📦 *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐙𝐈𝐏* 📦
+┣━━━━━━━━━━━━━━━━━━━━┛
+┃
+┃ 🔗 *Direct Download Link:*
+┃ ${CONFIG.ZIP_URL}
+┃
+┃ 📊 *Size:* ~15-20 MB
+┃
+┃ 💡 *Click the link above*
+┃    to download directly
+┃
+┃ 📌 *Alternative:* Clone with Git
+┃    git clone ${CONFIG.REPO_URL}
+┃
+╰━━━━━━━━━━━━━━━━━━━━╯`
+                }, { quoted: safeMessage });
+                
+                try { await sock.sendMessage(chatId, { delete: processingMsg.key }); } catch(e) {}
+                
+            } catch (error) {
+                console.error('Download error:', error);
+                await sock.sendMessage(chatId, {
+                    text: `❌ *Download Failed!*\n\n📌 Clone directly from GitHub:\n${CONFIG.REPO_URL}\n\n📦 Or download ZIP from:\n${CONFIG.ZIP_URL}`
+                });
+                try { await sock.sendMessage(chatId, { delete: processingMsg.key }); } catch(e) {}
+            }
+            return;
+        }
+        
+        // ========== HANDLE VIEW STATS ==========
+        if (cleanInput === 'repo_view_stats' || cleanInput === 'repo_stats' || cleanInput === 'stats') {
+            await viewRepoStats(sock, chatId, safeMessage, safeKey);
+            return;
+        }
+        
+        // ========== MAIN MENU (.repo) ==========
+        if (cleanInput === 'repo' || cleanInput === '' || cleanInput === 'menu') {
+            try {
+                await sock.sendMessage(chatId, { react: { text: '📂', key: safeKey } }).catch(() => {});
+            } catch(e) {}
+            
+            try {
+                await sendRepoMenu(sock, chatId, safeMessage);
+            } catch (error) {
+                console.error('Interactive menu error:', error);
+                await sendTextMenu(sock, chatId, safeMessage);
+            }
+            return;
+        }
+        
+        // ========== FALLBACK: Show menu if unknown command ==========
+        if (cleanInput !== '') {
+            await sock.sendMessage(chatId, {
+                text: `❌ *Unknown command: ${input}*\n\n📝 *Use .repo to see available options*`
+            });
+        }
+        
+    } catch (error) {
+        console.error("❌ Repo Command Error:", error);
+        try {
+            await sock.sendMessage(chatId, {
+                text: `╭━━━━━━━━━━━━━━━━━━━━╮
+┃  ❌ *𝐄𝐑𝐑𝐎𝐑* ❌
+┣━━━━━━━━━━━━━━━━━━━━┛
+┃
+┃ 🔴 *Something went wrong!*
+┃
+┃ 📝 *Error:* ${error.message?.substring(0, 100) || 'Unknown'}
+┃
+┃ 💡 *Try:*
+┃ • Use .repo again
+┃ • Check connection
+┃ • Clone directly: ${CONFIG.REPO_URL}
+┃
+╰━━━━━━━━━━━━━━━━━━━━╯`
+            });
+        } catch(e) {
+            console.error('Failed to send error message:', e);
+        }
+    }
+}
+
+module.exports = repoCommand;
