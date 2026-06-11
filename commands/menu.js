@@ -4,7 +4,7 @@ const { sendInteractiveMessage } = require('gifted-btns');
 /**
  * @project: MICKEY GLITCH V3.0.5
  * @author: Quantum Base Developer (TZ)
- * @description: Fast & Clean Menu - Minimalist Design
+ * @description: Fast & Clean Menu - Minimalist Design with Image Payment
  */
 
 // Quick rank system
@@ -179,44 +179,24 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const time = now.format('HH:mm:ss');
         const day = now.format('dddd');
 
-        // Clean menu text - Professional design
-        const menuText = `╔════════════════════════════════════════╗
-║       ✨ *𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇* ✨       ║
-║            ⎯  𝐕𝟑.𝟎.𝟓  ⎯             ║
-╚════════════════════════════════════════╝
+        // Muonekano mpya wa kisasa na mdogo (Clean & Minimalist text)
+        const menuText = `✨ *𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐕𝟑.𝟎.𝟓* ✨\n\n` +
+                         `👋 Habari ya ${greeting.text} ${greeting.emoji}, *${userName}*\n` +
+                         `🏆 *Rank:* ${userRank}\n` +
+                         `📊 *Commands:* ${userCmds.toLocaleString()}\n\n` +
+                         `📅 *Siku:* ${day}, ${date}\n` +
+                         `⏰ *Muda:* ${time} EAT\n` +
+                         `⚡ *Uptime:* ${stats.uptime}\n` +
+                         `💾 *Memory:* ${stats.memory}MB\n` +
+                         `👥 *Watumiaji:* ${stats.users}\n\n` +
+                         `💡 _"${quote}"_\n\n` +
+                         `👇 *Gusa button hapo chini kufungua menu:*`;
 
-┌─────────────────────────────────────────┐
-│  👋 *${greeting.text} ${greeting.emoji}*, ${userName}!  │
-│  🏆 *Rank:* ${userRank}                  │
-│  📊 *Commands:* ${userCmds.toLocaleString()}              │
-├─────────────────────────────────────────┤
-│  📅 *Date:* ${day}, ${date}      │
-│  ⏰ *Time:* ${time} EAT               │
-│  ⚡ *Uptime:* ${stats.uptime}               │
-│  💾 *Memory:* ${stats.memory}MB                │
-│  👥 *Users:* ${stats.users}                  │
-├─────────────────────────────────────────┤
-│  💡 *"${quote}"* │
-└─────────────────────────────────────────┘
-
-⫸ *Quantum Base Developer (TZ)* ⫷
-
-👇 *𝐓𝐀𝐏 𝐁𝐄𝐋𝐎𝐖 𝐓𝐎 𝐎𝐏𝐄𝐍 𝐌𝐄𝐍𝐔* 👇`;
-
-        // Send interactive message with SINGLE BUTTON only
+        // Send interactive message with Image and Single Select button
         await sendInteractiveMessage(sock, chatId, {
+            image: { url: "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg" },
             text: menuText,
-            contextInfo: {
-                externalAdReply: {
-                    title: "🌟 MICKEY GLITCH • PREMIUM BOT",
-                    body: "Powered by Quantum Code | Fast & Reliable",
-                    thumbnailUrl: 'https://water-billing-292n.onrender.com/1761205727440.png',
-                    sourceUrl: 'https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610',
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: true
-                }
-            },
+            footer: "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐",
             interactiveButtons: [
                 {
                     name: 'single_select',
@@ -226,7 +206,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                     })
                 }
             ]
-        });
+        }, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
