@@ -12,6 +12,10 @@ const CONFIG = settings.CONFIG || {};
 const BANNER = CONFIG.BANNER || 'https://files.catbox.moe/ljabyq.png';
 const FOOTER = CONFIG.FOOTER || '🚀 Powered by Mickey Glitch Tech';
 
+function formatMoney(amount) {
+    return `TSh ${Number(amount || 0).toLocaleString('en-US')}`;
+}
+
 // AzamPay credentials - NO API KEY NEEDED
 const AZAMPAY_ENV = CONFIG.AZAM_ENV?.toString().toUpperCase() === 'PRODUCTION' ? 'LIVE' : 'SANDBOX';
 const AZAM_APP_NAME = CONFIG.AZAM_APP_NAME || 'MickeyBiz';
@@ -171,12 +175,12 @@ function extractPhoneNumber(input, userJid) {
 }
 
 function detectProvider(phoneNumber) {
-    if (phoneNumber.startsWith('061') || phoneNumber.startsWith('062')) return 'Halopesa';
-    if (phoneNumber.startsWith('074') || phoneNumber.startsWith('075') || phoneNumber.startsWith('076')) return 'Mpesa';
-    if (phoneNumber.startsWith('078') || phoneNumber.startsWith('068') || phoneNumber.startsWith('069')) return 'Airtel';
-    if (phoneNumber.startsWith('065') || phoneNumber.startsWith('067') || phoneNumber.startsWith('071')) return 'Tigo';
-    if (phoneNumber.startsWith('071') || phoneNumber.startsWith('076')) return 'Vodacom';
-    return 'Tigo';
+    const clean = String(phoneNumber || '').replace(/\D/g, '');
+    if (/^(061|062)/.test(clean)) return 'Halopesa';
+    if (/^(071|072|074|075|076)/.test(clean)) return 'Mpesa';
+    if (/^(065|066|067|068|069)/.test(clean)) return 'Airtel';
+    if (/^(078|079)/.test(clean)) return 'Tigo';
+    return 'Halopesa';
 }
 
 // ==================== PROCESS PAYMENT ====================
@@ -185,8 +189,8 @@ async function processPayment(sock, chatId, m, phoneNumber, selectedItem, type, 
     const provider = detectProvider(phoneNumber);
     
     if (!phoneNumber || phoneNumber.length < 10) {
-        return await sock.sendMessage(chatId, { 
-            text: `❌ *Namba ya simu si sahihi!*\n\nTafadhali tumia namba sahihi kama:\n• *.halotel 0615944745 Gb10*\n• *.halotel 0711765335 small*` 
+        return await sock.sendMessage(chatId, {
+            text: `❌ *Namba ya simu si sahihi!*\n\nTumia namba ya simu ya Tanzania kama:\n• *.halotel 0615944745 Gb10*\n• *.halotel 0711765335 small*\n\nNamba itatambuliwa kiotomatiki na mfumo wa malipo utafuatilia ombi lako.`
         });
     }
     
@@ -206,23 +210,23 @@ async function processPayment(sock, chatId, m, phoneNumber, selectedItem, type, 
     
     // Kama AzamPay haipatikani (no credentials or error), tumia simulation
     if (!azamClient) {
-        await sock.sendMessage(chatId, { 
-            text: `⚠️ *HUDUMA YA MALIPO INAPATIKANA KWA SIMULATION MODE*\n\n📞 Namba: *${phoneNumber}*\n📦 Kifurushi: *${packageName}*\n💰 Kiasi: *TSh ${selectedItem.price.toLocaleString()}*\n\n🟡 Malipo yanachakatwa kwa simulation...\n\n✅ Kwa simulation, malipo yanakubaliwa moja kwa moja!` 
+        await sock.sendMessage(chatId, {
+            text: `⚠️ *SIMULATION MODE IMEWEZESHWA*\n\n📞 Namba: *${phoneNumber}*\n📦 Huduma: *${packageName}*\n💰 Kiasi: *${formatMoney(selectedItem.price)}*\n\n🟡 Malipo yamewekwa kwenye mfumo wa majaribio.\n✅ Utaona uthibitisho wa haraka baada ya sekunde chache.`
         });
         
         // Auto-confirm after 3 seconds
         setTimeout(async () => {
             updateOrderStatus(orderId, 'completed');
-            await sock.sendMessage(chatId, { 
-                text: `🎉 *MALIPO YAMETHIBITISHWA (SIMULATION)!*\n\nAsante *${userName}*, malipo yako ya TSh ${selectedItem.price.toLocaleString()} yamepokelewa kwa namba ${phoneNumber}.\n\n✅ Huduma yako ya *${packageName}* imewezeshwa kikamilifu!\n🆔 Order ID: ${orderId}` 
+            await sock.sendMessage(chatId, {
+                text: `🎉 *MALIPO YAMETHIBITISHWA (SIMULATION)!*\n\nAsante *${userName}*, malipo ya *${formatMoney(selectedItem.price)}* yamepokelewa kwa namba ${phoneNumber}.\n\n✅ Huduma yako ya *${packageName}* imewezeshwa kikamilifu.\n🆔 Order ID: ${orderId}`
             });
         }, 3000);
         return;
     }
     
     // Kama AzamPay ipo, tumia real payment
-    await sock.sendMessage(chatId, { 
-        text: `⏳ *Ombi la Malipo Linatayarishwa...*\n\n📞 Namba: *${phoneNumber}*\n📦 Kifurushi: *${packageName}*\n💰 Kiasi: *TSh ${selectedItem.price.toLocaleString()}*\n🏦 Mtoa Huduma: *${provider}*\n\nTafadhali angalia simu yako na uweke PIN kukamilisha malipo.` 
+    await sock.sendMessage(chatId, {
+        text: `⏳ *Ombi la malipo linatayarishwa...*\n\n📞 Namba: *${phoneNumber}*\n📦 Huduma: *${packageName}*\n💰 Kiasi: *${formatMoney(selectedItem.price)}*\n🏦 Mtoa huduma: *${provider}*\n\nTafadhali angalia simu yako na uweke PIN ili kukamilisha malipo.`
     });
     
     try {
@@ -259,8 +263,8 @@ async function processPayment(sock, chatId, m, phoneNumber, selectedItem, type, 
                     clearInterval(checkInterval);
                     updateOrderStatus(orderId, 'completed');
                     
-                    return await sock.sendMessage(chatId, { 
-                        text: `🎉 *MALIPO YAMETHIBITISHWA!*\n\nAsante *${userName}*, malipo yako ya TSh ${selectedItem.price.toLocaleString()} yamepokelewa.\n\n✅ Huduma yako ya *${packageName}* imewezeshwa kikamilifu!` 
+                    return await sock.sendMessage(chatId, {
+                        text: `🎉 *MALIPO YAMETHIBITISHWA!*\n\nAsante *${userName}*, malipo ya *${formatMoney(selectedItem.price)}* yamepokelewa kwa usahihi.\n\n✅ Huduma yako ya *${packageName}* imewezeshwa kikamilifu.`
                     });
                 }
             } catch (err) {
@@ -305,11 +309,12 @@ async function halotelCommand(sock, chatId, m, body = '') {
         if (lowerInput === '.halotel') {
             const mainButtons = [
                 { name: "quick_reply", buttonParamsJson: JSON.stringify({ display_text: "🖥️ SERVER HOSTING", id: ".halotel server" }) },
-                { name: "quick_reply", buttonParamsJson: JSON.stringify({ display_text: "📱 DATA BUNDLES", id: ".halotel data" }) }
+                { name: "quick_reply", buttonParamsJson: JSON.stringify({ display_text: "📱 DATA BUNDLES", id: ".halotel data" }) },
+                { name: "quick_reply", buttonParamsJson: JSON.stringify({ display_text: "💳 HOW TO PAY", id: ".halotel pay" }) }
             ];
             return await sendInteractiveMessage(sock, chatId, {
                 image: { url: BANNER },
-                text: `🏪 *MICKEY GLITCH STORE*\n\nMambo vipi *${userName}*! 👋\nChagua huduma unayohitaji.`,
+                text: `🏪 *MICKEY GLITCH STORE*\n\nMambo vipi *${userName}*! 👋\nChagua huduma unayohitaji au angalia mwongozo wa malipo.`,
                 footer: FOOTER,
                 interactiveButtons: mainButtons
             }, { quoted: m });
@@ -326,6 +331,12 @@ async function halotelCommand(sock, chatId, m, body = '') {
                 text: `🖥️ *CHAGUA SERVER HOSTING:*\n\n` + SERVER_PACKAGES.map(p => `▪️ *${p.name}*: TSh ${p.price} (${p.specs})`).join('\n'),
                 footer: FOOTER,
                 interactiveButtons: serverButtons
+            }, { quoted: m });
+        }
+
+        if (lowerInput === '.halotel pay') {
+            return await sock.sendMessage(chatId, {
+                text: `💳 *MWONGOZO WA MALIPO*\n\n1. Chagua kifurushi kutoka menyu ya juu.\n2. Weka namba yako ya simu ya Tanzania.\n3. Tuma amri kama: *.halotel 0711765335 small* au *.halotel 0615944745 Gb10*.\n4. Thibitisha malipo kwa PIN yako.\n\n✅ Mfumo wa malipo utaona provider na kukubali ombi lako haraka.`
             }, { quoted: m });
         }
 

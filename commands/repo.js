@@ -10,6 +10,17 @@ const CONFIG = {
     ZIP_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip'
 };
 
+async function sendSafeInteractiveMessage(sock, chatId, payload, options = {}) {
+    try {
+        return await sendInteractiveMessage(sock, chatId, payload, options);
+    } catch (error) {
+        console.warn('Repo interactive fallback used:', error?.message || error);
+        if (payload?.text) {
+            await sock.sendMessage(chatId, { text: payload.text, footer: payload.footer }, options);
+        }
+    }
+}
+
 function loadSettings() {
     const defaultSettings = { botName: '𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇', version: '3.3.0' };
     try {
@@ -46,7 +57,7 @@ async function repoCommand(sock, chatId, message) {
                          `📊 *GitHub Stats:*\n` +
                          `• ⭐ Stars: ${stats.stars}\n` +
                          `• 🔱 Forks: ${stats.forks}\n\n` +
-                         `Gusa button za chini kupata script iliyo tayari.`;
+                         `🔗 Tumia link za chini kupata source code au download ya haraka.`;
 
         // Payload safi na fupi kuzuia "payload invalid" error
         const interactiveMessage = {
@@ -84,7 +95,7 @@ async function repoCommand(sock, chatId, message) {
             ]
         };
 
-        return await sendInteractiveMessage(sock, chatId, interactiveMessage, { quoted: safeMessage });
+        return await sendSafeInteractiveMessage(sock, chatId, interactiveMessage, { quoted: safeMessage });
     } catch (error) {
         console.error("❌ Repo Error:", error);
         await sock.sendMessage(chatId, { text: `❌ Hitilafu: ${error.message}` });

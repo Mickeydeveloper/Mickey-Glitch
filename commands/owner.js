@@ -7,6 +7,17 @@ const CONFIG = {
     FOOTER: '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐'
 };
 
+async function sendSafeInteractiveMessage(sock, chatId, payload, options = {}) {
+    try {
+        return await sendInteractiveMessage(sock, chatId, payload, options);
+    } catch (error) {
+        console.warn('Owner interactive fallback used:', error?.message || error);
+        if (payload?.text) {
+            await sock.sendMessage(chatId, { text: payload.text, footer: payload.footer }, options);
+        }
+    }
+}
+
 function loadSettings() {
     const defaultSettings = {
         ownerNumber: '255612130873',
@@ -30,10 +41,10 @@ async function ownerCommand(sock, chatId, message) {
         const safeMessage = message || {};
 
         const ownerText = `👑 *${settings.botName} - OWNER INFO*\n\n` +
-                         `👨‍💻 *Dev:* ${settings.botOwner}\n` +
+                         `👨‍💻 *Developer:* ${settings.botOwner}\n` +
                          `📞 *Phone:* +${ownerNum}\n` +
                          `📧 *Email:* ${settings.botEmail}\n` +
-                         `🟢 *Status:* Active & Online`;
+                         `🟢 *Status:* Active and online for support.`;
 
         // Payload safi kabisa kuzuia authoring error
         const interactiveMessage = {
@@ -63,7 +74,7 @@ async function ownerCommand(sock, chatId, message) {
             ]
         };
 
-        return await sendInteractiveMessage(sock, chatId, interactiveMessage, { quoted: safeMessage });
+        return await sendSafeInteractiveMessage(sock, chatId, interactiveMessage, { quoted: safeMessage });
     } catch (error) {
         console.error("❌ Owner Error:", error);
         await sock.sendMessage(chatId, { text: `❌ Hitilafu: ${error.message}` });
