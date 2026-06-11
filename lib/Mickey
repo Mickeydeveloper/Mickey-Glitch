@@ -1,1 +1,3 @@
-Mickey
+// This file exists to support legacy imports of lib/Mickey
+module.exports = require('./Mickey.js');
+
