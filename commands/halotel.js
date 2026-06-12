@@ -1,11 +1,11 @@
 /**
- * halotel.js - Mickey Glitch Business AI with AzamPay Integration
- * Fixed: No API Key required - uses only App Name, Client ID, Client Secret
+ * halotel.js - Mickey Glitch Business AI with AzamPay Integration (LIVE & PRODUCTION READY)
  */
 
 const { sendInteractiveMessage } = require('gifted-btns');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios'); // Imeletwa juu kwa matumizi ya global scope
 const settings = require('./settings');
 
 const CONFIG = settings.CONFIG || {};
@@ -16,11 +16,20 @@ function formatMoney(amount) {
     return `TSh ${Number(amount || 0).toLocaleString('en-US')}`;
 }
 
-// AzamPay credentials - NO API KEY NEEDED
+// AzamPay credentials
 const AZAMPAY_ENV = CONFIG.AZAM_ENV?.toString().toUpperCase() === 'PRODUCTION' ? 'LIVE' : 'SANDBOX';
 const AZAM_APP_NAME = CONFIG.AZAM_APP_NAME || 'MickeyBiz';
 const AZAM_CLIENT_ID = CONFIG.AZAM_CLIENT_ID || '';
 const AZAM_CLIENT_SECRET = CONFIG.AZAM_CLIENT_SECRET || '';
+
+// Base URLs kulingana na Mazingira (Environment)
+const AUTH_URL = AZAMPAY_ENV === 'LIVE'
+    ? 'https://authenticator.azampay.co.tz/app/register'
+    : 'https://authenticator-sandbox.azampay.co.tz/app/register';
+
+const BASE_API_URL = AZAMPAY_ENV === 'LIVE'
+    ? 'https://api.azampay.co.tz'
+    : 'https://sandbox.azampay.co.tz';
 
 // Database
 const ORDERS_FILE = path.join(__dirname, '..', 'data', 'halotel_orders.json');
@@ -55,101 +64,66 @@ function updateOrderStatus(orderId, status) {
     }
 }
 
-// ==================== AZAMPAY WITHOUT API KEY ====================
+// ==================== LIVE AZAMPAY CLIENT ====================
 async function getAzamPayToken() {
-    // Kama hakuna client credentials, tumia simulation mode
     if (!AZAM_CLIENT_ID || !AZAM_CLIENT_SECRET) {
-        console.log("⚠️ AzamPay credentials missing - using simulation mode");
+        console.error("❌ AzamPay Error: Client ID au Client Secret haijapatikana kwenye config.");
         return null;
     }
-    
-    const axios = require('axios');
-    
+
     try {
-        const response = await axios.post(
-            AZAMPAY_ENV === 'LIVE' 
-                ? 'https://authenticator-sandbox.azampay.co.tz/app/register'  // Sandbox
-                : 'https://authenticator-sandbox.azampay.co.tz/app/register', // Same for sandbox
-            {
-                appName: AZAM_APP_NAME,
-                clientId: AZAM_CLIENT_ID,
-                clientSecret: AZAM_CLIENT_SECRET
-            },
-            {
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                timeout: 30000
-            }
-        );
-        
+        const response = await axios.post(AUTH_URL, {
+            appName: AZAM_APP_NAME,
+            clientId: AZAM_CLIENT_ID,
+            clientSecret: AZAM_CLIENT_SECRET
+        }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 15000
+        });
+
         if (response.data && response.data.success === true) {
-            return {
-                success: true,
-                data: response.data,
-                token: response.data.data?.apiKey || response.data.apiKey
-            };
+            return response.data.data?.apiKey || response.data.apiKey || null;
         }
-        
-        console.log("AzamPay response:", response.data);
         return null;
-        
     } catch (error) {
-        console.error("AzamPay token error:", error.response?.data || error.message);
+        console.error("AzamPay Token Auth Error:", error.response?.data || error.message);
         return null;
     }
 }
 
 async function createAzamPayClient() {
-    // Kama hakuna credentials, return null (tutatumia simulation)
-    if (!AZAM_CLIENT_ID || !AZAM_CLIENT_SECRET) {
-        return null;
-    }
-    
-    const tokenData = await getAzamPayToken();
-    if (!tokenData || !tokenData.success) {
-        console.log("⚠️ Failed to get AzamPay token - using simulation");
-        return null;
-    }
-    
+    const token = await getAzamPayToken();
+    if (!token) return null;
+
     return {
-        token: tokenData.token,
         mnoCheckout: async (params) => {
-            const axios = require('axios');
             try {
-                const response = await axios.post(
-                    AZAMPAY_ENV === 'LIVE'
-                        ? 'https://sandbox.azampay.co.tz/api/v1/azampay/mno/checkout'  // Sandbox endpoint
-                        : 'https://sandbox.azampay.co.tz/api/v1/azampay/mno/checkout',
-                    {
-                        accountNumber: params.accountNumber,
-                        amount: params.amount,
-                        currency: params.currency || 'TZS',
-                        externalId: params.externalId,
-                        provider: params.provider
+                const response = await axios.post(`${BASE_API_URL}/api/v1/azampay/mno/checkout`, {
+                    accountNumber: params.accountNumber,
+                    amount: params.amount,
+                    currency: params.currency || 'TZS',
+                    externalId: params.externalId,
+                    provider: params.provider
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
                     },
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${this.token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    }
-                );
+                    timeout: 20000
+                });
                 return { success: true, data: response.data };
             } catch (err) {
-                console.error("mnoCheckout error:", err.response?.data || err.message);
+                console.error("mnoCheckout Error:", err.response?.data || err.message);
                 return { success: false, message: err.response?.data?.message || err.message };
             }
         },
         transactionStatus: async (params) => {
-            const axios = require('axios');
             try {
                 const response = await axios.get(
-                    `${AZAMPAY_ENV === 'LIVE' ? 'https://sandbox.azampay.co.tz' : 'https://sandbox.azampay.co.tz'}/api/v1/azampay/transaction/status?reference=${params.reference}&bankName=${params.bankName}`,
+                    `${BASE_API_URL}/api/v1/azampay/transaction/status?reference=${params.reference}&bankName=${params.bankName}`,
                     {
-                        headers: {
-                            'Authorization': `Bearer ${this.token}`
-                        }
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        timeout: 10000
                     }
                 );
                 return { status: response.data?.status || 'PENDING', data: response.data };
@@ -160,7 +134,6 @@ async function createAzamPayClient() {
     };
 }
 
-// Extract phone number
 function extractPhoneNumber(input, userJid) {
     const phoneMatch = input.match(/(0[0-9]{9})|(255[0-9]{9})/);
     if (phoneMatch) {
@@ -168,7 +141,7 @@ function extractPhoneNumber(input, userJid) {
         if (phone.startsWith('255')) phone = '0' + phone.slice(3);
         return phone;
     }
-    
+
     let fallbackNumber = userJid.split('@')[0].replace(/[^0-9]/g, '');
     if (fallbackNumber.startsWith('255')) fallbackNumber = '0' + fallbackNumber.slice(3);
     return fallbackNumber;
@@ -177,23 +150,32 @@ function extractPhoneNumber(input, userJid) {
 function detectProvider(phoneNumber) {
     const clean = String(phoneNumber || '').replace(/\D/g, '');
     if (/^(061|062)/.test(clean)) return 'Halopesa';
-    if (/^(071|072|074|075|076)/.test(clean)) return 'Mpesa';
-    if (/^(065|066|067|068|069)/.test(clean)) return 'Airtel';
-    if (/^(078|079)/.test(clean)) return 'Tigo';
+    if (/^(074|075|076|067)/.test(clean)) return 'Mpesa'; // Mpesa / Vodacom prefixes
+    if (/^(068|069|078|079)/.test(clean)) return 'Airtel';
+    if (/^(065|066|071|072)/.test(clean)) return 'Tigo';
     return 'Halopesa';
 }
 
-// ==================== PROCESS PAYMENT ====================
+// ==================== PROCESS LIVE PAYMENT ====================
 async function processPayment(sock, chatId, m, phoneNumber, selectedItem, type, packageName, userName) {
     const orderId = 'ORD' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000);
     const provider = detectProvider(phoneNumber);
-    
+
     if (!phoneNumber || phoneNumber.length < 10) {
         return await sock.sendMessage(chatId, {
-            text: `❌ *Namba ya simu si sahihi!*\n\nTumia namba ya simu ya Tanzania kama:\n• *.halotel 0615944745 Gb10*\n• *.halotel 0711765335 small*\n\nNamba itatambuliwa kiotomatiki na mfumo wa malipo utafuatilia ombi lako.`
+            text: `❌ *Namba ya simu si sahihi!*\n\nTumia namba halali kama:\n• *.halotel 0615944745 Gb10*\n• *.halotel 0711765335 small*`
         });
     }
-    
+
+    // Jaribu kuunganisha AzamPay Client ya Live
+    const azamClient = await createAzamPayClient();
+
+    if (!azamClient) {
+        return await sock.sendMessage(chatId, {
+            text: `❌ *Hitilafu ya Mfumo wa Malipo (AzamPay)*\n\nTumeshindwa kuanzisha muunganisho wa malipo kwa sasa. Tafadhali thibitisha Client ID/Secret zako kwenye faili la mipangilio (settings.js).`
+        });
+    }
+
     saveOrder({ 
         id: orderId, 
         userJid: m.key.participant || m.key.remoteJid,
@@ -204,31 +186,11 @@ async function processPayment(sock, chatId, m, phoneNumber, selectedItem, type, 
         status: 'pending', 
         createdAt: new Date().toISOString() 
     });
-    
-    // Jaribu kuunda AzamPay client
-    const azamClient = await createAzamPayClient();
-    
-    // Kama AzamPay haipatikani (no credentials or error), tumia simulation
-    if (!azamClient) {
-        await sock.sendMessage(chatId, {
-            text: `⚠️ *SIMULATION MODE IMEWEZESHWA*\n\n📞 Namba: *${phoneNumber}*\n📦 Huduma: *${packageName}*\n💰 Kiasi: *${formatMoney(selectedItem.price)}*\n\n🟡 Malipo yamewekwa kwenye mfumo wa majaribio.\n✅ Utaona uthibitisho wa haraka baada ya sekunde chache.`
-        });
-        
-        // Auto-confirm after 3 seconds
-        setTimeout(async () => {
-            updateOrderStatus(orderId, 'completed');
-            await sock.sendMessage(chatId, {
-                text: `🎉 *MALIPO YAMETHIBITISHWA (SIMULATION)!*\n\nAsante *${userName}*, malipo ya *${formatMoney(selectedItem.price)}* yamepokelewa kwa namba ${phoneNumber}.\n\n✅ Huduma yako ya *${packageName}* imewezeshwa kikamilifu.\n🆔 Order ID: ${orderId}`
-            });
-        }, 3000);
-        return;
-    }
-    
-    // Kama AzamPay ipo, tumia real payment
+
     await sock.sendMessage(chatId, {
-        text: `⏳ *Ombi la malipo linatayarishwa...*\n\n📞 Namba: *${phoneNumber}*\n📦 Huduma: *${packageName}*\n💰 Kiasi: *${formatMoney(selectedItem.price)}*\n🏦 Mtoa huduma: *${provider}*\n\nTafadhali angalia simu yako na uweke PIN ili kukamilisha malipo.`
+        text: `⏳ *Ombi la malipo linatumwa...*\n\n📞 Namba: *${phoneNumber}*\n📦 Huduma: *${packageName}*\n💰 Kiasi: *${formatMoney(selectedItem.price)}*\n🏦 Mtandao: *${provider}*\n\n👉 *ANGALIA SIMU YAKO SASA hivi kuweka PIN ya malipo.*`
     });
-    
+
     try {
         const paymentResponse = await azamClient.mnoCheckout({
             accountNumber: phoneNumber,
@@ -237,54 +199,61 @@ async function processPayment(sock, chatId, m, phoneNumber, selectedItem, type, 
             externalId: orderId,
             provider: provider
         });
-        
+
         if (!paymentResponse || paymentResponse.success === false) {
             updateOrderStatus(orderId, 'failed');
             return await sock.sendMessage(chatId, { 
-                text: `❌ *Ombi la Malipo Limeshindwa*\n\n${paymentResponse?.message || 'Jaribu tena baada ya dakika chache.'}` 
+                text: `❌ *Ombi la Malipo Limeshindwa*\n\nSababu: ${paymentResponse?.message || 'Mtandao una shida, jaribu tena.'}` 
             });
         }
-        
-        // Poll for payment confirmation
+
+        // Kuanza kufuatilia (Polling) muamala kwa sekunde 60 (checks 12 kila baada ya sekunde 5)
         let checks = 0;
         let isPaid = false;
-        
+
         const checkInterval = setInterval(async () => {
             checks++;
-            
+
             try {
                 const statusCheck = await azamClient.transactionStatus({ 
                     reference: orderId, 
                     bankName: provider 
                 });
-                
+
                 if (statusCheck && statusCheck.status === 'SUCCESS') {
                     isPaid = true;
                     clearInterval(checkInterval);
                     updateOrderStatus(orderId, 'completed');
-                    
+
                     return await sock.sendMessage(chatId, {
-                        text: `🎉 *MALIPO YAMETHIBITISHWA!*\n\nAsante *${userName}*, malipo ya *${formatMoney(selectedItem.price)}* yamepokelewa kwa usahihi.\n\n✅ Huduma yako ya *${packageName}* imewezeshwa kikamilifu.`
+                        text: `🎉 *MALIPO YAMETHIBITISHWA!*\n\nAsante *${userName}*, malipo ya *${formatMoney(selectedItem.price)}* yamepokelewa kikamilifu.\n\n✅ Huduma ya *${packageName}* imewezeshwa tayari.`
+                    });
+                } else if (statusCheck && (statusCheck.status === 'FAILED' || statusCheck.status === 'CANCELED')) {
+                    isPaid = false;
+                    clearInterval(checkInterval);
+                    updateOrderStatus(orderId, 'failed');
+                    return await sock.sendMessage(chatId, {
+                        text: `❌ *Malipo Yamekataliwa!*\n\nMuamala umefeli au umeghairiwa kutoka kwenye simu yako.`
                     });
                 }
             } catch (err) {
-                // Still waiting
+                // Endelea kusubiri PIN iwekwe
             }
-            
+
             if (checks >= 12 && !isPaid) {
                 clearInterval(checkInterval);
                 updateOrderStatus(orderId, 'timeout');
                 return await sock.sendMessage(chatId, { 
-                    text: `⏱️ *Muda wa Malipo Umeisha*\n\nOmbi ${orderId} limeghairiwa. Tafadhali tuma ombi jipya.` 
+                    text: `⏱️ *Muda wa Kuweka PIN Umeisha*\n\nOmbi la malipo ${orderId} limeghairiwa kwa sababu umechelewa kuweka PIN.` 
                 });
             }
         }, 5000);
-        
+
     } catch (error) {
-        console.error("Payment error:", error);
+        console.error("Payment Process Error:", error);
         updateOrderStatus(orderId, 'error');
         await sock.sendMessage(chatId, { 
-            text: `❌ *Hitilafu ya Malipo*\n\nTumeshindwa kuchakata malipo yako. Jaribu tena.` 
+            text: `❌ *Hitilafu ya Malipo*\n\nTumeshindwa kukamilisha muamala wako. Jaribu tena.` 
         });
     }
 }
@@ -304,7 +273,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
         ).trim();
 
         const lowerInput = input.toLowerCase();
-        
+
         // Menu kuu
         if (lowerInput === '.halotel') {
             const mainButtons = [
@@ -336,7 +305,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
 
         if (lowerInput === '.halotel pay') {
             return await sock.sendMessage(chatId, {
-                text: `💳 *MWONGOZO WA MALIPO*\n\n1. Chagua kifurushi kutoka menyu ya juu.\n2. Weka namba yako ya simu ya Tanzania.\n3. Tuma amri kama: *.halotel 0711765335 small* au *.halotel 0615944745 Gb10*.\n4. Thibitisha malipo kwa PIN yako.\n\n✅ Mfumo wa malipo utaona provider na kukubali ombi lako haraka.`
+                text: `💳 *MWONGOZO WA MALIPO YA LIVE*\n\n1. Chagua kifurushi chako.\n2. Hakikisha simu yako ipo karibu.\n3. Tuma amri: *.halotel [Namba] [Kifurushi]*\n   Mfano: *.halotel 0711765335 small*\n4. Push Notification itatokea kwenye simu yako ya mkononi, weka PIN yako kukamilisha malipo.`
             }, { quoted: m });
         }
 
@@ -365,8 +334,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
             let selectedItem = null;
             let type = null;
             let packageName = null;
-            
-            // Check for server package
+
             const serverMatch = input.toLowerCase().match(/(small|medium|large)/);
             if (serverMatch) {
                 const serverName = serverMatch[1].toUpperCase();
@@ -376,8 +344,7 @@ async function halotelCommand(sock, chatId, m, body = '') {
                     packageName = `${selectedItem.name} Server`;
                 }
             }
-            
-            // Check for data package
+
             const dataMatch = input.match(/[Gg][Bb]\s*(\d+)/);
             if (dataMatch && !selectedItem) {
                 const gb = parseInt(dataMatch[1]);
@@ -387,22 +354,22 @@ async function halotelCommand(sock, chatId, m, body = '') {
                     packageName = `${selectedItem.gb}GB Data`;
                 }
             }
-            
+
             if (!selectedItem) {
                 return await sock.sendMessage(chatId, { 
-                    text: `⚠️ *Tafadhali andika kwa usahihi*\n\nMfano:\n• *.halotel 0711765335 small*\n• *.halotel 0711765335 medium*\n• *.halotel 0711765335 large*\n• *.halotel 0711765335 Gb10*` 
+                    text: `⚠️ *Tafadhali andika kwa usahihi*\n\nMfano:\n• *.halotel 0711765335 small*\n• *.halotel 0711765335 Gb10*` 
                 });
             }
-            
+
             await processPayment(sock, chatId, m, customerPhone, selectedItem, type, packageName, userName);
             return;
         }
-        
+
         // Handle button clicks
         if (lowerInput.startsWith('buy_server_') || lowerInput.startsWith('buy_data_')) {
             let selectedItem, type, packageName;
             let customerPhone = extractPhoneNumber('', userJid);
-            
+
             if (lowerInput.startsWith('buy_server_')) {
                 type = 'server';
                 selectedItem = SERVER_PACKAGES.find(pkg => pkg.id === input.replace('buy_server_', ''));
@@ -412,15 +379,15 @@ async function halotelCommand(sock, chatId, m, body = '') {
                 selectedItem = DATA_PACKAGES.find(p => p.gb === parseInt(input.replace('buy_data_', '')));
                 packageName = `${selectedItem?.gb}GB Data`;
             }
-            
+
             if (!selectedItem) {
                 return await sock.sendMessage(chatId, { text: "❌ Kifurushi hakikupatikana!" });
             }
-            
+
             await processPayment(sock, chatId, m, customerPhone, selectedItem, type, packageName, userName);
             return;
         }
-        
+
     } catch (e) {
         console.error("Fatal Error:", e);
         await sock.sendMessage(chatId, { text: "❌ Hitilafu ya mfumo. Jaribu tena." });
