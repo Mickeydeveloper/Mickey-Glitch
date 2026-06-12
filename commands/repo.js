@@ -16,7 +16,8 @@ async function sendSafeInteractiveMessage(sock, chatId, payload, options = {}) {
     } catch (error) {
         console.warn('Repo interactive fallback used:', error?.message || error);
         if (payload?.text) {
-            await sock.sendMessage(chatId, { text: payload.text, footer: payload.footer }, options);
+            const fallbackOptions = options.quoted ? { quoted: options.quoted } : {};
+            await sock.sendMessage(chatId, { text: payload.text, footer: payload.footer }, fallbackOptions);
         }
     }
 }
@@ -49,7 +50,6 @@ async function repoCommand(sock, chatId, message) {
     try {
         const settings = loadSettings();
         const stats = await getRepoStats();
-        const safeMessage = message || {};
 
         const repoText = `📂 *${settings.botName} - SCRIPT INFO*\n\n` +
                          `🤖 *Bot:* ${settings.botName}\n` +
@@ -59,7 +59,6 @@ async function repoCommand(sock, chatId, message) {
                          `• 🔱 Forks: ${stats.forks}\n\n` +
                          `🔗 Tumia link za chini kupata source code au download ya haraka.`;
 
-        // Payload safi na fupi kuzuia "payload invalid" error
         const interactiveMessage = {
             text: repoText,
             footer: CONFIG.FOOTER,
@@ -71,16 +70,16 @@ async function repoCommand(sock, chatId, message) {
                 {
                     name: "cta_copy",
                     buttonParamsJson: JSON.stringify({
-                        display_text: "📋 COPY REPO LINK",
-                        id: "cp_link",
+                        display_text: "📋 COPY LINK",
+                        id: "copy_repo_link",
                         copy_text: CONFIG.REPO_URL
                     })
                 },
                 {
                     name: "cta_url",
                     buttonParamsJson: JSON.stringify({
-                        display_text: "🔗 OPEN GITHUB",
-                        id: "op_git",
+                        display_text: "🌐 VISIT REPO",
+                        id: "visit_repo_url",
                         url: CONFIG.REPO_URL
                     })
                 },
@@ -95,7 +94,13 @@ async function repoCommand(sock, chatId, message) {
             ]
         };
 
-        return await sendSafeInteractiveMessage(sock, chatId, interactiveMessage, { quoted: safeMessage });
+        // Kuzuia undefined error ya 'fromMe'
+        const sendOptions = {};
+        if (message && message.key) {
+            sendOptions.quoted = message;
+        }
+
+        return await sendSafeInteractiveMessage(sock, chatId, interactiveMessage, sendOptions);
     } catch (error) {
         console.error("❌ Repo Error:", error);
         await sock.sendMessage(chatId, { text: `❌ Hitilafu: ${error.message}` });
