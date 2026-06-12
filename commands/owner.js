@@ -13,7 +13,9 @@ async function sendSafeInteractiveMessage(sock, chatId, payload, options = {}) {
     } catch (error) {
         console.warn('Owner interactive fallback used:', error?.message || error);
         if (payload?.text) {
-            await sock.sendMessage(chatId, { text: payload.text, footer: payload.footer }, options);
+            // Hakikisha options hazina vitu vilivyoharibika
+            const fallbackOptions = options.quoted ? { quoted: options.quoted } : {};
+            await sock.sendMessage(chatId, { text: payload.text, footer: payload.footer }, fallbackOptions);
         }
     }
 }
@@ -38,7 +40,6 @@ async function ownerCommand(sock, chatId, message) {
     try {
         const settings = loadSettings();
         const ownerNum = settings.ownerNumber.replace(/[^\d]/g, '');
-        const safeMessage = message || {};
 
         const ownerText = `👑 *${settings.botName} - OWNER INFO*\n\n` +
                          `👨‍💻 *Developer:* ${settings.botOwner}\n` +
@@ -46,7 +47,6 @@ async function ownerCommand(sock, chatId, message) {
                          `📧 *Email:* ${settings.botEmail}\n` +
                          `🟢 *Status:* Active and online for support.`;
 
-        // Payload safi kabisa kuzuia authoring error
         const interactiveMessage = {
             text: ownerText,
             footer: CONFIG.FOOTER,
@@ -74,7 +74,13 @@ async function ownerCommand(sock, chatId, message) {
             ]
         };
 
-        return await sendSafeInteractiveMessage(sock, chatId, interactiveMessage, { quoted: safeMessage });
+        // Maboresho hapa: weka quoted mssg tu ikiwa message ina muundo sahihi (valid structure)
+        const sendOptions = {};
+        if (message && message.key) {
+            sendOptions.quoted = message;
+        }
+
+        return await sendSafeInteractiveMessage(sock, chatId, interactiveMessage, sendOptions);
     } catch (error) {
         console.error("❌ Owner Error:", error);
         await sock.sendMessage(chatId, { text: `❌ Hitilafu: ${error.message}` });
