@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { sendInteractiveMessage } = require('gifted-btns'); // Imebaki kama ulivyoomba
+const { sendInteractiveMessage } = require('gifted-btns');
 
 const CONFIG = {
     FOOTER: '👑 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ • 𝟸𝟶𝟸𝟼 👑',
@@ -10,22 +10,6 @@ const CONFIG = {
     ZIP_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip'
 };
 
-// Kazi ya kutuma ujumbe kwa usalama (Safe Send)
-async function sendSafeInteractiveMessage(sock, chatId, payload, options = {}) {
-    try {
-        return await sendInteractiveMessage(sock, chatId, payload, options);
-    } catch (error) {
-        console.warn('⚠️ Fallback ya repo imetumika:', error?.message || error);
-        if (payload?.text) {
-            const fallbackOptions = options.quoted ? { quoted: options.quoted } : {};
-            await sock.sendMessage(chatId, { 
-                text: `${payload.text}\n\n_${payload.footer}_` 
-            }, fallbackOptions);
-        }
-    }
-}
-
-// Kupakia mipangilio (Settings)
 function loadSettings() {
     const defaultSettings = { botName: 'ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ', version: '3.3.0' };
     try {
@@ -37,7 +21,6 @@ function loadSettings() {
     return defaultSettings;
 }
 
-// Kupata takwimu za GitHub (Stars & Forks)
 async function getRepoStats() {
     try {
         const res = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch', {
@@ -48,7 +31,7 @@ async function getRepoStats() {
             return { stars: res.data.stargazers_count || 0, forks: res.data.forks_count || 0 };
         }
     } catch (e) {}
-    return { stars: 25, forks: 60 }; // Default stats zikifeli
+    return { stars: 38, forks: 85 };
 }
 
 async function repoCommand(sock, chatId, message) {
@@ -56,63 +39,58 @@ async function repoCommand(sock, chatId, message) {
         const settings = loadSettings();
         const stats = await getRepoStats();
 
-        // 🌟 MUONEKANO MPYA NA WA KUVUTIA (Fancy Text Style)
         const repoText = `✨ *${settings.botName.toUpperCase()} - SCRIPT INFO* ✨\n\n` +
-                         `📌 *Bᴏᴛ Nᴀᴍᴇ :* ${settings.botName}\n` +
+                         `🛸 *Bᴏᴛ Nᴀᴍᴇ :* ${settings.botName}\n` +
                          `📦 *Vᴇʀsɪᴏɴ  :* ${settings.version}\n` +
-                         `🛸 *Mᴏᴅᴇ     :* Public\n\n` +
+                         `💎 *Mᴏᴅᴇ     :* Public\n\n` +
                          `📊 *GɪᴛHᴜʙ Sᴛᴀᴛs:*\n` +
                          `│  ⭐ *Sᴛᴀʀs :* ${stats.stars}\n` +
                          `│  🔱 *Fᴏʀᴋs :* ${stats.forks}\n` +
                          `└───────────────┈⊷\n\n` +
                          `💬 _Gusa button zilizopo chini kupata source code au kudownload script kwa haraka._`;
 
-        // Muundo thabiti wa Interactive Message (V5/V6 compatible)
         const interactiveMessage = {
             text: repoText,
             footer: CONFIG.FOOTER,
             header: {
                 hasMediaAttachment: true,
-                imageMessage: { url: CONFIG.BANNER } // Banner picha
+                imageMessage: { url: CONFIG.BANNER }
             },
-            nativeFlowMessage: {
-                buttons: [
-                    {
-                        name: "cta_copy",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📋 COPY REPO LINK",
-                            id: "copy_repo_link",
-                            copy_text: CONFIG.REPO_URL
-                        })
-                    },
-                    {
-                        name: "cta_url",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "🌐 VISIT REPO",
-                            url: CONFIG.REPO_URL
-                        })
-                    },
-                    {
-                        name: "cta_url",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📦 DOWNLOAD ZIP",
-                            url: CONFIG.ZIP_URL
-                        })
-                    }
-                ]
-            }
+            // Muundo thabiti wa kutuma button kupitia gifted-btns npm
+            interactiveButtons: [
+                {
+                    name: "cta_copy",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "📋 COPY REPO LINK",
+                        id: "copy_repo_link",
+                        copy_text: CONFIG.REPO_URL
+                    })
+                },
+                {
+                    name: "cta_url",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "🌐 VISIT REPO",
+                        id: "visit_repo_url",
+                        url: CONFIG.REPO_URL
+                    })
+                },
+                {
+                    name: "cta_url",
+                    buttonParamsJson: JSON.stringify({
+                        display_text: "📦 DOWNLOAD ZIP",
+                        id: "dl_zip",
+                        url: CONFIG.ZIP_URL
+                    })
+                }
+            ]
         };
 
-        // Kuzuia undefined error ya 'quoted'
-        const sendOptions = {};
-        if (message && message.key) {
-            sendOptions.quoted = message;
-        }
+        const sendOptions = message?.key ? { quoted: message } : {};
+        return await sendInteractiveMessage(sock, chatId, interactiveMessage, sendOptions);
 
-        return await sendSafeInteractiveMessage(sock, chatId, interactiveMessage, sendOptions);
     } catch (error) {
-        console.error("❌ Repo Command Error:", error);
-        await sock.sendMessage(chatId, { text: `❌ Hitilafu: ${error.message}` });
+        console.error("❌ Repo Error:", error);
+        await sock.sendMessage(chatId, { text: `❌ Hitilafu ya Repo: ${error.message}` });
     }
 }
 
