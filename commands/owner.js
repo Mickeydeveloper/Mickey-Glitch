@@ -1,4 +1,4 @@
-const { generateWAMessageFromContent, proto, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
+const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 const CONFIG = {
     FOOTER: '👑 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ • 𝟸𝟶𝟸𝟼 👑',
@@ -12,7 +12,6 @@ const CONFIG = {
 
 async function ownerCommand(sock, chatId, message) {
     try {
-        // Data za kadi 3 zenye taarifa tofauti za kuvutia
         const cards = [
             { 
                 title: "👑 ᴅᴇᴠᴇʟᴏᴘᴇʀ ᴘʀᴏғɪʟᴇ", 
@@ -26,32 +25,32 @@ async function ownerCommand(sock, chatId, message) {
             },
             { 
                 title: "📞 ᴄᴏɴᴛᴀᴄᴛ & sᴜᴘᴘᴏʀᴛ", 
-                text: "Unahitaji msaada, script maalum (custom bot), au unataka kufanya biashara? Bofya kitufe cha 'CALL OWNER' hapo chini ili uwasiliane nami moja kwa moja.", 
+                text: "Unahitaji msaada, script maalum (custom bot), au unataka kufanya biashara? Bofya kitufe cha 'CALL OWNER' hapo chini.", 
                 image: CONFIG.IMAGES[2] 
             }
         ];
 
         let cardsPayload = [];
         
-        // Kutayarisha na ku-upload kila picha kwenye seva za WhatsApp
         for (const card of cards) {
             const media = await prepareWAMessageMedia({ image: { url: card.image } }, { upload: sock.waUploadToServer });
             
+            // Tumeondoa kabisa ".create" na kutumia Plain Object
             cardsPayload.push({
-                header: proto.Message.InteractiveMessage.Header.create({
+                header: {
                     title: card.title,
                     hasMediaAttachment: true,
                     imageMessage: media.imageMessage
-                }),
-                body: proto.Message.InteractiveMessage.Body.create({ text: card.text }),
-                footer: proto.Message.InteractiveMessage.Footer.create({ text: CONFIG.FOOTER }),
-                nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+                },
+                body: { text: card.text },
+                footer: { text: CONFIG.FOOTER },
+                nativeFlowMessage: {
                     buttons: [
                         {
                             name: "cta_call",
                             buttonParamsJson: JSON.stringify({
                                 display_text: "📞 CALL OWNER",
-                                phone_number: `+${CONFIG.OWNER_PHONE}`
+                                phone_number: CONFIG.OWNER_PHONE
                             })
                         },
                         {
@@ -62,25 +61,23 @@ async function ownerCommand(sock, chatId, message) {
                             })
                         }
                     ]
-                })
+                }
             });
         }
 
-        // Kuunda ujumbe mkuu wa Carousel
         let msg = generateWAMessageFromContent(chatId, {
             viewOnceMessage: {
                 message: {
-                    interactiveMessage: proto.Message.InteractiveMessage.create({
-                        body: proto.Message.InteractiveMessage.Body.create({ text: "✨ *ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴏᴡɴᴇʀ ᴄᴀʀᴏᴜsᴇʟ* ✨\n\n_Gusa na uteleze (slide) kushoto kuona kadi zote za taarifa._" }),
-                        carouselMessage: proto.Message.CarouselMessage.create({
+                    interactiveMessage: {
+                        body: { text: "✨ *ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴏᴡɴᴇʀ ᴄᴀʀᴏᴜsᴇʟ* ✨\n\n_Gusa na uteleze (slide) kushoto kuona kadi zote._" },
+                        carouselMessage: {
                             cards: cardsPayload
-                        })
-                    })
+                        }
+                    }
                 }
             }
         }, { quoted: message });
 
-        // Kutuma ujumbe moja kwa moja kwa relayMessage ili usikwame
         return await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
 
     } catch (error) {
