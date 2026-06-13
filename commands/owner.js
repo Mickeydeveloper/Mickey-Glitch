@@ -1,4 +1,4 @@
-const { generateWAMessageFromContent, proto } = require('@whiskeysockets/baileys');
+const { generateWAMessageFromContent, proto, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 const CONFIG = {
     FOOTER: '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐',
@@ -13,27 +13,16 @@ const CONFIG = {
 async function ownerCommand(sock, chatId, message) {
     try {
         const cards = [
-            {
-                title: "👨‍💻 Developer Profile",
-                text: "Mimi ni Mickey, mwanzilishi wa Mickey Glitch. Napenda teknolojia na kutengeneza bots.",
-                image: CONFIG.IMAGES[0]
-            },
-            {
-                title: "🚀 Professional Skills",
-                text: "Nabobea katika Node.js, WhatsApp Automation, na System Security. Karibu kwa huduma.",
-                image: CONFIG.IMAGES[1]
-            },
-            {
-                title: "📞 Contact Support",
-                text: "Unahitaji msaada au biashara? Bofya kitufe hapo chini ili unipigie simu moja kwa moja.",
-                image: CONFIG.IMAGES[2]
-            }
+            { title: "👨‍💻 Developer Profile", text: "Mimi ni Mickey, mwanzilishi wa Mickey Glitch.", image: CONFIG.IMAGES[0] },
+            { title: "🚀 Professional Skills", text: "Nabobea katika Node.js na WhatsApp Automation.", image: CONFIG.IMAGES[1] },
+            { title: "📞 Contact Support", text: "Bofya kitufe hapo chini ili unipigie simu.", image: CONFIG.IMAGES[2] }
         ];
 
-        // Kutayarisha kila kadi moja baada ya nyingine
         let cardsPayload = [];
+        
         for (const card of cards) {
-            const media = await sock.prepareMessageMedia({ image: { url: card.image } }, { upload: sock.waUploadToServer });
+            // Njia sahihi ya kuandaa media kwenye Baileys mpya
+            const media = await prepareWAMessageMedia({ image: { url: card.image } }, { upload: sock.waUploadToServer });
             
             cardsPayload.push({
                 header: proto.Message.InteractiveMessage.Header.create({
@@ -49,7 +38,7 @@ async function ownerCommand(sock, chatId, message) {
                             name: "cta_call",
                             buttonParamsJson: JSON.stringify({
                                 display_text: "📞 CALL OWNER",
-                                phone_number: CONFIG.OWNER_PHONE
+                                phone_number: `+${CONFIG.OWNER_PHONE}`
                             })
                         },
                         {
@@ -64,7 +53,6 @@ async function ownerCommand(sock, chatId, message) {
             });
         }
 
-        // Kuunganisha kadi zote kwenye Carousel imara
         let msg = generateWAMessageFromContent(chatId, {
             viewOnceMessage: {
                 message: {
