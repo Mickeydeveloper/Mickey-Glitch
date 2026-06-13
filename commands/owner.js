@@ -1,7 +1,7 @@
 const { generateWAMessageFromContent, proto, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 const CONFIG = {
-    FOOTER: '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐',
+    FOOTER: '👑 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ • 𝟸𝟶𝟸𝟼 👑',
     OWNER_PHONE: '255615944741',
     IMAGES: [
         'https://files.catbox.moe/h85xpq.jpg',
@@ -12,16 +12,29 @@ const CONFIG = {
 
 async function ownerCommand(sock, chatId, message) {
     try {
+        // Data za kadi 3 zenye taarifa tofauti za kuvutia
         const cards = [
-            { title: "👨‍💻 Developer Profile", text: "Mimi ni Mickey, mwanzilishi wa Mickey Glitch.", image: CONFIG.IMAGES[0] },
-            { title: "🚀 Professional Skills", text: "Nabobea katika Node.js na WhatsApp Automation.", image: CONFIG.IMAGES[1] },
-            { title: "📞 Contact Support", text: "Bofya kitufe hapo chini ili unipigie simu.", image: CONFIG.IMAGES[2] }
+            { 
+                title: "👑 ᴅᴇᴠᴇʟᴏᴘᴇʀ ᴘʀᴏғɪʟᴇ", 
+                text: "Mimi ni Mickey Developer, mtengenezaji mkuu wa mifumo na WhatsApp bots chini ya jina Mickey Glitch. Karibu kwenye ulimwengu wa teknolojia ya kisasa!", 
+                image: CONFIG.IMAGES[0] 
+            },
+            { 
+                title: "🚀 sᴘᴇᴄɪᴀʟ sᴋɪʟʟs", 
+                text: "Nabobea katika lugha ya JavaScript (Node.js), usalama wa mifumo (Cybersecurity), na kutatua matatizo (Debugging). Kila script hapa imetengenezwa kwa umakini mkubwa.", 
+                image: CONFIG.IMAGES[1] 
+            },
+            { 
+                title: "📞 ᴄᴏɴᴛᴀᴄᴛ & sᴜᴘᴘᴏʀᴛ", 
+                text: "Unahitaji msaada, script maalum (custom bot), au unataka kufanya biashara? Bofya kitufe cha 'CALL OWNER' hapo chini ili uwasiliane nami moja kwa moja.", 
+                image: CONFIG.IMAGES[2] 
+            }
         ];
 
         let cardsPayload = [];
         
+        // Kutayarisha na ku-upload kila picha kwenye seva za WhatsApp
         for (const card of cards) {
-            // Njia sahihi ya kuandaa media kwenye Baileys mpya
             const media = await prepareWAMessageMedia({ image: { url: card.image } }, { upload: sock.waUploadToServer });
             
             cardsPayload.push({
@@ -44,7 +57,7 @@ async function ownerCommand(sock, chatId, message) {
                         {
                             name: "cta_url",
                             buttonParamsJson: JSON.stringify({
-                                display_text: "💬 WHATSAPP",
+                                display_text: "💬 WHATSAPP CHAT",
                                 url: `https://wa.me/${CONFIG.OWNER_PHONE}`
                             })
                         }
@@ -53,11 +66,12 @@ async function ownerCommand(sock, chatId, message) {
             });
         }
 
+        // Kuunda ujumbe mkuu wa Carousel
         let msg = generateWAMessageFromContent(chatId, {
             viewOnceMessage: {
                 message: {
                     interactiveMessage: proto.Message.InteractiveMessage.create({
-                        body: proto.Message.InteractiveMessage.Body.create({ text: "👑 *MICKEY GLITCH - OWNER INFO CAROUSEL*" }),
+                        body: proto.Message.InteractiveMessage.Body.create({ text: "✨ *ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴏᴡɴᴇʀ ᴄᴀʀᴏᴜsᴇʟ* ✨\n\n_Gusa na uteleze (slide) kushoto kuona kadi zote za taarifa._" }),
                         carouselMessage: proto.Message.CarouselMessage.create({
                             cards: cardsPayload
                         })
@@ -66,6 +80,7 @@ async function ownerCommand(sock, chatId, message) {
             }
         }, { quoted: message });
 
+        // Kutuma ujumbe moja kwa moja kwa relayMessage ili usikwame
         return await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
 
     } catch (error) {
