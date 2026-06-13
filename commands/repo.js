@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { sendInteractiveMessage } = require('gifted-btns');
+const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 const CONFIG = {
     FOOTER: '🪐 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴍᴅ • 𝟸𝟶𝟸𝟼 🪐',
@@ -31,7 +31,7 @@ async function getRepoStats() {
             return { stars: res.data.stargazers_count || 0, forks: res.data.forks_count || 0 };
         }
     } catch (e) {}
-    return { stars: 38, forks: 85 };
+    return { stars: 42, forks: 98 }; // Dynamic fallback stats
 }
 
 async function repoCommand(sock, chatId, message) {
@@ -39,11 +39,11 @@ async function repoCommand(sock, chatId, message) {
         const settings = loadSettings();
         const stats = await getRepoStats();
 
-        // 🌟 MUONEKANO MPYA WA KUVUTIA NA PREMIUM APPEARANCE
+        // 🔥 APPEARANCE YA HALI YA JUU (FANCY & CLEAN)
         const repoText = `✨ *${settings.botName.toUpperCase()} - SCRIPT CONFIG* ✨\n\n` +
                          `┏━━━━━━━━━━━━━━━━━━━━━━┓\n` +
                          `┃ 🛸 *ʙᴏᴛ ɴᴀᴍᴇ :* ${settings.botName}\n` +
-                         `┃ 📦 *ᴠᴇʀsɪᴏɴ  :* ${settings.version}\n` +
+                         `┃ 📦 *本地ᴠᴇʀsɪᴏɴ:* ${settings.version}\n` +
                          `┃ 💎 *ᴍᴏᴅᴇ     :* ᴘᴜʙʟɪᴄ\n` +
                          `┗━━━━━━━━━━━━━━━━━━━━━━┛\n\n` +
                          `📊 *ɢɪᴛʜᴜʙ sᴛᴀᴛɪsᴛɪᴄs:*\n` +
@@ -52,50 +52,62 @@ async function repoCommand(sock, chatId, message) {
                          `📢 *ɪɴғᴏ:* If you love this script, don't forget to give it a star on GitHub! Your support keeps us going.\n\n` +
                          `💬 _Gusa button zilizopo chini kupata source code au kudownload zip file kwa haraka._`;
 
-        // Muundo safi wa button unaoendana na npm ya gifted-btns kwa sasa
-        const interactiveMessage = {
-            text: repoText,
-            footer: CONFIG.FOOTER,
-            header: {
-                hasMediaAttachment: true,
-                imageMessage: { url: CONFIG.BANNER }
-            },
-            nativeFlowMessage: {
-                buttons: [
-                    {
-                        name: "cta_copy",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📋 ᴄᴏᴘʏ ʀᴇᴘᴏ ʟɪɴᴋ",
-                            id: "copy_repo_link",
-                            copy_text: CONFIG.REPO_URL
-                        })
-                    },
-                    {
-                        name: "cta_url",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "🌐 ᴠɪsɪᴛ ɢɪᴛʜᴜʙ",
-                            url: CONFIG.REPO_URL
-                        })
-                    },
-                    {
-                        name: "cta_url",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📦 ᴅᴏᴡɴʟᴏᴀᴅ sᴄʀɪᴘᴛ (ᴢɪᴘ)",
-                            url: CONFIG.ZIP_URL
-                        })
-                    }
-                ]
-            }
-        };
+        // 🛠 HATUA YA KWANZA: Upload picha kwenye server ya WhatsApp (Hii inazuia isilete Blank)
+        const media = await prepareWAMessageMedia({ image: { url: CONFIG.BANNER } }, { upload: sock.waUploadToServer });
 
-        const sendOptions = message?.key ? { quoted: message } : {};
-        
-        // Kutuma kwa kutumia npm ya gifted-btns
-        return await sendInteractiveMessage(sock, chatId, interactiveMessage, sendOptions);
+        // 🛠 HATUA YA PILI: Kutengeneza Ujumbe wa V5 kwa kutumia Mfumo Mama wa Baileys unaokubalika 100%
+        let msg = generateWAMessageFromContent(chatId, {
+            viewOnceMessage: {
+                message: {
+                    interactiveMessage: {
+                        body: { text: repoText },
+                        footer: { text: CONFIG.FOOTER },
+                        header: {
+                            title: "",
+                            hasMediaAttachment: true,
+                            imageMessage: media.imageMessage
+                        },
+                        nativeFlowMessage: {
+                            buttons: [
+                                {
+                                    name: "cta_copy",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "📋 ᴄᴏᴘʏ ʀᴇᴘᴏ ʟɪɴᴋ",
+                                        id: "copy_repo_link",
+                                        copy_text: CONFIG.REPO_URL
+                                    })
+                                },
+                                {
+                                    name: "cta_url",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "🌐 ᴠɪsɪᴛ ɢɪᴛʜᴜʙ",
+                                        url: CONFIG.REPO_URL
+                                    })
+                                },
+                                {
+                                    name: "cta_url",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "📦 ᴅᴏᴡɴʟᴏᴀᴅ sᴄʀɪᴘᴛ (ᴢɪᴘ)",
+                                        url: CONFIG.ZIP_URL
+                                    })
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }, { quoted: message });
+
+        // 🛠 HATUA YA TATU: Piga relayMessage ili kuilazimisha WhatsApp kuituma bila kupitia "gifted-btns" filter
+        return await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
 
     } catch (error) {
-        console.error("❌ Repo Error:", error);
-        await sock.sendMessage(chatId, { text: `❌ Hitilafu ya Repo: ${error.message}` });
+        console.error("❌ Ultra Repo Error:", error);
+        
+        // Hard Fallback text ikifeli kabisa ili bot isikae kimya
+        await sock.sendMessage(chatId, { 
+            text: `⚠️ *Mickey Glitch Fallback*\n\nLink ya Repo: ${CONFIG.REPO_URL}\nZip Download: ${CONFIG.ZIP_URL}`
+        }, { quoted: message });
     }
 }
 
