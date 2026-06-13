@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { sendInteractiveMessage } = require('gifted-btns');
+const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 const CONFIG = {
     FOOTER: '👑 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ • 𝟸𝟶𝟸𝟼 👑',
@@ -49,44 +49,50 @@ async function repoCommand(sock, chatId, message) {
                          `└───────────────┈⊷\n\n` +
                          `💬 _Gusa button zilizopo chini kupata source code au kudownload script kwa haraka._`;
 
-        const interactiveMessage = {
-            text: repoText,
-            footer: CONFIG.FOOTER,
-            header: {
-                hasMediaAttachment: true,
-                imageMessage: { url: CONFIG.BANNER }
-            },
-            // Muundo thabiti wa kutuma button kupitia gifted-btns npm
-            interactiveButtons: [
-                {
-                    name: "cta_copy",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "📋 COPY REPO LINK",
-                        id: "copy_repo_link",
-                        copy_text: CONFIG.REPO_URL
-                    })
-                },
-                {
-                    name: "cta_url",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "🌐 VISIT REPO",
-                        id: "visit_repo_url",
-                        url: CONFIG.REPO_URL
-                    })
-                },
-                {
-                    name: "cta_url",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "📦 DOWNLOAD ZIP",
-                        id: "dl_zip",
-                        url: CONFIG.ZIP_URL
-                    })
-                }
-            ]
-        };
+        const media = await prepareWAMessageMedia({ image: { url: CONFIG.BANNER } }, { upload: sock.waUploadToServer });
 
-        const sendOptions = message?.key ? { quoted: message } : {};
-        return await sendInteractiveMessage(sock, chatId, interactiveMessage, sendOptions);
+        let msg = generateWAMessageFromContent(chatId, {
+            viewOnceMessage: {
+                message: {
+                    interactiveMessage: {
+                        body: { text: repoText },
+                        footer: { text: CONFIG.FOOTER },
+                        header: {
+                            hasMediaAttachment: true,
+                            imageMessage: media.imageMessage
+                        },
+                        nativeFlowMessage: {
+                            buttons: [
+                                {
+                                    name: "cta_copy",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "📋 COPY REPO LINK",
+                                        id: "copy_repo_link",
+                                        copy_text: CONFIG.REPO_URL
+                                    })
+                                },
+                                {
+                                    name: "cta_url",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "🌐 VISIT REPO",
+                                        url: CONFIG.REPO_URL
+                                    })
+                                },
+                                {
+                                    name: "cta_url",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "📦 DOWNLOAD ZIP",
+                                        url: CONFIG.ZIP_URL
+                                    })
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }, { quoted: message });
+
+        return await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
 
     } catch (error) {
         console.error("❌ Repo Error:", error);
