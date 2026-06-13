@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
+const { sendInteractiveMessage } = require('gifted-btns'); // Npm uliyotaka kwenye button
 
 const CONFIG = {
     FOOTER: '👑 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ • 𝟸𝟶𝟸𝟼 👑',
@@ -39,6 +39,7 @@ async function repoCommand(sock, chatId, message) {
         const settings = loadSettings();
         const stats = await getRepoStats();
 
+        // MUONEKANO MZURI (Fancy Text Style)
         const repoText = `✨ *${settings.botName.toUpperCase()} - SCRIPT INFO* ✨\n\n` +
                          `🛸 *Bᴏᴛ Nᴀᴍᴇ :* ${settings.botName}\n` +
                          `📦 *Vᴇʀsɪᴏɴ  :* ${settings.version}\n` +
@@ -49,50 +50,47 @@ async function repoCommand(sock, chatId, message) {
                          `└───────────────┈⊷\n\n` +
                          `💬 _Gusa button zilizopo chini kupata source code au kudownload script kwa haraka._`;
 
-        const media = await prepareWAMessageMedia({ image: { url: CONFIG.BANNER } }, { upload: sock.waUploadToServer });
-
-        let msg = generateWAMessageFromContent(chatId, {
-            viewOnceMessage: {
-                message: {
-                    interactiveMessage: {
-                        body: { text: repoText },
-                        footer: { text: CONFIG.FOOTER },
-                        header: {
-                            hasMediaAttachment: true,
-                            imageMessage: media.imageMessage
-                        },
-                        nativeFlowMessage: {
-                            buttons: [
-                                {
-                                    name: "cta_copy",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "📋 COPY REPO LINK",
-                                        id: "copy_repo_link",
-                                        copy_text: CONFIG.REPO_URL
-                                    })
-                                },
-                                {
-                                    name: "cta_url",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "🌐 VISIT REPO",
-                                        url: CONFIG.REPO_URL
-                                    })
-                                },
-                                {
-                                    name: "cta_url",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "📦 DOWNLOAD ZIP",
-                                        url: CONFIG.ZIP_URL
-                                    })
-                                }
-                            ]
-                        }
+        // Payload maalum ya gifted-btns iliyorekebishwa isilete error
+        const interactiveMessage = {
+            text: repoText,
+            footer: CONFIG.FOOTER,
+            header: {
+                hasMediaAttachment: true,
+                imageMessage: { url: CONFIG.BANNER }
+            },
+            // Muundo sahihi wa sasa hivi wa vifungo ndani ya gifted-btns npm
+            nativeFlowMessage: {
+                buttons: [
+                    {
+                        name: "cta_copy",
+                        buttonParamsJson: JSON.stringify({
+                            display_text: "📋 COPY REPO LINK",
+                            id: "copy_repo_link",
+                            copy_text: CONFIG.REPO_URL
+                        })
+                    },
+                    {
+                        name: "cta_url",
+                        buttonParamsJson: JSON.stringify({
+                            display_text: "🌐 VISIT REPO",
+                            url: CONFIG.REPO_URL
+                        })
+                    },
+                    {
+                        name: "cta_url",
+                        buttonParamsJson: JSON.stringify({
+                            display_text: "📦 DOWNLOAD ZIP",
+                            url: CONFIG.ZIP_URL
+                        })
                     }
-                }
+                ]
             }
-        }, { quoted: message });
+        };
 
-        return await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
+        const sendOptions = message?.key ? { quoted: message } : {};
+        
+        // Hapa tunatumia npm ya gifted-btns kutuma ujumbe
+        return await sendInteractiveMessage(sock, chatId, interactiveMessage, sendOptions);
 
     } catch (error) {
         console.error("❌ Repo Error:", error);
