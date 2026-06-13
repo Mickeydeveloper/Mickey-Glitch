@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { sendInteractiveMessage } = require('gifted-btns'); // Npm uliyotaka kwenye button
+const { sendInteractiveMessage } = require('gifted-btns');
 
 const CONFIG = {
-    FOOTER: '👑 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ • 𝟸𝟶𝟸𝟼 👑',
+    FOOTER: '🪐 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴍᴅ • 𝟸𝟶𝟸𝟼 🪐',
     REPO_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
     BANNER: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg',
     ZIP_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip'
@@ -39,18 +39,20 @@ async function repoCommand(sock, chatId, message) {
         const settings = loadSettings();
         const stats = await getRepoStats();
 
-        // MUONEKANO MZURI (Fancy Text Style)
-        const repoText = `✨ *${settings.botName.toUpperCase()} - SCRIPT INFO* ✨\n\n` +
-                         `🛸 *Bᴏᴛ Nᴀᴍᴇ :* ${settings.botName}\n` +
-                         `📦 *Vᴇʀsɪᴏɴ  :* ${settings.version}\n` +
-                         `💎 *Mᴏᴅᴇ     :* Public\n\n` +
-                         `📊 *GɪᴛHᴜʙ Sᴛᴀᴛs:*\n` +
-                         `│  ⭐ *Sᴛᴀʀs :* ${stats.stars}\n` +
-                         `│  🔱 *Fᴏʀᴋs :* ${stats.forks}\n` +
-                         `└───────────────┈⊷\n\n` +
-                         `💬 _Gusa button zilizopo chini kupata source code au kudownload script kwa haraka._`;
+        // 🌟 MUONEKANO MPYA WA KUVUTIA NA PREMIUM APPEARANCE
+        const repoText = `✨ *${settings.botName.toUpperCase()} - SCRIPT CONFIG* ✨\n\n` +
+                         `┏━━━━━━━━━━━━━━━━━━━━━━┓\n` +
+                         `┃ 🛸 *ʙᴏᴛ ɴᴀᴍᴇ :* ${settings.botName}\n` +
+                         `┃ 📦 *ᴠᴇʀsɪᴏɴ  :* ${settings.version}\n` +
+                         `┃ 💎 *ᴍᴏᴅᴇ     :* ᴘᴜʙʟɪᴄ\n` +
+                         `┗━━━━━━━━━━━━━━━━━━━━━━┛\n\n` +
+                         `📊 *ɢɪᴛʜᴜʙ sᴛᴀᴛɪsᴛɪᴄs:*\n` +
+                         ` ├── ⭐ *sᴛᴀʀs :* ${stats.stars}\n` +
+                         ` └── 🔱 *ғᴏʀᴋs :* ${stats.forks}\n\n` +
+                         `📢 *ɪɴғᴏ:* If you love this script, don't forget to give it a star on GitHub! Your support keeps us going.\n\n` +
+                         `💬 _Gusa button zilizopo chini kupata source code au kudownload zip file kwa haraka._`;
 
-        // Payload maalum ya gifted-btns iliyorekebishwa isilete error
+        // Muundo safi wa button unaoendana na npm ya gifted-btns kwa sasa
         const interactiveMessage = {
             text: repoText,
             footer: CONFIG.FOOTER,
@@ -58,13 +60,12 @@ async function repoCommand(sock, chatId, message) {
                 hasMediaAttachment: true,
                 imageMessage: { url: CONFIG.BANNER }
             },
-            // Muundo sahihi wa sasa hivi wa vifungo ndani ya gifted-btns npm
             nativeFlowMessage: {
                 buttons: [
                     {
                         name: "cta_copy",
                         buttonParamsJson: JSON.stringify({
-                            display_text: "📋 COPY REPO LINK",
+                            display_text: "📋 ᴄᴏᴘʏ ʀᴇᴘᴏ ʟɪɴᴋ",
                             id: "copy_repo_link",
                             copy_text: CONFIG.REPO_URL
                         })
@@ -72,14 +73,14 @@ async function repoCommand(sock, chatId, message) {
                     {
                         name: "cta_url",
                         buttonParamsJson: JSON.stringify({
-                            display_text: "🌐 VISIT REPO",
+                            display_text: "🌐 ᴠɪsɪᴛ ɢɪᴛʜᴜʙ",
                             url: CONFIG.REPO_URL
                         })
                     },
                     {
                         name: "cta_url",
                         buttonParamsJson: JSON.stringify({
-                            display_text: "📦 DOWNLOAD ZIP",
+                            display_text: "📦 ᴅᴏᴡɴʟᴏᴀᴅ sᴄʀɪᴘᴛ (ᴢɪᴘ)",
                             url: CONFIG.ZIP_URL
                         })
                     }
@@ -89,7 +90,7 @@ async function repoCommand(sock, chatId, message) {
 
         const sendOptions = message?.key ? { quoted: message } : {};
         
-        // Hapa tunatumia npm ya gifted-btns kutuma ujumbe
+        // Kutuma kwa kutumia npm ya gifted-btns
         return await sendInteractiveMessage(sock, chatId, interactiveMessage, sendOptions);
 
     } catch (error) {
