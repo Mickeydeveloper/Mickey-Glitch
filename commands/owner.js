@@ -49,14 +49,14 @@ async function ownerCommand(sock, chatId, message) {
                         {
                             name: "cta_call",
                             buttonParamsJson: JSON.stringify({
-                                display_text: "📞 CALL OWNER",
+                                display_text: " CALL OWNER",
                                 phone_number: CONFIG.OWNER_PHONE
                             })
                         },
                         {
                             name: "cta_url",
                             buttonParamsJson: JSON.stringify({
-                                display_text: "💬 WHATSAPP CHAT",
+                                display_text: " CHAT WITH ME",
                                 url: `https://wa.me/${CONFIG.OWNER_PHONE}`
                             })
                         }
