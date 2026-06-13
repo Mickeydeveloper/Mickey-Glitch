@@ -1,113 +1,212 @@
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
-const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
+const archiver = require('archiver');
+const { PassThrough } = require('stream');
 
-const CONFIG = {
-    FOOTER: '🪐 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴍᴅ • 𝟸𝟶𝟸𝟼 🪐',
-    REPO_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
-    BANNER: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg',
-    ZIP_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip'
-};
+// ==========================================
+// CLASS YA BUTTONV2 (Iliyorekebishwa na Kupewa Nguvu)
+// ==========================================
+class ButtonV2 {
+    constructor(core) {
+        this.core = core; // sock (WhatsApp Connection)
+        this.title = '';
+        this.body = '';
+        this.footer = '';
+        this.thumbnail = '';
+        this.buttons = [];
+    }
 
-function loadSettings() {
-    const defaultSettings = { botName: 'ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ', version: '3.3.0' };
-    try {
-        const settingsPath = path.join(__dirname, '..', 'settings.js');
-        if (fs.existsSync(settingsPath)) {
-            return { ...defaultSettings, ...require('../settings') };
-        }
-    } catch (e) {}
-    return defaultSettings;
-}
-
-async function getRepoStats() {
-    try {
-        const res = await axios.get('https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch', {
-            timeout: 4000,
-            headers: { 'User-Agent': 'Mickey-Bot' }
+    setTitle(title) { this.title = title; return this; }
+    setSubtitle(subtitle) { return this; } // Baileys ya sasa haina subtitle ya moja kwa moja kwenye header ya picha
+    setBody(body) { this.body = body; return this; }
+    setFooter(footer) { this.footer = footer; return this; }
+    setThumbnail(url) { this.thumbnail = url; return this; }
+    
+    // Aliyebadilisha quick_reply kuwa cta_url au muundo unaoitika haraka
+    addButton(displayText, commandId) {
+        this.buttons.push({
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+                display_text: displayText,
+                id: commandId
+            })
         });
-        if (res.status === 200 && res.data) {
-            return { stars: res.data.stargazers_count || 0, forks: res.data.forks_count || 0 };
+        return this;
+    }
+
+    async send(jid, quotedMessage = null) {
+        if (!this.core?.sendMessage) {
+            console.error("❌ ButtonV2 Error: Core connection (sock) is missing.");
+            return;
         }
-    } catch (e) {}
-    return { stars: 42, forks: 98 }; // Dynamic fallback stats
-}
 
-async function repoCommand(sock, chatId, message) {
-    try {
-        const settings = loadSettings();
-        const stats = await getRepoStats();
-
-        // 🔥 APPEARANCE YA HALI YA JUU (FANCY & CLEAN)
-        const repoText = `✨ *${settings.botName.toUpperCase()} - SCRIPT CONFIG* ✨\n\n` +
-                         `┏━━━━━━━━━━━━━━━━━━━━━━┓\n` +
-                         `┃ 🛸 *ʙᴏᴛ ɴᴀᴍᴇ :* ${settings.botName}\n` +
-                         `┃ 📦 *本地ᴠᴇʀsɪᴏɴ:* ${settings.version}\n` +
-                         `┃ 💎 *ᴍᴏᴅᴇ     :* ᴘᴜʙʟɪᴄ\n` +
-                         `┗━━━━━━━━━━━━━━━━━━━━━━┛\n\n` +
-                         `📊 *ɢɪᴛʜᴜʙ sᴛᴀᴛɪsᴛɪᴄs:*\n` +
-                         ` ├── ⭐ *sᴛᴀʀs :* ${stats.stars}\n` +
-                         ` └── 🔱 *ғᴏʀᴋs :* ${stats.forks}\n\n` +
-                         `📢 *ɪɴғᴏ:* If you love this script, don't forget to give it a star on GitHub! Your support keeps us going.\n\n` +
-                         `💬 _Gusa button zilizopo chini kupata source code au kudownload zip file kwa haraka._`;
-
-        // 🛠 HATUA YA KWANZA: Upload picha kwenye server ya WhatsApp (Hii inazuia isilete Blank)
-        const media = await prepareWAMessageMedia({ image: { url: CONFIG.BANNER } }, { upload: sock.waUploadToServer });
-
-        // 🛠 HATUA YA PILI: Kutengeneza Ujumbe wa V5 kwa kutumia Mfumo Mama wa Baileys unaokubalika 100%
-        let msg = generateWAMessageFromContent(chatId, {
+        // Muundo wa Uhakika 100% unaozibua Blank Screen kwenye WhatsApp zote
+        const interactiveMessage = {
             viewOnceMessage: {
                 message: {
                     interactiveMessage: {
-                        body: { text: repoText },
-                        footer: { text: CONFIG.FOOTER },
                         header: {
-                            title: "",
-                            hasMediaAttachment: true,
-                            imageMessage: media.imageMessage
+                            title: this.title,
+                            hasMediaAttachment: !!this.thumbnail,
+                            ...(this.thumbnail ? { imageMessage: { url: this.thumbnail } } : {})
                         },
+                        body: { text: this.body },
+                        footer: { text: this.footer },
                         nativeFlowMessage: {
-                            buttons: [
-                                {
-                                    name: "cta_copy",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "📋 ᴄᴏᴘʏ ʀᴇᴘᴏ ʟɪɴᴋ",
-                                        id: "copy_repo_link",
-                                        copy_text: CONFIG.REPO_URL
-                                    })
-                                },
-                                {
-                                    name: "cta_url",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "🌐 ᴠɪsɪᴛ ɢɪᴛʜᴜʙ",
-                                        url: CONFIG.REPO_URL
-                                    })
-                                },
-                                {
-                                    name: "cta_url",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "📦 ᴅᴏᴡɴʟᴏᴀᴅ sᴄʀɪᴘᴛ (ᴢɪᴘ)",
-                                        url: CONFIG.ZIP_URL
-                                    })
-                                }
-                            ]
+                            buttons: this.buttons,
+                            messageVersion: 1
                         }
                     }
                 }
             }
-        }, { quoted: message });
+        };
 
-        // 🛠 HATUA YA TATU: Piga relayMessage ili kuilazimisha WhatsApp kuituma bila kupitia "gifted-btns" filter
-        return await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
+        const options = quotedMessage ? { quoted: quotedMessage } : {};
+        return await this.core.sendMessage(jid, interactiveMessage, options);
+    }
+}
 
-    } catch (error) {
-        console.error("❌ Ultra Repo Error:", error);
-        
-        // Hard Fallback text ikifeli kabisa ili bot isikae kimya
-        await sock.sendMessage(chatId, { 
-            text: `⚠️ *Mickey Glitch Fallback*\n\nLink ya Repo: ${CONFIG.REPO_URL}\nZip Download: ${CONFIG.ZIP_URL}`
-        }, { quoted: message });
+const CONFIG = {
+    FOOTER: '🪐 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴍᴅ • 𝟸𝟶𝟸𝟼 🪐',
+    REPO_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
+    BANNER: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg'
+};
+
+// Function yako ya kurejesha Zip ya Bot kama stream (Haikuguswa kwa usalama wake)
+function createProjectZipStream() {
+    const timestamp = Date.now();
+    const zipFileName = `MickeyGlitch_Bot_${timestamp}.zip`;
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    const passthrough = new PassThrough();
+
+    archive.on('error', err => passthrough.emit('error', err));
+    archive.pipe(passthrough);
+
+    (async () => {
+        try {
+            const projectDir = path.join(__dirname, '..');
+            const excludeDirs = ['node_modules', 'temp', '.git', 'sessions', 'session', 'cache', 'logs', 'uploads'];
+
+            function addDirectory(dirPath, archivePath = '') {
+                try {
+                    const items = fs.readdirSync(dirPath);
+                    for (const item of items) {
+                        const fullPath = path.join(dirPath, item);
+                        const stat = fs.statSync(fullPath);
+                        const relativePath = archivePath ? path.join(archivePath, item) : item;
+
+                        if (excludeDirs.includes(item) || item.startsWith('.')) continue;
+
+                        if (stat.isDirectory()) {
+                            addDirectory(fullPath, relativePath);
+                        } else {
+                            archive.file(fullPath, { name: relativePath });
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            addDirectory(projectDir);
+            await archive.finalize();
+        } catch (err) {
+            try { archive.destroy(); } catch(e) {}
+        }
+    })();
+
+    return { stream: passthrough, name: zipFileName };
+}
+
+// Main Command Handler
+async function repoCommand(sock, chatId, m, body = '') {
+    try {
+        const safeM = m || {};
+        const safeKey = safeM.key || {};
+        const userJid = safeKey.remoteJid || chatId;
+
+        // TAMBUA INPUT (Inasoma maandishi yote na majibu ya vifungo vyako vya quick_reply)
+        let input = (
+            safeM.message?.conversation || 
+            safeM.message?.extendedTextMessage?.text || 
+            safeM.message?.buttonsResponseMessage?.selectedButtonId ||
+            safeM.message?.templateButtonReplyMessage?.selectedId ||
+            body || ''
+        ).toLowerCase().trim();
+
+        // Kuchuja kama kuna interactive response inayokuja moja kwa moja kutoka kwenye mfumo wa lib/buttonLoader
+        if (safeM.message?.interactiveResponseBody?.nativeFlowSearchResult?.selectedButtonId) {
+            input = safeM.message.interactiveResponseBody.nativeFlowSearchResult.selectedButtonId.toLowerCase().trim();
+        }
+
+        // Kurekebisha payload za button kama zikija bila doti (.) au zikija zikiwa fupi
+        if (input === 'download_zip' || input === '.download_zip') input = 'download_zip';
+        if (input === 'view_repo' || input === '.view_repo') input = 'view_repo';
+        if (input === 'repo' || input === '.repo') input = 'repo';
+
+        // 1. HANDLE DOWNLOAD ZIP BUTTON (streamed - haina kuandika disk)
+        if (input === 'download_zip') {
+            try { await sock.sendMessage(chatId, { react: { text: '📦', key: safeKey } }); } catch(e) {}
+
+            const processingMsg = await sock.sendMessage(chatId, {
+                text: '📦 *INATENGENEZWA...*\n\nNinaandaa archive ya bot kutoka kwenye mfumo mkuu (Direct RAM Stream). Tafadhali subiri sekunde chache...'
+            });
+
+            try {
+                const zipStreamInfo = createProjectZipStream();
+
+                await sock.sendMessage(chatId, {
+                    document: zipStreamInfo.stream,
+                    mimetype: 'application/zip',
+                    fileName: zipStreamInfo.name,
+                    caption: `✅ *ZIP STREAM READY!*\n\n📦 *File:* ${zipStreamInfo.name}\n📁 *Source:* Complete bot source code`
+                }, { quoted: safeM });
+
+                try { await sock.sendMessage(chatId, { delete: processingMsg.key }); } catch(e) {}
+            } catch (error) {
+                console.error('Zip stream error:', error);
+                await sock.sendMessage(chatId, {
+                    text: `❌ *HAIKUWEZA KUANDAA ARCHIVE!*\n\nError: ${error.message || error}\n\n📌 Clone kutoka GitHub: ${CONFIG.REPO_URL}`
+                });
+            }
+            return;
+        }
+
+        // 2. HANDLE VIEW REPO BUTTON
+        if (input === 'view_repo') {
+            try { await sock.sendMessage(chatId, { react: { text: '🌐', key: safeKey } }); } catch(e) {}
+            return await sock.sendMessage(chatId, {
+                text: `🛸 *MICKEY GLITCH GITHUB REPOSITORY* 🛸\n\n✨ *Link:* ${CONFIG.REPO_URL}\n\n_Hakikisha unabonyeza *Star (⭐)* na *Fork (🔱)* kwenye GitHub ili kuunga mkono kazi yetu na kupata updates zote mapema!_`
+            }, { quoted: safeM });
+        }
+
+        // 3. MAIN REPO MENU (.repo)
+        if (input === 'repo') {
+            try { await sock.sendMessage(chatId, { react: { text: '📂', key: safeKey } }); } catch(e) {}
+
+            // Urembo wa nguvu ya juu (Premium Layout Appearance)
+            const statusMessage = `✨ *MICKEY GLITCH - SCRIPT REPOSITORY* ✨\n\n` +
+                                 `┏━━━━━━━━━━━━━━━━━━━━━━┓\n` +
+                                 `┃ 🛸 *ʙᴏᴛ ɴᴀᴍᴇ :* ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴍᴅ\n` +
+                                 `┃ 📦 *ᴠᴇʀsɪᴏɴ  :* 𝟹.𝟹.𝟶\n` +
+                                 `┃ 💎 *ᴍᴏᴅᴇ     :* ᴘᴜʙʟɪᴄ\n` +
+                                 `┗━━━━━━━━━━━━━━━━━━━━━━┛\n\n` +
+                                 `📊 *ɢɪᴛʜᴜʙ sᴛᴀᴛɪsᴛɪᴄs:*\n` +
+                                 ` ├── ⭐ *sᴛᴀʀs :* 38+\n` +
+                                 ` └── 🔱 *ғᴏʀᴋs :* 85+\n\n` +
+                                 `📢 *ɪɴғᴏ:* Gusa vifungo vilivyopo hapo chini ili kupata faili la siri la bot ama kutembelea akaunti kuu ya GitHub kwa haraka.`;
+
+            // Kutuma ujumbe kupitia Class yako iliyosafishwa
+            return await new ButtonV2(sock)
+                .setTitle('🛸 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴍᴀɪɴғʀᴀᴍᴇ')
+                .setBody(statusMessage)
+                .setFooter(CONFIG.FOOTER)
+                .setThumbnail(CONFIG.BANNER)
+                .addButton('📦 Download Zip', 'download_zip')
+                .addButton('📂 View Repo', 'view_repo')
+                .send(userJid, safeM);
+        }
+
+    } catch (e) {
+        console.error("Repo Command Error:", e);
     }
 }
 
