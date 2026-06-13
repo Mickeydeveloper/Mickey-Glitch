@@ -1,10 +1,8 @@
-const { sendInteractiveMessage } = require('gifted-btns');
-const fs = require('fs');
-const path = require('path');
+const { generateWAMessageFromContent, proto } = require('@whiskeysockets/baileys');
 
 const CONFIG = {
     FOOTER: '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐',
-    OWNER_PHONE: '255615944741', // Namba uliyotaka
+    OWNER_PHONE: '255615944741',
     IMAGES: [
         'https://files.catbox.moe/h85xpq.jpg',
         'https://files.catbox.moe/hvyjsr.jpg',
@@ -14,7 +12,6 @@ const CONFIG = {
 
 async function ownerCommand(sock, chatId, message) {
     try {
-        // Data za kadi tatu tofauti
         const cards = [
             {
                 title: "👨‍💻 Developer Profile",
@@ -33,47 +30,59 @@ async function ownerCommand(sock, chatId, message) {
             }
         ];
 
-        // Kuandaa kadi za carousel
-        const cardsPayload = cards.map(card => ({
-            header: {
-                hasMediaAttachment: true,
-                imageMessage: { url: card.image }
-            },
-            body: { text: card.title + "\n\n" + card.text },
-            footer: { text: CONFIG.FOOTER },
-            nativeFlowMessage: {
-                buttons: [
-                    {
-                        name: "cta_call",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📞 CALL OWNER",
-                            phone_number: `+${CONFIG.OWNER_PHONE}`
+        // Kutayarisha kila kadi moja baada ya nyingine
+        let cardsPayload = [];
+        for (const card of cards) {
+            const media = await sock.prepareMessageMedia({ image: { url: card.image } }, { upload: sock.waUploadToServer });
+            
+            cardsPayload.push({
+                header: proto.Message.InteractiveMessage.Header.create({
+                    title: card.title,
+                    hasMediaAttachment: true,
+                    imageMessage: media.imageMessage
+                }),
+                body: proto.Message.InteractiveMessage.Body.create({ text: card.text }),
+                footer: proto.Message.InteractiveMessage.Footer.create({ text: CONFIG.FOOTER }),
+                nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+                    buttons: [
+                        {
+                            name: "cta_call",
+                            buttonParamsJson: JSON.stringify({
+                                display_text: "📞 CALL OWNER",
+                                phone_number: CONFIG.OWNER_PHONE
+                            })
+                        },
+                        {
+                            name: "cta_url",
+                            buttonParamsJson: JSON.stringify({
+                                display_text: "💬 WHATSAPP",
+                                url: `https://wa.me/${CONFIG.OWNER_PHONE}`
+                            })
+                        }
+                    ]
+                })
+            });
+        }
+
+        // Kuunganisha kadi zote kwenye Carousel imara
+        let msg = generateWAMessageFromContent(chatId, {
+            viewOnceMessage: {
+                message: {
+                    interactiveMessage: proto.Message.InteractiveMessage.create({
+                        body: proto.Message.InteractiveMessage.Body.create({ text: "👑 *MICKEY GLITCH - OWNER INFO CAROUSEL*" }),
+                        carouselMessage: proto.Message.CarouselMessage.create({
+                            cards: cardsPayload
                         })
-                    },
-                    {
-                        name: "cta_url",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "💬 WHATSAPP",
-                            url: `https://wa.me/${CONFIG.OWNER_PHONE}`
-                        })
-                    }
-                ]
+                    })
+                }
             }
-        }));
+        }, { quoted: message });
 
-        const interactiveMessage = {
-            body: { text: "👑 *MICKEY GLITCH - OWNER INFO CAROUSEL*" },
-            carouselMessage: { cards: cardsPayload }
-        };
-
-        const sendOptions = message?.key ? { quoted: message } : {};
-        
-        // Kutumia sendInteractiveMessage (Make sure library yako ina support carousel)
-        return await sendInteractiveMessage(sock, chatId, interactiveMessage, sendOptions);
+        return await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
 
     } catch (error) {
         console.error("❌ Owner Carousel Error:", error);
-        await sock.sendMessage(chatId, { text: `❌ Error: ${error.message}` });
+        await sock.sendMessage(chatId, { text: `❌ Hitilafu ya Owner: ${error.message}` });
     }
 }
 
