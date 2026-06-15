@@ -4,9 +4,9 @@ const isOwnerOrSudo = require('../lib/isOwner');
 
 const CONFIG_FILE = path.join(__dirname, '../data/autoStatus.json');
 const DEFAULT_CONFIG = Object.freeze({
-    enabled: true,
-    viewEnabled: true,
-    likeEnabled: true,
+    enabled: false,
+    viewEnabled: false,
+    likeEnabled: false,
 });
 
 const EMOJI_REACTIONS = ['❤️', '🔥', '😂', '😱', '👍', '🎉', '😍', '💯', '🙏', '😢', '🤔', '😁'];
@@ -18,17 +18,13 @@ async function loadConfig() {
     if (configCache) return configCache;
     try {
         const data = await fs.readFile(CONFIG_FILE, 'utf8');
-        configCache = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+        const parsed = JSON.parse(data);
+        configCache = { ...DEFAULT_CONFIG, ...parsed };
     } catch (err) {
         configCache = { ...DEFAULT_CONFIG };
         await saveConfig(configCache);
     }
-
-    // Backward compatibility: if enabled is not set, derive from features.
-    if (typeof configCache.enabled !== 'boolean') {
-        configCache.enabled = true;
-    }
-
+    
     return configCache;
 }
 
@@ -46,17 +42,16 @@ function getRandomEmoji() {
     return EMOJI_REACTIONS[Math.floor(Math.random() * EMOJI_REACTIONS.length)];
 }
 
-// AUTO VIEW - Sasa ni HARAKA (Immediate)
 async function autoView(sock, statusKey) {
     if (!statusKey?.id) return;
     try {
         await sock.readMessages([statusKey]);
+        console.log(`[AutoView] Successfully viewed status: ${statusKey.id}`);
     } catch (err) {
         console.error(`[AutoView] Failed:`, err.message);
     }
 }
 
-// AUTO LIKE - Sasa ni HARAKA (Immediate)
 async function autoLike(sock, statusKey) {
     if (!statusKey?.id || !statusKey?.participant) return;
 
@@ -72,6 +67,7 @@ async function autoLike(sock, statusKey) {
         }, {
             statusJidList: [participantJid]
         });
+        console.log(`[AutoLike] Successfully liked status: ${statusKey.id} with ${emoji}`);
     } catch (err) {
         console.error(`[AutoLike] Failed:`, err.message || err);
     }
@@ -79,6 +75,14 @@ async function autoLike(sock, statusKey) {
 
 async function handleStatusUpdate(sock, ev) {
     const cfg = await loadConfig();
+    
+    // Update enabled flag based on features
+    const shouldBeEnabled = cfg.viewEnabled || cfg.likeEnabled;
+    if (cfg.enabled !== shouldBeEnabled) {
+        await saveConfig({ enabled: shouldBeEnabled });
+        cfg.enabled = shouldBeEnabled;
+    }
+    
     if (!cfg.enabled) return;
 
     let statusKey = null;
@@ -90,10 +94,10 @@ async function handleStatusUpdate(sock, ev) {
     }
 
     if (!statusKey?.id || processedStatusIds.has(statusKey.id)) return;
-    
+
     processedStatusIds.add(statusKey.id);
 
-    // Limit memory
+    // Limit memory usage
     if (processedStatusIds.size > 1500) {
         const arr = Array.from(processedStatusIds);
         processedStatusIds.clear();
@@ -101,10 +105,16 @@ async function handleStatusUpdate(sock, ev) {
     }
 
     const promises = [];
-    if (cfg.viewEnabled) promises.push(autoView(sock, statusKey));
-    if (cfg.likeEnabled) promises.push(autoLike(sock, statusKey));
-    
-    await Promise.allSettled(promises);
+    if (cfg.viewEnabled) {
+        promises.push(autoView(sock, statusKey));
+    }
+    if (cfg.likeEnabled) {
+        promises.push(autoLike(sock, statusKey));
+    }
+
+    if (promises.length > 0) {
+        await Promise.allSettled(promises);
+    }
 }
 
 async function autoStatusCommand(sock, chatId, msg, args = []) {
@@ -116,48 +126,109 @@ async function autoStatusCommand(sock, chatId, msg, args = []) {
         const sub = (args[0] || '').toLowerCase();
         const option = (args[1] || '').toLowerCase();
 
+        // Command: .autostatus on
         if (sub === 'on') {
-            await saveConfig({ enabled: true, viewEnabled: true, likeEnabled: true });
-            return sock.sendMessage(chatId, { text: '✅ *Auto Status:* Enabled (view + like).' });
+            await saveConfig({ 
+                enabled: true, 
+                viewEnabled: true, 
+                likeEnabled: true 
+            });
+            return sock.sendMessage(chatId, { 
+                text: '✅ *Auto Status:* ENABLED (View + Like)\n\n📌 Auto-view na auto-like zimewashwa kwa status zote.' 
+            });
         }
 
+        // Command: .autostatus off
         if (sub === 'off') {
-            await saveConfig({ enabled: false });
-            return sock.sendMessage(chatId, { text: '❌ *Auto Status:* Disabled.' });
+            await saveConfig({ 
+                enabled: false, 
+                viewEnabled: false, 
+                likeEnabled: false 
+            });
+            return sock.sendMessage(chatId, { 
+                text: '❌ *Auto Status:* DISABLED\n\n📌 Auto-status imezimwa kabisa.' 
+            });
         }
 
+        // Command: .autostatus view on/off
         if (sub === 'view') {
             if (option === 'on' || option === 'off') {
-                const enabledValue = option === 'on';
-                await saveConfig({ viewEnabled: enabledValue, enabled: enabledValue || (await loadConfig()).likeEnabled });
-                return sock.sendMessage(chatId, { text: `✅ *Auto Status View:* ${enabledValue ? 'ON' : 'OFF'}` });
+                const viewEnabledValue = option === 'on';
+                const currentCfg = await loadConfig();
+                
+                // Update viewEnabled
+                await saveConfig({ viewEnabled: viewEnabledValue });
+                
+                // Update enabled based on either view or like being active
+                const newConfig = await loadConfig();
+                const shouldEnable = newConfig.viewEnabled || newConfig.likeEnabled;
+                if (newConfig.enabled !== shouldEnable) {
+                    await saveConfig({ enabled: shouldEnable });
+                }
+                
+                const status = viewEnabledValue ? 'ON' : 'OFF';
+                return sock.sendMessage(chatId, { 
+                    text: `✅ *Auto View Status:* ${status}\n\n📌 Auto-view ya status sasa ime${viewEnabledValue ? 'washwa' : 'zimwa'}.\n${!viewEnabledValue && !newConfig.likeEnabled ? '\n⚠️ Auto-status imezimwa kabisa kwa sababu hakuna feature iliyowashwa.' : ''}` 
+                });
             }
         }
 
+        // Command: .autostatus like on/off
         if (sub === 'like') {
             if (option === 'on' || option === 'off') {
-                const enabledValue = option === 'on';
-                await saveConfig({ likeEnabled: enabledValue, enabled: enabledValue || (await loadConfig()).viewEnabled });
-                return sock.sendMessage(chatId, { text: `✅ *Auto Status Like:* ${enabledValue ? 'ON' : 'OFF'}` });
+                const likeEnabledValue = option === 'on';
+                const currentCfg = await loadConfig();
+                
+                // Update likeEnabled
+                await saveConfig({ likeEnabled: likeEnabledValue });
+                
+                // Update enabled based on either view or like being active
+                const newConfig = await loadConfig();
+                const shouldEnable = newConfig.viewEnabled || newConfig.likeEnabled;
+                if (newConfig.enabled !== shouldEnable) {
+                    await saveConfig({ enabled: shouldEnable });
+                }
+                
+                const status = likeEnabledValue ? 'ON' : 'OFF';
+                return sock.sendMessage(chatId, { 
+                    text: `✅ *Auto Like Status:* ${status}\n\n📌 Auto-like ya status sasa ime${likeEnabledValue ? 'washwa' : 'zimwa'}.\n${!likeEnabledValue && !newConfig.viewEnabled ? '\n⚠️ Auto-status imezimwa kabisa kwa sababu hakuna feature iliyowashwa.' : ''}` 
+                });
             }
         }
 
+        // Command: .autostatus (show settings)
         const cfg = await loadConfig();
-        const overall = cfg.enabled ? 'ON' : 'OFF';
-        const view = cfg.viewEnabled ? 'ON' : 'OFF';
-        const like = cfg.likeEnabled ? 'ON' : 'OFF';
+        const overall = cfg.enabled ? '🟢 ACTIVE' : '🔴 INACTIVE';
+        const view = cfg.viewEnabled ? '✅ ON' : '❌ OFF';
+        const like = cfg.likeEnabled ? '✅ ON' : '❌ OFF';
+        
+        let statusText = `📊 *AUTO STATUS SETTINGS*\n\n`;
+        statusText += `┌─── 📋 STATUS\n`;
+        statusText += `│  ${overall}\n`;
+        statusText += `│\n`;
+        statusText += `├─── 👁️ AUTO VIEW\n`;
+        statusText += `│  ${view}\n`;
+        statusText += `│\n`;
+        statusText += `├─── ❤️ AUTO LIKE\n`;
+        statusText += `│  ${like}\n`;
+        statusText += `│\n`;
+        statusText += `└─── 🛠️ COMMANDS\n`;
+        statusText += `   • .autostatus on - Washa zote\n`;
+        statusText += `   • .autostatus off - Zima zote\n`;
+        statusText += `   • .autostatus view on/off - Washa/zima auto-view\n`;
+        statusText += `   • .autostatus like on/off - Washa/zima auto-like\n`;
+        
+        if (!cfg.viewEnabled && !cfg.likeEnabled) {
+            statusText += `\n⚠️ *Hakuna feature iliyowashwa.*\nTumia .autostatus on kuwasha zote au washa moja kwa moja.`;
+        }
 
-        return sock.sendMessage(chatId, {
-            text: `📊 *Auto Status Settings:*
-• Status: ${overall}
-• View: ${view}
-• Like: ${like}
-
-Use .autostatus on|off|view on|off|like on|off`,
-        });
+        return sock.sendMessage(chatId, { text: statusText });
 
     } catch (err) {
         console.error('[AutoStatus] Command error', err.message);
+        return sock.sendMessage(chatId, { 
+            text: `❌ *Error:* ${err.message}` 
+        });
     }
 }
 
