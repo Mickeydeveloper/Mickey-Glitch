@@ -21,6 +21,16 @@ async function tryRequest(getter, attempts = 2) {
     throw lastErr;
 }
 
+// Helper to convert stream to buffer (Safely handles large chunks)
+async function streamToBuffer(stream) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        stream.on('data', (chunk) => chunks.push(chunk));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+        stream.on('error', (err) => reject(err));
+    });
+}
+
 // Function to get audio from Nayan AllDown API
 async function getAudioFromAllDown(ytUrl) {
     let videoId = '';
@@ -41,16 +51,19 @@ async function getAudioFromAllDown(ytUrl) {
         if (res.data?.status === true && res.data?.data) {
             const data = res.data.data;
             const videoUrl = data.high || data.low;
-            
+
             if (!videoUrl) throw new Error('No download URL');
-            
+
+            // FIXED: Using stream and removed timeout for large downloads
             const fileRes = await tryRequest(() => axios.get(videoUrl, {
-                ...AXIOS_DEFAULTS,
-                responseType: 'arraybuffer'
+                headers: AXIOS_DEFAULTS.headers,
+                responseType: 'stream'
             }));
-            
+
+            const buffer = await streamToBuffer(fileRes.data);
+
             return {
-                buffer: Buffer.from(fileRes.data),
+                buffer: buffer,
                 title: data.title,
                 thumbnail: data.thumbnail,
                 source: 'Nayan AllDown',
@@ -85,10 +98,10 @@ async function getAudioFromYoutubeAPI(ytUrl) {
             const title = res.data.data.data.title;
             const thumbnail = res.data.data.data.thumbnail;
             const author = res.data.data.data.author;
-            
+
             let bestAudio = null;
             let priority = 0;
-            
+
             for (const format of formats) {
                 if (format.type === 'audio') {
                     let p = 0;
@@ -97,14 +110,14 @@ async function getAudioFromYoutubeAPI(ytUrl) {
                     else if (format.formatId === '249') p = 85;
                     else if (format.formatId === '140') p = 80;
                     else if (format.formatId === '139') p = 70;
-                    
+
                     if (p > priority) {
                         priority = p;
                         bestAudio = format;
                     }
                 }
             }
-            
+
             if (!bestAudio) {
                 for (const format of formats) {
                     if (format.type === 'video_with_audio' && format.mimeType?.includes('mp4')) {
@@ -113,15 +126,18 @@ async function getAudioFromYoutubeAPI(ytUrl) {
                     }
                 }
             }
-            
+
             if (bestAudio?.url) {
+                // FIXED: Using stream and removed timeout for large downloads
                 const fileRes = await tryRequest(() => axios.get(bestAudio.url, {
-                    ...AXIOS_DEFAULTS,
-                    responseType: 'arraybuffer'
+                    headers: AXIOS_DEFAULTS.headers,
+                    responseType: 'stream'
                 }));
-                
+
+                const buffer = await streamToBuffer(fileRes.data);
+
                 return {
-                    buffer: Buffer.from(fileRes.data),
+                    buffer: buffer,
                     title: title,
                     thumbnail: thumbnail,
                     author: author,
@@ -171,7 +187,7 @@ async function playCommand(sock, chatId, message) {
         if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
             const searchResults = await yts(query);
             const videos = searchResults?.videos;
-            
+
             if (!videos || videos.length === 0) {
                 await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
                 return sock.sendMessage(chatId, { text: '❌ Song not found' });
@@ -180,9 +196,9 @@ async function playCommand(sock, chatId, message) {
             videoInfo = videos[0];
             videoUrl = videoInfo.url;
             thumbnailUrl = videoInfo.thumbnail;
-            
+
             const infoText = `🎵 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()}\n\n⬇️ Downloading...`;
-            
+
             if (thumbnailUrl) {
                 await sock.sendMessage(chatId, {
                     image: { url: thumbnailUrl },
