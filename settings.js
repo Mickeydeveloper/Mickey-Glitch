@@ -31,8 +31,8 @@ const settings = {
 
   // Auto-join configuration: add channel/group targets here
   autoJoin: {
-    channels: [https://whatsapp.com/channel/0029Vb6B9xFCxoAseuG1g610], // e.g. ['https://chat.whatsapp.com/CHANNEL_CODE'] or channel JIDs
-    groups: ['https://chat.whatsapp.com/HJnXkPtpY2lDVi1rZilcNe?s=cl&p=a&ilr=4'] // e.g. ['https://chat.whatsapp.com/INVITE_CODE', '123456789-123456@g.us']
+    channels: ['0029Vb6B9xFCxoAseuG1g610@newsletter'], // Tumia Channel ID moja kwa moja
+    groups: ['https://chat.whatsapp.com/HJnXkPtpY2lDVi1rZilcNe'] // Link safi bila query params
   },
 
   // ==========================================

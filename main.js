@@ -130,6 +130,7 @@ const { setGroupDescription, setGroupName, setGroupPhoto } = require('./commands
 const instagramCommand = require('./commands/instagram');
 const facebookCommand = require('./commands/facebook');
 const playCommand = require('./commands/play');
+const telebotCommand = require('./commands/telebot');
 const tiktokCommand = require('./commands/tiktok');
 const aiCommand = require('./commands/ai');
 const aiVoiceCommand = require('./commands/ai');
@@ -158,6 +159,7 @@ const shazamCommand = require('./commands/shazam');
 const repoCommand = require('./commands/repo');
 const statsCommand = require('./commands/stats');
 const stickerAltCommand = require('./commands/sticker-alt');
+const textCommand = require('./commands/text');
 
 
 
@@ -264,6 +266,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 if (selectedId === 'show_data_menu' || selectedId.toString().startsWith('server_') || selectedId.toString().startsWith('data_')) {
                     console.log(`🔄 Routed interactive ID directly to halotel: ${selectedId}`);
                     await halotelCommand(sock, chatId, message, selectedId.toString().toLowerCase());
+                    return;
+                } else if (selectedId && selectedId.toString().startsWith('txtstyle_')) {
+                    console.log(`🔄 Routed interactive ID to text styler: ${selectedId}`);
+                    await textCommand(sock, chatId, message, selectedId.toString());
                     return;
                 } else if (selectedId && selectedId.startsWith('.')) {
                     console.log(`🔄 Button command intercepted: ${selectedId}`);
@@ -1006,6 +1012,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage.startsWith('.fire'):
                 await textmakerCommand(sock, chatId, message, userMessage, 'fire');
                 break;
+            case userMessage.startsWith('.text'):
+                await textCommand(sock, chatId, message, userMessage);
+                commandExecuted = true;
+                break;
             case userMessage.startsWith('.antidelete'):
                 const antideleteMatch = userMessage.slice(11).trim();
                 await handleAntideleteCommand(sock, chatId, message, antideleteMatch);
@@ -1147,6 +1157,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.stats'):
                 await statsCommand(sock, chatId, message);
+                break;
+            case userMessage.startsWith('.telebot'):
+                await telebotCommand(sock, chatId, message, userMessage);
                 break;
             case userMessage.startsWith('.stickeralt'):
                 await stickerAltCommand(sock, chatId, message);
