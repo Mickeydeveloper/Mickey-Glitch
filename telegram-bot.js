@@ -1,12 +1,12 @@
 /**
  * TELEGRAM BOT MODULE - MICKEY GLITCH
- * Fixed Syntax Errors
+ * Fixed: Uses commands from /commands folder only
+ * Only /pair command is handled internally for WhatsApp pairing
  */
 
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const yts = require('yt-search'); 
 const os = require('os');
 const settings = require('./settings');
 const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, delay } = require('@whiskeysockets/baileys');
@@ -22,7 +22,6 @@ const TELEGRAM_DATA_FILE = path.join(TELEGRAM_DATA_DIR, 'telegramPairs.json');
 const TELEGRAM_BASE_URL = (token) => `https://api.telegram.org/bot${token}`;
 const TEMP_DIR = path.join(__dirname, 'tmp');
 
-// Store active pairing sessions
 // Store active pairing sessions
 const activePairingSessions = new Map();
 const whatsappCommands = new Map();
@@ -82,7 +81,6 @@ function createTelegramSock(chatId, messageId) {
         },
         sendMessageAck: async () => {},
         react: async (jid, { text }) => {
-            // Telegram haina reaction rahisi kama Baileys kwa sasa, tunatuma emoji tu
             return await sendTelegramMessage(jid, text, {}, messageId);
         }
     };
@@ -93,32 +91,49 @@ function createTelegramSock(chatId, messageId) {
  */
 function loadWhatsappCommands() {
     const commandsDir = path.join(__dirname, 'commands');
-    if (!fs.existsSync(commandsDir)) return;
+    if (!fs.existsSync(commandsDir)) {
+        logWarning('Commands folder not found. Creating empty commands directory...');
+        fs.mkdirSync(commandsDir, { recursive: true });
+        return;
+    }
 
     const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.js'));
+    whatsappCommands.clear();
+    
     for (const file of files) {
         try {
             const baseName = file.replace('.js', '');
-            // Tunafuta cache ili kama ulibadili file lianze upya
+            // Clear cache to reload if file changed
             delete require.cache[require.resolve(path.join(commandsDir, file))];
             const cmdModule = require(path.join(commandsDir, file));
             
-            // Kama ni function moja kwa moja (kama alive.js au text.js)
+            // Check if it's a function (like alive.js or text.js)
             if (typeof cmdModule === 'function') {
                 whatsappCommands.set(baseName, cmdModule);
+                logDebug(`Loaded command: ${baseName} (function)`);
             } 
-            // Kama ni object yenye name (kama amri zenye metadata)
-            else if (cmdModule.name) {
-                whatsappCommands.set(cmdModule.name, cmdModule.execute || cmdModule);
-            } else {
-                // Fallback kwa jina la file
-                whatsappCommands.set(baseName, cmdModule);
+            // Check if it has a name property and execute function
+            else if (cmdModule.name && typeof cmdModule.execute === 'function') {
+                whatsappCommands.set(cmdModule.name, cmdModule.execute);
+                logDebug(`Loaded command: ${cmdModule.name} (object with execute)`);
+            }
+            // Fallback to file name
+            else if (typeof cmdModule === 'object' && cmdModule !== null) {
+                // Try to find execute function
+                if (typeof cmdModule.execute === 'function') {
+                    whatsappCommands.set(baseName, cmdModule.execute);
+                    logDebug(`Loaded command: ${baseName} (execute function)`);
+                } else {
+                    // Assume the object itself is callable or has a default export
+                    whatsappCommands.set(baseName, cmdModule);
+                    logDebug(`Loaded command: ${baseName} (object)`);
+                }
             }
         } catch (e) {
             logError(`Failed to load command ${file}: ${e.message}`);
         }
     }
-    logSuccess(`Loaded ${whatsappCommands.size} WhatsApp commands to Telegram Bridge`);
+    logSuccess(`Loaded ${whatsappCommands.size} WhatsApp commands from /commands folder`);
 }
 
 // Global flag to track if Telegram bot is running
@@ -128,85 +143,6 @@ let isTelegramBotRunning = false;
 // 📱 TELEGRAM MEDIA FUNCTIONS
 // ============================================================
 
-async function sendTelegramAudioWithPreview(chatId, audioUrl, title, thumbnailUrl, duration = '', quality = 'MP3 128kbps', messageId = null) {
-    const token = settings.telegram?.botToken?.trim();
-    if (!token || !chatId) return false;
-
-    try {
-        const keyboard = {
-            inline_keyboard: [
-                [
-                    { text: "🎵 Download Audio", url: audioUrl },
-                    { text: "👑 Owner", url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
-                ],
-                [
-                    { text: "📢 Join Channel", url: "https://t.me/mickeyglitch" },
-                    { text: "⭐ Support", url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
-                ]
-            ]
-        };
-
-        const caption = `🎵 *${title.substring(0, 60)}*\n${duration ? `⏱️ *Duration:* ${duration}\n` : ''}🎚️ *Quality:* ${quality}\n📡 *Source:* Nayan API\n\n⚡ *Mickey Glitch Bot*`;
-
-        await axios.post(`${TELEGRAM_BASE_URL(token)}/sendPhoto`, {
-            chat_id: String(chatId),
-            photo: thumbnailUrl,
-            caption: caption,
-            parse_mode: 'Markdown',
-            reply_markup: keyboard,
-            reply_to_message_id: messageId
-        }, AXIOS_DEFAULTS);
-
-        return true;
-    } catch (error) {
-        logError(`[AUDIO PREVIEW] ${error.message}`);
-        return await sendTelegramMedia(chatId, 'audio', audioUrl, `🎵 ${title}`, messageId);
-    }    
-}
-
-async function sendTelegramVideoWithPreview(chatId, videoUrl, title, thumbnailUrl, duration = '', quality = 'HD') {
-    const token = settings.telegram?.botToken?.trim();
-    if (!token || !chatId) return false;
-
-    try {
-        const keyboard = {
-            inline_keyboard: [
-                [
-                    { text: "📥 Download Video", url: videoUrl },
-                    { text: "👑 Owner", url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
-                ],
-                [
-                    { text: "📢 Join Channel", url: "https://t.me/mickeyglitch" },
-                    { text: "⭐ Support", url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
-                ]
-            ]
-        };
-
-        const caption = `🎥 *${title.substring(0, 60)}*\n${duration ? `⏱️ *Duration:* ${duration}\n` : ''}🎚️ *Quality:* ${quality}\n📡 *Source:* Nayan API\n\n⚡ *Mickey Glitch Bot*`;
-
-        await axios.post(`${TELEGRAM_BASE_URL(token)}/sendPhoto`, {
-            chat_id: String(chatId),
-            photo: thumbnailUrl,
-            caption: caption,
-            parse_mode: 'Markdown',
-            reply_markup: keyboard
-        }, AXIOS_DEFAULTS);
-
-        await axios.post(`${TELEGRAM_BASE_URL(token)}/sendVideo`, {
-            chat_id: String(chatId),
-            video: videoUrl,
-            caption: `✅ *Video Ready!*\n🎥 ${title.substring(0, 40)}`,
-            parse_mode: 'Markdown',
-            supports_streaming: true
-        }, AXIOS_DEFAULTS);
-
-        return true;
-    } catch (error) {
-        logError(`[VIDEO PREVIEW] ${error.message}`);
-        return await sendTelegramMedia(chatId, 'video', videoUrl, `📹 ${title}`);
-    }
-}
-
 async function sendTelegramMessage(chatId, text, extra = {}, messageId = null) {
     const token = settings.telegram?.botToken?.trim();
     if (!token || !chatId) return false;
@@ -215,7 +151,7 @@ async function sendTelegramMessage(chatId, text, extra = {}, messageId = null) {
             chat_id: String(chatId),
             text: text,
             disable_web_page_preview: true,
-            parse_mode: 'Markdown', // Ensure Markdown is always used
+            parse_mode: 'Markdown',
             reply_to_message_id: messageId,
             ...extra
         }, AXIOS_DEFAULTS);
@@ -265,171 +201,7 @@ async function sendTelegramMedia(chatId, type, url, caption = '', messageId = nu
 }
 
 // ============================================================
-// 🎵 YOUTUBE API FUNCTIONS
-// ============================================================
-
-async function tryRequest(getter, attempts = 2) {
-    let lastErr;
-    for (let i = 1; i <= attempts; i++) {
-        try { 
-            return await getter(); 
-        } catch (err) { 
-            lastErr = err; 
-            if (i < attempts) await new Promise(r => setTimeout(r, 1000 * i));
-        }
-    }
-    throw lastErr;
-}
-
-function extractVideoId(ytUrl) {
-    let videoId = '';
-    if (ytUrl.includes('youtu.be/')) {
-        videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
-    } else if (ytUrl.includes('youtube.com/watch')) {
-        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
-        videoId = urlParams.get('v');
-    } else if (ytUrl.includes('youtube.com/shorts/')) {
-        videoId = ytUrl.split('shorts/')[1].split('?')[0];
-    }
-    return videoId;
-}
-
-async function getYoutubeMp3(ytUrl) {
-    const videoId = extractVideoId(ytUrl);
-    if (!videoId) throw new Error('Invalid YouTube URL');
-
-    try {
-        const apiUrl = `https://nayan-video-downloader.vercel.app/youtube?url=https://youtu.be/${videoId}`;
-        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-
-        if (res.data?.status === true && res.data?.data?.data?.formats) {
-            const formats = res.data.data.data.formats;
-            const title = res.data.data.data.title;
-            const thumbnail = res.data.data.data.thumbnail;
-
-            let bestAudio = null;
-            let bestPriority = 0;
-            const audioPriority = { '251': 100, '250': 90, '249': 85, '140': 80, '139': 70 };
-
-            for (const format of formats) {
-                if (format.type === 'audio') {
-                    let priority = audioPriority[format.formatId] || 50;
-                    if (priority > bestPriority && format.url) {
-                        bestPriority = priority;
-                        bestAudio = format;
-                    }
-                }
-            }
-
-            if (bestAudio?.url) {
-                return {
-                    url: bestAudio.url,
-                    title: title,
-                    thumbnail: thumbnail,
-                    quality: bestAudio.quality || bestAudio.label,
-                    source: 'Nayan YouTube API'
-                };
-            }
-        }
-    } catch (err) {
-        logDebug(`YouTube API audio failed: ${err.message}`);
-    }
-
-    try {
-        const apiUrl = `https://nayan-video-downloader.vercel.app/alldown?url=https://youtu.be/${videoId}`;
-        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-
-        if (res.data?.status === true && res.data?.data) {
-            const videoData = res.data.data;
-            const videoUrl = videoData.high || videoData.low;
-            if (videoUrl) {
-                return {
-                    url: videoUrl,
-                    title: videoData.title,
-                    thumbnail: videoData.thumbnail,
-                    quality: 'MP3',
-                    source: 'Nayan AllDown'
-                };
-            }
-        }
-    } catch (err) {
-        logDebug(`AllDown audio failed: ${err.message}`);
-    }
-
-    throw new Error('All audio APIs failed');
-}
-
-async function getYoutubeMp4(ytUrl) {
-    const videoId = extractVideoId(ytUrl);
-    if (!videoId) throw new Error('Invalid YouTube URL');
-
-    try {
-        const apiUrl = `https://nayan-video-downloader.vercel.app/alldown?url=https://youtu.be/${videoId}`;
-        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-
-        if (res.data?.status === true && res.data?.data) {
-            const videoData = res.data.data;
-            const videoUrl = videoData.high || videoData.low;
-            if (videoUrl) {
-                return {
-                    url: videoUrl,
-                    title: videoData.title,
-                    thumbnail: videoData.thumbnail,
-                    quality: 'HD',
-                    source: 'Nayan AllDown'
-                };
-            }
-        }
-    } catch (err) {
-        logDebug(`AllDown video failed: ${err.message}`);
-    }
-
-    try {
-        const apiUrl = `https://nayan-video-downloader.vercel.app/youtube?url=https://youtu.be/${videoId}`;
-        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-
-        if (res.data?.status === true && res.data?.data?.data?.formats) {
-            const formats = res.data.data.data.formats;
-            const title = res.data.data.data.title;
-            const thumbnail = res.data.data.data.thumbnail;
-
-            let bestVideo = null;
-            let bestQuality = 0;
-            const qualityPriority = { '2160p': 100, '1440p': 90, '1080p': 80, '720p': 70, '480p': 60, '360p': 50 };
-
-            for (const format of formats) {
-                if (format.type === 'video_with_audio' || format.type === 'video_only') {
-                    let quality = format.quality || format.label || '';
-                    let priority = 0;
-                    for (const [q, p] of Object.entries(qualityPriority)) {
-                        if (quality.includes(q)) { priority = p; break; }
-                    }
-                    if (priority > bestQuality && format.url) {
-                        bestQuality = priority;
-                        bestVideo = format;
-                    }
-                }
-            }
-
-            if (bestVideo?.url) {
-                return {
-                    url: bestVideo.url,
-                    title: title,
-                    thumbnail: thumbnail,
-                    quality: bestVideo.quality || bestVideo.label,
-                    source: 'Nayan YouTube API'
-                };
-            }
-        }
-    } catch (err) {
-        logDebug(`YouTube API video failed: ${err.message}`);
-    }
-
-    throw new Error('All video APIs failed');
-}
-
-// ============================================================
-// 🔐 PAIRING FUNCTIONS
+// 🔐 PAIRING FUNCTIONS (Only internal command)
 // ============================================================
 
 async function generatePairingCode(phoneNumber) {
@@ -599,240 +371,27 @@ async function removeWebhookIfSet(token) {
 }
 
 // ============================================================
-// 📝 COMMAND HANDLERS
-// ============================================================
-
-function formatHelpText(chatId) {
-    return "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n" +
-           "┃      *MICKEY GLITCH BOT*        ┃\n" +
-           "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n\n" +
-           "🛡️ *PAIRING SYSTEM*\n" +
-           "┣ /pair <number> ➔ Connect WhatsApp\n" +
-           "┣ /unpair ➔ Disconnect this chat\n" +
-           "┗ /check ➔ Check pairing status\n\n" +
-           "🤖 *CORE COMMANDS*\n" +
-           "┣ /menu, /help ➔ Show all commands\n" +
-           "┣ /ping ➔ Check bot status\n" +
-           "┣ /alive ➔ System health\n" +
-           "┣ /owner ➔ Developer info\n" +
-           "┣ /stats ➔ RAM, CPU, Uptime\n\n" +
-           "🎵 *MEDIA & DOWNLOADS*\n" +
-           "┣ /play <song> ➔ Download Audio (YT)\n" +
-           "┣ /video <query> ➔ Download Video (YT)\n" +
-           "┣ /shazam ➔ Identify song (reply to audio)\n" +
-           "┗ /stickertelegram <link> ➔ Sticker info\n\n" +
-           "👑 *OWNER COMMANDS*\n" +
-           "┣ /chats ➔ Paired groups list\n" +
-           "┣ /update ➔ Update from GitHub\n" +
-           "┣ /exec <cmd> ➔ Run terminal command\n" +
-           "┗ /broadcast <msg> ➔ Send to all chats\n\n" +
-           "⏳ *Powered by Mickey Developer*";
-}
-
-// ============================================================
-// 🎵 PLAY & VIDEO COMMAND HANDLERS
-// ============================================================
-
-async function handlePlayCommand(chatId, query, sendMessage, messageId = null) {
-    if (!query) return sendMessage(chatId, '⚠️ *Usage:* `/play song name`\n📌 *Example:* `/play Jux Enjoy`');
-
-    await sendMessage(chatId, `🎵 *Searching:* _${query.substring(0, 50)}_...`);
-
-    try {
-        const searchResult = await yts(query);
-        const video = searchResult.videos[0];
-        if (!video) return sendMessage(chatId, '❌ *Song not found.*');
-
-        const audioData = await getYoutubeMp3(video.url);
-        
-        await sendTelegramAudioWithPreview(
-            chatId, 
-            audioData.url, 
-            video.title, 
-            video.thumbnail, 
-            video.timestamp, 
-            audioData.quality || 'MP3 128kbps',
-            messageId
-        );
-    } catch (err) {
-        logError(`[PLAY] ${err.message}`);
-        await sendMessage(chatId, '❌ *Download failed.* Try again later.');
-    }
-}
-async function handleVideoCommand(chatId, query, sendMessage, messageId = null) {
-    if (!query) return sendMessage(chatId, '⚠️ *Usage:* `/video video name`\n📌 *Example:* `/video Marioo Mi Amor`');
-
-    await sendMessage(chatId, `📹 *Searching:* _${query.substring(0, 50)}_...`);
-
-    try {
-        const searchResult = await yts(query);
-        const video = searchResult.videos[0];
-        if (!video) return sendMessage(chatId, '❌ *Video not found.*');
-
-        const videoData = await getYoutubeMp4(video.url);
-        
-        await sendTelegramVideoWithPreview(
-            chatId,
-            videoData.url,
-            video.title,
-            video.thumbnail,
-            video.timestamp, 
-            videoData.quality || 'HD',
-            messageId
-        );
-    } catch (err) {
-        logError(`[VIDEO] ${err.message}`);
-        await sendMessage(chatId, '❌ *Download failed.* Try again later.');
-    }
-}
-
-// ============================================================
-// 🎤 SHAZAM COMMAND
-// ============================================================
-
-async function handleShazamCommand(chatId, repliedMessage, sendMessage, messageId = null) {
-    const token = settings.telegram?.botToken?.trim();
-    const media = repliedMessage.audio || repliedMessage.video || repliedMessage.voice;
-    
-    if (!media || !media.file_id) {
-        return sendMessage(chatId, '❌ *Reply to an audio/video with /shazam*');
-    }
-    
-    if (!settings.acrcloud || !settings.acrcloud.access_key) {
-        return sendMessage(chatId, '❌ *ACRCloud API not configured!*');
-    }
-
-    await sendMessage(chatId, '🔍 *Identifying song, please wait...*');
-
-    try {
-        const fileRes = await axios.get(`${TELEGRAM_BASE_URL(token)}/getFile?file_id=${media.file_id}`, AXIOS_DEFAULTS);
-        const filePath = fileRes.data.result.file_path;
-        const fileUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
-        const responseBuffer = await axios.get(fileUrl, { responseType: 'arraybuffer', ...AXIOS_DEFAULTS });
-        const mediaBuffer = Buffer.from(responseBuffer.data);
-
-        const tempInput = path.join(TEMP_DIR, `shazam_in_${Date.now()}`);
-        const tempAudio = path.join(TEMP_DIR, `shazam_out_${Date.now()}.wav`);
-        fs.writeFileSync(tempInput, mediaBuffer);
-
-        try { 
-            await execAsync(`ffmpeg -i "${tempInput}" -vn -acodec pcm_s16le -ar 44100 -ac 2 -t 15 "${tempAudio}" -y`); 
-        } catch (e) { 
-            fs.writeFileSync(tempAudio, fs.readFileSync(tempInput)); 
-        }
-
-        const acrcloud = require('acrcloud');
-        const acr = new acrcloud({ 
-            host: settings.acrcloud.host, 
-            access_key: settings.acrcloud.access_key, 
-            access_secret: settings.acrcloud.access_secret 
-        });
-
-        const result = await acr.identify(fs.readFileSync(tempAudio));
-
-        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
-        if (fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
-
-        if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
-            const song = result.metadata.music[0];
-            const title = song.title || 'Unknown';
-            const artist = song.artists?.[0]?.name || 'Unknown';
-            const caption = `🎵 *SHAZAM IDENTIFIED!*\n━━━━━━━━━━━━━━━━━━━━━━\n📌 *Title:* ${title}\n👤 *Artist:* ${artist}\n━━━━━━━━━━━━━━━━━━━━━━\n\n💡 *Use* /play ${title} *to download*`;
-            await sendMessage(chatId, caption, {}, messageId);
-        } else { 
-            await sendMessage(chatId, '❌ *Song not recognized.*'); 
-        }
-    } catch (err) { 
-        logError(`Shazam error: ${err.message}`);
-        await sendMessage(chatId, '❌ *Shazam system error.*'); 
-    }
-}
-
-// ============================================================
-// 🔄 UPDATE & BROADCAST COMMANDS
-// ============================================================
-
-async function handleUpdateCommand(chatId, isActiveOwner, sendMessage, messageId = null) {
-    if (!isActiveOwner) return sendMessage(chatId, '🚷 Owner only command!');
-    
-    await sendMessage(chatId, '⏳ *Checking for updates from GitHub...*');
-    const rawUrl = 'https://raw.githubusercontent.com/Mickeydeveloper/Mickey-Glitch/main/telegram-bot.js';
-    
-    try {
-        const response = await axios.get(rawUrl, { responseType: 'text', ...AXIOS_DEFAULTS });
-        if (response.status === 200 && response.data) {
-            fs.writeFileSync(__filename, response.data, 'utf8');
-            await sendMessage(chatId, '✅ *Code updated!* Restarting...', {}, messageId);
-            setTimeout(() => { process.exit(0); }, 2000);
-        } else { throw new Error(); }
-    } catch (error) { 
-        await sendMessage(chatId, '❌ *Update failed.*'); 
-    }
-}
-
-async function handleBroadcastCommand(chatId, isActiveOwner, message, sendMessage, messageId = null) {
-    if (!isActiveOwner) return sendMessage(chatId, '🚷 Owner only command!');
-    
-    const broadcastMsg = message.substring(message.indexOf(' ') + 1);
-    if (!broadcastMsg) return sendMessage(chatId, '⚠️ Usage: `/broadcast message`');
-    
-    const chats = loadAllowedChats();
-    let success = 0;
-    
-    for (const chat of chats) {
-        if (await sendMessage(chat, `📢 *BROADCAST*\n\n${broadcastMsg}`)) success++;
-        await delay(100); // Small delay to avoid rate limits
-    }
-    
-    await sendMessage(chatId, `✅ *Broadcast sent to ${success}/${chats.length} chats*`);
-}
-
-// ============================================================
 // 🚀 MAIN UPDATE HANDLER
 // ============================================================
 
 async function handleUpdate(update) {
-    if (update.callback_query) {
-        const callback = update.callback_query;
-        const chatId = callback.message.chat.id;
-        const data = callback.data;
-        const messageId = callback.message.message_id;
-
-        if (data.startsWith('play_')) {
-            const trackTitle = data.replace('play_', '');
-            await handlePlayCommand(chatId, trackTitle, (id, msg, extra = {}, msgId = null) => sendTelegramMessage(id, msg, extra, msgId), messageId);
-        }
-        
-        const token = settings.telegram?.botToken?.trim();
-        if (token) {
-            try {
-                await axios.post(`${TELEGRAM_BASE_URL(token)}/answerCallbackQuery`, {
-                    callback_query_id: callback.id
-                }, AXIOS_DEFAULTS);
-            } catch(e) {}
-        }
-        return;
-    }
-
     const message = update.message || update.edited_message;
     if (!message) return;
 
-    const chatId = message.chat?.id; // Chat ID for sending responses
-    const messageId = message.message_id; // Message ID for replying
+    const chatId = message.chat?.id;
+    const messageId = message.message_id;
     const sender = message.from;
     const rawText = String(message.text || '').trim();
 
     const sendMsg = async (id, txt, extra = {}, msgId = messageId) => sendTelegramMessage(id, txt, extra, msgId);
 
-    if (rawText.toLowerCase() === '/shazam' || rawText.toLowerCase() === '.shazam') {
-        if (message.reply_to_message) {
-            await handleShazamCommand(chatId, message.reply_to_message, sendMsg, messageId);
-        } else { 
-            await sendMsg(chatId, '❌ *Reply to an audio/video with /shazam*'); 
-        }
+    // Handle callback queries if any
+    if (update.callback_query) {
+        // You can add callback handling here if needed
         return;
     }
 
+    // Only process commands starting with / or .
     if (!rawText.startsWith('/') && !rawText.startsWith('.')) return;
 
     const cleanText = rawText.substring(1);
@@ -844,134 +403,51 @@ async function handleUpdate(update) {
     const allowed = isTelegramAuthorized(chatId);
     const isActiveOwner = isOwnerChat(chatId);
 
-    if (commandText === 'start' || commandText === 'menu' || commandText === 'help') {
-        await sendMsg(chatId, formatHelpText(chatId));
-        return;
-    }
-
+    // ============================================================
+    // 📝 INTERNAL COMMANDS (Only /pair is handled internally)
+    // ============================================================
+    
     if (commandText === 'pair') {
         await handlePairCommand(chatId, args, sendMsg);
         return;
     }
 
-    if (commandText === 'ping') {
-        return sendMsg(chatId, `🏓 *Pong!* Bot is active.\n⏱️ Latency: ${Date.now() - message.date * 1000}ms`);
-    }
-
-    if (commandText === 'alive') {
-        const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-        return sendMsg(chatId, `✅ *MICKEY GLITCH BOT* is Active!\n💾 RAM: ${ramUsage} MB\n⚙️ Telegram Engine | All Systems Operational`);
-    }
-
-    if (commandText === 'owner') {
-        return sendMsg(chatId, `👑 *Owner:* ${settings.botOwner || 'Mickey Developer'}\n📱 *WhatsApp:* wa.me/${settings.ownerNumber || '255612130873'}\n📢 *Channel:* t.me/mickeyglitch`);
-    }
-
+    // For all other commands, check if chat is authorized
     if (!allowed) {
         return sendMsg(chatId, '⚠️ *Chat not paired!*\n\nPlease use `/pair <number>` to connect your WhatsApp.');
     }
 
-    switch (commandText) {
-        case 'unpair':
-            if (!isChatAllowed(chatId)) return sendMsg(chatId, 'ℹ️ Chat not paired.');
-            removeAllowedChat(chatId);
-            return sendMsg(chatId, '✅ Chat unpaired successfully.');
+    // ============================================================
+    // 🎯 LOAD AND EXECUTE COMMANDS FROM /commands FOLDER
+    // ============================================================
+    
+    // Check if command exists in the commands folder
+    if (whatsappCommands.has(commandText)) {
+        try {
+            const cmd = whatsappCommands.get(commandText);
+            const tgSock = createTelegramSock(chatId, messageId);
+            
+            // Create mock WhatsApp message object
+            const mockMsg = {
+                key: { remoteJid: chatId, fromMe: false, id: messageId },
+                pushName: sender.first_name || sender.username || 'Telegram User',
+                message: { conversation: rawText },
+                quoted: message.reply_to_message || null
+            };
 
-        case 'check':
-            const isPaired = isChatAllowed(chatId);
-            return sendMsg(chatId, isPaired ? '✅ *Chat is paired!*' : '❌ *Chat is not paired.*');
-
-        case 'stats':
-            const uptime = Math.floor(process.uptime());
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            const seconds = uptime % 60;
-            const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-            const serverFreeRam = (os.freemem() / 1024 / 1024 / 1024).toFixed(2);
-            const totalRam = (os.totalmem() / 1024 / 1024 / 1024).toFixed(2);
-            const pairedChats = loadAllowedChats().length;
-
-            const statsText = `📊 *SYSTEM STATS*\n━━━━━━━━━━━━━━━━━━━━━━\n⏱️ *Uptime:* ${hours}h ${minutes}m ${seconds}s\n💾 *RAM:* ${ramUsage} MB\n🖥️ *Server:* ${serverFreeRam}GB / ${totalRam}GB Free\n💻 *Platform:* ${os.platform()} (${os.arch()})\n👥 *Paired Chats:* ${pairedChats}`;
-            return sendMsg(chatId, statsText);
-
-        case 'chats':
-            if (!isActiveOwner) return sendMsg(chatId, '🚷 Owner only command.');
-            const list = loadAllowedChats();
-            if (!list.length) return sendMsg(chatId, 'ℹ️ No paired chats.');
-            return sendMsg(chatId, `📝 *PAIRED CHATS (${list.length}):*\n\n` + list.map((id, index) => `${index + 1}. ID: \`${id}\``).join('\n'));
-
-        case 'exec':
-            if (!isActiveOwner) return sendMsg(chatId, '🚷 Owner only command!');
-            if (!fullArgs) return sendMsg(chatId, '⚠️ Usage: `/exec ls`');
-            await sendMsg(chatId, `💻 *Running command...*`);
-            try {
-                const { stdout, stderr } = await execAsync(fullArgs, { timeout: 30000 });
-                const output = stdout || stderr || 'No output.';
-                return sendMsg(chatId, `📤 *Output:*\n\`\`\`bash\n${output.substring(0, 3500)}\n\`\`\``);
-            } catch (e) {
-                return sendMsg(chatId, `❌ *Error:*\n\`\`\`bash\n${e.message.substring(0, 500)}\n\`\`\``);
-            }
-
-        case 'update':
-            await handleUpdateCommand(chatId, isActiveOwner, sendMsg, messageId);
+            // Execute the command
+            await cmd(tgSock, chatId, mockMsg, rawText);
             return;
-
-        case 'broadcast':
-            await handleBroadcastCommand(chatId, isActiveOwner, rawText, sendMsg, messageId);
+        } catch (err) {
+            logError(`Bridge Error (${commandText}): ${err.message}`);
+            await sendMsg(chatId, `❌ *Error executing command:* ${err.message}`);
             return;
+        }
+    }
 
-        case 'play':
-            await handlePlayCommand(chatId, fullArgs, sendMsg);
-            return;
-
-        case 'video':
-            await handleVideoCommand(chatId, fullArgs, sendMsg);
-            return;
-
-        case 'stickertelegram':
-            if (!args.length) return sendMsg(chatId, '⚠️ Usage: `/stickertelegram https://t.me/addstickers/PackName`');
-            const url = args[0].trim();
-            const match = url.match(/(?:https?:\/\/)?t\.me\/addstickers\/(.+)/i);
-            if (!match) return sendMsg(chatId, '❌ Invalid URL.');
-            const packName = match[1];
-            try {
-                const token = settings.telegram?.botToken?.trim();
-                const response = await axios.get(`${TELEGRAM_BASE_URL(token)}/getStickerSet`, { params: { name: packName }, ...AXIOS_DEFAULTS });
-                const stickerSet = response.data.result;
-                const stickers = stickerSet.stickers || [];
-                const text = `📦 *${stickerSet.title}*\n🆔 *Name:* ${stickerSet.name}\n🧩 *Count:* ${stickers.length}\n\n✨ *Mickey Glitch Bot*`;
-                await sendMsg(chatId, text);
-            } catch (error) { 
-                await sendMsg(chatId, '❌ Failed to get sticker pack.'); 
-            }
-            return;
-
-        default:
-            // JARIBU KUTAFUTA AMRI KWENYE FOLDER LA COMMANDS
-            if (whatsappCommands.has(commandText)) {
-                try {
-                    const cmd = whatsappCommands.get(commandText);
-                    const tgSock = createTelegramSock(chatId, messageId);
-                    
-                    // Kutengeneza "Fake Message" object inayofanana na ya WhatsApp
-                    const mockMsg = {
-                        key: { remoteJid: chatId, fromMe: false, id: messageId },
-                        pushName: sender.first_name || sender.username || 'Telegram User',
-                        message: { conversation: rawText },
-                        quoted: message.reply_to_message || null
-                    };
-
-                    await cmd(tgSock, chatId, mockMsg, rawText);
-                    return;
-                } catch (err) {
-                    logError(`Bridge Error (${commandText}): ${err.message}`);
-                }
-            }
-
-            if (rawText.startsWith('/') || rawText.startsWith('.')) {
-                return sendMsg(chatId, `❌ Command '${commandText}' not found.\nUse /menu to see available commands.`);
-            }
-            return;
+    // Command not found
+    if (rawText.startsWith('/') || rawText.startsWith('.')) {
+        return sendMsg(chatId, `❌ Command '${commandText}' not found.\n\n📂 Available commands are in the /commands folder.\nUse /menu to see available commands.`);
     }
 }
 
@@ -987,13 +463,18 @@ async function startTelegramBot() {
     }
 
     const token = settings.telegram?.botToken?.trim();
-    if (!token) { logError('Telegram botToken not found in settings.js'); return null; }
+    if (!token) { 
+        logError('Telegram botToken not found in settings.js'); 
+        return null; 
+    }
 
     ensureTelegramDataFile();
     loadWhatsappCommands();
     await removeWebhookIfSet(token);
     
     logSuccess('Telegram bot starting...');
+    logInfo(`Loaded ${whatsappCommands.size} commands from /commands folder`);
+    logInfo('Only /pair command is handled internally');
     
     let offset = 0;
     
@@ -1021,7 +502,11 @@ async function startTelegramBot() {
     const ownerId = String(settings.telegram?.ownerId || '').trim();
     if (ownerId) {
         const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-        const startMsg = "✅ *MICKEY GLITCH BOT STARTED!*\n\n🟢 *Status:* Online\n💾 *RAM:* " + ramUsage + " MB\n📅 *Time:* " + new Date().toLocaleString();
+        const startMsg = "✅ *MICKEY GLITCH BOT STARTED!*\n\n" +
+                        "🟢 *Status:* Online\n" +
+                        `💾 *RAM:* ${ramUsage} MB\n` +
+                        `📂 *Commands Loaded:* ${whatsappCommands.size}\n` +
+                        `📅 *Time:* ${new Date().toLocaleString()}`;
         await sendTelegramMessage(ownerId, startMsg);
     }
     
