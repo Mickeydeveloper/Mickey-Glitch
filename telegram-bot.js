@@ -1,7 +1,7 @@
 /**
  * TELEGRAM BOT MODULE - MICKEY GLITCH
- * Fixed: Uses commands from /commands folder only
- * Only /pair command is handled internally for WhatsApp pairing
+ * Enhanced: Better error handling for WhatsApp commands in Telegram
+ * Fixed: Command execution safety, timeout handling, and fallback mechanisms
  */
 
 const fs = require('fs');
@@ -25,6 +25,7 @@ const TEMP_DIR = path.join(__dirname, 'tmp');
 // Store active pairing sessions
 const activePairingSessions = new Map();
 const whatsappCommands = new Map();
+const commandExecutionTimeouts = new Map();
 
 // Default axios config
 const AXIOS_DEFAULTS = {
@@ -56,78 +57,156 @@ function logInfo(text) { console.log(colors.blue('ℹ️ ' + text)); }
 function logDebug(text) { console.log(colors.cyan('🐛 ' + text)); }
 
 // ============================================================
-// 🛠️ COMMAND BRIDGE (WHATSAPP TO TELEGRAM)
+// 🛠️ ENHANCED TELEGRAM SOCK WITH ERROR HANDLING
 // ============================================================
 
 /**
  * Inatengeneza "Fake Sock" ili amri za WhatsApp zifanye kazi Telegram
+ * Imeongezwa error handling na validation
  */
 function createTelegramSock(chatId, messageId) {
     return {
         sendMessage: async (jid, content, options = {}) => {
-            const id = String(jid);
-            if (content.text) {
-                return await sendTelegramMessage(id, content.text, {}, messageId);
-            } else if (content.image) {
-                const url = content.image.url || content.image;
-                return await sendTelegramPhoto(id, url, content.caption || '', messageId);
-            } else if (content.audio) {
-                const url = content.audio.url || content.audio;
-                return await sendTelegramMedia(id, 'audio', url, content.caption || '', messageId);
-            } else if (content.video) {
-                const url = content.video.url || content.video;
-                return await sendTelegramMedia(id, 'video', url, content.caption || '', messageId);
+            try {
+                const id = String(jid);
+                
+                // Validate content
+                if (!content || typeof content !== 'object') {
+                    throw new Error('Invalid content format');
+                }
+                
+                // Handle different message types
+                if (content.text) {
+                    return await sendTelegramMessage(id, content.text, {}, messageId);
+                } else if (content.image) {
+                    const url = content.image.url || content.image;
+                    if (!url) throw new Error('Image URL missing');
+                    return await sendTelegramPhoto(id, url, content.caption || '', messageId);
+                } else if (content.audio) {
+                    const url = content.audio.url || content.audio;
+                    if (!url) throw new Error('Audio URL missing');
+                    return await sendTelegramMedia(id, 'audio', url, content.caption || '', messageId);
+                } else if (content.video) {
+                    const url = content.video.url || content.video;
+                    if (!url) throw new Error('Video URL missing');
+                    return await sendTelegramMedia(id, 'video', url, content.caption || '', messageId);
+                } else {
+                    // Fallback: try to send as text
+                    const text = typeof content === 'string' ? content : JSON.stringify(content);
+                    return await sendTelegramMessage(id, text, {}, messageId);
+                }
+            } catch (error) {
+                logError(`[Sock.sendMessage] Error: ${error.message}`);
+                // Try to send error message to user
+                try {
+                    await sendTelegramMessage(String(jid), `❌ *Error sending message:* ${error.message}`, {}, messageId);
+                } catch (e) {
+                    logError(`[Sock.sendMessage] Fallback error: ${e.message}`);
+                }
+                return false;
             }
         },
-        sendMessageAck: async () => {},
+        
+        sendMessageAck: async () => {
+            // Simulate acknowledgment
+            return true;
+        },
+        
         react: async (jid, { text }) => {
-            return await sendTelegramMessage(jid, text, {}, messageId);
+            try {
+                // Send emoji reaction as text message
+                return await sendTelegramMessage(String(jid), text, {}, messageId);
+            } catch (error) {
+                logError(`[Sock.react] Error: ${error.message}`);
+                return false;
+            }
+        },
+        
+        // Additional WhatsApp methods that might be called
+        sendPresenceUpdate: async () => true,
+        readMessages: async () => true,
+        updateMessage: async () => true,
+        
+        // Logger for commands
+        logger: {
+            info: logInfo,
+            error: logError,
+            warn: logWarning,
+            debug: logDebug
         }
     };
 }
 
+// ============================================================
+// 📁 ENHANCED COMMAND LOADER WITH VALIDATION
+// ============================================================
+
 /**
- * Inapakia amri zote kutoka kwenye folder la commands
+ * Inapakia na kuthibitisha amri zote kutoka kwenye folder la commands
+ * Imeongezwa validation na error handling
  */
 function loadWhatsappCommands() {
     const commandsDir = path.join(__dirname, 'commands');
     if (!fs.existsSync(commandsDir)) {
         logWarning('Commands folder not found. Creating empty commands directory...');
-        fs.mkdirSync(commandsDir, { recursive: true });
+        try {
+            fs.mkdirSync(commandsDir, { recursive: true });
+        } catch (e) {
+            logError(`Failed to create commands directory: ${e.message}`);
+        }
         return;
     }
 
     const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.js'));
     whatsappCommands.clear();
     
+    if (files.length === 0) {
+        logWarning('No command files found in /commands folder');
+        return;
+    }
+    
     for (const file of files) {
         try {
             const baseName = file.replace('.js', '');
-            // Clear cache to reload if file changed
-            delete require.cache[require.resolve(path.join(commandsDir, file))];
-            const cmdModule = require(path.join(commandsDir, file));
+            const filePath = path.join(commandsDir, file);
             
-            // Check if it's a function (like alive.js or text.js)
+            // Clear cache to reload if file changed
+            delete require.cache[require.resolve(filePath)];
+            const cmdModule = require(filePath);
+            
+            // Validate and load command
+            let commandName = null;
+            let commandFunction = null;
+            
+            // Check if it's a function
             if (typeof cmdModule === 'function') {
-                whatsappCommands.set(baseName, cmdModule);
-                logDebug(`Loaded command: ${baseName} (function)`);
+                commandName = baseName;
+                commandFunction = cmdModule;
             } 
             // Check if it has a name property and execute function
-            else if (cmdModule.name && typeof cmdModule.execute === 'function') {
-                whatsappCommands.set(cmdModule.name, cmdModule.execute);
-                logDebug(`Loaded command: ${cmdModule.name} (object with execute)`);
-            }
-            // Fallback to file name
-            else if (typeof cmdModule === 'object' && cmdModule !== null) {
-                // Try to find execute function
-                if (typeof cmdModule.execute === 'function') {
-                    whatsappCommands.set(baseName, cmdModule.execute);
-                    logDebug(`Loaded command: ${baseName} (execute function)`);
+            else if (cmdModule && typeof cmdModule === 'object') {
+                if (cmdModule.name && typeof cmdModule.execute === 'function') {
+                    commandName = cmdModule.name;
+                    commandFunction = cmdModule.execute;
+                } else if (typeof cmdModule.execute === 'function') {
+                    commandName = baseName;
+                    commandFunction = cmdModule.execute;
+                } else if (cmdModule.default && typeof cmdModule.default === 'function') {
+                    commandName = baseName;
+                    commandFunction = cmdModule.default;
                 } else {
-                    // Assume the object itself is callable or has a default export
-                    whatsappCommands.set(baseName, cmdModule);
-                    logDebug(`Loaded command: ${baseName} (object)`);
+                    // Try to use the object itself as a function
+                    commandName = baseName;
+                    commandFunction = cmdModule;
                 }
+            }
+            
+            // Validate command
+            if (commandName && typeof commandFunction === 'function') {
+                whatsappCommands.set(commandName, commandFunction);
+                logDebug(`Loaded command: ${commandName} from ${file}`);
+            } else {
+                logWarning(`Skipping ${file}: No valid command function found`);
             }
         } catch (e) {
             logError(`Failed to load command ${file}: ${e.message}`);
@@ -136,72 +215,112 @@ function loadWhatsappCommands() {
     logSuccess(`Loaded ${whatsappCommands.size} WhatsApp commands from /commands folder`);
 }
 
-// Global flag to track if Telegram bot is running
-let isTelegramBotRunning = false;
-
 // ============================================================
-// 📱 TELEGRAM MEDIA FUNCTIONS
+// 📱 TELEGRAM MEDIA FUNCTIONS WITH ERROR HANDLING
 // ============================================================
 
 async function sendTelegramMessage(chatId, text, extra = {}, messageId = null) {
     const token = settings.telegram?.botToken?.trim();
-    if (!token || !chatId) return false;
+    if (!token || !chatId) {
+        logError('Missing token or chatId for sendTelegramMessage');
+        return false;
+    }
+    
     try {
-        await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
+        // Ensure text is string and not too long
+        const safeText = String(text || '').substring(0, 4096);
+        if (!safeText) {
+            logWarning('Empty message text');
+            return false;
+        }
+        
+        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
             chat_id: String(chatId),
-            text: text,
+            text: safeText,
             disable_web_page_preview: true,
             parse_mode: 'Markdown',
             reply_to_message_id: messageId,
             ...extra
-        }, AXIOS_DEFAULTS);
-        return true;
+        }, {
+            ...AXIOS_DEFAULTS,
+            timeout: 30000
+        });
+        
+        return response?.data?.ok !== false;
     } catch (error) {
-        logError(`Send message error: ${error.message}`);
+        // Handle specific error cases
+        if (error.response?.statusCode === 403) {
+            logError(`Bot blocked by user: ${chatId}`);
+        } else if (error.response?.statusCode === 400) {
+            logError(`Bad request: ${error.response?.data?.description || error.message}`);
+        } else {
+            logError(`Send message error: ${error.message}`);
+        }
         return false;
     }
 }
 
 async function sendTelegramPhoto(chatId, photoUrl, caption = '', messageId = null) {
     const token = settings.telegram?.botToken?.trim();
-    if (!token || !chatId) return false;
+    if (!token || !chatId || !photoUrl) return false;
+    
     try {
-        await axios.post(`${TELEGRAM_BASE_URL(token)}/sendPhoto`, {
+        const safeCaption = String(caption || '').substring(0, 1024);
+        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendPhoto`, {
             chat_id: String(chatId),
             photo: photoUrl,
-            caption: caption,
+            caption: safeCaption,
             parse_mode: 'Markdown',
             reply_to_message_id: messageId
-        }, AXIOS_DEFAULTS);
-        return true;
+        }, {
+            ...AXIOS_DEFAULTS,
+            timeout: 60000
+        });
+        return response?.data?.ok !== false;
     } catch (error) {
         logError(`Send photo error: ${error.message}`);
+        // Fallback: try to send as text with URL
+        try {
+            await sendTelegramMessage(chatId, `📸 *Photo URL:* ${photoUrl}\n${caption}`, {}, messageId);
+        } catch (e) {
+            logError(`Photo fallback error: ${e.message}`);
+        }
         return false;
     }
 }
 
 async function sendTelegramMedia(chatId, type, url, caption = '', messageId = null) {
     const token = settings.telegram?.botToken?.trim();
-    if (!token || !chatId) return false;
+    if (!token || !chatId || !url) return false;
+    
     const endpoint = type === 'audio' ? 'sendAudio' : 'sendVideo';
     try {
-        await axios.post(`${TELEGRAM_BASE_URL(token)}/${endpoint}`, {
+        const safeCaption = String(caption || '').substring(0, 1024);
+        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/${endpoint}`, {
             chat_id: String(chatId),
             [type]: url,
-            caption: caption,
+            caption: safeCaption,
             parse_mode: 'Markdown',
             reply_to_message_id: messageId
-        }, AXIOS_DEFAULTS);
-        return true;
+        }, {
+            ...AXIOS_DEFAULTS,
+            timeout: 120000 // 2 minutes for media
+        });
+        return response?.data?.ok !== false;
     } catch (error) {
         logError(`Send media error: ${error.message}`);
-        await sendTelegramMessage(chatId, `❌ Failed to send ${type}. File may be too large.`);
+        // Fallback: send link
+        try {
+            await sendTelegramMessage(chatId, `🎵 *Media Link:* ${url}\n${caption}`, {}, messageId);
+        } catch (e) {
+            logError(`Media fallback error: ${e.message}`);
+        }
         return false;
     }
 }
 
 // ============================================================
-// 🔐 PAIRING FUNCTIONS (Only internal command)
+// 🔐 PAIRING FUNCTIONS
 // ============================================================
 
 async function generatePairingCode(phoneNumber) {
@@ -261,10 +380,10 @@ async function handlePairCommand(chatId, args, sendMessage) {
     }
 
     if (activePairingSessions.has(chatId)) {
-        return sendMessage(chatId, '⏳ *Pairing already in progress!*');
+        return sendMessage(chatId, '⏳ *Pairing already in progress!*\n\nPlease wait for the current pairing to complete.');
     }
 
-    await sendMessage(chatId, `🔐 *GENERATING PAIRING CODE...*\n\n📱 *Number:* +${cleanNumber}\n⏱️ *Time:* 15-30 seconds`);
+    await sendMessage(chatId, `🔐 *GENERATING PAIRING CODE...*\n\n📱 *Number:* +${cleanNumber}\n⏱️ *Time:* 15-30 seconds\n\n⏳ Please wait...`);
 
     activePairingSessions.set(chatId, true);
 
@@ -283,20 +402,21 @@ async function handlePairCommand(chatId, args, sendMessage) {
                               `2️⃣ Go *Settings* → *Linked Devices*\n` +
                               `3️⃣ Select *Link with Phone Number*\n` +
                               `4️⃣ Enter this code: \`${result.pairingCode}\`\n\n` +
-                              `✅ *Bot will connect automatically!*`;
+                              `✅ *Bot will connect automatically!*\n` +
+                              `⏳ Connection may take 10-30 seconds.`;
 
             await sendMessage(chatId, successMsg);
 
             const ownerId = String(settings.telegram?.ownerId || '').trim();
             if (ownerId && ownerId !== chatId) {
-                await sendMessage(ownerId, `🔔 *New Pairing Request*\n👤 Chat ID: \`${chatId}\`\n📱 Number: +${cleanNumber}\n✅ Status: Success`);
+                await sendMessage(ownerId, `🔔 *New Pairing Request*\n👤 Chat ID: \`${chatId}\`\n📱 Number: +${cleanNumber}\n✅ Status: Success\n🔑 Code: \`${result.pairingCode}\``);
             }
         } else {
-            await sendMessage(chatId, '❌ *FAILED TO GET CODE!*');
+            await sendMessage(chatId, '❌ *FAILED TO GET CODE!*\n\nPlease try again later.');
         }
     } catch (error) {
         logError(`Pairing Error: ${error.message}`);
-        await sendMessage(chatId, '❌ *PAIRING FAILED!*\n\nPlease try again later.');
+        await sendMessage(chatId, `❌ *PAIRING FAILED!*\n\n📛 Error: ${error.message}\n\nPlease try again later.`);
     } finally {
         setTimeout(() => {
             activePairingSessions.delete(chatId);
@@ -326,8 +446,12 @@ function loadAllowedChats() {
 }
 
 function saveAllowedChats(chats) {
-    const unique = Array.from(new Set(chats.map(id => String(id))));
-    fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify(unique, null, 2), 'utf8');
+    try {
+        const unique = Array.from(new Set(chats.map(id => String(id))));
+        fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify(unique, null, 2), 'utf8');
+    } catch (error) {
+        logError(`Save allowed chats error: ${error.message}`);
+    }
 }
 
 function isChatAllowed(chatId) { 
@@ -371,83 +495,223 @@ async function removeWebhookIfSet(token) {
 }
 
 // ============================================================
-// 🚀 MAIN UPDATE HANDLER
+// 🛡️ COMMAND EXECUTION WITH SAFETY FEATURES
+// ============================================================
+
+/**
+ * Execute WhatsApp command with timeout and error handling
+ */
+async function executeWhatsAppCommand(commandName, commandFn, sock, chatId, message, text) {
+    const startTime = Date.now();
+    const timeoutMs = 60000; // 60 seconds timeout
+    
+    return new Promise(async (resolve) => {
+        // Set timeout for command execution
+        const timeoutId = setTimeout(() => {
+            logError(`Command ${commandName} timed out after ${timeoutMs}ms`);
+            try {
+                sendTelegramMessage(chatId, `⏰ *Command timeout!*\n\nCommand "${commandName}" took too long to execute.`, {}, message.id);
+            } catch (e) {
+                logError(`Timeout notification failed: ${e.message}`);
+            }
+            resolve(false);
+        }, timeoutMs);
+        
+        try {
+            // Execute the command
+            const result = await commandFn(sock, chatId, message, text);
+            
+            clearTimeout(timeoutId);
+            const executionTime = Date.now() - startTime;
+            logDebug(`Command ${commandName} executed in ${executionTime}ms`);
+            resolve(result !== false);
+        } catch (error) {
+            clearTimeout(timeoutId);
+            logError(`Command ${commandName} execution error: ${error.message}`);
+            
+            // Send error to user
+            try {
+                const errorMsg = `❌ *Command Error!*\n\n` +
+                                `📛 *Command:* ${commandName}\n` +
+                                `⚠️ *Error:* ${error.message.substring(0, 300)}`;
+                await sendTelegramMessage(chatId, errorMsg, {}, message.id);
+            } catch (e) {
+                logError(`Error notification failed: ${e.message}`);
+            }
+            resolve(false);
+        }
+    });
+}
+
+// ============================================================
+// 🚀 MAIN UPDATE HANDLER WITH ENHANCED ERROR HANDLING
 // ============================================================
 
 async function handleUpdate(update) {
-    const message = update.message || update.edited_message;
-    if (!message) return;
-
-    const chatId = message.chat?.id;
-    const messageId = message.message_id;
-    const sender = message.from;
-    const rawText = String(message.text || '').trim();
-
-    const sendMsg = async (id, txt, extra = {}, msgId = messageId) => sendTelegramMessage(id, txt, extra, msgId);
-
-    // Handle callback queries if any
-    if (update.callback_query) {
-        // You can add callback handling here if needed
-        return;
-    }
-
-    // Only process commands starting with / or .
-    if (!rawText.startsWith('/') && !rawText.startsWith('.')) return;
-
-    const cleanText = rawText.substring(1);
-    const parts = cleanText.split(/\s+/);
-    const commandText = parts[0].toLowerCase();
-    const args = parts.slice(1);
-    const fullArgs = args.join(' ');
-
-    const allowed = isTelegramAuthorized(chatId);
-    const isActiveOwner = isOwnerChat(chatId);
-
-    // ============================================================
-    // 📝 INTERNAL COMMANDS (Only /pair is handled internally)
-    // ============================================================
-    
-    if (commandText === 'pair') {
-        await handlePairCommand(chatId, args, sendMsg);
-        return;
-    }
-
-    // For all other commands, check if chat is authorized
-    if (!allowed) {
-        return sendMsg(chatId, '⚠️ *Chat not paired!*\n\nPlease use `/pair <number>` to connect your WhatsApp.');
-    }
-
-    // ============================================================
-    // 🎯 LOAD AND EXECUTE COMMANDS FROM /commands FOLDER
-    // ============================================================
-    
-    // Check if command exists in the commands folder
-    if (whatsappCommands.has(commandText)) {
-        try {
-            const cmd = whatsappCommands.get(commandText);
-            const tgSock = createTelegramSock(chatId, messageId);
+    try {
+        // Handle callback queries
+        if (update.callback_query) {
+            const callback = update.callback_query;
+            const chatId = callback.message?.chat?.id;
+            const messageId = callback.message?.message_id;
+            const data = callback.data;
             
-            // Create mock WhatsApp message object
-            const mockMsg = {
-                key: { remoteJid: chatId, fromMe: false, id: messageId },
-                pushName: sender.first_name || sender.username || 'Telegram User',
-                message: { conversation: rawText },
-                quoted: message.reply_to_message || null
-            };
-
-            // Execute the command
-            await cmd(tgSock, chatId, mockMsg, rawText);
-            return;
-        } catch (err) {
-            logError(`Bridge Error (${commandText}): ${err.message}`);
-            await sendMsg(chatId, `❌ *Error executing command:* ${err.message}`);
+            if (!chatId) return;
+            
+            // Handle callback data
+            try {
+                const token = settings.telegram?.botToken?.trim();
+                if (token) {
+                    await axios.post(`${TELEGRAM_BASE_URL(token)}/answerCallbackQuery`, {
+                        callback_query_id: callback.id
+                    }, AXIOS_DEFAULTS);
+                }
+                
+                // Process callback if needed
+                // You can add callback handlers here
+            } catch (e) {
+                logError(`Callback handling error: ${e.message}`);
+            }
             return;
         }
-    }
 
-    // Command not found
-    if (rawText.startsWith('/') || rawText.startsWith('.')) {
-        return sendMsg(chatId, `❌ Command '${commandText}' not found.\n\n📂 Available commands are in the /commands folder.\nUse /menu to see available commands.`);
+        const message = update.message || update.edited_message;
+        if (!message) return;
+
+        const chatId = message.chat?.id;
+        const messageId = message.message_id;
+        const sender = message.from;
+        const rawText = String(message.text || '').trim();
+
+        if (!chatId || !sender) {
+            logWarning('Invalid message: missing chatId or sender');
+            return;
+        }
+
+        const sendMsg = async (id, txt, extra = {}, msgId = messageId) => {
+            try {
+                return await sendTelegramMessage(id, txt, extra, msgId);
+            } catch (error) {
+                logError(`sendMsg error: ${error.message}`);
+                return false;
+            }
+        };
+
+        // Only process commands starting with / or .
+        if (!rawText.startsWith('/') && !rawText.startsWith('.')) return;
+
+        const cleanText = rawText.substring(1);
+        const parts = cleanText.split(/\s+/);
+        const commandText = parts[0].toLowerCase();
+        const args = parts.slice(1);
+
+        const allowed = isTelegramAuthorized(chatId);
+        const isActiveOwner = isOwnerChat(chatId);
+
+        // ============================================================
+        // 📝 INTERNAL COMMANDS (Only /pair is handled internally)
+        // ============================================================
+        
+        if (commandText === 'pair') {
+            await handlePairCommand(chatId, args, sendMsg);
+            return;
+        }
+
+        // For all other commands, check if chat is authorized
+        if (!allowed) {
+            return sendMsg(chatId, '⚠️ *Chat not paired!*\n\nPlease use `/pair <number>` to connect your WhatsApp.');
+        }
+
+        // ============================================================
+        // 🎯 LOAD AND EXECUTE COMMANDS FROM /commands FOLDER
+        // ============================================================
+        
+        // Check if command exists in the commands folder
+        if (whatsappCommands.has(commandText)) {
+            try {
+                const commandFn = whatsappCommands.get(commandText);
+                
+                // Validate command function
+                if (typeof commandFn !== 'function') {
+                    throw new Error(`Command ${commandText} is not a valid function`);
+                }
+                
+                // Create Telegram sock
+                const tgSock = createTelegramSock(chatId, messageId);
+                
+                // Create mock WhatsApp message object
+                const mockMsg = {
+                    key: { 
+                        remoteJid: chatId, 
+                        fromMe: false, 
+                        id: messageId,
+                        participant: sender.id || sender.username,
+                        mentionedJid: []
+                    },
+                    pushName: sender.first_name || sender.username || 'Telegram User',
+                    message: { conversation: rawText },
+                    quoted: message.reply_to_message ? {
+                        key: { remoteJid: chatId, fromMe: false, id: message.reply_to_message.message_id },
+                        pushName: message.reply_to_message.from?.first_name || 'Unknown',
+                        message: { conversation: message.reply_to_message.text || '' }
+                    } : null,
+                    id: messageId,
+                    sender: sender,
+                    chat: message.chat,
+                    from: chatId,
+                    body: rawText,
+                    // Extra properties for compatibility
+                    fromMe: false,
+                    isGroup: message.chat?.type === 'group' || message.chat?.type === 'supergroup',
+                    participant: sender.id || sender.username
+                };
+
+                logDebug(`Executing command: ${commandText} from chat: ${chatId}`);
+                
+                // Execute command with safety features
+                await executeWhatsAppCommand(commandText, commandFn, tgSock, chatId, mockMsg, rawText);
+                return;
+            } catch (err) {
+                logError(`Bridge Error (${commandText}): ${err.message}`);
+                await sendMsg(chatId, `❌ *Error executing command:* ${err.message.substring(0, 200)}`);
+                return;
+            }
+        }
+
+        // Command not found
+        if (rawText.startsWith('/') || rawText.startsWith('.')) {
+            // Suggest similar commands
+            const suggestions = [];
+            for (const [cmdName] of whatsappCommands) {
+                if (cmdName.startsWith(commandText.substring(0, 2))) {
+                    suggestions.push(cmdName);
+                }
+            }
+            
+            let errorMsg = `❌ *Command '${commandText}' not found.*\n\n`;
+            if (suggestions.length > 0) {
+                errorMsg += `💡 *Did you mean:* ${suggestions.slice(0, 5).map(s => `\`${s}\``).join(', ')}\n\n`;
+            }
+            errorMsg += `📂 *Available commands:*\n`;
+            const cmds = Array.from(whatsappCommands.keys()).slice(0, 15);
+            errorMsg += cmds.map(c => `┣ \`${c}\``).join('\n');
+            if (whatsappCommands.size > 15) {
+                errorMsg += `\n┗ ... and ${whatsappCommands.size - 15} more`;
+            }
+            
+            return sendMsg(chatId, errorMsg);
+        }
+    } catch (error) {
+        logError(`Update handling error: ${error.message}`);
+        // Try to notify user
+        try {
+            const chatId = update.message?.chat?.id;
+            if (chatId) {
+                await sendTelegramMessage(chatId, '❌ *System Error!*\n\nAn unexpected error occurred. Please try again later.');
+            }
+        } catch (e) {
+            logError(`Final error handler failed: ${e.message}`);
+        }
     }
 }
 
@@ -475,39 +739,72 @@ async function startTelegramBot() {
     logSuccess('Telegram bot starting...');
     logInfo(`Loaded ${whatsappCommands.size} commands from /commands folder`);
     logInfo('Only /pair command is handled internally');
+    logInfo('All other commands are loaded from /commands folder');
     
     let offset = 0;
+    let pollingErrors = 0;
+    const maxPollingErrors = 10;
     
     const pollUpdates = async () => {
         try {
             const response = await axios.get(`${TELEGRAM_BASE_URL(token)}/getUpdates`, {
-                params: { timeout: 30, offset: offset + 1 },
+                params: { 
+                    timeout: 30, 
+                    offset: offset + 1,
+                    allowed_updates: ['message', 'edited_message', 'callback_query']
+                },
                 ...AXIOS_DEFAULTS
             });
             
+            // Reset error counter on success
+            pollingErrors = 0;
+            
             const updates = response.data.result;
-            for (const update of updates) {
-                await handleUpdate(update);
-                offset = update.update_id;
+            if (updates && updates.length > 0) {
+                logDebug(`Processing ${updates.length} updates`);
+                for (const update of updates) {
+                    try {
+                        await handleUpdate(update);
+                        offset = update.update_id;
+                    } catch (err) {
+                        logError(`Update processing error: ${err.message}`);
+                    }
+                }
             }
         } catch (err) {
-            logError(`Polling error: ${err.message}`);
+            pollingErrors++;
+            logError(`Polling error (${pollingErrors}/${maxPollingErrors}): ${err.message}`);
+            
+            if (pollingErrors >= maxPollingErrors) {
+                logError('Too many polling errors. Bot might be offline or token invalid.');
+                // Don't stop, just continue with longer delay
+            }
         }
         
-        setTimeout(pollUpdates, 1000);
+        // Adaptive polling interval
+        const interval = pollingErrors > 5 ? 5000 : 1000;
+        setTimeout(pollUpdates, interval);
     };
     
+    // Start polling
     pollUpdates();
     
+    // Send startup notification to owner
     const ownerId = String(settings.telegram?.ownerId || '').trim();
     if (ownerId) {
-        const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-        const startMsg = "✅ *MICKEY GLITCH BOT STARTED!*\n\n" +
-                        "🟢 *Status:* Online\n" +
-                        `💾 *RAM:* ${ramUsage} MB\n` +
-                        `📂 *Commands Loaded:* ${whatsappCommands.size}\n` +
-                        `📅 *Time:* ${new Date().toLocaleString()}`;
-        await sendTelegramMessage(ownerId, startMsg);
+        try {
+            const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
+            const startMsg = "✅ *MICKEY GLITCH BOT STARTED!*\n\n" +
+                            "🟢 *Status:* Online\n" +
+                            `💾 *RAM:* ${ramUsage} MB\n` +
+                            `📂 *Commands Loaded:* ${whatsappCommands.size}\n` +
+                            `👥 *Paired Chats:* ${loadAllowedChats().length}\n` +
+                            `📅 *Time:* ${new Date().toLocaleString()}\n\n` +
+                            "⚡ *Ready to serve!*";
+            await sendTelegramMessage(ownerId, startMsg);
+        } catch (e) {
+            logError(`Startup notification failed: ${e.message}`);
+        }
     }
     
     // Set the flag to true after successful startup
