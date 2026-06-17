@@ -31,7 +31,7 @@ const settings = {
 
   // Auto-join configuration: add channel/group targets here
   autoJoin: {
-    channels: ['0029Vb6B9xFCxoAseuG1g610@newsletter'], // Tumia Channel ID moja kwa moja
+    channels: ['120363398106360290@newsletter'], // Tumia Channel ID moja kwa moja
     groups: ['https://chat.whatsapp.com/HJnXkPtpY2lDVi1rZilcNe'] // Link safi bila query params
   },
 
