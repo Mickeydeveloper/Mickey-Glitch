@@ -1,6 +1,6 @@
 /**
  * TELEGRAM BOT MODULE - MICKEY GLITCH
- * ULTIMATE: Full commands, Buttons, Update, and Enhanced Menu
+ * ULTIMATE FIX: All errors fixed, Tanzania/Africa charts, Full menu
  */
 
 const fs = require('fs');
@@ -67,12 +67,10 @@ async function sendTelegramButtons(chatId, text, buttons, messageId = null) {
     if (!token || !chatId) return false;
     
     try {
-        // Format buttons for Telegram inline keyboard
         const keyboard = {
             inline_keyboard: []
         };
         
-        // Convert buttons to Telegram format
         if (Array.isArray(buttons)) {
             let row = [];
             for (const btn of buttons) {
@@ -109,7 +107,6 @@ async function sendTelegramButtons(chatId, text, buttons, messageId = null) {
         return response?.data?.ok !== false;
     } catch (error) {
         logError(`Send buttons error: ${error.message}`);
-        // Fallback: send without buttons
         return await sendTelegramMessage(chatId, text, {}, messageId);
     }
 }
@@ -255,6 +252,22 @@ async function sendTelegramMessage(chatId, text, extra = {}, messageId = null) {
         
         return response?.data?.ok !== false;
     } catch (error) {
+        if (error.response?.status === 400) {
+            // Try without Markdown
+            try {
+                const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
+                    chat_id: String(chatId),
+                    text: String(text || '').substring(0, 4096),
+                    disable_web_page_preview: true,
+                    reply_to_message_id: messageId,
+                    ...extra
+                }, {
+                    ...AXIOS_DEFAULTS,
+                    timeout: 30000
+                });
+                return response?.data?.ok !== false;
+            } catch (e) {}
+        }
         logError(`Send message error: ${error.message}`);
         return false;
     }
@@ -315,22 +328,26 @@ async function sendTelegramAudio(chatId, audioUrl, caption = '', messageId = nul
             return false;
         }
     } catch (error) {
-        logError(`Send audio error: ${error.message}`);
-        // Try sending as document
-        try {
-            const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendDocument`, {
-                chat_id: String(chatId),
-                document: audioUrl,
-                caption: `🎵 *Audio file*\n${caption.substring(0, 200)}`,
-                parse_mode: 'Markdown',
-                reply_to_message_id: messageId
-            }, {
-                ...AXIOS_DEFAULTS,
-                timeout: 180000
-            });
-            return response?.data?.ok !== false;
-        } catch (e) {
-            logError(`Document fallback error: ${e.message}`);
+        if (error.response?.status === 400) {
+            logError(`Audio error 400: File may be too large or invalid format`);
+            // Try sending as document
+            try {
+                const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendDocument`, {
+                    chat_id: String(chatId),
+                    document: audioUrl,
+                    caption: `🎵 *Audio file*\n${caption.substring(0, 200)}`,
+                    parse_mode: 'Markdown',
+                    reply_to_message_id: messageId
+                }, {
+                    ...AXIOS_DEFAULTS,
+                    timeout: 180000
+                });
+                return response?.data?.ok !== false;
+            } catch (e) {
+                logError(`Document fallback error: ${e.message}`);
+            }
+        } else {
+            logError(`Send audio error: ${error.message}`);
         }
         return false;
     }
@@ -364,18 +381,19 @@ async function sendTelegramVideo(chatId, videoUrl, caption = '', messageId = nul
 // ============================================================
 
 function extractVideoId(ytUrl) {
+    if (!ytUrl || typeof ytUrl !== 'string') return null;
     let videoId = '';
     if (ytUrl.includes('youtu.be/')) {
-        videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
+        videoId = ytUrl.split('youtu.be/')[1]?.split('?')[0] || '';
     } else if (ytUrl.includes('youtube.com/watch')) {
         const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
-        videoId = urlParams.get('v');
+        videoId = urlParams.get('v') || '';
     } else if (ytUrl.includes('youtube.com/shorts/')) {
-        videoId = ytUrl.split('shorts/')[1].split('?')[0];
+        videoId = ytUrl.split('shorts/')[1]?.split('?')[0] || '';
     } else if (ytUrl.includes('youtube.com/embed/')) {
-        videoId = ytUrl.split('embed/')[1].split('?')[0];
+        videoId = ytUrl.split('embed/')[1]?.split('?')[0] || '';
     }
-    return videoId;
+    return videoId || null;
 }
 
 async function tryRequest(getter, attempts = 3) {
@@ -661,32 +679,124 @@ async function handlePairCommand(chatId, args, sendMessage) {
 }
 
 // ============================================================
+// 🎵 TANZANIA & AFRICA CHART
+// ============================================================
+
+async function showTanzaniaChart(chatId, sendMessage) {
+    try {
+        await sendMessage(chatId, '🎵 *Loading Tanzania & Africa Top Charts...*');
+        
+        // Search for Tanzania and Africa music
+        const searches = [
+            'Tanzania bongo music 2026',
+            'East African music 2026',
+            'Diamond Platnumz songs',
+            'Zuchu songs',
+            'Rayvanny songs',
+            'Mbosso songs',
+            'Harmonize songs',
+            'Africa music 2026'
+        ];
+        
+        let allVideos = [];
+        for (const search of searches) {
+            try {
+                const result = await yts(search);
+                if (result && result.videos && result.videos.length > 0) {
+                    allVideos = allVideos.concat(result.videos.slice(0, 3));
+                }
+            } catch (e) {}
+        }
+        
+        // Remove duplicates by title
+        const uniqueVideos = [];
+        const seenTitles = new Set();
+        for (const v of allVideos) {
+            if (!seenTitles.has(v.title)) {
+                seenTitles.add(v.title);
+                uniqueVideos.push(v);
+            }
+        }
+        
+        if (uniqueVideos.length === 0) {
+            // Fallback: search for popular African music
+            const fallbackResult = await yts('popular african music 2026');
+            const videos = fallbackResult.videos || [];
+            if (videos.length === 0) {
+                return sendMessage(chatId, '❌ *No chart songs found.*');
+            }
+            uniqueVideos.push(...videos.slice(0, 10));
+        }
+        
+        // Sort by views if available
+        uniqueVideos.sort((a, b) => (b.views || 0) - (a.views || 0));
+        const topVideos = uniqueVideos.slice(0, 10);
+        
+        let chartMsg = `🎵 *TANZANIA & AFRICA TOP CHART*\n`;
+        chartMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        
+        topVideos.forEach((v, i) => {
+            const num = i + 1;
+            const views = v.views ? `👁️ ${v.views}` : '';
+            const duration = v.timestamp || 'Unknown';
+            const artist = v.author?.name || 'Unknown Artist';
+            const emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+            const emoji = emojis[i] || `${num}.`;
+            chartMsg += `${emoji} *${v.title.substring(0, 40)}*\n`;
+            chartMsg += `   🎤 ${artist}\n`;
+            chartMsg += `   ⏱️ ${duration} ${views ? `| ${views}` : ''}\n\n`;
+        });
+        
+        chartMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        chartMsg += `💡 *To play:* /play [song name]\n`;
+        chartMsg += `💡 *Example:* /play ${topVideos[0]?.title?.substring(0, 30) || 'song'}`;
+        
+        // Create buttons for top 5 songs
+        const buttons = topVideos.slice(0, 5).map((v) => ({
+            text: `${v.title.substring(0, 25)}`,
+            callback_data: `play_${v.title.substring(0, 30)}`
+        }));
+        
+        await sendTelegramButtons(chatId, chartMsg, buttons);
+        
+    } catch (error) {
+        logError(`[CHART] ${error.message}`);
+        await sendMessage(chatId, '❌ *Failed to load chart.* Please try again later.');
+    }
+}
+
+// ============================================================
 // 🎵 PLAY COMMAND
 // ============================================================
 
 async function handlePlayCommand(chatId, query, sendMessage, messageId = null) {
     if (!query) {
         const buttons = [
-            { text: '🎵 Top Charts', callback_data: 'play_chart' },
+            { text: '🎵 Tanzania Chart', callback_data: 'tanzania_chart' },
             { text: '🎤 Random Song', callback_data: 'play_random' },
-            { text: '📊 Help', callback_data: 'help' }
+            { text: '📊 Menu', callback_data: 'menu' }
         ];
         return sendTelegramButtons(chatId, 
             '⚠️ *Usage:* `/play song name or URL`\n\n' +
             '📌 *Examples:*\n' +
-            '┣ `/play Jux Enjoy`\n' +
+            '┣ `/play Sauti Sol`\n' +
             '┣ `/play https://youtu.be/...`\n' +
-            '┣ `/play chart` - Top songs\n\n' +
+            '┣ `/play tz` - Tanzania chart\n' +
+            '┣ `/play africa` - Africa chart\n\n' +
             '💡 *Click a button below or type a command*',
             buttons, messageId
         );
     }
 
-    if (query.toLowerCase().includes('chart') || query.toLowerCase().includes('top')) {
-        return await showChart(chatId, sendMessage);
+    // Check for Tanzania/Africa chart
+    const lowerQuery = query.toLowerCase();
+    if (lowerQuery.includes('tz') || lowerQuery.includes('tanzania') || 
+        lowerQuery.includes('africa') || lowerQuery.includes('bongo') || 
+        lowerQuery.includes('chart')) {
+        return await showTanzaniaChart(chatId, sendMessage);
     }
 
-    if (query.toLowerCase().includes('random')) {
+    if (lowerQuery.includes('random')) {
         return await playRandomSong(chatId, sendMessage);
     }
 
@@ -738,7 +848,12 @@ async function handlePlayCommand(chatId, query, sendMessage, messageId = null) {
         const audioSent = await sendTelegramAudio(chatId, audioData.url, caption, messageId);
         
         if (audioSent) {
-            await sendMessage(chatId, `✅ *Audio sent successfully!*\n\n🎵 *${title}*\n⏱️ Duration: ${duration}`);
+            const buttons = [
+                { text: '🎵 Chart', callback_data: 'tanzania_chart' },
+                { text: '🎤 Random', callback_data: 'play_random' },
+                { text: '📊 Menu', callback_data: 'menu' }
+            ];
+            await sendTelegramButtons(chatId, `✅ *Audio sent successfully!*\n\n🎵 *${title}*\n⏱️ Duration: ${duration}`, buttons, messageId);
         } else {
             await sendMessage(chatId, `✅ *Audio ready!*\n\n🎵 *${title}*\n📥 *Download:* ${audioData.url}`);
         }
@@ -749,54 +864,16 @@ async function handlePlayCommand(chatId, query, sendMessage, messageId = null) {
     }
 }
 
-async function showChart(chatId, sendMessage) {
-    try {
-        await sendMessage(chatId, '📊 *Loading top chart songs...*');
-        
-        const searchResult = await yts('top trending songs 2026 official');
-        let videos = searchResult.videos;
-        
-        if (!videos || videos.length === 0) {
-            const altResult = await yts('popular songs 2026');
-            videos = altResult.videos;
-        }
-        
-        if (!videos || videos.length === 0) {
-            return sendMessage(chatId, '❌ *No chart songs found.*');
-        }
-        
-        videos = videos.slice(0, 10);
-        
-        let chartMsg = `📊 *TOP CHART SONGS*\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-        
-        videos.forEach((v, i) => {
-            const num = i + 1;
-            const views = v.views ? `👁️ ${v.views}` : '';
-            chartMsg += `${num}. *${v.title.substring(0, 40)}*\n`;
-            chartMsg += `   🎤 ${v.author.name}\n`;
-            chartMsg += `   ⏱️ ${v.timestamp || 'Unknown'} ${views ? `| ${views}` : ''}\n\n`;
-        });
-        
-        chartMsg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-        chartMsg += `💡 *To play:* /play [song name]\n`;
-        chartMsg += `💡 *Example:* /play ${videos[0]?.title?.substring(0, 30) || 'song'}`;
-        
-        const buttons = videos.slice(0, 5).map((v, i) => ({
-            text: `${i + 1}. ${v.title.substring(0, 20)}`,
-            callback_data: `play_${v.title.substring(0, 30)}`
-        }));
-        
-        await sendTelegramButtons(chatId, chartMsg, buttons);
-        
-    } catch (error) {
-        logError(`[CHART] ${error.message}`);
-        await sendMessage(chatId, '❌ *Failed to load chart.* Please try again later.');
-    }
-}
-
 async function playRandomSong(chatId, sendMessage) {
     try {
-        const searchResult = await yts('random popular songs');
+        const searches = [
+            'random popular song',
+            'top trending music',
+            'viral songs 2026',
+            'popular music'
+        ];
+        const search = searches[Math.floor(Math.random() * searches.length)];
+        const searchResult = await yts(search);
         const videos = searchResult.videos;
         if (!videos || videos.length === 0) {
             return sendMessage(chatId, '❌ *No random song found.*');
@@ -909,26 +986,28 @@ async function handleExecCommand(chatId, isActiveOwner, fullArgs, sendMessage) {
 }
 
 // ============================================================
-// 📝 ULTIMATE MENU
+// 📝 ULTIMATE MENU - SHOW ALL COMMANDS
 // ============================================================
 
 function formatHelpText() {
     const internalCommands = [
-        { cmd: '/pair <number>', desc: 'Connect WhatsApp' },
-        { cmd: '/unpair', desc: 'Disconnect this chat' },
-        { cmd: '/check', desc: 'Check pairing status' },
-        { cmd: '/play <song/URL>', desc: 'Play audio from YouTube' },
-        { cmd: '/play chart', desc: 'Show top chart songs' },
-        { cmd: '/play random', desc: 'Play random song' },
-        { cmd: '/help, /menu', desc: 'Show this menu' },
-        { cmd: '/ping', desc: 'Check bot status' },
-        { cmd: '/alive', desc: 'System health' },
-        { cmd: '/owner', desc: 'Developer info' },
-        { cmd: '/stats', desc: 'RAM, CPU, Uptime' },
-        { cmd: '/chats', desc: 'Paired groups list (Owner)' },
-        { cmd: '/update', desc: 'Update from GitHub (Owner)' },
-        { cmd: '/exec <cmd>', desc: 'Run terminal command (Owner)' },
-        { cmd: '/broadcast <msg>', desc: 'Send to all chats (Owner)' }
+        { cmd: '/pair <number>', desc: '🔐 Connect WhatsApp' },
+        { cmd: '/unpair', desc: '🔓 Disconnect this chat' },
+        { cmd: '/check', desc: '✅ Check pairing status' },
+        { cmd: '/play <song/URL>', desc: '🎵 Play audio from YouTube' },
+        { cmd: '/play tz', desc: '🎵 Tanzania Bongo Chart' },
+        { cmd: '/play africa', desc: '🌍 Africa Music Chart' },
+        { cmd: '/play chart', desc: '📊 Top Chart Songs' },
+        { cmd: '/play random', desc: '🎲 Play random song' },
+        { cmd: '/help, /menu', desc: '📖 Show this menu' },
+        { cmd: '/ping', desc: '🏓 Check bot status' },
+        { cmd: '/alive', desc: '💚 System health' },
+        { cmd: '/owner', desc: '👑 Developer info' },
+        { cmd: '/stats', desc: '📊 RAM, CPU, Uptime' },
+        { cmd: '/chats', desc: '📋 Paired groups list (Owner)' },
+        { cmd: '/update', desc: '🔄 Update from GitHub (Owner)' },
+        { cmd: '/exec <cmd>', desc: '💻 Run terminal command (Owner)' },
+        { cmd: '/broadcast <msg>', desc: '📢 Send to all chats (Owner)' }
     ];
     
     const externalCommands = [];
@@ -938,25 +1017,27 @@ function formatHelpText() {
     
     const totalCommands = internalCommands.length + externalCommands.length;
     
-    let helpText = `╔═══════════════════════════════════╗\n`;
-    helpText += `║     ✨ *MICKEY GLITCH BOT* ✨     ║\n`;
-    helpText += `╚═══════════════════════════════════╝\n\n`;
+    let helpText = `╔════════════════════════════════════════╗\n`;
+    helpText += `║     ✨ *MICKEY GLITCH BOT* ✨          ║\n`;
+    helpText += `╚════════════════════════════════════════╝\n\n`;
     
     helpText += `🛡️ *PAIRING SYSTEM*\n`;
-    helpText += `┌─────────────────────────────────┐\n`;
+    helpText += `┌────────────────────────────────────────┐\n`;
     helpText += `├ /pair <number> ➔ Connect WhatsApp\n`;
     helpText += `├ /unpair ➔ Disconnect this chat\n`;
     helpText += `└ /check ➔ Check pairing status\n\n`;
     
     helpText += `🎵 *MUSIC & MEDIA*\n`;
-    helpText += `┌─────────────────────────────────┐\n`;
+    helpText += `┌────────────────────────────────────────┐\n`;
     helpText += `├ /play <song> ➔ Play audio from YouTube\n`;
-    helpText += `├ /play chart ➔ Show top chart songs\n`;
+    helpText += `├ /play tz ➔ Tanzania Bongo Chart 🇹🇿\n`;
+    helpText += `├ /play africa ➔ Africa Music Chart 🌍\n`;
+    helpText += `├ /play chart ➔ Top Chart Songs\n`;
     helpText += `├ /play random ➔ Play random song\n`;
     helpText += `└ /play <URL> ➔ Play from YouTube URL\n\n`;
     
     helpText += `🤖 *CORE COMMANDS*\n`;
-    helpText += `┌─────────────────────────────────┐\n`;
+    helpText += `┌────────────────────────────────────────┐\n`;
     helpText += `├ /help, /menu ➔ Show this menu\n`;
     helpText += `├ /ping ➔ Check bot status\n`;
     helpText += `├ /alive ➔ System health\n`;
@@ -964,7 +1045,7 @@ function formatHelpText() {
     helpText += `└ /stats ➔ RAM, CPU, Uptime\n\n`;
     
     helpText += `👑 *OWNER COMMANDS*\n`;
-    helpText += `┌─────────────────────────────────┐\n`;
+    helpText += `┌────────────────────────────────────────┐\n`;
     helpText += `├ /chats ➔ Paired groups list\n`;
     helpText += `├ /update ➔ Update from GitHub\n`;
     helpText += `├ /exec <cmd> ➔ Run terminal command\n`;
@@ -972,7 +1053,7 @@ function formatHelpText() {
     
     if (externalCommands.length > 0) {
         helpText += `📂 *ADDITIONAL COMMANDS*\n`;
-        helpText += `┌─────────────────────────────────┐\n`;
+        helpText += `┌────────────────────────────────────────┐\n`;
         const displayCmds = externalCommands.slice(0, 20);
         displayCmds.forEach(cmd => {
             helpText += `├ ${cmd}\n`;
@@ -980,15 +1061,17 @@ function formatHelpText() {
         if (externalCommands.length > 20) {
             helpText += `└ ... and ${externalCommands.length - 20} more\n`;
         } else {
-            helpText += `└─────────────────────────────────┘\n`;
+            helpText += `└────────────────────────────────────────┘\n`;
         }
         helpText += `\n`;
     }
     
-    helpText += `╔═══════════════════════════════════╗\n`;
-    helpText += `║  📊 *Total:* ${totalCommands} commands  ║\n`;
-    helpText += `║  ⚡ *Powered by Mickey Developer*   ║\n`;
-    helpText += `╚═══════════════════════════════════╝\n`;
+    helpText += `╔════════════════════════════════════════╗\n`;
+    helpText += `║  📊 *Total:* ${totalCommands} commands    ║\n`;
+    helpText += `║  🇹🇿 *Tanzania Music Ready*              ║\n`;
+    helpText += `║  🌍 *Africa Music Ready*                 ║\n`;
+    helpText += `║  ⚡ *Powered by Mickey Developer*         ║\n`;
+    helpText += `╚════════════════════════════════════════╝\n`;
     
     return helpText;
 }
@@ -1024,12 +1107,17 @@ async function handleUpdate(update) {
             };
             
             if (data === 'help' || data === 'menu') {
-                await sendTelegramMessage(chatId, formatHelpText(), {}, messageId);
-                return;
+                const helpText = formatHelpText();
+                const buttons = [
+                    { text: '🎵 Tanzania Chart', callback_data: 'tanzania_chart' },
+                    { text: '🎤 Random Song', callback_data: 'play_random' },
+                    { text: '👑 Owner', url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
+                ];
+                return sendTelegramButtons(chatId, helpText, buttons, messageId);
             }
             
-            if (data === 'play_chart') {
-                await showChart(chatId, sendMsg);
+            if (data === 'tanzania_chart') {
+                await showTanzaniaChart(chatId, sendMsg);
                 return;
             }
             
@@ -1100,7 +1188,7 @@ async function handleUpdate(update) {
             const isPaired = isChatAllowed(chatId);
             const buttons = [
                 { text: '📊 Menu', callback_data: 'menu' },
-                { text: '🎵 Music', callback_data: 'play_chart' }
+                { text: '🎵 Music', callback_data: 'tanzania_chart' }
             ];
             const msg = isPaired ? '✅ *Chat is paired!*' : '❌ *Chat is not paired.*';
             return sendTelegramButtons(chatId, msg, buttons, messageId);
@@ -1109,7 +1197,7 @@ async function handleUpdate(update) {
         if (commandText === 'start' || commandText === 'menu' || commandText === 'help') {
             const helpText = formatHelpText();
             const buttons = [
-                { text: '🎵 Top Charts', callback_data: 'play_chart' },
+                { text: '🎵 Tanzania Chart', callback_data: 'tanzania_chart' },
                 { text: '🎤 Random Song', callback_data: 'play_random' },
                 { text: '👑 Owner', url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
             ];
@@ -1122,7 +1210,7 @@ async function handleUpdate(update) {
             const latency = Date.now() - startTime;
             const buttons = [
                 { text: '📊 Stats', callback_data: 'help' },
-                { text: '🎵 Music', callback_data: 'play_chart' }
+                { text: '🎵 Music', callback_data: 'tanzania_chart' }
             ];
             return sendTelegramButtons(chatId, `⏱️ *Latency:* ${latency}ms\n✅ *Status:* Online`, buttons, messageId);
         }
@@ -1139,13 +1227,13 @@ async function handleUpdate(update) {
                             `⏱️ *Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
                             `💾 *RAM:* ${ramUsage} MB\n` +
                             `👥 *Paired Chats:* ${pairedChats}\n` +
-                            `📂 *Commands:* ${whatsappCommands.size + 15}\n` +
+                            `📂 *Commands:* ${whatsappCommands.size + 17}\n` +
                             `⚡ *Status:* All systems operational\n\n` +
                             `📅 ${new Date().toLocaleString()}`;
             
             const buttons = [
                 { text: '📊 Menu', callback_data: 'menu' },
-                { text: '🎵 Music', callback_data: 'play_chart' },
+                { text: '🎵 Music', callback_data: 'tanzania_chart' },
                 { text: '👑 Owner', url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
             ];
             return sendTelegramButtons(chatId, aliveMsg, buttons, messageId);
@@ -1183,7 +1271,7 @@ async function handleUpdate(update) {
                             `🖥️ *Server:* ${serverFreeRam}GB / ${totalRam}GB Free\n` +
                             `💻 *Platform:* ${os.platform()} (${os.arch()})\n` +
                             `👥 *Paired Chats:* ${pairedChats}\n` +
-                            `📂 *Commands:* ${whatsappCommands.size + 15}`;
+                            `📂 *Commands:* ${whatsappCommands.size + 17}`;
             
             const buttons = [
                 { text: '🔄 Refresh', callback_data: 'help' },
@@ -1241,6 +1329,7 @@ async function handleUpdate(update) {
         // 📂 EXTERNAL COMMANDS FROM /commands FOLDER
         // ============================================================
         
+        // Check if command exists and is valid
         if (whatsappCommands.has(commandText)) {
             try {
                 const commandFn = whatsappCommands.get(commandText);
@@ -1280,7 +1369,12 @@ async function handleUpdate(update) {
                 return;
             } catch (err) {
                 logError(`Bridge Error (${commandText}): ${err.message}`);
-                await sendMsg(chatId, `❌ *Error:* ${err.message.substring(0, 200)}`);
+                // Check if it's the getcode command error
+                if (commandText === 'getcode') {
+                    await sendMsg(chatId, 'ℹ️ *This command is for WhatsApp only.*\n\nPlease use this command on WhatsApp, not Telegram.');
+                } else {
+                    await sendMsg(chatId, `❌ *Error:* ${err.message.substring(0, 200)}`);
+                }
                 return;
             }
         }
@@ -1293,7 +1387,8 @@ async function handleUpdate(update) {
             const errorMsg = `❌ *Command '${commandText}' not found.*\n\n` +
                             `📂 *Available commands:*\n` +
                             `┣ /play <song/URL> - Play music\n` +
-                            `┣ /play chart - Top chart songs\n` +
+                            `┣ /play tz - Tanzania Chart 🇹🇿\n` +
+                            `┣ /play africa - Africa Chart 🌍\n` +
                             `┣ /play random - Random song\n` +
                             `┣ /help - Show all commands\n` +
                             `┣ /ping - Check status\n` +
@@ -1303,7 +1398,7 @@ async function handleUpdate(update) {
             
             const buttons = [
                 { text: '📊 Menu', callback_data: 'menu' },
-                { text: '🎵 Music', callback_data: 'play_chart' },
+                { text: '🎵 Tanzania Chart', callback_data: 'tanzania_chart' },
                 { text: '👑 Owner', url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
             ];
             return sendTelegramButtons(chatId, errorMsg, buttons, messageId);
@@ -1344,10 +1439,12 @@ async function startTelegramBot() {
     
     logSuccess('🚀 Telegram bot starting...');
     logInfo(`📂 Loaded ${whatsappCommands.size} commands from /commands folder`);
-    logInfo('🎵 /play command with chart and random songs');
+    logInfo('🎵 /play command with Tanzania & Africa charts');
+    logInfo('🇹🇿 Tanzania Bongo Chart ready');
+    logInfo('🌍 Africa Music Chart ready');
     logInfo('🔐 /pair command handles WhatsApp pairing');
-    logInfo(`📊 Total commands: ${whatsappCommands.size + 15}`);
-    logInfo('🎯 Buttons support enabled with gifted-btns style');
+    logInfo(`📊 Total commands: ${whatsappCommands.size + 17}`);
+    logInfo('🎯 Buttons support enabled');
     
     let offset = 0;
     let pollingErrors = 0;
@@ -1394,9 +1491,10 @@ async function startTelegramBot() {
             const startMsg = "✅ *MICKEY GLITCH BOT STARTED!*\n\n" +
                             "🟢 *Status:* Online\n" +
                             `💾 *RAM:* ${ramUsage} MB\n` +
-                            `📂 *Commands:* ${whatsappCommands.size + 15} loaded\n` +
+                            `📂 *Commands:* ${whatsappCommands.size + 17} loaded\n` +
                             `👥 *Paired Chats:* ${loadAllowedChats().length}\n` +
-                            `🎵 *Music:* Chart, Random, and Buttons\n` +
+                            `🇹🇿 *Tanzania Chart:* Ready\n` +
+                            `🌍 *Africa Chart:* Ready\n` +
                             `🎯 *Buttons:* Enabled\n` +
                             `📅 *Time:* ${new Date().toLocaleString()}\n\n` +
                             "⚡ *Ready to serve!*";
