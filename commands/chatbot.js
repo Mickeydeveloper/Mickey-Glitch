@@ -415,4 +415,4 @@ async function handleCommand(sock, chatId, m, text) {
     }
 }
 
-module.exports = { handleChatbotMessage, setBotNumber };
+module.exports =  handleChatbotMessage, setBotNumber ;
