@@ -1,6 +1,6 @@
 /**
  * MICKEY CHATBOT - Simplified Natural Conversations
- * Removed: Stats, Quotes, Complex Memory, Rate Limiting, Unnecessary Features
+ * Fixed: groupChatbotToggleCommand is not a function
  */
 
 const fs = require('fs').promises;
@@ -84,37 +84,44 @@ const responses = {
     jokes: [
         "Simu haicheki... Ina data chache! 😂",
         "Kwanini tombo anakimbia? Anafuata ndoto zake! 😅",
-        "Kwanini nyoka hajisalimii? Anajisikia mnyama! 🐍"
+        "Kwanini nyoka hajisalimii? Anajisikia mnyama! 🐍",
+        "Mwalimu: 'Nipe sentensi na neno matunda'... Matunda yanauzwa sokoni! 💀"
     ],
     advice: [
         "Ukiwa na shida, usibebe mzigo peke yako",
         "Maisha ni mafupi mazee, furahia kila dakika",
-        "Watu watasema mengi, wewe fanya yako tu"
+        "Watu watasema mengi, wewe fanya yako tu",
+        "Kupata rafiki wa kweli ni kama dhahabu"
     ],
     love: [
         "Ah mapenzi! Fanya moyo wako useme",
         "Mapenzi si mchezo mkuu. Hakikisha unampata anayekufaa",
-        "Moyo unasema nini? Fanya hivyo, usiogope"
+        "Moyo unasema nini? Fanya hivyo, usiogope",
+        "Mapenzi yana changamoto zake. Subiri uwe tayari"
     ],
     work: [
         "Endelea kujituma mazee. Bidii yako itakupeleka mbali",
         "Kazi ni nzuri, lakini pumzika pia",
-        "Ukiwa na nidhamu, mafanikio yatakujia"
+        "Ukiwa na nidhamu, mafanikio yatakujia",
+        "Endelea kujituma, mafanikio yako karibu"
     ],
     problem: [
         "Usijali mazee, kila tatizo lina suluhisho",
         "Nimekuelewa. Wakati mgumu hupita",
-        "Shida ni sehemu ya maisha. Usikate tamaa"
+        "Shida ni sehemu ya maisha. Usikate tamaa",
+        "Ukipata nafasi, tembea kidogo. Hewa safi inasaidia"
     ],
     dontKnow: [
         "Sijui mazee, siyo eneo langu",
         "Hapo nimeshindwa mkuu, samahani",
-        "Samahani, sijui hilo"
+        "Samahani, sijui hilo. Mengine nikusaidie?",
+        "Leta swali lingine, hili nimeshindwa"
     ],
     goodbye: [
         "Kwaheri mazee, tutaonana! 👋",
         "Bye mkuu, kesho! 😎",
-        "Later mazee, nitarudi!"
+        "Later mazee, nitarudi!",
+        "Tutaonana baadaye! ✌️"
     ]
 };
 
@@ -131,55 +138,45 @@ function getTimeGreeting() {
 }
 
 // ============ DETECT INTENT ============
-function detectIntent(text, userName) {
+function detectIntent(text) {
     const lower = text.toLowerCase().trim();
 
-    // Greetings
     if (lower.match(/^(mambo|vipi|niaje|sema|yo|hi|hello|hey|sasa|habari|hujambo|ujambo)$/i)) {
         return 'greetings';
     }
 
-    // How are you
-    if (lower.match(/^(habari|how are you|unaendelea aje|poa|fresh|hujambo|ujambo|mambo poa)/i)) {
+    if (lower.match(/^(habari|how are you|unaendelea aje|poa|fresh|hujambo|ujambo|mambo poa|mambo vipi)/i)) {
         return 'howAreYou';
     }
 
-    // Thanks
     if (lower.match(/^(asante|thanks|thank you|shukran|ahsante|karibu)/i)) {
         return 'thanks';
     }
 
-    // Jokes
-    if (lower.match(/(joke|utani|cheka|funny|comedy|aniambie utani)/i)) {
+    if (lower.match(/(joke|utani|cheka|funny|comedy|aniambie utani|nitanii)/i)) {
         return 'jokes';
     }
 
-    // Advice/Help
-    if (lower.match(/(advice|ushauri|nisaidie|shida|tatizo|help|nasaha)/i)) {
+    if (lower.match(/(advice|ushauri|nisaidie|shida|tatizo|help|nasaha|mawaidha)/i)) {
         return 'advice';
     }
 
-    // Love
-    if (lower.match(/(mapenzi|love|boyfriend|girlfriend|crush|mpenzi|pendo|nampenda|tunapendana)/i)) {
+    if (lower.match(/(mapenzi|love|boyfriend|girlfriend|crush|mpenzi|pendo|nampenda|tunapendana|upendo)/i)) {
         return 'love';
     }
 
-    // Work/Studies
-    if (lower.match(/(kazi|work|school|shule|job|studies|masomo|biashara|kazi ngumu)/i)) {
+    if (lower.match(/(kazi|work|school|shule|job|studies|masomo|biashara|kazi ngumu|ofisi)/i)) {
         return 'work';
     }
 
-    // Problems
-    if (lower.match(/(problem|tatizo|shida|mgumu|nimeshinda|challenging|ngumu)/i)) {
+    if (lower.match(/(problem|tatizo|shida|mgumu|nimeshinda|challenging|ngumu|msongo)/i)) {
         return 'problem';
     }
 
-    // Goodbye
-    if (lower.match(/(kwaheri|bye|goodbye|tutaonana|later|ninaondoka|nawaacha)/i)) {
+    if (lower.match(/(kwaheri|bye|goodbye|tutaonana|later|ninaondoka|nawaacha|tuonane)/i)) {
         return 'goodbye';
     }
 
-    // Short messages
     if (text.length < 3) {
         return 'greetings';
     }
@@ -206,130 +203,17 @@ function extractText(m) {
     }
 }
 
-// ============ MAIN CHATBOT ============
-async function handleChatbotMessage(sock, chatId, m, userText = null) {
-    try {
-        if (!chatId || m.key?.fromMe) return;
-
-        // Set bot number
-        if (!BOT_NUMBER && sock.user) {
-            setBotNumber(sock.user.id);
-        }
-
-        const text = userText || extractText(m);
-        if (!text) return;
-
-        const userName = m.pushName || 'Mshkaji';
-        const senderId = m.key.remoteJid?.split('@')[0] || '';
-        const isGroup = chatId.endsWith('@g.us');
-
-        // Check if chatbot is enabled
-        const state = await loadState();
-        let enabled = false;
-        if (isGroup) {
-            enabled = state.groups?.[chatId]?.enabled || false;
-        } else {
-            enabled = state.dm || false;
-        }
-
-        // Only owner can use commands when disabled
-        const isCommand = text.startsWith('.') || text.startsWith('!');
-        if (!enabled && isCommand && !isOwner(senderId)) {
-            return;
-        }
-
-        // Handle .chatbot command
-        if (text.startsWith('.chatbot')) {
-            return await handleCommand(sock, chatId, m, text);
-        }
-
-        // Skip if not enabled
-        if (!enabled) return;
-
-        // Show typing
-        sock.sendPresenceUpdate('composing', chatId).catch(() => {});
-
-        // Load memory (simple)
-        let memory = await loadMemory();
-        if (!memory[chatId]) memory[chatId] = [];
-        
-        // Keep last 4 messages
-        if (memory[chatId].length > 4) {
-            memory[chatId] = memory[chatId].slice(-4);
-        }
-
-        // Detect intent
-        const intent = detectIntent(text, userName);
-        if (intent) {
-            const reply = getResponse(intent);
-            memory[chatId].push({ user: text, bot: reply });
-            await saveMemory(memory);
-            await sock.sendMessage(chatId, { text: reply }, { quoted: m });
-            return;
-        }
-
-        // New conversation greeting
-        if (memory[chatId].length === 0) {
-            const greeting = getTimeGreeting();
-            memory[chatId].push({ user: text, bot: greeting });
-            await saveMemory(memory);
-            await sock.sendMessage(chatId, { text: greeting }, { quoted: m });
-            return;
-        }
-
-        // API call for complex questions
-        const history = memory[chatId]
-            .map(msg => `${msg.user} asked: ${msg.user}`)
-            .join('\n');
-
-        const prompt = `Wewe ni Mickey, mtu wa kawaida kutoka Tanzania.
-Usiseme kamwe kuwa wewe ni AI, robot, chatbot, au program.
-Ongea kwa Kiswahili cha mitaani kama mtu halisi.
-Majibu mafupi sana (sentensi 1-3 tu).
-Ukishindwa jibu, sema "Sijui mazee".
-
-Historia:
-${history}
-
-${userName}: ${text}
-Mickey:`;
-
-        const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(prompt)}`;
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-
-        let reply = data?.response || data?.result || data?.message || data?.data || getResponse('dontKnow');
-
-        // Remove AI language
-        reply = reply.replace(/I am an AI|I am a chatbot|As an AI|Mimi ni AI|Nimeundwa na|Mimi ni chatbot|Mickey AI/gi, "Mimi ni Mickey");
-
-        // Shorten if too long
-        if (reply.length > 200) {
-            reply = reply.substring(0, 200) + '...';
-        }
-
-        memory[chatId].push({ user: text, bot: reply });
-        await saveMemory(memory);
-
-        await sock.sendMessage(chatId, { text: reply }, { quoted: m });
-
-    } catch (e) { 
-        console.error('Chatbot Error:', e);
-        try {
-            await sock.sendMessage(chatId, { text: getResponse('dontKnow') });
-        } catch (err) {
-            console.error('Send error:', err);
-        }
-    }
-}
-
-// ============ COMMAND HANDLER ============
-async function handleCommand(sock, chatId, m, text) {
+// ============ COMMAND HANDLER (FIXED) ============
+async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
         const senderId = m.key.remoteJid?.split('@')[0] || '';
         const userName = m.pushName || 'Mshkaji';
         const isGroup = chatId.endsWith('@g.us');
         const isOwnerUser = isOwner(senderId);
+
+        // Extract command
+        const args = (body || '').trim().split(/\s+/);
+        const sub = args[0]?.toLowerCase().replace(/^\./, '');
 
         // Check if owner
         if (!isOwnerUser) {
@@ -337,9 +221,6 @@ async function handleCommand(sock, chatId, m, text) {
                 text: `❌ Samahani ${userName}, wewe sio owner wa bot hii.` 
             });
         }
-
-        const args = text.trim().split(/\s+/);
-        const sub = args[1]?.toLowerCase();
 
         const state = await loadState();
 
@@ -415,4 +296,120 @@ async function handleCommand(sock, chatId, m, text) {
     }
 }
 
-module.exports =  handleChatbotMessage, setBotNumber ;
+// ============ MAIN CHATBOT ============
+async function handleChatbotMessage(sock, chatId, m, userText = null) {
+    try {
+        if (!chatId || m.key?.fromMe) return;
+
+        // Set bot number
+        if (!BOT_NUMBER && sock.user) {
+            setBotNumber(sock.user.id);
+        }
+
+        const text = userText || extractText(m);
+        if (!text) return;
+
+        const senderId = m.key.remoteJid?.split('@')[0] || '';
+        const userName = m.pushName || 'Mshkaji';
+        const isGroup = chatId.endsWith('@g.us');
+
+        // Handle .chatbot command
+        if (text.startsWith('.chatbot')) {
+            return await groupChatbotToggleCommand(sock, chatId, m, text);
+        }
+
+        // Check if chatbot is enabled
+        const state = await loadState();
+        let enabled = false;
+        if (isGroup) {
+            enabled = state.groups?.[chatId]?.enabled || false;
+        } else {
+            enabled = state.dm || false;
+        }
+
+        // Skip if not enabled
+        if (!enabled) return;
+
+        // Show typing
+        sock.sendPresenceUpdate('composing', chatId).catch(() => {});
+
+        // Load memory (simple)
+        let memory = await loadMemory();
+        if (!memory[chatId]) memory[chatId] = [];
+        
+        // Keep last 4 messages
+        if (memory[chatId].length > 4) {
+            memory[chatId] = memory[chatId].slice(-4);
+        }
+
+        // Detect intent
+        const intent = detectIntent(text);
+        if (intent) {
+            const reply = getResponse(intent);
+            memory[chatId].push({ user: text, bot: reply });
+            await saveMemory(memory);
+            await sock.sendMessage(chatId, { text: reply }, { quoted: m });
+            return;
+        }
+
+        // New conversation greeting
+        if (memory[chatId].length === 0) {
+            const greeting = getTimeGreeting();
+            memory[chatId].push({ user: text, bot: greeting });
+            await saveMemory(memory);
+            await sock.sendMessage(chatId, { text: greeting }, { quoted: m });
+            return;
+        }
+
+        // API call for complex questions
+        const history = memory[chatId]
+            .map(msg => `${msg.user}`)
+            .join('\n');
+
+        const prompt = `Wewe ni Mickey, mtu wa kawaida kutoka Tanzania.
+Usiseme kamwe kuwa wewe ni AI, robot, chatbot, au program.
+Ongea kwa Kiswahili cha mitaani kama mtu halisi.
+Majibu mafupi sana (sentensi 1-3 tu).
+Ukishindwa jibu, sema "Sijui mazee".
+
+Mazungumzo:
+${history}
+
+${userName}: ${text}
+Mickey:`;
+
+        const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(prompt)}`;
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+
+        let reply = data?.response || data?.result || data?.message || data?.data || getResponse('dontKnow');
+
+        // Remove AI language
+        reply = reply.replace(/I am an AI|I am a chatbot|As an AI|Mimi ni AI|Nimeundwa na|Mimi ni chatbot|Mickey AI|Glitch/gi, "Mimi ni Mickey");
+
+        // Shorten if too long
+        if (reply.length > 200) {
+            reply = reply.substring(0, 200) + '...';
+        }
+
+        memory[chatId].push({ user: text, bot: reply });
+        await saveMemory(memory);
+
+        await sock.sendMessage(chatId, { text: reply }, { quoted: m });
+
+    } catch (e) { 
+        console.error('Chatbot Error:', e);
+        try {
+            await sock.sendMessage(chatId, { text: getResponse('dontKnow') });
+        } catch (err) {
+            console.error('Send error:', err);
+        }
+    }
+}
+
+// ============ EXPORTS (FIXED) ============
+module.exports = { 
+    handleChatbotMessage,      // Main chatbot handler
+    groupChatbotToggleCommand, // Command handler (FIXED: now exported)
+    setBotNumber              // Set bot number
+};
