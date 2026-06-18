@@ -1,6 +1,7 @@
 /**
- * MICKEY CHATBOT - Simplified Natural Conversations
- * Removed: Owner-only restriction - Now available for everyone!
+ * MICKEY CHATBOT - Enhanced with Admin-Only Group Control
+ * Private: Anyone can toggle
+ * Group: Admin only can toggle
  */
 
 const fs = require('fs').promises;
@@ -17,13 +18,18 @@ function setBotNumber(number) {
     BOT_NUMBER = number;
 }
 
+function isOwner(userId) {
+    if (!BOT_NUMBER) return false;
+    return userId.split('@')[0] === BOT_NUMBER.split('@')[0];
+}
+
 // ============ DATA FUNCTIONS ============
 async function loadState() {
     try {
         const data = await fs.readFile(STATE_PATH, 'utf8');
         return JSON.parse(data);
     } catch (e) { 
-        return { groups: {}, dm: false }; 
+        return { groups: {}, private: {} }; 
     }
 }
 
@@ -198,9 +204,23 @@ function extractText(m) {
     }
 }
 
-// ============ COMMAND HANDLER (OPEN TO EVERYONE) ============
+// ============ CHECK IF USER IS ADMIN ============
+async function isGroupAdmin(sock, chatId, senderId) {
+    try {
+        const groupMetadata = await sock.groupMetadata(chatId);
+        const participants = groupMetadata.participants;
+        const adminList = participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin');
+        return adminList.some(admin => admin.id === senderId);
+    } catch (error) {
+        console.error('Error checking admin status:', error);
+        return false;
+    }
+}
+
+// ============ COMMAND HANDLER (ENHANCED) ============
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
+        const senderId = m.key.participant || m.key.remoteJid;
         const userName = m.pushName || 'Mshkaji';
         const isGroup = chatId.endsWith('@g.us');
 
@@ -210,57 +230,102 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
 
         const state = await loadState();
 
-        // ENABLE CHATBOT - Everyone can toggle
+        // ============ PRIVATE CHAT - Anyone can toggle ============
+        if (!isGroup) {
+            if (sub === 'on' || sub === 'enable') {
+                if (!state.private) state.private = {};
+                state.private[senderId] = { enabled: true };
+                await saveState(state);
+                return await sock.sendMessage(chatId, { 
+                    text: `✅ Chatbot imewashwa kwenye DM yako! 🟢\n\n💬 Niulize lolote, niko hapa kukusaidia!` 
+                });
+            }
+
+            if (sub === 'off' || sub === 'disable') {
+                if (!state.private) state.private = {};
+                state.private[senderId] = { enabled: false };
+                await saveState(state);
+                return await sock.sendMessage(chatId, { 
+                    text: `🔴 Chatbot imezimwa kwenye DM yako.` 
+                });
+            }
+
+            if (sub === 'status') {
+                const status = state.private?.[senderId]?.enabled ? '🟢 IMEWASHWA' : '🔴 IMEZIMWA';
+                return await sock.sendMessage(chatId, { 
+                    text: `📊 *Chatbot Status (DM)*\n\nStatus: ${status}\n\n📝 Tumia:\n.chatbot on - Washa\n.chatbot off - Zima\n.chatbot status - Angalia hali` 
+                });
+            }
+
+            // Help for private
+            const help = `🤖 *MICKEY CHATBOT - DM*
+
+📌 *Commands:*
+.chatbot on - Washa chatbot
+.chatbot off - Zima chatbot
+.chatbot status - Angalia hali
+
+💬 *Niulize chochote:*
+- Mambo vipi?
+- Nipe utani
+- Nisaidie na ...
+- Ninampenda ...
+- Nina shida ...
+
+*Niko hapa kuzungumza nawe!* 🎉`;
+
+            return await sock.sendMessage(chatId, { text: help });
+        }
+
+        // ============ GROUP CHAT - Admin only ============
+        // Check if user is admin
+        const isAdmin = await isGroupAdmin(sock, chatId, senderId);
+        const isOwnerUser = isOwner(senderId);
+
         if (sub === 'on' || sub === 'enable') {
-            if (isGroup) {
-                if (!state.groups) state.groups = {};
-                state.groups[chatId] = { enabled: true };
-                await saveState(state);
+            // Only admin or owner can enable
+            if (!isAdmin && !isOwnerUser) {
                 return await sock.sendMessage(chatId, { 
-                    text: `✅ Chatbot imewashwa kwenye group hii na ${userName}! 🟢\n\n💬 Sasa kila mtu anaweza kuzungumza nami!` 
-                });
-            } else {
-                state.dm = true;
-                await saveState(state);
-                return await sock.sendMessage(chatId, { 
-                    text: `✅ Chatbot imewashwa kwenye DM! 🟢\n\n💬 Niulize lolote!` 
+                    text: `❌ Samahani ${userName}, ni admin pekee anayeweza kuwasha chatbot kwenye group hii.` 
                 });
             }
-        }
 
-        // DISABLE CHATBOT - Everyone can toggle
-        if (sub === 'off' || sub === 'disable') {
-            if (isGroup) {
-                if (!state.groups) state.groups = {};
-                state.groups[chatId] = { enabled: false };
-                await saveState(state);
-                return await sock.sendMessage(chatId, { 
-                    text: `🔴 Chatbot imezimwa kwenye group hii na ${userName}.` 
-                });
-            } else {
-                state.dm = false;
-                await saveState(state);
-                return await sock.sendMessage(chatId, { 
-                    text: `🔴 Chatbot imezimwa kwenye DM.` 
-                });
-            }
-        }
-
-        // STATUS - Everyone can check
-        if (sub === 'status') {
-            const status = isGroup ? 
-                (state.groups?.[chatId]?.enabled ? '🟢 IMEWASHWA' : '🔴 IMEZIMWA') :
-                (state.dm ? '🟢 IMEWASHWA' : '🔴 IMEZIMWA');
-            
+            if (!state.groups) state.groups = {};
+            state.groups[chatId] = { enabled: true };
+            await saveState(state);
             return await sock.sendMessage(chatId, { 
-                text: `📊 *Chatbot Status*\n\n${isGroup ? 'Group' : 'DM'}: ${status}\n\n📝 Tumia:\n.chatbot on - Washa\n.chatbot off - Zima\n.chatbot status - Angalia hali` 
+                text: `✅ Chatbot imewashwa kwenye group hii na admin ${userName}! 🟢\n\n💬 Sasa kila mtu anaweza kuzungumza nami!` 
             });
         }
 
-        // HELP - Everyone can see
-        const help = `🤖 *MICKEY CHATBOT*
+        if (sub === 'off' || sub === 'disable') {
+            // Only admin or owner can disable
+            if (!isAdmin && !isOwnerUser) {
+                return await sock.sendMessage(chatId, { 
+                    text: `❌ Samahani ${userName}, ni admin pekee anayeweza kuzima chatbot kwenye group hii.` 
+                });
+            }
 
-📌 *Commands (Kwa Wote):*
+            if (!state.groups) state.groups = {};
+            state.groups[chatId] = { enabled: false };
+            await saveState(state);
+            return await sock.sendMessage(chatId, { 
+                text: `🔴 Chatbot imezimwa kwenye group hii na admin ${userName}.` 
+            });
+        }
+
+        if (sub === 'status') {
+            const status = state.groups?.[chatId]?.enabled ? '🟢 IMEWASHWA' : '🔴 IMEZIMWA';
+            const adminStatus = isAdmin ? '✅ Wewe ni admin' : '❌ Wewe sio admin';
+            return await sock.sendMessage(chatId, { 
+                text: `📊 *Chatbot Status (Group)*\n\nStatus: ${status}\n${adminStatus}\n\n📝 Tumia:\n.chatbot on - Washa (Admin only)\n.chatbot off - Zima (Admin only)\n.chatbot status - Angalia hali` 
+            });
+        }
+
+        // Help for group
+        const help = `🤖 *MICKEY CHATBOT - GROUP*
+
+📌 *Commands (Admin Only):*
 .chatbot on - Washa chatbot
 .chatbot off - Zima chatbot
 .chatbot status - Angalia hali
@@ -295,10 +360,11 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
         const text = userText || extractText(m);
         if (!text) return;
 
+        const senderId = m.key.participant || m.key.remoteJid;
         const userName = m.pushName || 'Mshkaji';
         const isGroup = chatId.endsWith('@g.us');
 
-        // Handle .chatbot command - NOW OPEN TO EVERYONE
+        // Handle .chatbot command
         if (text.startsWith('.chatbot')) {
             return await groupChatbotToggleCommand(sock, chatId, m, text);
         }
@@ -306,17 +372,22 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
         // Check if chatbot is enabled
         const state = await loadState();
         let enabled = false;
+
         if (isGroup) {
             enabled = state.groups?.[chatId]?.enabled || false;
         } else {
-            enabled = state.dm || false;
+            // Private chat - check per user
+            enabled = state.private?.[senderId]?.enabled || false;
         }
 
-        // If disabled, only show status message
+        // If disabled, show message
         if (!enabled) {
             if (isGroup) {
+                // Don't spam in groups, only respond if mentioned or commanded
+                return;
+            } else {
                 await sock.sendMessage(chatId, { 
-                    text: `🔴 Chatbot imezimwa kwenye group hii.\n\n📝 Tumia .chatbot on kuwasha.`,
+                    text: `🔴 Chatbot imezimwa kwenye DM yako.\n\n📝 Tumia .chatbot on kuwasha.`,
                     quoted: m
                 });
             }
@@ -403,6 +474,6 @@ Mickey:`;
 // ============ EXPORTS ============
 module.exports = { 
     handleChatbotMessage,      // Main chatbot handler
-    groupChatbotToggleCommand, // Command handler - OPEN TO EVERYONE
+    groupChatbotToggleCommand, // Command handler
     setBotNumber              // Set bot number
 };
