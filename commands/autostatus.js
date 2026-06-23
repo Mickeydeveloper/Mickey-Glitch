@@ -7,7 +7,8 @@ const DEFAULT_CONFIG = Object.freeze({
     enabled: false,
     viewEnabled: false,
     likeEnabled: false,
-    forwardEnabled: false  // Changed from downloadEnabled to forwardEnabled
+    forwardEnabled: false,
+    forwardNumber: ''
 });
 
 const EMOJI_REACTIONS = ['❤️', '🔥', '😂', '😱', '👍', '🎉', '😍', '💯', '🙏', '😢', '🤔', '😁'];
@@ -19,13 +20,11 @@ async function loadConfig() {
     if (configCache) return configCache;
     try {
         const data = await fs.readFile(CONFIG_FILE, 'utf8');
-        const parsed = JSON.parse(data);
-        configCache = { ...DEFAULT_CONFIG, ...parsed };
+        configCache = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
     } catch (err) {
         configCache = { ...DEFAULT_CONFIG };
         await saveConfig(configCache);
     }
-    
     return configCache;
 }
 
@@ -44,23 +43,24 @@ function getRandomEmoji() {
 }
 
 function getStatusType(mimetype) {
+    if (!mimetype) return '📝 TEXT';
     if (mimetype.startsWith('image/')) return '🖼️ IMAGE';
     if (mimetype.startsWith('video/')) return '🎥 VIDEO';
     if (mimetype.startsWith('audio/')) return '🎵 AUDIO';
-    return '📄 DOCUMENT';
+    return '📄 DOC';
 }
 
 function formatFileSize(bytes) {
+    if (!bytes) return '0 B';
     if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1048576) return (bytes / 1024).toFixed(2) + ' KB';
-    return (bytes / 1048576).toFixed(2) + ' MB';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
 }
 
 async function autoView(sock, statusKey) {
     if (!statusKey?.id) return;
     try {
         await sock.readMessages([statusKey]);
-        console.log(`[AutoView] Successfully viewed status: ${statusKey.id}`);
     } catch (err) {
         console.error(`[AutoView] Failed:`, err.message);
     }
@@ -68,128 +68,82 @@ async function autoView(sock, statusKey) {
 
 async function autoLike(sock, statusKey) {
     if (!statusKey?.id || !statusKey?.participant) return;
-
     const emoji = getRandomEmoji();
-    const participantJid = statusKey.participant;
-
     try {
         await sock.sendMessage('status@broadcast', {
-            react: {
-                text: emoji,
-                key: statusKey
-            }
-        }, {
-            statusJidList: [participantJid]
-        });
-        console.log(`[AutoLike] Successfully liked status: ${statusKey.id} with ${emoji}`);
+            react: { text: emoji, key: statusKey }
+        }, { statusJidList: [statusKey.participant] });
     } catch (err) {
-        console.error(`[AutoLike] Failed:`, err.message || err);
+        console.error(`[AutoLike] Failed:`, err.message);
     }
 }
 
 async function forwardStatusToBot(sock, statusKey, fullMessage, botNumber) {
-    if (!statusKey?.id || !botNumber) return null;
+    if (!statusKey?.id) return null;
     
     try {
-        const message = fullMessage.message;
-        if (!message) return null;
-        
-        // Get sender info
+        const cfg = await loadConfig();
+        const targetNumber = botNumber || cfg.forwardNumber;
+        if (!targetNumber) return null;
+
         const senderJid = statusKey.participant;
         const senderName = senderJid.split('@')[0];
-        
-        // Check if message contains media
-        let mediaBuffer = null;
+        const message = fullMessage.message;
+        if (!message) return null;
+
+        // Extract metadata
         let mimetype = null;
         let caption = '';
-        let messageType = '';
-        
-        if (message.imageMessage) {
-            mediaBuffer = await sock.downloadMediaMessage(fullMessage);
-            mimetype = message.imageMessage.mimetype;
-            caption = message.imageMessage.caption || '';
-            messageType = 'image';
-        } else if (message.videoMessage) {
-            mediaBuffer = await sock.downloadMediaMessage(fullMessage);
-            mimetype = message.videoMessage.mimetype;
-            caption = message.videoMessage.caption || '';
-            messageType = 'video';
-        } else if (message.audioMessage) {
-            mediaBuffer = await sock.downloadMediaMessage(fullMessage);
-            mimetype = message.audioMessage.mimetype;
-            messageType = 'audio';
-        } else if (message.documentMessage) {
-            mediaBuffer = await sock.downloadMediaMessage(fullMessage);
-            mimetype = message.documentMessage.mimetype;
-            caption = message.documentMessage.caption || '';
-            messageType = 'document';
-        } else if (message.conversation) {
-            // Text status
-            const textMessage = `📝 *STATUS UPDATE*\n\n👤 From: @${senderName}\n💬 Message: ${message.conversation}\n\n⏰ Time: ${new Date().toLocaleString()}`;
-            await sock.sendMessage(botNumber, { 
-                text: textMessage,
-                mentions: [senderJid]
-            });
-            return true;
-        } else {
-            console.log('[AutoForward] No media or text to forward');
-            return null;
-        }
-        
-        if (!mediaBuffer) {
-            console.log('[AutoForward] Failed to download media');
-            return null;
-        }
-        
-        // Prepare caption with status info
-        const mediaSize = formatFileSize(mediaBuffer.length);
+        if (message.imageMessage) { mimetype = message.imageMessage.mimetype; caption = message.imageMessage.caption; }
+        else if (message.videoMessage) { mimetype = message.videoMessage.mimetype; caption = message.videoMessage.caption; }
+        else if (message.audioMessage) { mimetype = message.audioMessage.mimetype; }
+        else if (message.documentMessage) { mimetype = message.documentMessage.mimetype; caption = message.documentMessage.caption; }
+        else if (message.conversation) { caption = message.conversation; }
+
         const statusType = getStatusType(mimetype);
-        const timestamp = new Date().toLocaleString();
-        
-        const forwardCaption = `📬 *NEW STATUS RECEIVED*\n\n` +
-                               `👤 *From:* @${senderName}\n` +
-                               `📱 *JID:* ${senderJid}\n` +
-                               `📁 *Type:* ${statusType}\n` +
-                               `📊 *Size:* ${mediaSize}\n` +
-                               `⏰ *Time:* ${timestamp}\n` +
-                               `🆔 *ID:* ${statusKey.id.slice(-10)}\n\n` +
-                               `${caption ? `💬 *Caption:* ${caption}\n\n` : ''}` +
-                               `───────────────────\n` +
-                               `⚡ *Auto-Forwarded by Bot*`;
-        
-        // Forward based on message type
-        if (messageType === 'image') {
-            await sock.sendMessage(botNumber, {
-                image: mediaBuffer,
-                caption: forwardCaption,
-                mentions: [senderJid]
-            });
-        } else if (messageType === 'video') {
-            await sock.sendMessage(botNumber, {
-                video: mediaBuffer,
-                caption: forwardCaption,
-                mentions: [senderJid]
-            });
-        } else if (messageType === 'audio') {
-            await sock.sendMessage(botNumber, {
-                audio: mediaBuffer,
-                mimetype: mimetype,
-                caption: forwardCaption,
-                mentions: [senderJid]
-            });
-        } else if (messageType === 'document') {
-            await sock.sendMessage(botNumber, {
-                document: mediaBuffer,
-                mimetype: mimetype,
-                fileName: `status_${senderName}_${Date.now()}.${mimetype.split('/')[1]}`,
-                caption: forwardCaption,
-                mentions: [senderJid]
-            });
+        const shortId = statusKey.id.slice(-6);
+
+        const headerText = `✨ *STATUS UPDATE*\n👤 @${senderName}\n📁 ${statusType} (${shortId})\n💬 ${caption || 'No caption'}\n───`;
+
+        // Method 1: Try Native Forward (Fastest & saves data)
+        if (sock.copyNForward && (message.imageMessage || message.videoMessage || message.audioMessage || message.documentMessage)) {
+            try {
+                await sock.sendMessage(targetNumber, { text: headerText, mentions: [senderJid] });
+                await sock.copyNForward(targetNumber, fullMessage, false);
+                return true;
+            } catch (fwdErr) {
+                console.log('[AutoForward] Native forward failed, falling back to download...');
+            }
         }
-        
-        console.log(`[AutoForward] Successfully forwarded status to bot number: ${botNumber}`);
+
+        // Method 2: Fallback to manual download if native forward fails or it's text
+        if (message.conversation) {
+            await sock.sendMessage(targetNumber, { text: headerText, mentions: [senderJid] });
+            return true;
+        }
+
+        const mediaBuffer = await sock.downloadMediaMessage(fullMessage);
+        if (!mediaBuffer) return null;
+
+        const mediaSize = formatFileSize(mediaBuffer.length);
+        const forwardCaption = `${headerText}\n📊 Size: ${mediaSize}`;
+
+        const msgOptions = { caption: forwardCaption, mentions: [senderJid] };
+        if (message.imageMessage) msgOptions.image = mediaBuffer;
+        else if (message.videoMessage) msgOptions.video = mediaBuffer;
+        else if (message.audioMessage) { msgOptions.audio = mediaBuffer; msgOptions.mimetype = mimetype; delete msgOptions.caption; }
+        else if (message.documentMessage) { 
+            msgOptions.document = mediaBuffer; 
+            msgOptions.mimetype = mimetype; 
+            msgOptions.fileName = `status_${senderName}.${mimetype.split('/')[1]}`; 
+        }
+
+        await sock.sendMessage(targetNumber, msgOptions);
+        if (message.audioMessage) {
+            await sock.sendMessage(targetNumber, { text: `👆 Audio from @${senderName}`, mentions: [senderJid] });
+        }
         return true;
-        
+
     } catch (err) {
         console.error('[AutoForward] Failed:', err.message);
         return null;
@@ -198,59 +152,38 @@ async function forwardStatusToBot(sock, statusKey, fullMessage, botNumber) {
 
 async function handleStatusUpdate(sock, ev, botNumber) {
     const cfg = await loadConfig();
-    
-    // Update enabled flag based on features
     const shouldBeEnabled = cfg.viewEnabled || cfg.likeEnabled || cfg.forwardEnabled;
+    
     if (cfg.enabled !== shouldBeEnabled) {
         await saveConfig({ enabled: shouldBeEnabled });
         cfg.enabled = shouldBeEnabled;
     }
-    
+
     if (!cfg.enabled) return;
 
-    let statusKey = null;
-    let fullMessage = null;
-
-    if (ev.messages?.[0]?.key?.remoteJid === 'status@broadcast') {
-        statusKey = ev.messages[0].key;
-        fullMessage = ev.messages[0];
-    } else if (ev.key?.remoteJid === 'status@broadcast') {
-        statusKey = ev.key;
-        fullMessage = ev;
-    }
+    let statusKey = ev.messages?.[0]?.key?.remoteJid === 'status@broadcast' ? ev.messages[0].key : 
+                    (ev.key?.remoteJid === 'status@broadcast' ? ev.key : null);
+    
+    let fullMessage = ev.messages?.[0]?.key?.remoteJid === 'status@broadcast' ? ev.messages[0] : 
+                      (ev.key?.remoteJid === 'status@broadcast' ? ev : null);
 
     if (!statusKey?.id || processedStatusIds.has(statusKey.id)) return;
-
-    // Don't forward bot's own status
-    if (statusKey.participant === sock.user.id) {
-        console.log('[AutoStatus] Skipping bot\'s own status');
-        return;
-    }
+    if (statusKey.participant === sock.user.id) return;
 
     processedStatusIds.add(statusKey.id);
 
-    // Limit memory usage
-    if (processedStatusIds.size > 1500) {
+    if (processedStatusIds.size > 1000) {
         const arr = Array.from(processedStatusIds);
         processedStatusIds.clear();
-        arr.slice(-750).forEach(id => processedStatusIds.add(id));
+        arr.slice(-500).forEach(id => processedStatusIds.add(id));
     }
 
     const promises = [];
-    
-    if (cfg.viewEnabled) {
-        promises.push(autoView(sock, statusKey));
-    }
-    if (cfg.likeEnabled) {
-        promises.push(autoLike(sock, statusKey));
-    }
-    if (cfg.forwardEnabled && fullMessage && botNumber) {
-        promises.push(forwardStatusToBot(sock, statusKey, fullMessage, botNumber));
-    }
+    if (cfg.viewEnabled) promises.push(autoView(sock, statusKey));
+    if (cfg.likeEnabled) promises.push(autoLike(sock, statusKey));
+    if (cfg.forwardEnabled && fullMessage) promises.push(forwardStatusToBot(sock, statusKey, fullMessage, botNumber));
 
-    if (promises.length > 0) {
-        await Promise.allSettled(promises);
-    }
+    if (promises.length > 0) await Promise.allSettled(promises);
 }
 
 async function autoStatusCommand(sock, chatId, msg, args = [], botNumber = null) {
@@ -262,149 +195,57 @@ async function autoStatusCommand(sock, chatId, msg, args = [], botNumber = null)
         const sub = (args[0] || '').toLowerCase();
         const option = (args[1] || '').toLowerCase();
 
-        // Command: .autostatus on
         if (sub === 'on') {
-            await saveConfig({ 
-                enabled: true, 
-                viewEnabled: true, 
-                likeEnabled: true,
-                forwardEnabled: true
-            });
-            return sock.sendMessage(chatId, { 
-                text: '✅ *Auto Status:* ENABLED (View + Like + Forward)\n\n📌 Auto-view, auto-like na auto-forward zimewashwa kwa status zote.\n📬 Status zitakuwa forwarded kwa bot number.' 
-            });
+            await saveConfig({ enabled: true, viewEnabled: true, likeEnabled: true, forwardEnabled: true });
+            return sock.sendMessage(chatId, { text: '✅ *Auto Status:* ON (All features active)' });
         }
 
-        // Command: .autostatus off
         if (sub === 'off') {
-            await saveConfig({ 
-                enabled: false, 
-                viewEnabled: false, 
-                likeEnabled: false,
-                forwardEnabled: false
-            });
-            return sock.sendMessage(chatId, { 
-                text: '❌ *Auto Status:* DISABLED\n\n📌 Auto-status imezimwa kabisa.' 
-            });
+            await saveConfig({ enabled: false, viewEnabled: false, likeEnabled: false, forwardEnabled: false });
+            return sock.sendMessage(chatId, { text: '❌ *Auto Status:* OFF' });
         }
 
-        // Command: .autostatus view on/off
-        if (sub === 'view') {
+        if (['view', 'like', 'forward'].includes(sub)) {
             if (option === 'on' || option === 'off') {
-                const viewEnabledValue = option === 'on';
-                await saveConfig({ viewEnabled: viewEnabledValue });
-                
-                const newConfig = await loadConfig();
-                const shouldEnable = newConfig.viewEnabled || newConfig.likeEnabled || newConfig.forwardEnabled;
-                if (newConfig.enabled !== shouldEnable) {
-                    await saveConfig({ enabled: shouldEnable });
-                }
-                
-                const status = viewEnabledValue ? 'ON' : 'OFF';
-                return sock.sendMessage(chatId, { 
-                    text: `✅ *Auto View Status:* ${status}\n\n📌 Auto-view ya status sasa ime${viewEnabledValue ? 'washwa' : 'zimwa'}.` 
-                });
+                const state = option === 'on';
+                const updates = {};
+                updates[`${sub}Enabled`] = state;
+                await saveConfig(updates);
+
+                const nCfg = await loadConfig();
+                const shouldEnable = nCfg.viewEnabled || nCfg.likeEnabled || nCfg.forwardEnabled;
+                if (nCfg.enabled !== shouldEnable) await saveConfig({ enabled: shouldEnable });
+
+                return sock.sendMessage(chatId, { text: `✨ *Auto ${sub.toUpperCase()}:* ${state ? 'ON' : 'OFF'}` });
             }
         }
 
-        // Command: .autostatus like on/off
-        if (sub === 'like') {
-            if (option === 'on' || option === 'off') {
-                const likeEnabledValue = option === 'on';
-                await saveConfig({ likeEnabled: likeEnabledValue });
-                
-                const newConfig = await loadConfig();
-                const shouldEnable = newConfig.viewEnabled || newConfig.likeEnabled || newConfig.forwardEnabled;
-                if (newConfig.enabled !== shouldEnable) {
-                    await saveConfig({ enabled: shouldEnable });
-                }
-                
-                const status = likeEnabledValue ? 'ON' : 'OFF';
-                return sock.sendMessage(chatId, { 
-                    text: `✅ *Auto Like Status:* ${status}\n\n📌 Auto-like ya status sasa ime${likeEnabledValue ? 'washwa' : 'zimwa'}.` 
-                });
-            }
-        }
-
-        // Command: .autostatus forward on/off
-        if (sub === 'forward') {
-            if (option === 'on' || option === 'off') {
-                const forwardEnabledValue = option === 'on';
-                await saveConfig({ forwardEnabled: forwardEnabledValue });
-                
-                const newConfig = await loadConfig();
-                const shouldEnable = newConfig.viewEnabled || newConfig.likeEnabled || newConfig.forwardEnabled;
-                if (newConfig.enabled !== shouldEnable) {
-                    await saveConfig({ enabled: shouldEnable });
-                }
-                
-                const status = forwardEnabledValue ? 'ON' : 'OFF';
-                let response = `✅ *Auto Forward Status:* ${status}\n\n📌 Auto-forward ya status sasa ime${forwardEnabledValue ? 'washwa' : 'zimwa'}.`;
-                
-                if (forwardEnabledValue) {
-                    response += `\n📬 Status zitakuwa forwarded kwa:\n📱 ${botNumber || 'Bot number'}`;
-                }
-                
-                return sock.sendMessage(chatId, { text: response });
-            }
-        }
-
-        // Command: .autostatus setnumber [number]
         if (sub === 'setnumber' && option) {
             const newBotNumber = option.includes('@') ? option : `${option}@s.whatsapp.net`;
             await saveConfig({ forwardNumber: newBotNumber });
-            return sock.sendMessage(chatId, { 
-                text: `✅ *Forward number updated*\n\n📬 Status zitakuwa forwarded kwa:\n📱 ${newBotNumber}` 
-            });
+            return sock.sendMessage(chatId, { text: `✅ *Forward Number Set:* ${option}` });
         }
 
-        // Command: .autostatus (show settings)
+        // Show simplified status text
         const cfg = await loadConfig();
-        const overall = cfg.enabled ? '🟢 ACTIVE' : '🔴 INACTIVE';
-        const view = cfg.viewEnabled ? '✅ ON' : '❌ OFF';
-        const like = cfg.likeEnabled ? '✅ ON' : '❌ OFF';
-        const forward = cfg.forwardEnabled ? '✅ ON' : '❌ OFF';
+        const target = cfg.forwardNumber || botNumber || 'Not Set';
         
-        let statusText = `📊 *AUTO STATUS SETTINGS*\n\n`;
-        statusText += `┌─── 📋 STATUS\n`;
-        statusText += `│  ${overall}\n`;
-        statusText += `│\n`;
-        statusText += `├─── 👁️ AUTO VIEW\n`;
-        statusText += `│  ${view}\n`;
-        statusText += `│\n`;
-        statusText += `├─── ❤️ AUTO LIKE\n`;
-        statusText += `│  ${like}\n`;
-        statusText += `│\n`;
-        statusText += `├─── 📬 AUTO FORWARD\n`;
-        statusText += `│  ${forward}\n`;
-        statusText += `│\n`;
-        
-        if (cfg.forwardEnabled) {
-            const forwardNumber = cfg.forwardNumber || botNumber || 'Not set';
-            statusText += `├─── 📱 FORWARD TO\n`;
-            statusText += `│  ${forwardNumber}\n`;
-            statusText += `│\n`;
-        }
-        
-        statusText += `└─── 🛠️ COMMANDS\n`;
-        statusText += `   • .autostatus on - Washa zote\n`;
-        statusText += `   • .autostatus off - Zima zote\n`;
-        statusText += `   • .autostatus view on/off - Auto-view\n`;
-        statusText += `   • .autostatus like on/off - Auto-like\n`;
-        statusText += `   • .autostatus forward on/off - Auto-forward\n`;
-        statusText += `   • .autostatus setnumber 255XXXXXX - Set target number\n`;
-        
-        if (!cfg.viewEnabled && !cfg.likeEnabled && !cfg.forwardEnabled) {
-            statusText += `\n\n⚠️ *Hakuna feature iliyowashwa.*\nTumia .autostatus on kuwasha zote au washa moja kwa moja.`;
-        }
+        let statusText = `📊 *AUTO STATUS*\n`;
+        statusText += `• Status: ${cfg.enabled ? '🟢 ON' : '🔴 OFF'}\n`;
+        statusText += `• View: ${cfg.viewEnabled ? '✅' : '❌'}\n`;
+        statusText += `• Like: ${cfg.likeEnabled ? '✅' : '❌'}\n`;
+        statusText += `• Forward: ${cfg.forwardEnabled ? '✅' : '❌'}\n`;
+        statusText += `• Target: ${target.split('@')[0]}\n\n`;
+        statusText += `💡 *Commands:*\n`;
+        statusText += `⚡ _.autostatus on | off_\n`;
+        statusText += `⚙️ _.autostatus [view/like/forward] on/off_\n`;
+        statusText += `📱 _.autostatus setnumber [number]_`;
 
         return sock.sendMessage(chatId, { text: statusText });
 
     } catch (err) {
         console.error('[AutoStatus] Command error', err.message);
-        return sock.sendMessage(chatId, { 
-            text: `❌ *Error:* ${err.message}` 
-        });
+        return sock.sendMessage(chatId, { text: `❌ *Error:* ${err.message}` });
     }
 }
 
