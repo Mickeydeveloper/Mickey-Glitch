@@ -240,8 +240,8 @@ async function sysInfoCommand(sock, chatId, message) {
     }
 }
 
-module.exports = { 
+module.exports =  
     pingCommand,
     sysInfoCommand,
     formatTime 
-};
+;
