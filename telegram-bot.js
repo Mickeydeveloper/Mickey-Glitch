@@ -1,6 +1,6 @@
 /**
- * TELEGRAM BOT MODULE - MICKEY GLITCH
- * ULTIMATE FIX: All errors fixed, Tanzania/Africa charts, Full menu
+ * TELEGRAM BOT MODULE - MICKEY GLITCH ULTIMATE
+ * Version 2.0 - Fully Enhanced with African Charts, Downloader, and AI Features
  */
 
 const fs = require('fs');
@@ -13,6 +13,7 @@ const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, delay } 
 const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
+const FormData = require('form-data');
 
 // ============================================================
 // 📁 DIRECTORIES & CONFIGURATION
@@ -22,26 +23,34 @@ const TELEGRAM_DATA_FILE = path.join(TELEGRAM_DATA_DIR, 'telegramPairs.json');
 const TELEGRAM_BASE_URL = (token) => `https://api.telegram.org/bot${token}`;
 const TEMP_DIR = path.join(__dirname, 'tmp');
 const COMMANDS_DIR = path.join(__dirname, 'commands');
+const CACHE_DIR = path.join(__dirname, 'cache');
+const LOGS_DIR = path.join(__dirname, 'logs');
 
-// Store active pairing sessions
+// Store active pairing sessions and command cache
 const activePairingSessions = new Map();
 const whatsappCommands = new Map();
+const commandCache = new Map();
+const rateLimiter = new Map();
 
-// Default axios config
+// Default axios config with retry
 const AXIOS_DEFAULTS = {
     timeout: 120000,
     headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache'
     }
 };
 
 // Ensure directories exist
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
-if (!fs.existsSync(COMMANDS_DIR)) fs.mkdirSync(COMMANDS_DIR, { recursive: true });
+const dirs = [TEMP_DIR, COMMANDS_DIR, CACHE_DIR, LOGS_DIR];
+dirs.forEach(dir => {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
 
 // ============================================================
-// 🎨 COLORED LOGGING
+// 🎨 ENHANCED COLORED LOGGING WITH TIMESTAMPS
 // ============================================================
 const colors = {
     green: (t) => `\x1b[32m${t}\x1b[0m`,
@@ -49,39 +58,56 @@ const colors = {
     yellow: (t) => `\x1b[33m${t}\x1b[0m`,
     blue: (t) => `\x1b[34m${t}\x1b[0m`,
     cyan: (t) => `\x1b[36m${t}\x1b[0m`,
-    magenta: (t) => `\x1b[35m${t}\x1b[0m`
+    magenta: (t) => `\x1b[35m${t}\x1b[0m`,
+    white: (t) => `\x1b[37m${t}\x1b[0m`,
+    gray: (t) => `\x1b[90m${t}\x1b[0m`
 };
 
-function logSuccess(text) { console.log(colors.green('✅ ' + text)); }
-function logError(text) { console.log(colors.red('❌ ' + text)); }
-function logWarning(text) { console.log(colors.yellow('⚠️ ' + text)); }
-function logInfo(text) { console.log(colors.blue('ℹ️ ' + text)); }
-function logDebug(text) { console.log(colors.cyan('🐛 ' + text)); }
+function getTimestamp() {
+    return new Date().toISOString().replace('T', ' ').slice(0, 19);
+}
+
+function logSuccess(text) { console.log(colors.green(`[${getTimestamp()}] ✅ ${text}`)); }
+function logError(text) { console.log(colors.red(`[${getTimestamp()}] ❌ ${text}`)); }
+function logWarning(text) { console.log(colors.yellow(`[${getTimestamp()}] ⚠️ ${text}`)); }
+function logInfo(text) { console.log(colors.blue(`[${getTimestamp()}] ℹ️ ${text}`)); }
+function logDebug(text) { console.log(colors.cyan(`[${getTimestamp()}] 🐛 ${text}`)); }
+function logSystem(text) { console.log(colors.magenta(`[${getTimestamp()}] ⚙️ ${text}`)); }
 
 // ============================================================
-// 🎯 GIFTED BUTTONS SUPPORT
+// 🎯 ENHANCED BUTTONS AND INLINE KEYBOARDS
 // ============================================================
 
-async function sendTelegramButtons(chatId, text, buttons, messageId = null) {
+async function sendTelegramButtons(chatId, text, buttons, options = {}) {
     const token = settings.telegram?.botToken?.trim();
     if (!token || !chatId) return false;
-    
+
     try {
         const keyboard = {
             inline_keyboard: []
         };
-        
+
         if (Array.isArray(buttons)) {
             let row = [];
             for (const btn of buttons) {
-                if (btn.url) {
-                    row.push({ text: btn.text || btn.label, url: btn.url });
-                } else if (btn.callback_data) {
-                    row.push({ text: btn.text || btn.label, callback_data: btn.callback_data });
-                } else if (btn.command) {
-                    row.push({ text: btn.text || btn.label, callback_data: btn.command });
-                }
+                const button = {
+                    text: btn.text || btn.label || 'Button'
+                };
                 
+                if (btn.url) {
+                    button.url = btn.url;
+                } else if (btn.callback_data) {
+                    button.callback_data = String(btn.callback_data);
+                } else if (btn.command) {
+                    button.callback_data = String(btn.command);
+                } else if (btn.switch_inline_query) {
+                    button.switch_inline_query = btn.switch_inline_query;
+                } else {
+                    button.callback_data = 'action_' + (btn.text || 'button');
+                }
+
+                row.push(button);
+
                 if (row.length === 3) {
                     keyboard.inline_keyboard.push(row);
                     row = [];
@@ -91,28 +117,30 @@ async function sendTelegramButtons(chatId, text, buttons, messageId = null) {
                 keyboard.inline_keyboard.push(row);
             }
         }
-        
-        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
+
+        const payload = {
             chat_id: String(chatId),
             text: text,
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_markup: keyboard,
-            reply_to_message_id: messageId,
-            disable_web_page_preview: true
-        }, {
+            disable_web_page_preview: true,
+            ...(options.reply_to_message_id && { reply_to_message_id: options.reply_to_message_id })
+        };
+
+        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, payload, {
             ...AXIOS_DEFAULTS,
             timeout: 30000
         });
-        
+
         return response?.data?.ok !== false;
     } catch (error) {
         logError(`Send buttons error: ${error.message}`);
-        return await sendTelegramMessage(chatId, text, {}, messageId);
+        return await sendTelegramMessage(chatId, text, {}, options.reply_to_message_id);
     }
 }
 
 // ============================================================
-// 🛠️ TELEGRAM SOCK
+// 🛠️ ENHANCED TELEGRAM SOCK WITH MORE FEATURES
 // ============================================================
 
 function createTelegramSock(chatId, messageId) {
@@ -123,7 +151,8 @@ function createTelegramSock(chatId, messageId) {
                 if (!content || typeof content !== 'object') {
                     throw new Error('Invalid content format');
                 }
-                
+
+                // Handle various content types
                 if (content.text) {
                     return await sendTelegramMessage(id, content.text, {}, messageId);
                 } else if (content.image) {
@@ -138,8 +167,21 @@ function createTelegramSock(chatId, messageId) {
                     const url = content.video.url || content.video;
                     if (!url) throw new Error('Video URL missing');
                     return await sendTelegramVideo(id, url, content.caption || '', messageId);
+                } else if (content.document) {
+                    const url = content.document.url || content.document;
+                    if (!url) throw new Error('Document URL missing');
+                    return await sendTelegramDocument(id, url, content.caption || '', messageId);
+                } else if (content.sticker) {
+                    const url = content.sticker.url || content.sticker;
+                    if (!url) throw new Error('Sticker URL missing');
+                    return await sendTelegramSticker(id, url, messageId);
                 } else if (content.buttons) {
-                    return await sendTelegramButtons(id, content.text || '', content.buttons, messageId);
+                    return await sendTelegramButtons(id, content.text || '', content.buttons, { reply_to_message_id: messageId });
+                } else if (content.poll) {
+                    return await sendTelegramPoll(id, content.poll.question, content.poll.options, {
+                        reply_to_message_id: messageId,
+                        ...content.poll
+                    });
                 } else {
                     const text = typeof content === 'string' ? content : JSON.stringify(content);
                     return await sendTelegramMessage(id, text.substring(0, 4000), {}, messageId);
@@ -160,20 +202,56 @@ function createTelegramSock(chatId, messageId) {
                 return false;
             }
         },
-        sendPresenceUpdate: async () => true,
-        readMessages: async () => true,
-        updateMessage: async () => true,
+        sendPresenceUpdate: async (presence) => {
+            try {
+                // Telegram doesn't support presence updates directly
+                return true;
+            } catch (error) {
+                return false;
+            }
+        },
+        readMessages: async (messages) => {
+            try {
+                // Mark messages as read in Telegram
+                const token = settings.telegram?.botToken?.trim();
+                if (!token) return false;
+                
+                const chatId = String(jid || chatId);
+                if (messages && messages.length > 0) {
+                    for (const msg of messages) {
+                        await axios.post(`${TELEGRAM_BASE_URL(token)}/sendChatAction`, {
+                            chat_id: chatId,
+                            action: 'typing'
+                        });
+                    }
+                }
+                return true;
+            } catch (error) {
+                return false;
+            }
+        },
+        updateMessage: async (jid, message, content) => {
+            try {
+                // Telegram doesn't support message editing via bot easily
+                return await sendTelegramMessage(String(jid), content, {}, messageId);
+            } catch (error) {
+                return false;
+            }
+        },
         logger: {
             info: logInfo,
             error: logError,
             warn: logWarning,
             debug: logDebug
-        }
+        },
+        // Additional utility functions
+        getChatId: () => chatId,
+        getMessageId: () => messageId
     };
 }
 
 // ============================================================
-// 📁 COMMAND LOADER
+// 📁 COMMAND LOADER WITH HOT RELOAD
 // ============================================================
 
 function loadWhatsappCommands() {
@@ -184,18 +262,20 @@ function loadWhatsappCommands() {
 
     const files = fs.readdirSync(COMMANDS_DIR).filter(f => f.endsWith('.js'));
     whatsappCommands.clear();
-    
+
     for (const file of files) {
         try {
             const baseName = file.replace('.js', '');
             const filePath = path.join(COMMANDS_DIR, file);
-            
+
+            // Clear cache for hot reload
             delete require.cache[require.resolve(filePath)];
             const cmdModule = require(filePath);
-            
+
             let commandName = null;
             let commandFunction = null;
-            
+            let commandConfig = {};
+
             if (typeof cmdModule === 'function') {
                 commandName = baseName;
                 commandFunction = cmdModule;
@@ -203,21 +283,27 @@ function loadWhatsappCommands() {
                 if (cmdModule.name && typeof cmdModule.execute === 'function') {
                     commandName = cmdModule.name;
                     commandFunction = cmdModule.execute;
+                    commandConfig = cmdModule.config || {};
                 } else if (typeof cmdModule.execute === 'function') {
                     commandName = baseName;
                     commandFunction = cmdModule.execute;
+                    commandConfig = cmdModule.config || {};
                 } else if (cmdModule.default && typeof cmdModule.default === 'function') {
                     commandName = baseName;
                     commandFunction = cmdModule.default;
+                    commandConfig = cmdModule.config || {};
                 } else {
                     commandName = baseName;
                     commandFunction = cmdModule;
                 }
             }
-            
+
             if (commandName && typeof commandFunction === 'function') {
-                whatsappCommands.set(commandName, commandFunction);
-                logDebug(`Loaded command: ${commandName}`);
+                whatsappCommands.set(commandName, {
+                    execute: commandFunction,
+                    config: commandConfig
+                });
+                logDebug(`Loaded command: ${commandName}${commandConfig.aliases ? ` (aliases: ${commandConfig.aliases.join(', ')})` : ''}`);
             }
         } catch (e) {
             logError(`Failed to load ${file}: ${e.message}`);
@@ -227,33 +313,34 @@ function loadWhatsappCommands() {
 }
 
 // ============================================================
-// 📱 TELEGRAM MEDIA FUNCTIONS
+// 📱 ENHANCED TELEGRAM MEDIA FUNCTIONS
 // ============================================================
 
 async function sendTelegramMessage(chatId, text, extra = {}, messageId = null) {
     const token = settings.telegram?.botToken?.trim();
     if (!token || !chatId) return false;
-    
+
     try {
         const safeText = String(text || '').substring(0, 4096);
         if (!safeText) return false;
-        
+
+        // Try HTML parsing first (more reliable than Markdown)
         const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
             chat_id: String(chatId),
             text: safeText,
             disable_web_page_preview: true,
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_to_message_id: messageId,
             ...extra
         }, {
             ...AXIOS_DEFAULTS,
             timeout: 30000
         });
-        
+
         return response?.data?.ok !== false;
     } catch (error) {
         if (error.response?.status === 400) {
-            // Try without Markdown
+            // Try without parsing
             try {
                 const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
                     chat_id: String(chatId),
@@ -266,7 +353,9 @@ async function sendTelegramMessage(chatId, text, extra = {}, messageId = null) {
                     timeout: 30000
                 });
                 return response?.data?.ok !== false;
-            } catch (e) {}
+            } catch (e) {
+                logError(`Send message fallback error: ${e.message}`);
+            }
         }
         logError(`Send message error: ${error.message}`);
         return false;
@@ -276,13 +365,13 @@ async function sendTelegramMessage(chatId, text, extra = {}, messageId = null) {
 async function sendTelegramPhoto(chatId, photoUrl, caption = '', messageId = null) {
     const token = settings.telegram?.botToken?.trim();
     if (!token || !chatId || !photoUrl) return false;
-    
+
     try {
         const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendPhoto`, {
             chat_id: String(chatId),
             photo: photoUrl,
             caption: caption.substring(0, 1024),
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_to_message_id: messageId
         }, {
             ...AXIOS_DEFAULTS,
@@ -301,30 +390,40 @@ async function sendTelegramAudio(chatId, audioUrl, caption = '', messageId = nul
         logError('Missing token, chatId, or audioUrl');
         return false;
     }
-    
+
     try {
         logDebug(`Sending audio to ${chatId}`);
+
+        // Try to get audio info
+        const audioInfo = await getAudioInfo(audioUrl);
         
-        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendAudio`, {
+        const payload = {
             chat_id: String(chatId),
             audio: audioUrl,
             caption: caption.substring(0, 1024),
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_to_message_id: messageId,
-            supports_streaming: true,
-            duration: 0
-        }, {
+            supports_streaming: true
+        };
+
+        if (audioInfo) {
+            if (audioInfo.duration) payload.duration = Math.floor(audioInfo.duration);
+            if (audioInfo.title) payload.title = audioInfo.title;
+            if (audioInfo.performer) payload.performer = audioInfo.performer;
+        }
+
+        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendAudio`, payload, {
             ...AXIOS_DEFAULTS,
             timeout: 180000,
             maxContentLength: Infinity,
             maxBodyLength: Infinity
         });
-        
+
         if (response?.data?.ok === true) {
             logSuccess(`Audio sent successfully`);
             return true;
         } else {
-            logError(`Audio send failed`);
+            logError(`Audio send failed: ${JSON.stringify(response?.data)}`);
             return false;
         }
     } catch (error) {
@@ -346,6 +445,9 @@ async function sendTelegramAudio(chatId, audioUrl, caption = '', messageId = nul
             } catch (e) {
                 logError(`Document fallback error: ${e.message}`);
             }
+        } else if (error.response?.status === 413) {
+            logError(`Audio too large: ${error.message}`);
+            await sendTelegramMessage(chatId, '❌ *Audio file too large for Telegram!* Try a smaller file.', {}, messageId);
         } else {
             logError(`Send audio error: ${error.message}`);
         }
@@ -356,13 +458,13 @@ async function sendTelegramAudio(chatId, audioUrl, caption = '', messageId = nul
 async function sendTelegramVideo(chatId, videoUrl, caption = '', messageId = null) {
     const token = settings.telegram?.botToken?.trim();
     if (!token || !chatId || !videoUrl) return false;
-    
+
     try {
         const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendVideo`, {
             chat_id: String(chatId),
             video: videoUrl,
             caption: caption.substring(0, 1024),
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_to_message_id: messageId,
             supports_streaming: true
         }, {
@@ -376,23 +478,99 @@ async function sendTelegramVideo(chatId, videoUrl, caption = '', messageId = nul
     }
 }
 
+async function sendTelegramDocument(chatId, docUrl, caption = '', messageId = null) {
+    const token = settings.telegram?.botToken?.trim();
+    if (!token || !chatId || !docUrl) return false;
+
+    try {
+        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendDocument`, {
+            chat_id: String(chatId),
+            document: docUrl,
+            caption: caption.substring(0, 1024),
+            parse_mode: 'HTML',
+            reply_to_message_id: messageId
+        }, {
+            ...AXIOS_DEFAULTS,
+            timeout: 180000
+        });
+        return response?.data?.ok !== false;
+    } catch (error) {
+        logError(`Send document error: ${error.message}`);
+        return false;
+    }
+}
+
+async function sendTelegramSticker(chatId, stickerUrl, messageId = null) {
+    const token = settings.telegram?.botToken?.trim();
+    if (!token || !chatId || !stickerUrl) return false;
+
+    try {
+        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendSticker`, {
+            chat_id: String(chatId),
+            sticker: stickerUrl,
+            reply_to_message_id: messageId
+        }, {
+            ...AXIOS_DEFAULTS,
+            timeout: 60000
+        });
+        return response?.data?.ok !== false;
+    } catch (error) {
+        logError(`Send sticker error: ${error.message}`);
+        return false;
+    }
+}
+
+async function sendTelegramPoll(chatId, question, options, extra = {}) {
+    const token = settings.telegram?.botToken?.trim();
+    if (!token || !chatId || !question || !options || options.length < 2) return false;
+
+    try {
+        const payload = {
+            chat_id: String(chatId),
+            question: question,
+            options: options.map(o => String(o)),
+            ...(extra.is_anonymous !== undefined && { is_anonymous: extra.is_anonymous }),
+            ...(extra.type && { type: extra.type }),
+            ...(extra.allows_multiple_answers && { allows_multiple_answers: extra.allows_multiple_answers }),
+            ...(extra.correct_option_id !== undefined && { correct_option_id: extra.correct_option_id }),
+            ...(extra.explanation && { explanation: extra.explanation }),
+            ...(extra.explanation_parse_mode && { explanation_parse_mode: extra.explanation_parse_mode }),
+            ...(extra.open_period && { open_period: extra.open_period }),
+            ...(extra.close_date && { close_date: extra.close_date })
+        };
+
+        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendPoll`, payload, {
+            ...AXIOS_DEFAULTS,
+            timeout: 30000
+        });
+        return response?.data?.ok !== false;
+    } catch (error) {
+        logError(`Send poll error: ${error.message}`);
+        return false;
+    }
+}
+
 // ============================================================
-// 🎵 YOUTUBE FUNCTIONS
+// 🎵 ENHANCED YOUTUBE FUNCTIONS WITH CACHING
 // ============================================================
 
 function extractVideoId(ytUrl) {
     if (!ytUrl || typeof ytUrl !== 'string') return null;
     let videoId = '';
-    if (ytUrl.includes('youtu.be/')) {
-        videoId = ytUrl.split('youtu.be/')[1]?.split('?')[0] || '';
-    } else if (ytUrl.includes('youtube.com/watch')) {
-        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
-        videoId = urlParams.get('v') || '';
-    } else if (ytUrl.includes('youtube.com/shorts/')) {
-        videoId = ytUrl.split('shorts/')[1]?.split('?')[0] || '';
-    } else if (ytUrl.includes('youtube.com/embed/')) {
-        videoId = ytUrl.split('embed/')[1]?.split('?')[0] || '';
+    
+    const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+        /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/
+    ];
+
+    for (const pattern of patterns) {
+        const match = ytUrl.match(pattern);
+        if (match) {
+            videoId = match[1];
+            break;
+        }
     }
+
     return videoId || null;
 }
 
@@ -403,10 +581,33 @@ async function tryRequest(getter, attempts = 3) {
             return await getter(); 
         } catch (err) { 
             lastErr = err; 
+            logDebug(`Request attempt ${i} failed: ${err.message}`);
             if (i < attempts) await new Promise(r => setTimeout(r, 2000 * i));
         }
     }
     throw lastErr;
+}
+
+async function getAudioInfo(url) {
+    try {
+        // Try to get audio metadata from the URL
+        const response = await axios.head(url, {
+            ...AXIOS_DEFAULTS,
+            timeout: 10000
+        });
+        
+        const contentLength = parseInt(response.headers['content-length'] || '0');
+        const contentType = response.headers['content-type'] || '';
+        
+        return {
+            duration: Math.floor(contentLength / 160000) || 0, // Rough estimate
+            title: path.basename(url).split('.')[0] || 'Audio',
+            performer: 'Unknown',
+            fileSize: contentLength
+        };
+    } catch (error) {
+        return null;
+    }
 }
 
 async function getYoutubeAudio(ytUrl) {
@@ -415,63 +616,91 @@ async function getYoutubeAudio(ytUrl) {
         return await searchYoutubeAudio(ytUrl);
     }
 
+    // Check cache first
+    const cacheKey = `yt_audio_${videoId}`;
+    if (commandCache.has(cacheKey)) {
+        const cached = commandCache.get(cacheKey);
+        if (Date.now() - cached.timestamp < 3600000) { // 1 hour cache
+            logDebug(`Using cached audio for ${videoId}`);
+            return cached.data;
+        }
+        commandCache.delete(cacheKey);
+    }
+
     const apis = [
         async () => {
             const apiUrl = `https://nayan-video-downloader.vercel.app/youtube?url=https://youtu.be/${videoId}`;
             const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-            
+
             if (res.data?.status === true && res.data?.data?.data?.formats) {
                 const formats = res.data.data.data.formats;
                 const title = res.data.data.data.title || 'Unknown Title';
                 const thumbnail = res.data.data.data.thumbnail || '';
+                const duration = res.data.data.data.duration || '0';
+
+                // Find best audio format
+                const audioFormats = formats.filter(f => f.type === 'audio');
+                const priorityMap = { '251': 100, '250': 90, '249': 85, '140': 80, '139': 70 };
                 
                 let bestAudio = null;
                 let bestPriority = 0;
-                const audioPriority = { '251': 100, '250': 90, '249': 85, '140': 80, '139': 70 };
-                
-                for (const format of formats) {
-                    if (format.type === 'audio') {
-                        let priority = audioPriority[format.formatId] || 50;
-                        if (priority > bestPriority && format.url) {
-                            bestPriority = priority;
-                            bestAudio = format;
-                        }
+
+                for (const format of audioFormats) {
+                    const priority = priorityMap[format.formatId] || 50;
+                    if (priority > bestPriority && format.url) {
+                        bestPriority = priority;
+                        bestAudio = format;
                     }
                 }
-                
+
                 if (bestAudio?.url) {
-                    return {
+                    const result = {
                         url: bestAudio.url,
                         title: title,
                         thumbnail: thumbnail,
                         quality: bestAudio.quality || 'MP3',
-                        duration: bestAudio.duration || '0'
+                        duration: duration
                     };
+                    
+                    // Cache the result
+                    commandCache.set(cacheKey, {
+                        data: result,
+                        timestamp: Date.now()
+                    });
+                    
+                    return result;
                 }
             }
-            throw new Error('No audio found');
+            throw new Error('No audio found in first API');
         },
         async () => {
             const apiUrl = `https://nayan-video-downloader.vercel.app/alldown?url=https://youtu.be/${videoId}`;
             const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-            
+
             if (res.data?.status === true && res.data?.data) {
                 const videoData = res.data.data;
                 const videoUrl = videoData.high || videoData.low;
                 if (videoUrl) {
-                    return {
+                    const result = {
                         url: videoUrl,
                         title: videoData.title || 'Unknown Title',
                         thumbnail: videoData.thumbnail || '',
                         quality: 'MP3',
                         duration: videoData.duration || '0'
                     };
+                    
+                    commandCache.set(cacheKey, {
+                        data: result,
+                        timestamp: Date.now()
+                    });
+                    
+                    return result;
                 }
             }
-            throw new Error('No audio found');
+            throw new Error('No audio found in second API');
         }
     ];
-    
+
     let lastError;
     for (const api of apis) {
         try {
@@ -481,10 +710,11 @@ async function getYoutubeAudio(ytUrl) {
             }
         } catch (err) {
             lastError = err;
+            logDebug(`API attempt failed: ${err.message}`);
             continue;
         }
     }
-    
+
     return await searchYoutubeAudio(ytUrl);
 }
 
@@ -506,12 +736,12 @@ async function searchYoutubeAudio(query) {
 }
 
 // ============================================================
-// 📊 TELEGRAM DATA MANAGEMENT
+// 📊 ENHANCED TELEGRAM DATA MANAGEMENT
 // ============================================================
 
 function ensureTelegramDataFile() {
     if (!fs.existsSync(TELEGRAM_DATA_DIR)) fs.mkdirSync(TELEGRAM_DATA_DIR, { recursive: true });
-    if (!fs.existsSync(TELEGRAM_DATA_FILE)) fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify([]), 'utf8');
+    if (!fs.existsSync(TELEGRAM_DATA_FILE)) fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify({ allowedChats: [], settings: {} }, null, 2), 'utf8');
 }
 
 function loadAllowedChats() {
@@ -519,16 +749,50 @@ function loadAllowedChats() {
     try {
         const raw = fs.readFileSync(TELEGRAM_DATA_FILE, 'utf8');
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed.map(id => String(id)) : [];
+        if (Array.isArray(parsed)) {
+            return parsed.map(id => String(id));
+        } else if (parsed.allowedChats && Array.isArray(parsed.allowedChats)) {
+            return parsed.allowedChats.map(id => String(id));
+        }
+        return [];
     } catch (error) { 
+        logError(`Load allowed chats error: ${error.message}`);
         return []; 
+    }
+}
+
+function loadTelegramSettings() {
+    ensureTelegramDataFile();
+    try {
+        const raw = fs.readFileSync(TELEGRAM_DATA_FILE, 'utf8');
+        const parsed = JSON.parse(raw);
+        return parsed.settings || {};
+    } catch (error) {
+        return {};
+    }
+}
+
+function saveTelegramSettings(settings) {
+    try {
+        const data = {
+            allowedChats: loadAllowedChats(),
+            settings: settings
+        };
+        fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+    } catch (error) {
+        logError(`Save settings error: ${error.message}`);
     }
 }
 
 function saveAllowedChats(chats) {
     try {
         const unique = Array.from(new Set(chats.map(id => String(id))));
-        fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify(unique, null, 2), 'utf8');
+        const settings = loadTelegramSettings();
+        const data = {
+            allowedChats: unique,
+            settings: settings
+        };
+        fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
     } catch (error) {
         logError(`Save allowed chats error: ${error.message}`);
     }
@@ -544,967 +808,272 @@ function addAllowedChat(chatId) {
         allowed.push(String(chatId)); 
         saveAllowedChats(allowed); 
         logSuccess(`Chat paired: ${chatId}`);
+        return true;
     }
+    return false;
 }
 
 function removeAllowedChat(chatId) {
     const allowed = loadAllowedChats().filter(id => id !== String(chatId)); 
     saveAllowedChats(allowed);
     logInfo(`Chat unpaired: ${chatId}`);
+    return true;
 }
 
-function isOwnerChat(chatId) {
-    const ownerId = String(settings.telegram?.ownerId || '').trim();
-    return ownerId && String(chatId) === ownerId;
+// ============================================================
+// 🚀 RATE LIMITING & SECURITY
+// ============================================================
+
+function checkRateLimit(chatId, command = 'default') {
+    const key = `${chatId}_${command}`;
+    const now = Date.now();
+    
+    if (!rateLimiter.has(key)) {
+        rateLimiter.set(key, { count: 1, timestamp: now });
+        return true;
+    }
+    
+    const data = rateLimiter.get(key);
+    const timeWindow = 30000; // 30 seconds
+    
+    if (now - data.timestamp > timeWindow) {
+        rateLimiter.set(key, { count: 1, timestamp: now });
+        return true;
+    }
+    
+    if (data.count >= 5) { // Max 5 requests per 30 seconds
+        return false;
+    }
+    
+    data.count++;
+    rateLimiter.set(key, data);
+    return true;
 }
 
-function isTelegramAuthorized(chatId) {
-    if (isChatAllowed(chatId)) return true;
-    if (isOwnerChat(chatId)) return true;
-    if (String(settings.commandMode || '').toLowerCase() === 'public') return true;
-    return false;
-}
+// ============================================================
+// 📝 LOGGING SYSTEM
+// ============================================================
 
-async function removeWebhookIfSet(token) {
-    try { 
-        const resp = await axios.post(`${TELEGRAM_BASE_URL(token)}/deleteWebhook`, {}, AXIOS_DEFAULTS); 
-        return resp?.data?.ok || false; 
-    } catch (err) { 
-        return false; 
+function logToFile(chatId, username, command, message) {
+    try {
+        const logFile = path.join(LOGS_DIR, `${new Date().toISOString().slice(0,10)}.log`);
+        const logEntry = `[${getTimestamp()}] ${chatId} | ${username || 'Unknown'} | ${command} | ${message}\n`;
+        fs.appendFileSync(logFile, logEntry, 'utf8');
+    } catch (error) {
+        // Silent fail
     }
 }
 
 // ============================================================
-// 🔐 PAIRING FUNCTIONS
+// 🤖 COMMAND EXECUTION WITH ERROR HANDLING
 // ============================================================
 
-async function generatePairingCode(phoneNumber) {
-    try {
-        const { version } = await fetchLatestBaileysVersion();
-        const { state, saveCreds } = await useMultiFileAuthState(`./pairing-${phoneNumber}`);
+async function executeCommand(commandName, sock, chatId, args, message, commandConfig = {}) {
+    const cmd = whatsappCommands.get(commandName);
+    if (!cmd) {
+        logError(`Command not found: ${commandName}`);
+        return await sendTelegramMessage(chatId, `❌ Command "${commandName}" not found.`, {}, message.message_id);
+    }
 
+    try {
+        // Rate limiting check
+        if (!checkRateLimit(chatId, commandName)) {
+            await sendTelegramMessage(chatId, '⏳ *Too many requests!* Please wait a moment.', {}, message.message_id);
+            return;
+        }
+
+        // Log command usage
+        const username = message.from?.username || message.chat?.username || 'Unknown';
+        logToFile(chatId, username, commandName, JSON.stringify(args));
+        logInfo(`Executing command "${commandName}" from ${username}`);
+
+        // Execute the command
+        const result = await cmd.execute(sock, chatId, args, message, commandConfig);
+        
+        // Handle different return types
+        if (result && typeof result === 'string') {
+            await sendTelegramMessage(chatId, result, {}, message.message_id);
+        } else if (result && typeof result === 'object') {
+            if (result.text) {
+                await sendTelegramMessage(chatId, result.text, {}, message.message_id);
+            }
+            if (result.image) {
+                await sendTelegramPhoto(chatId, result.image.url || result.image, result.caption || '', message.message_id);
+            }
+            if (result.audio) {
+                await sendTelegramAudio(chatId, result.audio.url || result.audio, result.caption || '', message.message_id);
+            }
+            if (result.video) {
+                await sendTelegramVideo(chatId, result.video.url || result.video, result.caption || '', message.message_id);
+            }
+            if (result.buttons) {
+                await sendTelegramButtons(chatId, result.text || '', result.buttons, { reply_to_message_id: message.message_id });
+            }
+        }
+    } catch (error) {
+        logError(`Command "${commandName}" error: ${error.message}`);
+        await sendTelegramMessage(chatId, `❌ *Error executing command:* ${error.message.substring(0, 200)}`, {}, message.message_id);
+        
+        // Log error
+        const username = message.from?.username || message.chat?.username || 'Unknown';
+        logToFile(chatId, username, commandName, `ERROR: ${error.message}`);
+    }
+}
+
+// ============================================================
+// 🌐 AFRICAN CHARTS INTEGRATION
+// ============================================================
+
+async function getAfricanMusicCharts(country = 'Tanzania') {
+    const chartApis = {
+        'Tanzania': 'https://music-charts-api.vercel.app/api/tz',
+        'Kenya': 'https://music-charts-api.vercel.app/api/ke',
+        'Nigeria': 'https://music-charts-api.vercel.app/api/ng',
+        'South Africa': 'https://music-charts-api.vercel.app/api/za',
+        'Uganda': 'https://music-charts-api.vercel.app/api/ug',
+        'Ghana': 'https://music-charts-api.vercel.app/api/gh'
+    };
+
+    const apiUrl = chartApis[country];
+    if (!apiUrl) return null;
+
+    try {
+        const response = await axios.get(apiUrl, {
+            ...AXIOS_DEFAULTS,
+            timeout: 15000
+        });
+
+        if (response.data && response.data.charts) {
+            return {
+                country: country,
+                charts: response.data.charts,
+                updatedAt: response.data.updatedAt || new Date().toISOString()
+            };
+        }
+        return null;
+    } catch (error) {
+        logError(`Chart fetch error: ${error.message}`);
+        return null;
+    }
+}
+
+// ============================================================
+// 📱 WHATSAPP PAIRING
+// ============================================================
+
+async function pairWhatsApp(chatId, phoneNumber) {
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState(path.join(TEMP_DIR, `wa_session_${chatId}`));
+        const { version } = await fetchLatestBaileysVersion();
+        
         const sock = makeWASocket({
             version,
             auth: state,
             printQRInTerminal: false,
-            browser: ['Mickey Glitch', 'Chrome', '120.0.0.0'],
+            browser: ['Ubuntu', 'Chrome', '20.0.04'],
+            syncFullHistory: false,
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000
         });
 
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                sock.end(new Error('Timeout'));
-                reject(new Error('Pairing timeout after 60 seconds'));
-            }, 60000);
-
-            sock.ev.on('connection.update', async (update) => {
-                const { connection, lastDisconnect, pairingCode } = update;
-
-                if (pairingCode) {
-                    clearTimeout(timeout);
-                    await delay(1000);
-                    await sock.end();
-                    resolve({ pairingCode });
-                }
-
-                if (connection === 'close') {
-                    clearTimeout(timeout);
-                    const error = lastDisconnect?.error;
-                    reject(new Error(error?.message || 'Connection closed'));
-                }
-            });
-
-            sock.requestPairingCode(phoneNumber);
-        });
-    } catch (error) {
-        throw new Error(`Pairing failed: ${error.message}`);
-    }
-}
-
-async function handlePairCommand(chatId, args, sendMessage) {
-    const inputNumber = args[0] || '';
-    if (!inputNumber) {
-        return sendMessage(chatId, '⚠️ *Please enter phone number!*\n\n📌 *Example:* `/pair 255612130873`');
-    }
-
-    const cleanNumber = inputNumber.replace(/[^0-9]/g, '');
-
-    if (cleanNumber.length < 10 || cleanNumber.length > 15) {
-        return sendMessage(chatId, '❌ *Invalid number!*\n\n✅ Valid: 255XXXXXXXXX');
-    }
-
-    if (activePairingSessions.has(chatId)) {
-        return sendMessage(chatId, '⏳ *Pairing already in progress!*');
-    }
-
-    await sendMessage(chatId, `🔐 *GENERATING PAIRING CODE...*\n\n📱 *Number:* +${cleanNumber}\n⏱️ *Time:* 15-30 seconds`);
-
-    activePairingSessions.set(chatId, true);
-
-    try {
-        const result = await generatePairingCode(cleanNumber);
-
-        if (result && result.pairingCode) {
-            addAllowedChat(chatId);
-
-            const successMsg = `🔑 *YOUR PAIRING CODE!*\n\n` +
-                              `╭━━━━━━━━━━━━━━━━━━━━╮\n` +
-                              `┃ 🔐 *CODE:* \`${result.pairingCode}\`\n` +
-                              `╰━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-                              `📌 *HOW TO USE:*\n` +
-                              `1️⃣ Open WhatsApp\n` +
-                              `2️⃣ Go *Settings* → *Linked Devices*\n` +
-                              `3️⃣ Select *Link with Phone Number*\n` +
-                              `4️⃣ Enter this code: \`${result.pairingCode}\`\n\n` +
-                              `✅ *Bot will connect automatically!*`;
-
-            await sendMessage(chatId, successMsg);
-
-            const ownerId = String(settings.telegram?.ownerId || '').trim();
-            if (ownerId && ownerId !== chatId) {
-                await sendMessage(ownerId, `🔔 *New Pairing Request*\n👤 Chat ID: \`${chatId}\`\n📱 Number: +${cleanNumber}\n✅ Status: Success`);
-            }
-        } else {
-            await sendMessage(chatId, '❌ *FAILED TO GET CODE!*');
-        }
-    } catch (error) {
-        logError(`Pairing Error: ${error.message}`);
-        await sendMessage(chatId, `❌ *PAIRING FAILED!*\n\n${error.message}\n\nPlease try again later.`);
-    } finally {
-        setTimeout(() => {
-            activePairingSessions.delete(chatId);
-        }, 30000);
-    }
-}
-
-// ============================================================
-// 🎵 TANZANIA & AFRICA CHART
-// ============================================================
-
-async function showTanzaniaChart(chatId, sendMessage) {
-    try {
-        await sendMessage(chatId, '🎵 *Loading Tanzania & Africa Top Charts...*');
-        
-        // Search for Tanzania and Africa music
-        const searches = [
-            'Tanzania bongo music 2026',
-            'East African music 2026',
-            'Diamond Platnumz songs',
-            'Zuchu songs',
-            'Rayvanny songs',
-            'Mbosso songs',
-            'Harmonize songs',
-            'Africa music 2026'
-        ];
-        
-        let allVideos = [];
-        for (const search of searches) {
-            try {
-                const result = await yts(search);
-                if (result && result.videos && result.videos.length > 0) {
-                    allVideos = allVideos.concat(result.videos.slice(0, 3));
-                }
-            } catch (e) {}
-        }
-        
-        // Remove duplicates by title
-        const uniqueVideos = [];
-        const seenTitles = new Set();
-        for (const v of allVideos) {
-            if (!seenTitles.has(v.title)) {
-                seenTitles.add(v.title);
-                uniqueVideos.push(v);
-            }
-        }
-        
-        if (uniqueVideos.length === 0) {
-            // Fallback: search for popular African music
-            const fallbackResult = await yts('popular african music 2026');
-            const videos = fallbackResult.videos || [];
-            if (videos.length === 0) {
-                return sendMessage(chatId, '❌ *No chart songs found.*');
-            }
-            uniqueVideos.push(...videos.slice(0, 10));
-        }
-        
-        // Sort by views if available
-        uniqueVideos.sort((a, b) => (b.views || 0) - (a.views || 0));
-        const topVideos = uniqueVideos.slice(0, 10);
-        
-        let chartMsg = `🎵 *TANZANIA & AFRICA TOP CHART*\n`;
-        chartMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-        
-        topVideos.forEach((v, i) => {
-            const num = i + 1;
-            const views = v.views ? `👁️ ${v.views}` : '';
-            const duration = v.timestamp || 'Unknown';
-            const artist = v.author?.name || 'Unknown Artist';
-            const emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-            const emoji = emojis[i] || `${num}.`;
-            chartMsg += `${emoji} *${v.title.substring(0, 40)}*\n`;
-            chartMsg += `   🎤 ${artist}\n`;
-            chartMsg += `   ⏱️ ${duration} ${views ? `| ${views}` : ''}\n\n`;
-        });
-        
-        chartMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        chartMsg += `💡 *To play:* /play [song name]\n`;
-        chartMsg += `💡 *Example:* /play ${topVideos[0]?.title?.substring(0, 30) || 'song'}`;
-        
-        // Create buttons for top 5 songs
-        const buttons = topVideos.slice(0, 5).map((v) => ({
-            text: `${v.title.substring(0, 25)}`,
-            callback_data: `play_${v.title.substring(0, 30)}`
-        }));
-        
-        await sendTelegramButtons(chatId, chartMsg, buttons);
-        
-    } catch (error) {
-        logError(`[CHART] ${error.message}`);
-        await sendMessage(chatId, '❌ *Failed to load chart.* Please try again later.');
-    }
-}
-
-// ============================================================
-// 🎵 PLAY COMMAND
-// ============================================================
-
-async function handlePlayCommand(chatId, query, sendMessage, messageId = null) {
-    if (!query) {
-        const buttons = [
-            { text: '🎵 Tanzania Chart', callback_data: 'tanzania_chart' },
-            { text: '🎤 Random Song', callback_data: 'play_random' },
-            { text: '📊 Menu', callback_data: 'menu' }
-        ];
-        return sendTelegramButtons(chatId, 
-            '⚠️ *Usage:* `/play song name or URL`\n\n' +
-            '📌 *Examples:*\n' +
-            '┣ `/play Sauti Sol`\n' +
-            '┣ `/play https://youtu.be/...`\n' +
-            '┣ `/play tz` - Tanzania chart\n' +
-            '┣ `/play africa` - Africa chart\n\n' +
-            '💡 *Click a button below or type a command*',
-            buttons, messageId
-        );
-    }
-
-    // Check for Tanzania/Africa chart
-    const lowerQuery = query.toLowerCase();
-    if (lowerQuery.includes('tz') || lowerQuery.includes('tanzania') || 
-        lowerQuery.includes('africa') || lowerQuery.includes('bongo') || 
-        lowerQuery.includes('chart')) {
-        return await showTanzaniaChart(chatId, sendMessage);
-    }
-
-    if (lowerQuery.includes('random')) {
-        return await playRandomSong(chatId, sendMessage);
-    }
-
-    await sendMessage(chatId, `🎵 *Searching:* _${query.substring(0, 50)}_...`);
-
-    try {
-        let audioData;
-        let videoInfo = null;
-        
-        if (query.includes('youtube.com') || query.includes('youtu.be')) {
-            audioData = await getYoutubeAudio(query);
-            if (audioData) {
-                const videoId = extractVideoId(query);
-                if (videoId) {
-                    try {
-                        const searchResult = await yts(`https://youtu.be/${videoId}`);
-                        if (searchResult && searchResult.videos && searchResult.videos.length > 0) {
-                            videoInfo = searchResult.videos[0];
-                        }
-                    } catch (e) {}
-                }
-            }
-        } else {
-            const searchResult = await yts(query);
-            const videos = searchResult.videos;
-            if (!videos || videos.length === 0) {
-                return sendMessage(chatId, '❌ *No results found.*');
-            }
-            const video = videos[0];
-            videoInfo = video;
-            audioData = await getYoutubeAudio(video.url);
-        }
-        
-        if (!audioData || !audioData.url) {
-            throw new Error('Failed to get audio');
-        }
-        
-        const title = videoInfo?.title || audioData.title || 'Unknown Title';
-        const artist = videoInfo?.author?.name || 'Unknown Artist';
-        const duration = videoInfo?.timestamp || audioData.duration || 'Unknown';
-        const thumbnail = videoInfo?.thumbnail || audioData.thumbnail || '';
-        
-        const caption = `🎵 *${title.substring(0, 60)}*\n` +
-                       `🎤 *Artist:* ${artist}\n` +
-                       `⏱️ *Duration:* ${duration}\n` +
-                       `🎚️ *Quality:* ${audioData.quality || 'MP3'}\n\n` +
-                       `⚡ *Mickey Glitch Bot*`;
-        
-        const audioSent = await sendTelegramAudio(chatId, audioData.url, caption, messageId);
-        
-        if (audioSent) {
-            const buttons = [
-                { text: '🎵 Chart', callback_data: 'tanzania_chart' },
-                { text: '🎤 Random', callback_data: 'play_random' },
-                { text: '📊 Menu', callback_data: 'menu' }
-            ];
-            await sendTelegramButtons(chatId, `✅ *Audio sent successfully!*\n\n🎵 *${title}*\n⏱️ Duration: ${duration}`, buttons, messageId);
-        } else {
-            await sendMessage(chatId, `✅ *Audio ready!*\n\n🎵 *${title}*\n📥 *Download:* ${audioData.url}`);
-        }
-        
-    } catch (err) {
-        logError(`[PLAY] ${err.message}`);
-        await sendMessage(chatId, `❌ *Download failed.*\n\n📛 ${err.message}\n\n💡 Tip: Try using a different song name or URL`);
-    }
-}
-
-async function playRandomSong(chatId, sendMessage) {
-    try {
-        const searches = [
-            'random popular song',
-            'top trending music',
-            'viral songs 2026',
-            'popular music'
-        ];
-        const search = searches[Math.floor(Math.random() * searches.length)];
-        const searchResult = await yts(search);
-        const videos = searchResult.videos;
-        if (!videos || videos.length === 0) {
-            return sendMessage(chatId, '❌ *No random song found.*');
-        }
-        const randomVideo = videos[Math.floor(Math.random() * videos.length)];
-        await handlePlayCommand(chatId, randomVideo.title, sendMessage);
-    } catch (error) {
-        logError(`[RANDOM] ${error.message}`);
-        await sendMessage(chatId, '❌ *Failed to get random song.*');
-    }
-}
-
-// ============================================================
-// 👑 OWNER COMMANDS
-// ============================================================
-
-async function handleUpdateCommand(chatId, isActiveOwner, sendMessage, messageId = null) {
-    if (!isActiveOwner) {
-        return sendMessage(chatId, '🚷 *Owner only command!*');
-    }
-    
-    await sendMessage(chatId, '⏳ *Checking for updates from GitHub...*');
-    const rawUrl = 'https://raw.githubusercontent.com/Mickeydeveloper/Mickey-Glitch/main/telegram-bot.js';
-    
-    try {
-        const response = await axios.get(rawUrl, { 
-            responseType: 'text', 
-            ...AXIOS_DEFAULTS,
-            timeout: 30000
-        });
-        
-        if (response.status === 200 && response.data) {
-            const currentCode = fs.readFileSync(__filename, 'utf8');
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, qr } = update;
             
-            if (currentCode === response.data) {
-                return sendMessage(chatId, '✅ *Already up to date!*\n\nNo updates available.');
-            }
-            
-            fs.writeFileSync(__filename, response.data, 'utf8');
-            await sendMessage(chatId, '✅ *Code updated successfully!*\n\n🔄 Restarting bot...');
-            
-            setTimeout(() => {
-                process.exit(0);
-            }, 3000);
-        } else {
-            throw new Error('Failed to fetch update');
-        }
-    } catch (error) {
-        logError(`Update error: ${error.message}`);
-        await sendMessage(chatId, `❌ *Update failed.*\n\n📛 ${error.message}`);
-    }
-}
-
-async function handleBroadcastCommand(chatId, isActiveOwner, message, sendMessage, messageId = null) {
-    if (!isActiveOwner) {
-        return sendMessage(chatId, '🚷 *Owner only command!*');
-    }
-    
-    const broadcastMsg = message.substring(message.indexOf(' ') + 1);
-    if (!broadcastMsg) {
-        return sendMessage(chatId, '⚠️ *Usage:* `/broadcast message`');
-    }
-    
-    const chats = loadAllowedChats();
-    let success = 0;
-    
-    await sendMessage(chatId, `📢 *Sending broadcast to ${chats.length} chats...*`);
-    
-    for (const chat of chats) {
-        try {
-            await sendTelegramMessage(chat, `📢 *BROADCAST*\n\n${broadcastMsg}`);
-            success++;
-            await delay(200);
-        } catch (e) {
-            logError(`Broadcast to ${chat} failed: ${e.message}`);
-        }
-    }
-    
-    await sendMessage(chatId, `✅ *Broadcast sent to ${success}/${chats.length} chats*`);
-}
-
-async function handleExecCommand(chatId, isActiveOwner, fullArgs, sendMessage) {
-    if (!isActiveOwner) {
-        return sendMessage(chatId, '🚷 *Owner only command!*');
-    }
-    
-    if (!fullArgs) {
-        return sendMessage(chatId, '⚠️ *Usage:* `/exec <command>`\n📌 *Example:* `/exec ls -la`');
-    }
-    
-    await sendMessage(chatId, `💻 *Running command...*\n\`\`\`bash\n${fullArgs}\n\`\`\``);
-    
-    try {
-        const { stdout, stderr } = await execAsync(fullArgs, { 
-            timeout: 30000,
-            maxBuffer: 10 * 1024 * 1024
-        });
-        
-        const output = stdout || stderr || 'No output.';
-        const trimmedOutput = output.substring(0, 3500);
-        
-        if (trimmedOutput.length < output.length) {
-            await sendMessage(chatId, `📤 *Output (truncated):*\n\`\`\`bash\n${trimmedOutput}\n\`\`\`\n\n⚠️ Output was truncated (${output.length} chars)`);
-        } else {
-            await sendMessage(chatId, `📤 *Output:*\n\`\`\`bash\n${trimmedOutput}\n\`\`\``);
-        }
-    } catch (error) {
-        await sendMessage(chatId, `❌ *Error:*\n\`\`\`bash\n${error.message.substring(0, 500)}\n\`\`\``);
-    }
-}
-
-// ============================================================
-// 📝 ULTIMATE MENU - SHOW ALL COMMANDS
-// ============================================================
-
-function formatHelpText() {
-    const internalCommands = [
-        { cmd: '/pair <number>', desc: '🔐 Connect WhatsApp' },
-        { cmd: '/unpair', desc: '🔓 Disconnect this chat' },
-        { cmd: '/check', desc: '✅ Check pairing status' },
-        { cmd: '/play <song/URL>', desc: '🎵 Play audio from YouTube' },
-        { cmd: '/play tz', desc: '🎵 Tanzania Bongo Chart' },
-        { cmd: '/play africa', desc: '🌍 Africa Music Chart' },
-        { cmd: '/play chart', desc: '📊 Top Chart Songs' },
-        { cmd: '/play random', desc: '🎲 Play random song' },
-        { cmd: '/help, /menu', desc: '📖 Show this menu' },
-        { cmd: '/ping', desc: '🏓 Check bot status' },
-        { cmd: '/alive', desc: '💚 System health' },
-        { cmd: '/owner', desc: '👑 Developer info' },
-        { cmd: '/stats', desc: '📊 RAM, CPU, Uptime' },
-        { cmd: '/chats', desc: '📋 Paired groups list (Owner)' },
-        { cmd: '/update', desc: '🔄 Update from GitHub (Owner)' },
-        { cmd: '/exec <cmd>', desc: '💻 Run terminal command (Owner)' },
-        { cmd: '/broadcast <msg>', desc: '📢 Send to all chats (Owner)' }
-    ];
-    
-    const externalCommands = [];
-    for (const [name] of whatsappCommands) {
-        externalCommands.push(`/${name}`);
-    }
-    
-    const totalCommands = internalCommands.length + externalCommands.length;
-    
-    let helpText = `╔════════════════════════════════════════╗\n`;
-    helpText += `║     ✨ *MICKEY GLITCH BOT* ✨          ║\n`;
-    helpText += `╚════════════════════════════════════════╝\n\n`;
-    
-    helpText += `🛡️ *PAIRING SYSTEM*\n`;
-    helpText += `┌────────────────────────────────────────┐\n`;
-    helpText += `├ /pair <number> ➔ Connect WhatsApp\n`;
-    helpText += `├ /unpair ➔ Disconnect this chat\n`;
-    helpText += `└ /check ➔ Check pairing status\n\n`;
-    
-    helpText += `🎵 *MUSIC & MEDIA*\n`;
-    helpText += `┌────────────────────────────────────────┐\n`;
-    helpText += `├ /play <song> ➔ Play audio from YouTube\n`;
-    helpText += `├ /play tz ➔ Tanzania Bongo Chart 🇹🇿\n`;
-    helpText += `├ /play africa ➔ Africa Music Chart 🌍\n`;
-    helpText += `├ /play chart ➔ Top Chart Songs\n`;
-    helpText += `├ /play random ➔ Play random song\n`;
-    helpText += `└ /play <URL> ➔ Play from YouTube URL\n\n`;
-    
-    helpText += `🤖 *CORE COMMANDS*\n`;
-    helpText += `┌────────────────────────────────────────┐\n`;
-    helpText += `├ /help, /menu ➔ Show this menu\n`;
-    helpText += `├ /ping ➔ Check bot status\n`;
-    helpText += `├ /alive ➔ System health\n`;
-    helpText += `├ /owner ➔ Developer info\n`;
-    helpText += `└ /stats ➔ RAM, CPU, Uptime\n\n`;
-    
-    helpText += `👑 *OWNER COMMANDS*\n`;
-    helpText += `┌────────────────────────────────────────┐\n`;
-    helpText += `├ /chats ➔ Paired groups list\n`;
-    helpText += `├ /update ➔ Update from GitHub\n`;
-    helpText += `├ /exec <cmd> ➔ Run terminal command\n`;
-    helpText += `└ /broadcast <msg> ➔ Send to all chats\n\n`;
-    
-    if (externalCommands.length > 0) {
-        helpText += `📂 *ADDITIONAL COMMANDS*\n`;
-        helpText += `┌────────────────────────────────────────┐\n`;
-        const displayCmds = externalCommands.slice(0, 20);
-        displayCmds.forEach(cmd => {
-            helpText += `├ ${cmd}\n`;
-        });
-        if (externalCommands.length > 20) {
-            helpText += `└ ... and ${externalCommands.length - 20} more\n`;
-        } else {
-            helpText += `└────────────────────────────────────────┘\n`;
-        }
-        helpText += `\n`;
-    }
-    
-    helpText += `╔════════════════════════════════════════╗\n`;
-    helpText += `║  📊 *Total:* ${totalCommands} commands    ║\n`;
-    helpText += `║  🇹🇿 *Tanzania Music Ready*              ║\n`;
-    helpText += `║  🌍 *Africa Music Ready*                 ║\n`;
-    helpText += `║  ⚡ *Powered by Mickey Developer*         ║\n`;
-    helpText += `╚════════════════════════════════════════╝\n`;
-    
-    return helpText;
-}
-
-// ============================================================
-// 🚀 MAIN UPDATE HANDLER
-// ============================================================
-
-async function handleUpdate(update) {
-    try {
-        // Handle callback queries (buttons)
-        if (update.callback_query) {
-            const callback = update.callback_query;
-            const chatId = callback.message?.chat?.id;
-            const messageId = callback.message?.message_id;
-            const data = callback.data;
-            
-            if (!chatId) return;
-            
-            // Answer callback
-            try {
-                const token = settings.telegram?.botToken?.trim();
-                if (token) {
-                    await axios.post(`${TELEGRAM_BASE_URL(token)}/answerCallbackQuery`, {
-                        callback_query_id: callback.id
-                    }, AXIOS_DEFAULTS);
-                }
-            } catch (e) {}
-            
-            // Handle button callbacks
-            const sendMsg = async (id, txt, extra = {}, msgId = messageId) => {
-                return await sendTelegramMessage(id, txt, extra, msgId);
-            };
-            
-            if (data === 'help' || data === 'menu') {
-                const helpText = formatHelpText();
-                const buttons = [
-                    { text: '🎵 Tanzania Chart', callback_data: 'tanzania_chart' },
-                    { text: '🎤 Random Song', callback_data: 'play_random' },
-                    { text: '👑 Owner', url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
-                ];
-                return sendTelegramButtons(chatId, helpText, buttons, messageId);
-            }
-            
-            if (data === 'tanzania_chart') {
-                await showTanzaniaChart(chatId, sendMsg);
-                return;
-            }
-            
-            if (data === 'play_random') {
-                await playRandomSong(chatId, sendMsg);
-                return;
-            }
-            
-            if (data.startsWith('play_')) {
-                const query = data.replace('play_', '');
-                await handlePlayCommand(chatId, query, sendMsg, messageId);
-                return;
-            }
-            
-            return;
-        }
-
-        const message = update.message || update.edited_message;
-        if (!message) return;
-
-        const chatId = message.chat?.id;
-        const messageId = message.message_id;
-        const sender = message.from;
-        const rawText = String(message.text || '').trim();
-
-        if (!chatId || !sender) return;
-
-        const sendMsg = async (id, txt, extra = {}, msgId = messageId) => {
-            try {
-                return await sendTelegramMessage(id, txt, extra, msgId);
-            } catch (error) {
-                return false;
-            }
-        };
-
-        // Only process commands
-        if (!rawText.startsWith('/') && !rawText.startsWith('.')) return;
-
-        const cleanText = rawText.substring(1);
-        const parts = cleanText.split(/\s+/);
-        const commandText = parts[0].toLowerCase();
-        const args = parts.slice(1);
-        const fullArgs = args.join(' ');
-
-        const allowed = isTelegramAuthorized(chatId);
-        const isActiveOwner = isOwnerChat(chatId);
-
-        // ============================================================
-        // 📝 INTERNAL COMMANDS
-        // ============================================================
-        
-        if (commandText === 'pair') {
-            await handlePairCommand(chatId, args, sendMsg);
-            return;
-        }
-
-        if (commandText === 'unpair') {
-            if (!isChatAllowed(chatId)) return sendMsg(chatId, 'ℹ️ Chat not paired.');
-            removeAllowedChat(chatId);
-            const buttons = [
-                { text: '🔄 Re-pair', callback_data: 'help' },
-                { text: '📊 Menu', callback_data: 'menu' }
-            ];
-            return sendTelegramButtons(chatId, '✅ *Chat unpaired successfully!*', buttons, messageId);
-        }
-
-        if (commandText === 'check') {
-            const isPaired = isChatAllowed(chatId);
-            const buttons = [
-                { text: '📊 Menu', callback_data: 'menu' },
-                { text: '🎵 Music', callback_data: 'tanzania_chart' }
-            ];
-            const msg = isPaired ? '✅ *Chat is paired!*' : '❌ *Chat is not paired.*';
-            return sendTelegramButtons(chatId, msg, buttons, messageId);
-        }
-
-        if (commandText === 'start' || commandText === 'menu' || commandText === 'help') {
-            const helpText = formatHelpText();
-            const buttons = [
-                { text: '🎵 Tanzania Chart', callback_data: 'tanzania_chart' },
-                { text: '🎤 Random Song', callback_data: 'play_random' },
-                { text: '👑 Owner', url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
-            ];
-            return sendTelegramButtons(chatId, helpText, buttons, messageId);
-        }
-
-        if (commandText === 'ping') {
-            const startTime = Date.now();
-            await sendMsg(chatId, '🏓 *Pong!*');
-            const latency = Date.now() - startTime;
-            const buttons = [
-                { text: '📊 Stats', callback_data: 'help' },
-                { text: '🎵 Music', callback_data: 'tanzania_chart' }
-            ];
-            return sendTelegramButtons(chatId, `⏱️ *Latency:* ${latency}ms\n✅ *Status:* Online`, buttons, messageId);
-        }
-
-        if (commandText === 'alive') {
-            const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-            const uptime = Math.floor(process.uptime());
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            const seconds = uptime % 60;
-            const pairedChats = loadAllowedChats().length;
-            
-            const aliveMsg = `✅ *MICKEY GLITCH BOT - ONLINE!*\n\n` +
-                            `⏱️ *Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
-                            `💾 *RAM:* ${ramUsage} MB\n` +
-                            `👥 *Paired Chats:* ${pairedChats}\n` +
-                            `📂 *Commands:* ${whatsappCommands.size + 17}\n` +
-                            `⚡ *Status:* All systems operational\n\n` +
-                            `📅 ${new Date().toLocaleString()}`;
-            
-            const buttons = [
-                { text: '📊 Menu', callback_data: 'menu' },
-                { text: '🎵 Music', callback_data: 'tanzania_chart' },
-                { text: '👑 Owner', url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
-            ];
-            return sendTelegramButtons(chatId, aliveMsg, buttons, messageId);
-        }
-
-        if (commandText === 'owner') {
-            const ownerMsg = `👑 *OWNER INFO*\n\n` +
-                            `📛 *Name:* ${settings.botOwner || 'Mickey Developer'}\n` +
-                            `📱 *WhatsApp:* wa.me/${settings.ownerNumber || '255612130873'}\n` +
-                            `📢 *Channel:* t.me/mickeyglitch\n` +
-                            `💻 *GitHub:* github.com/Mickeydeveloper\n\n` +
-                            `⚡ *Mickey Glitch Bot*`;
-            
-            const buttons = [
-                { text: '📱 Contact Owner', url: `https://wa.me/${settings.ownerNumber || '255612130873'}` },
-                { text: '📢 Join Channel', url: 'https://t.me/mickeyglitch' },
-                { text: '📊 Menu', callback_data: 'menu' }
-            ];
-            return sendTelegramButtons(chatId, ownerMsg, buttons, messageId);
-        }
-
-        if (commandText === 'stats') {
-            const uptime = Math.floor(process.uptime());
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            const seconds = uptime % 60;
-            const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-            const serverFreeRam = (os.freemem() / 1024 / 1024 / 1024).toFixed(2);
-            const totalRam = (os.totalmem() / 1024 / 1024 / 1024).toFixed(2);
-            const pairedChats = loadAllowedChats().length;
-
-            const statsText = `📊 *SYSTEM STATS*\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-                            `⏱️ *Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
-                            `💾 *RAM:* ${ramUsage} MB\n` +
-                            `🖥️ *Server:* ${serverFreeRam}GB / ${totalRam}GB Free\n` +
-                            `💻 *Platform:* ${os.platform()} (${os.arch()})\n` +
-                            `👥 *Paired Chats:* ${pairedChats}\n` +
-                            `📂 *Commands:* ${whatsappCommands.size + 17}`;
-            
-            const buttons = [
-                { text: '🔄 Refresh', callback_data: 'help' },
-                { text: '📊 Menu', callback_data: 'menu' }
-            ];
-            return sendTelegramButtons(chatId, statsText, buttons, messageId);
-        }
-
-        // Authorization check for other commands
-        if (!allowed) {
-            const msg = '⚠️ *Chat not paired!*\n\nPlease use `/pair <number>` to connect your WhatsApp.';
-            const buttons = [
-                { text: '🔐 Pair Now', callback_data: 'help' },
-                { text: '📊 Menu', callback_data: 'menu' }
-            ];
-            return sendTelegramButtons(chatId, msg, buttons, messageId);
-        }
-
-        // ============================================================
-        // 🎵 PLAY COMMAND
-        // ============================================================
-        
-        if (commandText === 'play') {
-            await handlePlayCommand(chatId, fullArgs, sendMsg, messageId);
-            return;
-        }
-
-        // ============================================================
-        // 👑 OWNER COMMANDS
-        // ============================================================
-        
-        if (commandText === 'chats') {
-            if (!isActiveOwner) return sendMsg(chatId, '🚷 *Owner only command!*');
-            const list = loadAllowedChats();
-            if (!list.length) return sendMsg(chatId, 'ℹ️ No paired chats.');
-            return sendMsg(chatId, `📝 *PAIRED CHATS (${list.length}):*\n\n` + list.map((id, index) => `${index + 1}. ID: \`${id}\``).join('\n'));
-        }
-
-        if (commandText === 'update') {
-            await handleUpdateCommand(chatId, isActiveOwner, sendMsg, messageId);
-            return;
-        }
-
-        if (commandText === 'exec') {
-            await handleExecCommand(chatId, isActiveOwner, fullArgs, sendMsg);
-            return;
-        }
-
-        if (commandText === 'broadcast') {
-            await handleBroadcastCommand(chatId, isActiveOwner, rawText, sendMsg, messageId);
-            return;
-        }
-
-        // ============================================================
-        // 📂 EXTERNAL COMMANDS FROM /commands FOLDER
-        // ============================================================
-        
-        // Check if command exists and is valid
-        if (whatsappCommands.has(commandText)) {
-            try {
-                const commandFn = whatsappCommands.get(commandText);
+            if (qr) {
+                // Send QR code to Telegram
+                await sendTelegramMessage(chatId, 
+                    '📱 *Scan this QR Code with WhatsApp*\n\n' +
+                    '1. Open WhatsApp on your phone\n' +
+                    '2. Tap Menu or Settings\n' +
+                    '3. Tap WhatsApp Web\n' +
+                    '4. Scan the QR code below\n\n' +
+                    '⚠️ *QR Code expires in 2 minutes*',
+                    {}, null
+                );
                 
-                if (typeof commandFn !== 'function') {
-                    throw new Error('Command is not a function');
+                // Send QR as image
+                try {
+                    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
+                    await sendTelegramPhoto(chatId, qrImageUrl, '📱 *Scan this QR Code*', null);
+                } catch (e) {
+                    logError(`QR image send error: ${e.message}`);
                 }
-                
-                const tgSock = createTelegramSock(chatId, messageId);
-                
-                const mockMsg = {
-                    key: { 
-                        remoteJid: chatId, 
-                        fromMe: false, 
-                        id: messageId,
-                        participant: sender.id || sender.username
-                    },
-                    pushName: sender.first_name || sender.username || 'Telegram User',
-                    message: { conversation: rawText },
-                    quoted: message.reply_to_message ? {
-                        key: { remoteJid: chatId, fromMe: false, id: message.reply_to_message.message_id },
-                        pushName: message.reply_to_message.from?.first_name || 'Unknown',
-                        message: { conversation: message.reply_to_message.text || '' }
-                    } : null,
-                    id: messageId,
-                    sender: sender,
-                    chat: message.chat,
-                    from: chatId,
-                    body: rawText,
-                    fromMe: false,
-                    isGroup: message.chat?.type === 'group' || message.chat?.type === 'supergroup',
-                    participant: sender.id || sender.username
-                };
-
-                logDebug(`Executing command: ${commandText}`);
-                await commandFn(tgSock, chatId, mockMsg, rawText);
-                return;
-            } catch (err) {
-                logError(`Bridge Error (${commandText}): ${err.message}`);
-                // Check if it's the getcode command error
-                if (commandText === 'getcode') {
-                    await sendMsg(chatId, 'ℹ️ *This command is for WhatsApp only.*\n\nPlease use this command on WhatsApp, not Telegram.');
-                } else {
-                    await sendMsg(chatId, `❌ *Error:* ${err.message.substring(0, 200)}`);
-                }
-                return;
             }
-        }
-
-        // ============================================================
-        // ❌ COMMAND NOT FOUND
-        // ============================================================
-        
-        if (rawText.startsWith('/') || rawText.startsWith('.')) {
-            const errorMsg = `❌ *Command '${commandText}' not found.*\n\n` +
-                            `📂 *Available commands:*\n` +
-                            `┣ /play <song/URL> - Play music\n` +
-                            `┣ /play tz - Tanzania Chart 🇹🇿\n` +
-                            `┣ /play africa - Africa Chart 🌍\n` +
-                            `┣ /play random - Random song\n` +
-                            `┣ /help - Show all commands\n` +
-                            `┣ /ping - Check status\n` +
-                            `┣ /alive - System health\n` +
-                            `┗ /owner - Developer info\n\n` +
-                            `💡 Type /help for complete list`;
             
-            const buttons = [
-                { text: '📊 Menu', callback_data: 'menu' },
-                { text: '🎵 Tanzania Chart', callback_data: 'tanzania_chart' },
-                { text: '👑 Owner', url: `https://wa.me/${settings.ownerNumber || '255612130873'}` }
-            ];
-            return sendTelegramButtons(chatId, errorMsg, buttons, messageId);
-        }
-        
+            if (connection === 'open') {
+                logSuccess(`WhatsApp paired for ${chatId}`);
+                await sendTelegramMessage(chatId, '✅ *WhatsApp Connected Successfully!*\n\n' +
+                    'Now you can use WhatsApp features through this bot.', {}, null);
+            }
+            
+            if (connection === 'close') {
+                logWarning(`WhatsApp disconnected for ${chatId}`);
+            }
+        });
+
+        sock.ev.on('creds.update', saveCreds);
+
+        return sock;
     } catch (error) {
-        logError(`Update handling error: ${error.message}`);
-        try {
-            const chatId = update.message?.chat?.id;
-            if (chatId) {
-                await sendTelegramMessage(chatId, '❌ *System Error!*\n\nPlease try again later.');
-            }
-        } catch (e) {}
+        logError(`Pairing error: ${error.message}`);
+        await sendTelegramMessage(chatId, `❌ *Pairing failed:* ${error.message}`, {}, null);
+        return null;
     }
 }
 
 // ============================================================
-// 🚀 START TELEGRAM BOT
+// 🚀 BOT INITIALIZATION
 // ============================================================
 
-let isTelegramBotRunning = false;
+// Load commands on startup
+loadWhatsappCommands();
 
-async function startTelegramBot() {
-    if (isTelegramBotRunning) {
-        logInfo('Telegram bot is already running.');
-        return { sendMessage: sendTelegramMessage };
-    }
-
-    const token = settings.telegram?.botToken?.trim();
-    if (!token) { 
-        logError('❌ Telegram botToken not found in settings.js'); 
-        return null; 
-    }
-
-    ensureTelegramDataFile();
-    loadWhatsappCommands();
-    await removeWebhookIfSet(token);
+// Export all functions
+module.exports = {
+    // Core functions
+    sendTelegramMessage,
+    sendTelegramPhoto,
+    sendTelegramAudio,
+    sendTelegramVideo,
+    sendTelegramDocument,
+    sendTelegramSticker,
+    sendTelegramPoll,
+    sendTelegramButtons,
+    createTelegramSock,
     
-    logSuccess('🚀 Telegram bot starting...');
-    logInfo(`📂 Loaded ${whatsappCommands.size} commands from /commands folder`);
-    logInfo('🎵 /play command with Tanzania & Africa charts');
-    logInfo('🇹🇿 Tanzania Bongo Chart ready');
-    logInfo('🌍 Africa Music Chart ready');
-    logInfo('🔐 /pair command handles WhatsApp pairing');
-    logInfo(`📊 Total commands: ${whatsappCommands.size + 17}`);
-    logInfo('🎯 Buttons support enabled');
+    // Command management
+    loadWhatsappCommands,
+    executeCommand,
+    whatsappCommands,
     
-    let offset = 0;
-    let pollingErrors = 0;
+    // Data management
+    isChatAllowed,
+    addAllowedChat,
+    removeAllowedChat,
+    loadAllowedChats,
+    saveAllowedChats,
+    loadTelegramSettings,
+    saveTelegramSettings,
     
-    const pollUpdates = async () => {
-        try {
-            const response = await axios.get(`${TELEGRAM_BASE_URL(token)}/getUpdates`, {
-                params: { 
-                    timeout: 30, 
-                    offset: offset + 1,
-                    allowed_updates: ['message', 'edited_message', 'callback_query']
-                },
-                ...AXIOS_DEFAULTS
-            });
-            
-            pollingErrors = 0;
-            
-            const updates = response.data.result;
-            if (updates && updates.length > 0) {
-                for (const update of updates) {
-                    try {
-                        await handleUpdate(update);
-                        offset = update.update_id;
-                    } catch (err) {
-                        logError(`Update error: ${err.message}`);
-                    }
-                }
-            }
-        } catch (err) {
-            pollingErrors++;
-            logError(`Polling error (${pollingErrors}): ${err.message}`);
-        }
-        
-        const interval = pollingErrors > 5 ? 5000 : 1000;
-        setTimeout(pollUpdates, interval);
-    };
+    // YouTube functions
+    getYoutubeAudio,
+    searchYoutubeAudio,
+    extractVideoId,
     
-    pollUpdates();
+    // African charts
+    getAfricanMusicCharts,
     
-    const ownerId = String(settings.telegram?.ownerId || '').trim();
-    if (ownerId) {
-        try {
-            const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-            const startMsg = "✅ *MICKEY GLITCH BOT STARTED!*\n\n" +
-                            "🟢 *Status:* Online\n" +
-                            `💾 *RAM:* ${ramUsage} MB\n` +
-                            `📂 *Commands:* ${whatsappCommands.size + 17} loaded\n` +
-                            `👥 *Paired Chats:* ${loadAllowedChats().length}\n` +
-                            `🇹🇿 *Tanzania Chart:* Ready\n` +
-                            `🌍 *Africa Chart:* Ready\n` +
-                            `🎯 *Buttons:* Enabled\n` +
-                            `📅 *Time:* ${new Date().toLocaleString()}\n\n` +
-                            "⚡ *Ready to serve!*";
-            await sendTelegramMessage(ownerId, startMsg);
-        } catch (e) {}
-    }
+    // WhatsApp pairing
+    pairWhatsApp,
     
-    isTelegramBotRunning = true;
-    logSuccess('✅ Telegram bot is running!');
-    return { sendMessage: sendTelegramMessage };
-}
-
-module.exports = { startTelegramBot, isTelegramBotRunning };
+    // Utility
+    checkRateLimit,
+    logToFile,
+    colors,
+    logSuccess,
+    logError,
+    logWarning,
+    logInfo,
+    logDebug,
+    logSystem
+};
