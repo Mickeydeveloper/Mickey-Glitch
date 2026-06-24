@@ -8,6 +8,7 @@ const path = require('path');
 const axios = require('axios');
 const yts = require('yt-search');
 const os = require('os');
+const { performance } = require('perf_hooks');
 const settings = require('./settings');
 const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, delay } = require('@whiskeysockets/baileys');
 const { exec } = require('child_process');
@@ -75,6 +76,41 @@ function logDebug(text) { console.log(colors.cyan(`[${getTimestamp()}] 🐛 ${te
 function logSystem(text) { console.log(colors.magenta(`[${getTimestamp()}] ⚙️ ${text}`)); }
 
 // ============================================================
+// 📋 FORMATTING UTILITIES
+// ============================================================
+
+const formatUptime = (seconds) => {
+    const d = Math.floor(seconds / (3600 * 24));
+    const h = Math.floor((seconds % (3600 * 24)) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+
+    const parts = [];
+    if (d > 0) parts.push(`${d}ᴅ`);
+    if (h > 0) parts.push(`${h}ʜ`);
+    if (m > 0) parts.push(`${m}ᴍ`);
+    parts.push(`${s}ꜱ`);
+
+    return parts.join(' ');
+};
+
+const progressBar = (percentage, length = 10) => {
+    const filled = Math.round((percentage / 100) * length);
+    const empty = length - filled;
+    return '█'.repeat(filled) + '░'.repeat(empty);
+};
+
+const getSystemLoad = () => {
+    const loadAvg = os.loadavg();
+    const cpuCount = os.cpus().length;
+    return {
+        '1m': (loadAvg[0] / cpuCount * 100).toFixed(1),
+        '5m': (loadAvg[1] / cpuCount * 100).toFixed(1),
+        '15m': (loadAvg[2] / cpuCount * 100).toFixed(1)
+    };
+};
+
+// ============================================================
 // 🎯 ENHANCED BUTTONS AND INLINE KEYBOARDS
 // ============================================================
 
@@ -93,7 +129,7 @@ async function sendTelegramButtons(chatId, text, buttons, options = {}) {
                 const button = {
                     text: btn.text || btn.label || 'Button'
                 };
-                
+
                 if (btn.url) {
                     button.url = btn.url;
                 } else if (btn.callback_data) {
@@ -139,6 +175,25 @@ async function sendTelegramButtons(chatId, text, buttons, options = {}) {
     }
 }
 
+async function sendInteractiveMessage(sock, chatId, content, options = {}) {
+    try {
+        // Send interactive message with buttons
+        const text = content.text || '';
+        const buttons = content.interactiveButtons || content.buttons || [];
+        
+        if (buttons.length > 0) {
+            return await sendTelegramButtons(chatId, text, buttons, {
+                reply_to_message_id: options.quoted?.message_id || options.reply_to_message_id
+            });
+        } else {
+            return await sendTelegramMessage(chatId, text, {}, options.quoted?.message_id || options.reply_to_message_id);
+        }
+    } catch (error) {
+        logError(`Send interactive error: ${error.message}`);
+        return false;
+    }
+}
+
 // ============================================================
 // 🛠️ ENHANCED TELEGRAM SOCK WITH MORE FEATURES
 // ============================================================
@@ -175,8 +230,8 @@ function createTelegramSock(chatId, messageId) {
                     const url = content.sticker.url || content.sticker;
                     if (!url) throw new Error('Sticker URL missing');
                     return await sendTelegramSticker(id, url, messageId);
-                } else if (content.buttons) {
-                    return await sendTelegramButtons(id, content.text || '', content.buttons, { reply_to_message_id: messageId });
+                } else if (content.buttons || content.interactiveButtons) {
+                    return await sendInteractiveMessage(null, id, content, { quoted: { message_id: messageId } });
                 } else if (content.poll) {
                     return await sendTelegramPoll(id, content.poll.question, content.poll.options, {
                         reply_to_message_id: messageId,
@@ -204,7 +259,6 @@ function createTelegramSock(chatId, messageId) {
         },
         sendPresenceUpdate: async (presence) => {
             try {
-                // Telegram doesn't support presence updates directly
                 return true;
             } catch (error) {
                 return false;
@@ -212,10 +266,9 @@ function createTelegramSock(chatId, messageId) {
         },
         readMessages: async (messages) => {
             try {
-                // Mark messages as read in Telegram
                 const token = settings.telegram?.botToken?.trim();
                 if (!token) return false;
-                
+
                 const chatId = String(jid || chatId);
                 if (messages && messages.length > 0) {
                     for (const msg of messages) {
@@ -232,7 +285,6 @@ function createTelegramSock(chatId, messageId) {
         },
         updateMessage: async (jid, message, content) => {
             try {
-                // Telegram doesn't support message editing via bot easily
                 return await sendTelegramMessage(String(jid), content, {}, messageId);
             } catch (error) {
                 return false;
@@ -244,7 +296,6 @@ function createTelegramSock(chatId, messageId) {
             warn: logWarning,
             debug: logDebug
         },
-        // Additional utility functions
         getChatId: () => chatId,
         getMessageId: () => messageId
     };
@@ -294,50 +345,67 @@ function loadWhatsappCommands() {
 
             delete require.cache[require.resolve(filePath)];
             const cmdModule = require(filePath);
-            const exportTarget = cmdModule && typeof cmdModule === 'object' && 'default' in cmdModule ? cmdModule.default : cmdModule;
-
-            let commandName = baseName;
+            
+            // Handle different export formats
             let commandFunction = null;
             let commandConfig = {};
             let aliases = [];
+            let commandName = baseName;
 
-            if (typeof exportTarget === 'function') {
-                commandFunction = exportTarget;
-            } else if (exportTarget && typeof exportTarget === 'object') {
-                if (typeof exportTarget.execute === 'function') {
-                    commandFunction = exportTarget.execute;
-                    commandConfig = exportTarget.config || {};
-                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
-                } else if (typeof exportTarget.default === 'function') {
-                    commandFunction = exportTarget.default;
-                    commandConfig = exportTarget.config || {};
-                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
-                } else if (typeof exportTarget.run === 'function') {
-                    commandFunction = exportTarget.run;
-                    commandConfig = exportTarget.config || {};
-                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
-                } else if (typeof exportTarget.handler === 'function') {
-                    commandFunction = exportTarget.handler;
-                    commandConfig = exportTarget.config || {};
-                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
+            // Check if it's a function directly
+            if (typeof cmdModule === 'function') {
+                commandFunction = cmdModule;
+            } 
+            // Check if it has execute property
+            else if (cmdModule && typeof cmdModule === 'object') {
+                if (typeof cmdModule.execute === 'function') {
+                    commandFunction = cmdModule.execute;
+                    commandConfig = cmdModule.config || {};
+                    aliases = Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [];
+                } 
+                // Check if it has default export
+                else if (cmdModule.default) {
+                    if (typeof cmdModule.default === 'function') {
+                        commandFunction = cmdModule.default;
+                    } else if (typeof cmdModule.default.execute === 'function') {
+                        commandFunction = cmdModule.default.execute;
+                        commandConfig = cmdModule.default.config || {};
+                        aliases = Array.isArray(cmdModule.default.aliases) ? cmdModule.default.aliases : [];
+                    }
                 }
+                // Check for run or handler
+                else if (typeof cmdModule.run === 'function') {
+                    commandFunction = cmdModule.run;
+                    commandConfig = cmdModule.config || {};
+                    aliases = Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [];
+                } else if (typeof cmdModule.handler === 'function') {
+                    commandFunction = cmdModule.handler;
+                    commandConfig = cmdModule.config || {};
+                    aliases = Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [];
+                }
+            }
 
-                if (!commandFunction) {
-                    commandName = exportTarget.name || baseName;
-                    commandConfig = exportTarget.config || {};
-                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
+            // If still no function, try to get it from exports
+            if (!commandFunction) {
+                const exports = Object.values(cmdModule);
+                for (const exp of exports) {
+                    if (typeof exp === 'function') {
+                        commandFunction = exp;
+                        break;
+                    }
                 }
             }
 
             if (commandFunction && typeof commandFunction === 'function') {
-                const resolvedName = (typeof exportTarget?.name === 'string' && exportTarget.name) || baseName;
+                const resolvedName = (typeof cmdModule?.name === 'string' && cmdModule.name) || baseName;
                 const resolvedAliases = Array.isArray(commandConfig.aliases) ? commandConfig.aliases : aliases;
+                
                 const entry = {
                     execute: commandFunction,
                     config: commandConfig,
                     aliases: resolvedAliases,
-                    category: commandConfig.category || exportTarget?.category || null,
-                    description: commandConfig.description || exportTarget?.description || null
+                    category: commandConfig.category || null,
+                    description: commandConfig.description || null
                 };
 
                 whatsappCommands.set(normalizeCommandName(resolvedName), entry);
@@ -345,6 +413,8 @@ function loadWhatsappCommands() {
                     if (alias) whatsappCommands.set(normalizeCommandName(alias), entry);
                 }
                 logDebug(`Loaded command: ${resolvedName}${resolvedAliases.length ? ` (aliases: ${resolvedAliases.join(', ')})` : ''}`);
+            } else {
+                logWarning(`Could not load command from ${file}: No function found`);
             }
         } catch (e) {
             logError(`Failed to load ${file}: ${e.message}`);
@@ -365,7 +435,6 @@ async function sendTelegramMessage(chatId, text, extra = {}, messageId = null) {
         const safeText = String(text || '').substring(0, 4096);
         if (!safeText) return false;
 
-        // Try HTML parsing first (more reliable than Markdown)
         const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
             chat_id: String(chatId),
             text: safeText,
@@ -381,7 +450,6 @@ async function sendTelegramMessage(chatId, text, extra = {}, messageId = null) {
         return response?.data?.ok !== false;
     } catch (error) {
         if (error.response?.status === 400) {
-            // Try without parsing
             try {
                 const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendMessage`, {
                     chat_id: String(chatId),
@@ -435,9 +503,8 @@ async function sendTelegramAudio(chatId, audioUrl, caption = '', messageId = nul
     try {
         logDebug(`Sending audio to ${chatId}`);
 
-        // Try to get audio info
         const audioInfo = await getAudioInfo(audioUrl);
-        
+
         const payload = {
             chat_id: String(chatId),
             audio: audioUrl,
@@ -470,7 +537,6 @@ async function sendTelegramAudio(chatId, audioUrl, caption = '', messageId = nul
     } catch (error) {
         if (error.response?.status === 400) {
             logError(`Audio error 400: File may be too large or invalid format`);
-            // Try sending as document
             try {
                 const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendDocument`, {
                     chat_id: String(chatId),
@@ -598,7 +664,7 @@ async function sendTelegramPoll(chatId, question, options, extra = {}) {
 function extractVideoId(ytUrl) {
     if (!ytUrl || typeof ytUrl !== 'string') return null;
     let videoId = '';
-    
+
     const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
         /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/
@@ -631,17 +697,16 @@ async function tryRequest(getter, attempts = 3) {
 
 async function getAudioInfo(url) {
     try {
-        // Try to get audio metadata from the URL
         const response = await axios.head(url, {
             ...AXIOS_DEFAULTS,
             timeout: 10000
         });
-        
+
         const contentLength = parseInt(response.headers['content-length'] || '0');
         const contentType = response.headers['content-type'] || '';
-        
+
         return {
-            duration: Math.floor(contentLength / 160000) || 0, // Rough estimate
+            duration: Math.floor(contentLength / 160000) || 0,
             title: path.basename(url).split('.')[0] || 'Audio',
             performer: 'Unknown',
             fileSize: contentLength
@@ -657,11 +722,10 @@ async function getYoutubeAudio(ytUrl) {
         return await searchYoutubeAudio(ytUrl);
     }
 
-    // Check cache first
     const cacheKey = `yt_audio_${videoId}`;
     if (commandCache.has(cacheKey)) {
         const cached = commandCache.get(cacheKey);
-        if (Date.now() - cached.timestamp < 3600000) { // 1 hour cache
+        if (Date.now() - cached.timestamp < 3600000) {
             logDebug(`Using cached audio for ${videoId}`);
             return cached.data;
         }
@@ -679,10 +743,9 @@ async function getYoutubeAudio(ytUrl) {
                 const thumbnail = res.data.data.data.thumbnail || '';
                 const duration = res.data.data.data.duration || '0';
 
-                // Find best audio format
                 const audioFormats = formats.filter(f => f.type === 'audio');
                 const priorityMap = { '251': 100, '250': 90, '249': 85, '140': 80, '139': 70 };
-                
+
                 let bestAudio = null;
                 let bestPriority = 0;
 
@@ -702,13 +765,12 @@ async function getYoutubeAudio(ytUrl) {
                         quality: bestAudio.quality || 'MP3',
                         duration: duration
                     };
-                    
-                    // Cache the result
+
                     commandCache.set(cacheKey, {
                         data: result,
                         timestamp: Date.now()
                     });
-                    
+
                     return result;
                 }
             }
@@ -729,12 +791,12 @@ async function getYoutubeAudio(ytUrl) {
                         quality: 'MP3',
                         duration: videoData.duration || '0'
                     };
-                    
+
                     commandCache.set(cacheKey, {
                         data: result,
                         timestamp: Date.now()
                     });
-                    
+
                     return result;
                 }
             }
@@ -868,24 +930,24 @@ function removeAllowedChat(chatId) {
 function checkRateLimit(chatId, command = 'default') {
     const key = `${chatId}_${command}`;
     const now = Date.now();
-    
+
     if (!rateLimiter.has(key)) {
         rateLimiter.set(key, { count: 1, timestamp: now });
         return true;
     }
-    
+
     const data = rateLimiter.get(key);
-    const timeWindow = 30000; // 30 seconds
-    
+    const timeWindow = 30000;
+
     if (now - data.timestamp > timeWindow) {
         rateLimiter.set(key, { count: 1, timestamp: now });
         return true;
     }
-    
-    if (data.count >= 5) { // Max 5 requests per 30 seconds
+
+    if (data.count >= 5) {
         return false;
     }
-    
+
     data.count++;
     rateLimiter.set(key, data);
     return true;
@@ -900,9 +962,7 @@ function logToFile(chatId, username, command, message) {
         const logFile = path.join(LOGS_DIR, `${new Date().toISOString().slice(0,10)}.log`);
         const logEntry = `[${getTimestamp()}] ${chatId} | ${username || 'Unknown'} | ${command} | ${message}\n`;
         fs.appendFileSync(logFile, logEntry, 'utf8');
-    } catch (error) {
-        // Silent fail
-    }
+    } catch (error) {}
 }
 
 // ============================================================
@@ -928,6 +988,8 @@ async function executeCommand(commandName, sock, chatId, args, message, commandC
         logInfo(`Executing command "${normalizedName}" from ${username}`);
 
         let result;
+        
+        // Try different invocation patterns
         const invocationCandidates = [
             () => cmd.execute(sock, chatId, message, args, commandConfig),
             () => cmd.execute(sock, chatId, args, message, commandConfig),
@@ -943,6 +1005,7 @@ async function executeCommand(commandName, sock, chatId, args, message, commandC
                 break;
             } catch (error) {
                 lastError = error;
+                logDebug(`Invocation attempt failed: ${error.message}`);
             }
         }
 
@@ -950,6 +1013,7 @@ async function executeCommand(commandName, sock, chatId, args, message, commandC
             throw lastError;
         }
 
+        // Handle different return types
         if (result && typeof result === 'string') {
             await sendTelegramMessage(chatId, result, {}, message?.message_id);
         } else if (result && typeof result === 'object') {
@@ -965,8 +1029,8 @@ async function executeCommand(commandName, sock, chatId, args, message, commandC
             if (result.video) {
                 await sendTelegramVideo(chatId, result.video.url || result.video, result.caption || '', message?.message_id);
             }
-            if (result.buttons) {
-                await sendTelegramButtons(chatId, result.text || '', result.buttons, { reply_to_message_id: message?.message_id });
+            if (result.buttons || result.interactiveButtons) {
+                await sendInteractiveMessage(null, chatId, result, { quoted: { message_id: message?.message_id } });
             }
         }
     } catch (error) {
@@ -1023,7 +1087,7 @@ async function pairWhatsApp(chatId, phoneNumber) {
     try {
         const { state, saveCreds } = await useMultiFileAuthState(path.join(TEMP_DIR, `wa_session_${chatId}`));
         const { version } = await fetchLatestBaileysVersion();
-        
+
         const sock = makeWASocket({
             version,
             auth: state,
@@ -1036,9 +1100,8 @@ async function pairWhatsApp(chatId, phoneNumber) {
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, qr } = update;
-            
+
             if (qr) {
-                // Send QR code to Telegram
                 await sendTelegramMessage(chatId, 
                     '📱 *Scan this QR Code with WhatsApp*\n\n' +
                     '1. Open WhatsApp on your phone\n' +
@@ -1048,8 +1111,7 @@ async function pairWhatsApp(chatId, phoneNumber) {
                     '⚠️ *QR Code expires in 2 minutes*',
                     {}, null
                 );
-                
-                // Send QR as image
+
                 try {
                     const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
                     await sendTelegramPhoto(chatId, qrImageUrl, '📱 *Scan this QR Code*', null);
@@ -1057,13 +1119,13 @@ async function pairWhatsApp(chatId, phoneNumber) {
                     logError(`QR image send error: ${e.message}`);
                 }
             }
-            
+
             if (connection === 'open') {
                 logSuccess(`WhatsApp paired for ${chatId}`);
                 await sendTelegramMessage(chatId, '✅ *WhatsApp Connected Successfully!*\n\n' +
                     'Now you can use WhatsApp features through this bot.', {}, null);
             }
-            
+
             if (connection === 'close') {
                 logWarning(`WhatsApp disconnected for ${chatId}`);
             }
@@ -1152,6 +1214,178 @@ async function startTelegramBot() {
     };
 }
 
+// ============================================================
+// 📝 EXAMPLE COMMAND - ALIVE/STATUS
+// ============================================================
+
+/**
+ * Get bot name from config
+ */
+const getBotName = () => {
+    try {
+        const configPath = path.join(__dirname, 'config', 'config.json');
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath));
+            return config.botName || '𝐌𝐈𝐂𝐊𝐄𝐘-𝐕𝟑';
+        }
+    } catch (e) {}
+    return '𝐌𝐈𝐂𝐊𝐄𝐘-𝐕𝟑';
+};
+
+/**
+ * Get formatted date with fancy emojis
+ */
+const getFormattedDate = () => {
+    const now = new Date();
+    const days = ['𝐒𝐮𝐧𝐝𝐚𝐲', '𝐌𝐨𝐧𝐝𝐚𝐲', '𝐓𝐮𝐞𝐬𝐝𝐚𝐲', '𝐖𝐞𝐝𝐧𝐞𝐬𝐝𝐚𝐲', '𝐓𝐡𝐮𝐫𝐬𝐝𝐚𝐲', '𝐅𝐫𝐢𝐝𝐚𝐲', '𝐒𝐚𝐭𝐮𝐫𝐝𝐚𝐲'];
+    const months = ['𝐉𝐚𝐧', '𝐅𝐞𝐛', '𝐌𝐚𝐫', '𝐀𝐩𝐫', '𝐌𝐚𝐲', '𝐉𝐮𝐧', '𝐉𝐮𝐥', '𝐀𝐮𝐠', '𝐒𝐞𝐩', '𝐎𝐜𝐭', '𝐍𝐨𝐯', '𝐃𝐞𝐜'];
+
+    return `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+};
+
+/**
+ * Get network stats
+ */
+const getNetworkStats = () => {
+    const networkInterfaces = os.networkInterfaces();
+    let ipAddress = 'N/A';
+    let macAddress = 'N/A';
+
+    for (const interfaceName in networkInterfaces) {
+        const interfaces = networkInterfaces[interfaceName];
+        for (const iface of interfaces) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                ipAddress = iface.address;
+                macAddress = iface.mac;
+                break;
+            }
+        }
+        if (ipAddress !== 'N/A') break;
+    }
+
+    return { ipAddress, macAddress };
+};
+
+/**
+ * Main alive command function
+ */
+const aliveCommand = async (sock, chatId, message, args, config) => {
+    const startTime = performance.now();
+
+    try {
+        const botName = getBotName();
+        const formattedDate = getFormattedDate();
+
+        const time = new Date().toLocaleTimeString('en-US', { 
+            timeZone: 'Africa/Dar_es_Salaam', 
+            hour: '2-digit', 
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+
+        const latency = (performance.now() - startTime).toFixed(0);
+        const pingEmoji = latency < 100 ? '🟢' : latency < 200 ? '🟡' : '🔴';
+
+        const totalRam = os.totalmem() / Math.pow(1024, 3);
+        const usedRam = process.memoryUsage().heapUsed / Math.pow(1024, 3);
+        const freeRam = totalRam - usedRam;
+        const ramPercent = ((usedRam / totalRam) * 100).toFixed(1);
+        const ramBar = progressBar(parseFloat(ramPercent), 12);
+
+        const cpuModel = os.cpus()[0]?.model.split('@')[0].trim() || 'Generic CPU';
+        const cpuCores = os.cpus().length;
+        const cpuLoad = getSystemLoad();
+
+        const network = getNetworkStats();
+        const uptime = formatUptime(process.uptime());
+        const platform = os.platform() === 'linux' ? '🐧 𝐋𝐢𝐧𝐮𝐱' : os.platform() === 'win32' ? '🪟 𝐖𝐢𝐧𝐝𝐨𝐰𝐬' : '📱 𝐀𝐧𝐝𝐫𝐨𝐢𝐝';
+        const arch = os.arch() === 'x64' ? '64-ʙɪᴛ' : os.arch();
+
+        const nodeVersion = process.version.replace('v', '');
+
+        const botStartTime = global.botStartTime || Date.now();
+        const botUptime = formatUptime(Math.floor((Date.now() - botStartTime) / 1000));
+
+        const imageUrl = 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png';
+
+        const statusMessage = `🚀 *${botName} Status*
+
+*— USER INFO —*
+👤 *Name:* ${message.pushName || 'Guest'}
+📅 *Date:* ${formattedDate}
+🕐 *Time:* ${time} EAT
+⚡ *Ping:* ${latency}ms ${pingEmoji}
+
+*— SYSTEM —*
+⏳ *Uptime:* ${uptime}
+💾 *RAM:* ${ramPercent}% (${usedRam.toFixed(1)}GB)
+📊 ${ramBar}
+🖥️ *CPU:* ${cpuModel.split(' ').slice(0, 2).join(' ')}
+🐧 *OS:* ${platform}
+
+*— HEALTH —*
+${ramPercent < 70 ? '🟢 Status: Perfect' : ramPercent < 85 ? '🟡 Status: Stable' : '🔴 Status: Heavy'}
+💡 *Free:* ${freeRam.toFixed(2)}GB
+
+_Mickey Glitch Technology_`;
+
+        await sendInteractiveMessage(sock, chatId, {
+            text: statusMessage,
+            contextInfo: {
+                mentionedJid: [chatId],
+                externalAdReply: {
+                    title: `🚀 ${botName} | 𝐎𝐍𝐋𝐈𝐍𝐄`,
+                    body: '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲',
+                    thumbnailUrl: imageUrl,
+                    sourceUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
+                    mediaType: 1,
+                    renderLargerThumbnail: true,
+                    showAdAttribution: true
+                }
+            },
+            interactiveButtons: [
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({ 
+                        display_text: '📜 𝐌𝐄𝐍𝐔', 
+                        id: '.menu' 
+                    })
+                },
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({ 
+                        display_text: '📡 𝐒𝐏𝐄𝐄𝐃', 
+                        id: '.ping' 
+                    })
+                },
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({ 
+                        display_text: '👑 𝐎𝐖𝐍𝐄𝐑', 
+                        id: '.owner' 
+                    })
+                },
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({ 
+                        display_text: '⚡ 𝐑𝐔𝐍𝐓𝐈𝐌𝐄', 
+                        id: '.runtime' 
+                    })
+                }
+            ]
+        }, { quoted: message });
+
+    } catch (error) {
+        console.error('Critical Error in Alive Command:', error);
+        try {
+            await sock.sendMessage(chatId, { 
+                text: '❌ *System Error:* Unable to fetch status.\n```' + error.message + '```' 
+            }, { quoted: message });
+        } catch (e) { }
+    }
+};
+
 // Export all functions
 module.exports = {
     // Core functions
@@ -1163,13 +1397,14 @@ module.exports = {
     sendTelegramSticker,
     sendTelegramPoll,
     sendTelegramButtons,
+    sendInteractiveMessage,
     createTelegramSock,
-    
+
     // Command management
     loadWhatsappCommands,
     executeCommand,
     whatsappCommands,
-    
+
     // Data management
     isChatAllowed,
     addAllowedChat,
@@ -1178,18 +1413,18 @@ module.exports = {
     saveAllowedChats,
     loadTelegramSettings,
     saveTelegramSettings,
-    
+
     // YouTube functions
     getYoutubeAudio,
     searchYoutubeAudio,
     extractVideoId,
-    
+
     // African charts
     getAfricanMusicCharts,
-    
+
     // WhatsApp pairing
     pairWhatsApp,
-    
+
     // Utility
     checkRateLimit,
     logToFile,
@@ -1202,5 +1437,14 @@ module.exports = {
     logWarning,
     logInfo,
     logDebug,
-    logSystem
+    logSystem,
+    
+    // Example commands
+    aliveCommand,
+    formatUptime,
+    progressBar,
+    getSystemLoad,
+    getBotName,
+    getFormattedDate,
+    getNetworkStats
 };
