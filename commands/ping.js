@@ -292,7 +292,7 @@ async function reportCommand(sock, chatId, message) {
 // 📦 MODULE EXPORTS
 // ============================================================
 
-module.exports = {
+module.exports =  
     pingCommand,
     sysInfoCommand,
     statusCommand,
@@ -304,4 +304,4 @@ module.exports = {
     getPerformanceRating,
     getSystemHealth,
     getAdvancedSystemInfo
-};
+ ;
