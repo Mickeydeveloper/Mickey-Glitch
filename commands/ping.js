@@ -614,7 +614,7 @@ ${sysInfo.disk.percent > 90 ? '⚠️ Low disk space - Clean up files\n' : '✅ 
 // 📦 MODULE EXPORTS
 // ============================================================
 
-module.exports = {
+module.exports = 
     // Command functions
     pingCommand,
     sysInfoCommand,
@@ -630,4 +630,4 @@ module.exports = {
     getSystemHealth,
     getAdvancedSystemInfo,
     getBasicSystemInfo
-};
+ ;
