@@ -3,10 +3,17 @@
  * Enhanced version with beautiful UI, animations, and comprehensive system monitoring
  */
 
+const fs = require('fs');
+const path = require('path');
 const os = require('os');
-const { sendButtons } = require('gifted-btns');
-const si = require('systeminformation'); // For advanced system info
 const { performance } = require('perf_hooks');
+
+let si = null;
+try {
+    si = require('systeminformation');
+} catch (error) {
+    si = null;
+}
 
 // ============================================================
 // 🎨 FORMATTING & UTILITY FUNCTIONS
@@ -94,6 +101,10 @@ function getSystemHealth(ramPercent, cpuLoad, diskPercent) {
 // ============================================================
 
 async function getAdvancedSystemInfo() {
+    if (!si) {
+        return getBasicSystemInfo();
+    }
+
     try {
         const [cpu, mem, disk, net, osInfo, process] = await Promise.all([
             si.cpu(),
@@ -284,7 +295,7 @@ async function pingCommand(sock, chatId, message) {
         const procUptime = formatTime(sysInfo.process.uptime);
         
         // Get current time
-        const currentTime = new Date().toLocaleString('en-TZ', {
+        const currentTime = new Date().toLocaleString('en-US', {
             timeZone: 'Africa/Dar_es_Salaam',
             hour12: false
         });
@@ -341,41 +352,8 @@ async function pingCommand(sock, chatId, message) {
 💡 *Commands:* /ping | /sysinfo | /status | /help
 `;
 
-        // Create interactive buttons
-        const buttons = [
-            { 
-                id: '.ping', 
-                text: '🔄 REFRESH',
-                description: 'Update system status'
-            },
-            { 
-                id: '.sysinfo', 
-                text: '📊 DETAILED',
-                description: 'View detailed system info'
-            },
-            { 
-                id: '.status', 
-                text: '📈 LIVE STATS',
-                description: 'Real-time monitoring'
-            },
-            { 
-                id: '.help', 
-                text: '❓ HELP',
-                description: 'Get help'
-            },
-            { 
-                id: '.report', 
-                text: '📋 REPORT',
-                description: 'Generate system report'
-            }
-        ];
-
-        // Send with buttons
-        await sendButtons(sock, chatId, {
-            title: '⚡ *SYSTEM STATUS REPORT*',
-            text: pingText,
-            footer: '🔄 Auto-refresh every 30s | Mickey Glitch Tech',
-            buttons: buttons
+        await sock.sendMessage(chatId, {
+            text: pingText
         }, { quoted: message });
 
         // Log success
@@ -547,17 +525,8 @@ async function statusCommand(sock, chatId, message) {
 *© 2026 Mickey Glitch Labs*
 `;
 
-        const buttons = [
-            { id: '.status', text: '🔄 REFRESH' },
-            { id: '.ping', text: '📊 FULL PING' },
-            { id: '.sysinfo', text: '📋 DETAILED' }
-        ];
-
-        await sendButtons(sock, chatId, {
-            title: '📈 *LIVE STATUS MONITOR*',
-            text: statusText,
-            footer: 'Real-time monitoring | Mickey Glitch Tech',
-            buttons: buttons
+        await sock.sendMessage(chatId, {
+            text: statusText
         }, { quoted: message });
 
     } catch (error) {
@@ -620,7 +589,7 @@ ${sysInfo.disk.percent > 90 ? '⚠️ Low disk space - Clean up files\n' : '✅ 
 
         // Send report as file
         const reportBuffer = Buffer.from(report, 'utf8');
-        const reportPath = path.join(__dirname, 'tmp', `report_${Date.now()}.txt`);
+        const reportPath = path.join(__dirname, '..', 'tmp', `report_${Date.now()}.txt`);
         fs.writeFileSync(reportPath, reportBuffer);
         
         await sock.sendMessage(chatId, {

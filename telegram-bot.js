@@ -254,6 +254,30 @@ function createTelegramSock(chatId, messageId) {
 // 📁 COMMAND LOADER WITH HOT RELOAD
 // ============================================================
 
+function normalizeCommandName(command) {
+    if (typeof command !== 'string') return '';
+    return command.trim().replace(/^[\/!.#]+/, '').toLowerCase();
+}
+
+function parseCommandText(text) {
+    if (typeof text !== 'string') return null;
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+
+    const startsWithCommandPrefix = /^[/.!#]/.test(trimmed);
+    if (!startsWithCommandPrefix) return null;
+
+    const [rawCommand, ...rest] = trimmed.slice(1).split(/\s+/);
+    const name = normalizeCommandName(rawCommand);
+    if (!name) return null;
+
+    return {
+        name,
+        args: rest.join(' ').trim(),
+        raw: trimmed
+    };
+}
+
 function loadWhatsappCommands() {
     if (!fs.existsSync(COMMANDS_DIR)) {
         fs.mkdirSync(COMMANDS_DIR, { recursive: true });
@@ -268,42 +292,59 @@ function loadWhatsappCommands() {
             const baseName = file.replace('.js', '');
             const filePath = path.join(COMMANDS_DIR, file);
 
-            // Clear cache for hot reload
             delete require.cache[require.resolve(filePath)];
             const cmdModule = require(filePath);
+            const exportTarget = cmdModule && typeof cmdModule === 'object' && 'default' in cmdModule ? cmdModule.default : cmdModule;
 
-            let commandName = null;
+            let commandName = baseName;
             let commandFunction = null;
             let commandConfig = {};
+            let aliases = [];
 
-            if (typeof cmdModule === 'function') {
-                commandName = baseName;
-                commandFunction = cmdModule;
-            } else if (cmdModule && typeof cmdModule === 'object') {
-                if (cmdModule.name && typeof cmdModule.execute === 'function') {
-                    commandName = cmdModule.name;
-                    commandFunction = cmdModule.execute;
-                    commandConfig = cmdModule.config || {};
-                } else if (typeof cmdModule.execute === 'function') {
-                    commandName = baseName;
-                    commandFunction = cmdModule.execute;
-                    commandConfig = cmdModule.config || {};
-                } else if (cmdModule.default && typeof cmdModule.default === 'function') {
-                    commandName = baseName;
-                    commandFunction = cmdModule.default;
-                    commandConfig = cmdModule.config || {};
-                } else {
-                    commandName = baseName;
-                    commandFunction = cmdModule;
+            if (typeof exportTarget === 'function') {
+                commandFunction = exportTarget;
+            } else if (exportTarget && typeof exportTarget === 'object') {
+                if (typeof exportTarget.execute === 'function') {
+                    commandFunction = exportTarget.execute;
+                    commandConfig = exportTarget.config || {};
+                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
+                } else if (typeof exportTarget.default === 'function') {
+                    commandFunction = exportTarget.default;
+                    commandConfig = exportTarget.config || {};
+                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
+                } else if (typeof exportTarget.run === 'function') {
+                    commandFunction = exportTarget.run;
+                    commandConfig = exportTarget.config || {};
+                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
+                } else if (typeof exportTarget.handler === 'function') {
+                    commandFunction = exportTarget.handler;
+                    commandConfig = exportTarget.config || {};
+                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
+                }
+
+                if (!commandFunction) {
+                    commandName = exportTarget.name || baseName;
+                    commandConfig = exportTarget.config || {};
+                    aliases = Array.isArray(exportTarget.aliases) ? exportTarget.aliases : [];
                 }
             }
 
-            if (commandName && typeof commandFunction === 'function') {
-                whatsappCommands.set(commandName, {
+            if (commandFunction && typeof commandFunction === 'function') {
+                const resolvedName = (typeof exportTarget?.name === 'string' && exportTarget.name) || baseName;
+                const resolvedAliases = Array.isArray(commandConfig.aliases) ? commandConfig.aliases : aliases;
+                const entry = {
                     execute: commandFunction,
-                    config: commandConfig
-                });
-                logDebug(`Loaded command: ${commandName}${commandConfig.aliases ? ` (aliases: ${commandConfig.aliases.join(', ')})` : ''}`);
+                    config: commandConfig,
+                    aliases: resolvedAliases,
+                    category: commandConfig.category || exportTarget?.category || null,
+                    description: commandConfig.description || exportTarget?.description || null
+                };
+
+                whatsappCommands.set(normalizeCommandName(resolvedName), entry);
+                for (const alias of resolvedAliases) {
+                    if (alias) whatsappCommands.set(normalizeCommandName(alias), entry);
+                }
+                logDebug(`Loaded command: ${resolvedName}${resolvedAliases.length ? ` (aliases: ${resolvedAliases.join(', ')})` : ''}`);
             }
         } catch (e) {
             logError(`Failed to load ${file}: ${e.message}`);
@@ -869,54 +910,71 @@ function logToFile(chatId, username, command, message) {
 // ============================================================
 
 async function executeCommand(commandName, sock, chatId, args, message, commandConfig = {}) {
-    const cmd = whatsappCommands.get(commandName);
+    const normalizedName = normalizeCommandName(commandName);
+    const cmd = whatsappCommands.get(normalizedName);
     if (!cmd) {
         logError(`Command not found: ${commandName}`);
-        return await sendTelegramMessage(chatId, `❌ Command "${commandName}" not found.`, {}, message.message_id);
+        return await sendTelegramMessage(chatId, `❌ Command "${commandName}" not found.`, {}, message?.message_id);
     }
 
     try {
-        // Rate limiting check
-        if (!checkRateLimit(chatId, commandName)) {
-            await sendTelegramMessage(chatId, '⏳ *Too many requests!* Please wait a moment.', {}, message.message_id);
+        if (!checkRateLimit(chatId, normalizedName)) {
+            await sendTelegramMessage(chatId, '⏳ *Too many requests!* Please wait a moment.', {}, message?.message_id);
             return;
         }
 
-        // Log command usage
-        const username = message.from?.username || message.chat?.username || 'Unknown';
-        logToFile(chatId, username, commandName, JSON.stringify(args));
-        logInfo(`Executing command "${commandName}" from ${username}`);
+        const username = message?.from?.username || message?.chat?.username || message?.pushName || 'Unknown';
+        logToFile(chatId, username, normalizedName, JSON.stringify(args));
+        logInfo(`Executing command "${normalizedName}" from ${username}`);
 
-        // Execute the command
-        const result = await cmd.execute(sock, chatId, args, message, commandConfig);
-        
-        // Handle different return types
+        let result;
+        const invocationCandidates = [
+            () => cmd.execute(sock, chatId, message, args, commandConfig),
+            () => cmd.execute(sock, chatId, args, message, commandConfig),
+            () => cmd.execute(sock, chatId, message, args),
+            () => cmd.execute(sock, chatId, message),
+            () => cmd.execute(sock, chatId, args)
+        ];
+
+        let lastError = null;
+        for (const candidate of invocationCandidates) {
+            try {
+                result = await candidate();
+                break;
+            } catch (error) {
+                lastError = error;
+            }
+        }
+
+        if (result === undefined && lastError) {
+            throw lastError;
+        }
+
         if (result && typeof result === 'string') {
-            await sendTelegramMessage(chatId, result, {}, message.message_id);
+            await sendTelegramMessage(chatId, result, {}, message?.message_id);
         } else if (result && typeof result === 'object') {
             if (result.text) {
-                await sendTelegramMessage(chatId, result.text, {}, message.message_id);
+                await sendTelegramMessage(chatId, result.text, {}, message?.message_id);
             }
             if (result.image) {
-                await sendTelegramPhoto(chatId, result.image.url || result.image, result.caption || '', message.message_id);
+                await sendTelegramPhoto(chatId, result.image.url || result.image, result.caption || '', message?.message_id);
             }
             if (result.audio) {
-                await sendTelegramAudio(chatId, result.audio.url || result.audio, result.caption || '', message.message_id);
+                await sendTelegramAudio(chatId, result.audio.url || result.audio, result.caption || '', message?.message_id);
             }
             if (result.video) {
-                await sendTelegramVideo(chatId, result.video.url || result.video, result.caption || '', message.message_id);
+                await sendTelegramVideo(chatId, result.video.url || result.video, result.caption || '', message?.message_id);
             }
             if (result.buttons) {
-                await sendTelegramButtons(chatId, result.text || '', result.buttons, { reply_to_message_id: message.message_id });
+                await sendTelegramButtons(chatId, result.text || '', result.buttons, { reply_to_message_id: message?.message_id });
             }
         }
     } catch (error) {
-        logError(`Command "${commandName}" error: ${error.message}`);
-        await sendTelegramMessage(chatId, `❌ *Error executing command:* ${error.message.substring(0, 200)}`, {}, message.message_id);
-        
-        // Log error
-        const username = message.from?.username || message.chat?.username || 'Unknown';
-        logToFile(chatId, username, commandName, `ERROR: ${error.message}`);
+        logError(`Command "${normalizedName}" error: ${error.message}`);
+        await sendTelegramMessage(chatId, `❌ *Error executing command:* ${error.message.substring(0, 200)}`, {}, message?.message_id);
+
+        const username = message?.from?.username || message?.chat?.username || message?.pushName || 'Unknown';
+        logToFile(chatId, username, normalizedName, `ERROR: ${error.message}`);
     }
 }
 
@@ -1025,8 +1083,74 @@ async function pairWhatsApp(chatId, phoneNumber) {
 // 🚀 BOT INITIALIZATION
 // ============================================================
 
-// Load commands on startup
-loadWhatsappCommands();
+let telegramBotLoop = null;
+let telegramBotActive = false;
+let telegramBotOffset = 0;
+
+async function startTelegramBot() {
+    const token = settings.telegram?.botToken?.trim();
+    if (!token) {
+        logWarning('Telegram bot token not configured. Skipping Telegram bridge startup.');
+        return null;
+    }
+
+    loadWhatsappCommands();
+    if (telegramBotActive) return { active: true };
+
+    telegramBotActive = true;
+    logSuccess('Telegram bridge started. Listening for commands...');
+
+    const pollUpdates = async () => {
+        if (!telegramBotActive) return;
+
+        try {
+            const response = await axios.get(`${TELEGRAM_BASE_URL(token)}/getUpdates`, {
+                ...AXIOS_DEFAULTS,
+                params: { offset: telegramBotOffset, timeout: 2 }
+            });
+
+            if (response?.data?.ok) {
+                const updates = response.data.result || [];
+                for (const update of updates) {
+                    const message = update.message || update.edited_message;
+                    if (!message) continue;
+
+                    const chatId = message.chat?.id;
+                    const text = message.text || message.caption || '';
+                    const parsed = parseCommandText(text);
+                    if (!chatId || !parsed) continue;
+
+                    const normalizedMessage = {
+                        ...message,
+                        chatId: String(chatId),
+                        pushName: message.from?.first_name || message.from?.username || message.chat?.title || 'User',
+                        message_id: message.message_id,
+                        from: message.from || {},
+                        chat: message.chat || {}
+                    };
+
+                    const sock = createTelegramSock(String(chatId), message.message_id);
+                    const args = parsed.args;
+                    await executeCommand(parsed.name, sock, String(chatId), args, normalizedMessage, {});
+                    telegramBotOffset = Math.max(telegramBotOffset, update.update_id + 1);
+                }
+            }
+        } catch (error) {
+            logError(`Telegram polling error: ${error.message}`);
+        }
+
+        telegramBotLoop = setTimeout(pollUpdates, 1500);
+    };
+
+    pollUpdates();
+    return {
+        active: true,
+        stop: () => {
+            telegramBotActive = false;
+            if (telegramBotLoop) clearTimeout(telegramBotLoop);
+        }
+    };
+}
 
 // Export all functions
 module.exports = {
@@ -1069,6 +1193,9 @@ module.exports = {
     // Utility
     checkRateLimit,
     logToFile,
+    parseCommandText,
+    normalizeCommandName,
+    startTelegramBot,
     colors,
     logSuccess,
     logError,
