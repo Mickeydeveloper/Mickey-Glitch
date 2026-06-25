@@ -1,9 +1,8 @@
-const { generateWAMessageFromContent, proto, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
+const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 const CONFIG = {
     FOOTER: '👑 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ • 𝟸𝟶𝟸𝟼 👑',
     OWNER_PHONE: '255615944741',
-    // Picha 4 kutoka kwenye folder lako la privacy GitHub
     IMAGES: [
         'https://raw.githubusercontent.com/Mickeymozy/Mickey-Water/main/privacy/privacy1.jpg',
         'https://raw.githubusercontent.com/Mickeymozy/Mickey-Water/main/privacy/privacy2.jpg',
@@ -14,7 +13,6 @@ const CONFIG = {
 
 async function ownerCommand(sock, chatId, message) {
     try {
-        // Data za kadi 4 zinazoendana na picha za ulinzi wa data (privacy) zilizopo kwenye repo
         const cards = [
             { 
                 title: "🛡️ ᴍɪᴄᴋᴇʏ ᴘʀɪᴠᴀᴄʏ 🛡️", 
@@ -40,19 +38,19 @@ async function ownerCommand(sock, chatId, message) {
 
         let cardsPayload = [];
         
-        // Kutayarisha na ku-upload kila picha kwenye seva za WhatsApp
         for (const card of cards) {
             const media = await prepareWAMessageMedia({ image: { url: card.image } }, { upload: sock.waUploadToServer });
             
+            // Tumetumia Plain Objects {} moja kwa moja, bila protobuffers .create()
             cardsPayload.push({
-                header: proto.Message.InteractiveMessage.Header.create({
+                header: {
                     title: card.title,
                     hasMediaAttachment: true,
                     imageMessage: media.imageMessage
-                }),
-                body: proto.Message.InteractiveMessage.Body.create({ text: card.text }),
-                footer: proto.Message.InteractiveMessage.Footer.create({ text: CONFIG.FOOTER }),
-                nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+                },
+                body: { text: card.text },
+                footer: { text: CONFIG.FOOTER },
+                nativeFlowMessage: {
                     buttons: [
                         {
                             name: "cta_call",
@@ -69,25 +67,25 @@ async function ownerCommand(sock, chatId, message) {
                             })
                         }
                     ]
-                })
+                }
             });
         }
 
-        // Kuunda ujumbe mkuu wa Carousel
-        let msg = generateWAMessageFromContent(chatId, {
+        // Muundo mkuu wa Carousel uliosafishwa
+        let carouselMessage = {
             viewOnceMessage: {
                 message: {
-                    interactiveMessage: proto.Message.InteractiveMessage.create({
-                        body: proto.Message.InteractiveMessage.Body.create({ text: "🔒 *ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ - ᴘʀɪᴠᴀᴄʏ & sᴇᴄᴜʀɪᴛʏ* 🔒\n\n_Teleza (slide) kushoto kuona vipengele vikuu 4 vya ulinzi wa faragha yako._" }),
-                        carouselMessage: proto.Message.CarouselMessage.create({
+                    interactiveMessage: {
+                        body: { text: "🔒 *ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ - ᴘʀɪᴠᴀᴄʏ & sᴇᴄᴜʀɪᴛʏ* 🔒\n\n_Teleza (slide) kushoto kuona vipengele vikuu 4 vya ulinzi wa faragha yako._" },
+                        carouselMessage: {
                             cards: cardsPayload
-                        })
-                    })
+                        }
+                    }
                 }
             }
-        }, { quoted: message });
+        };
 
-        // Kutuma ujumbe
+        const msg = generateWAMessageFromContent(chatId, carouselMessage, { quoted: message });
         return await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
 
     } catch (error) {
