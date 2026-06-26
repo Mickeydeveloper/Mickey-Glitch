@@ -126,7 +126,7 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
         const senderId = m.key.participant || m.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
         const args = (body || '').trim().split(/\s+/);
-        const sub = args[1]?.toLowerCase() || ''; // .chatbot [on/off/status]
+        const sub = args[1]?.toLowerCase() || ''; 
 
         const state = await loadState();
 
@@ -147,7 +147,6 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
                 return await sock.sendMessage(chatId, { text: `📊 *Chatbot Status:* ${status}` });
             }
 
-            // Short Help
             return await sock.sendMessage(chatId, { 
                 text: `🤖 *Mickey Chatbot*\n• _.chatbot on_ - Washa\n• _.chatbot off_ - Zima\n• _.chatbot status_ - Hali` 
             });
@@ -210,7 +209,6 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
 
         if (!enabled) {
             if (!isGroup && text.length > 0 && !text.startsWith('.')) {
-                // Inform user on DM if disabled
                 await sock.sendMessage(chatId, { text: '🔴 Chatbot imezimwa hapa. Tumia _.chatbot on_ kuwasha.' }, { quoted: m });
             }
             return;
@@ -241,14 +239,17 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
             return await sock.sendMessage(chatId, { text: greeting }, { quoted: m });
         }
 
-        // 3. API Fallback for complex queries
+        // 3. API Fallback for complex queries (UPDATED API)
         const history = localMem.map(msg => `${msg.user}`).join('\n');
         const prompt = `Wewe ni Mickey, mtu wa kawaida kutoka TZ. Usiseme wewe ni AI au robot. Ongea Kiswahili cha mitaani. Jibu fupi sana (sentensi 1-2).\nHistory:\n${history}\n${userName}: ${text}\nMickey:`;
 
-        const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(prompt)}`;
-        
+        // Mpangilio mpya wa API kwa kutumia axios
+        const apiUrl = `https://apis.prexzyvilla.site/ai/aichat?prompt=${encodeURIComponent(prompt)}`;
+
         const response = await axios.get(apiUrl, { timeout: 8000 });
-        let reply = response.data?.response || response.data?.result || response.data?.message || getResponse('dontKnow');
+        
+        // Kulingana na mifumo mingi ya aina hii, jibu huwa kwenye data.result au data.response
+        let reply = response.data?.result || response.data?.response || response.data?.message || getResponse('dontKnow');
 
         // Clean AI vocabulary
         reply = reply.replace(/I am an AI|I am a chatbot|As an AI|Mimi ni AI|Mimi ni chatbot|Mickey AI/gi, "Mimi ni Mickey");
