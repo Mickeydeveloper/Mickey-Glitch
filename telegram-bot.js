@@ -329,6 +329,70 @@ function parseCommandText(text) {
     };
 }
 
+function collectCommandEntries(cmdModule, baseName) {
+    const entries = [];
+
+    const addEntry = (handler, name = baseName, aliases = [], config = {}) => {
+        if (typeof handler === 'function') {
+            entries.push({
+                execute: handler,
+                name: name || baseName,
+                aliases: Array.isArray(aliases) ? aliases : [],
+                config
+            });
+        }
+    };
+
+    if (typeof cmdModule === 'function') {
+        addEntry(cmdModule, baseName);
+        return entries;
+    }
+
+    if (!cmdModule || typeof cmdModule !== 'object') {
+        return entries;
+    }
+
+    if (typeof cmdModule.execute === 'function') {
+        addEntry(cmdModule.execute, cmdModule.name || baseName, Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [], cmdModule.config || {});
+        return entries;
+    }
+
+    if (cmdModule.default) {
+        if (typeof cmdModule.default === 'function') {
+            addEntry(cmdModule.default, cmdModule.name || baseName);
+        } else if (typeof cmdModule.default.execute === 'function') {
+            addEntry(
+                cmdModule.default.execute,
+                cmdModule.default.name || cmdModule.name || baseName,
+                Array.isArray(cmdModule.default.aliases) ? cmdModule.default.aliases : [],
+                cmdModule.default.config || {}
+            );
+        }
+        return entries;
+    }
+
+    if (typeof cmdModule.run === 'function') {
+        addEntry(cmdModule.run, cmdModule.name || baseName, Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [], cmdModule.config || {});
+        return entries;
+    }
+
+    if (typeof cmdModule.handler === 'function') {
+        addEntry(cmdModule.handler, cmdModule.name || baseName, Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [], cmdModule.config || {});
+        return entries;
+    }
+
+    for (const [key, value] of Object.entries(cmdModule)) {
+        if (typeof value === 'function') {
+            addEntry(value, key === 'default' ? baseName : key);
+        } else if (value && typeof value === 'object' && typeof value.execute === 'function') {
+            const entryName = value.name || (key === 'default' ? baseName : key);
+            addEntry(value.execute, entryName, Array.isArray(value.aliases) ? value.aliases : [], value.config || {});
+        }
+    }
+
+    return entries;
+}
+
 function loadWhatsappCommands() {
     if (!fs.existsSync(COMMANDS_DIR)) {
         fs.mkdirSync(COMMANDS_DIR, { recursive: true });
@@ -346,73 +410,26 @@ function loadWhatsappCommands() {
             delete require.cache[require.resolve(filePath)];
             const cmdModule = require(filePath);
             
-            // Handle different export formats
-            let commandFunction = null;
-            let commandConfig = {};
-            let aliases = [];
-            let commandName = baseName;
+            const commandEntries = collectCommandEntries(cmdModule, baseName);
 
-            // Check if it's a function directly
-            if (typeof cmdModule === 'function') {
-                commandFunction = cmdModule;
-            } 
-            // Check if it has execute property
-            else if (cmdModule && typeof cmdModule === 'object') {
-                if (typeof cmdModule.execute === 'function') {
-                    commandFunction = cmdModule.execute;
-                    commandConfig = cmdModule.config || {};
-                    aliases = Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [];
-                } 
-                // Check if it has default export
-                else if (cmdModule.default) {
-                    if (typeof cmdModule.default === 'function') {
-                        commandFunction = cmdModule.default;
-                    } else if (typeof cmdModule.default.execute === 'function') {
-                        commandFunction = cmdModule.default.execute;
-                        commandConfig = cmdModule.default.config || {};
-                        aliases = Array.isArray(cmdModule.default.aliases) ? cmdModule.default.aliases : [];
+            if (commandEntries.length > 0) {
+                for (const entry of commandEntries) {
+                    const resolvedName = entry.name || baseName;
+                    const resolvedAliases = Array.isArray(entry.config?.aliases) ? entry.config.aliases : entry.aliases;
+                    const normalizedEntry = {
+                        execute: entry.execute,
+                        config: entry.config || {},
+                        aliases: resolvedAliases,
+                        category: entry.config?.category || null,
+                        description: entry.config?.description || null
+                    };
+
+                    whatsappCommands.set(normalizeCommandName(resolvedName), normalizedEntry);
+                    for (const alias of resolvedAliases) {
+                        if (alias) whatsappCommands.set(normalizeCommandName(alias), normalizedEntry);
                     }
+                    logDebug(`Loaded command: ${resolvedName}${resolvedAliases.length ? ` (aliases: ${resolvedAliases.join(', ')})` : ''}`);
                 }
-                // Check for run or handler
-                else if (typeof cmdModule.run === 'function') {
-                    commandFunction = cmdModule.run;
-                    commandConfig = cmdModule.config || {};
-                    aliases = Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [];
-                } else if (typeof cmdModule.handler === 'function') {
-                    commandFunction = cmdModule.handler;
-                    commandConfig = cmdModule.config || {};
-                    aliases = Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [];
-                }
-            }
-
-            // If still no function, try to get it from exports
-            if (!commandFunction) {
-                const exports = Object.values(cmdModule);
-                for (const exp of exports) {
-                    if (typeof exp === 'function') {
-                        commandFunction = exp;
-                        break;
-                    }
-                }
-            }
-
-            if (commandFunction && typeof commandFunction === 'function') {
-                const resolvedName = (typeof cmdModule?.name === 'string' && cmdModule.name) || baseName;
-                const resolvedAliases = Array.isArray(commandConfig.aliases) ? commandConfig.aliases : aliases;
-                
-                const entry = {
-                    execute: commandFunction,
-                    config: commandConfig,
-                    aliases: resolvedAliases,
-                    category: commandConfig.category || null,
-                    description: commandConfig.description || null
-                };
-
-                whatsappCommands.set(normalizeCommandName(resolvedName), entry);
-                for (const alias of resolvedAliases) {
-                    if (alias) whatsappCommands.set(normalizeCommandName(alias), entry);
-                }
-                logDebug(`Loaded command: ${resolvedName}${resolvedAliases.length ? ` (aliases: ${resolvedAliases.join(', ')})` : ''}`);
             } else {
                 logWarning(`Could not load command from ${file}: No function found`);
             }

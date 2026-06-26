@@ -162,9 +162,4 @@ async function reportCommand(sock, chatId, message) {
 // 📦 MODULE EXPORTS
 // ============================================================
 
-module.exports = 
-    pingCommand,
-    sysInfoCommand,
-    statusCommand,
-    reportCommand
-;
+module.exports = pingCommand;
