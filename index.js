@@ -2,7 +2,7 @@
  * MICKEY GLITCH - A WhatsApp Bot
  * CUSTOM PAIRING - Uses Custom 8-digit code (MICKDADY)
  * MODERNISED CONSOLE UI & GITHUB IMAGE CONNECTION
- * FIXED: Hidden session logs for better performance
+ * FIXED: Aggressive auto-cleanup for session/temp/tmp files
  */
 
 require("dotenv").config();
@@ -40,14 +40,8 @@ try {
 }
 
 // ────────────────────────────────────────────────
-// LOGGER - COMPLETELY SILENT (HIDE EVERYTHING)
+// LOGGER - COMPLETELY SILENT
 // ────────────────────────────────────────────────
-// Create a logger that writes to nowhere
-const nullTransport = pino.transport({
-    target: 'pino/file',
-    options: { destination: '/dev/null' }
-});
-
 const pinoLogger = pino({
     level: 'fatal',
     transport: {
@@ -56,11 +50,10 @@ const pinoLogger = pino({
     }
 });
 
-// Completely silent logger - hides ALL session logs
 const silentLogger = {
     info: () => {},
     warn: () => {},
-    error: () => {},  // ← HIDES ALL ERRORS including session
+    error: () => {},
     fatal: () => {},
     debug: () => {},
     trace: () => {},
@@ -77,61 +70,208 @@ global.botName = _botName;
 global.themeemoji = '•';
 
 // ────────────────────────────────────────────────
-// PATHS & AUTO CLEANUP
+// PATHS
 // ────────────────────────────────────────────────
 const SESSION_DIR = path.resolve(process.cwd(), 'session');
-const TEMP_DIR = path.resolve(process.cwd(), 'tmp');
+const TEMP_DIR = path.resolve(process.cwd(), 'temp');
+const TMP_DIR = path.resolve(process.cwd(), 'tmp');
 const CACHE_DIR = path.resolve(process.cwd(), 'cache');
 const MEDIA_DIR = path.resolve(process.cwd(), 'media');
 
-function ensureDirectories() {
-    [SESSION_DIR, TEMP_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    });
-}
+// ────────────────────────────────────────────────
+// AGGRESSIVE AUTO-CLEANUP FUNCTIONS
+// ────────────────────────────────────────────────
 
-function autoClean() {
+// 1. CLEAN TEMP & TMP FILES - Every 3 seconds
+function cleanTempAndTmpFiles() {
     try {
-        let cleaned = 0;
-        [TEMP_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
+        const dirs = [TEMP_DIR, TMP_DIR];
+        let totalDeleted = 0;
+        
+        dirs.forEach(dir => {
             if (fs.existsSync(dir)) {
                 const files = fs.readdirSync(dir);
                 files.forEach(file => {
                     const filePath = path.join(dir, file);
                     try {
                         const stats = fs.statSync(filePath);
-                        if (Date.now() - stats.mtimeMs > 3600000) {
-                            if (stats.isDirectory()) {
-                                fs.rmSync(filePath, { recursive: true, force: true });
-                            } else {
-                                fs.unlinkSync(filePath);
-                            }
-                            cleaned++;
+                        // Delete all files in temp/tmp regardless of age
+                        if (stats.isDirectory()) {
+                            fs.rmSync(filePath, { recursive: true, force: true });
+                        } else {
+                            fs.unlinkSync(filePath);
                         }
-                    } catch (e) {}
+                        totalDeleted++;
+                    } catch (e) {
+                        // Skip if file is in use
+                    }
                 });
             }
         });
-        if (cleaned > 0) console.log(chalk.cyan(`▓▒░ [CLEANER] auto-purged ${cleaned} temporary cache files.`));
-    } catch (err) {}
+        
+        if (totalDeleted > 0) {
+            console.log(chalk.dim(`  [CLEANER] Purged ${totalDeleted} temp/tmp files`));
+        }
+    } catch (err) {
+        // Silent fail
+    }
 }
 
-// ────────────────────────────────────────────────
-// SESSION MANAGEMENT
-// ────────────────────────────────────────────────
-function clearSession() {
+// 2. CLEAN OLD SESSION FILES - Every 5 minutes
+function cleanOldSessionFiles() {
+    try {
+        if (!fs.existsSync(SESSION_DIR)) return;
+        
+        const files = fs.readdirSync(SESSION_DIR);
+        const now = Date.now();
+        const SESSION_MAX_AGE = 5 * 60 * 1000; // 5 minutes
+        let deletedCount = 0;
+        
+        files.forEach(file => {
+            const filePath = path.join(SESSION_DIR, file);
+            try {
+                const stats = fs.statSync(filePath);
+                const fileAge = now - stats.mtimeMs;
+                
+                // Delete session files older than 5 minutes
+                if (fileAge > SESSION_MAX_AGE) {
+                    if (stats.isDirectory()) {
+                        fs.rmSync(filePath, { recursive: true, force: true });
+                    } else {
+                        fs.unlinkSync(filePath);
+                    }
+                    deletedCount++;
+                }
+            } catch (e) {
+                // If file is corrupted or can't be read, delete it
+                try {
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                        deletedCount++;
+                    }
+                } catch (e2) {}
+            }
+        });
+        
+        if (deletedCount > 0) {
+            console.log(chalk.dim(`  [CLEANER] Removed ${deletedCount} old session files (>5min)`));
+        }
+    } catch (err) {
+        // Silent fail
+    }
+}
+
+// 3. CHECK AND FIX CORRUPTED SESSION FILES
+function checkAndFixCorruptedSession() {
+    try {
+        if (!fs.existsSync(SESSION_DIR)) return;
+        
+        const files = fs.readdirSync(SESSION_DIR);
+        let corruptedCount = 0;
+        
+        files.forEach(file => {
+            const filePath = path.join(SESSION_DIR, file);
+            if (file.endsWith('.json')) {
+                try {
+                    const content = fs.readFileSync(filePath, 'utf8');
+                    if (content.trim() === '' || content.trim() === '{}') {
+                        fs.unlinkSync(filePath);
+                        corruptedCount++;
+                    } else {
+                        JSON.parse(content);
+                    }
+                } catch (e) {
+                    // Corrupted JSON - delete it
+                    try {
+                        fs.unlinkSync(filePath);
+                        corruptedCount++;
+                    } catch (e2) {}
+                }
+            }
+        });
+        
+        if (corruptedCount > 0) {
+            console.log(chalk.yellow(`  [CLEANER] Removed ${corruptedCount} corrupted session files`));
+        }
+    } catch (err) {
+        // Silent fail
+    }
+}
+
+// 4. COMPLETE SESSION RESET (when too corrupted)
+function resetCorruptedSession() {
     try {
         if (fs.existsSync(SESSION_DIR)) {
-            UI.warning('Clearing corrupted/expired session files...');
+            console.log(chalk.yellow('  [CLEANER] Resetting corrupted session...'));
             fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-            UI.success('Session directory wiped successfully!');
+            console.log(chalk.green('  [CLEANER] Session reset complete!'));
         }
         ensureDirectories();
         return true;
     } catch (err) {
-        UI.error(`Failed to clear session: ${err.message}`);
+        console.log(chalk.red(`  [CLEANER] Failed to reset: ${err.message}`));
         return false;
     }
+}
+
+// 5. ENSURE DIRECTORIES EXIST
+function ensureDirectories() {
+    [SESSION_DIR, TEMP_DIR, TMP_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    });
+}
+
+// ────────────────────────────────────────────────
+// START AGGRESSIVE CLEANUP INTERVALS
+// ────────────────────────────────────────────────
+function startAggressiveCleanup() {
+    // Clean temp/tmp every 3 seconds
+    setInterval(cleanTempAndTmpFiles, 3000);
+    console.log(chalk.dim('  [CLEANER] Temp/Tmp cleaner active (every 3s)'));
+
+    // Check corrupted session files every 10 seconds
+    setInterval(checkAndFixCorruptedSession, 10000);
+    console.log(chalk.dim('  [CLEANER] Session corruption checker active (every 10s)'));
+
+    // Clean old session files every 5 minutes
+    setInterval(cleanOldSessionFiles, 5 * 60 * 1000);
+    console.log(chalk.dim('  [CLEANER] Old session cleaner active (every 5min)'));
+
+    // Full session reset if too many corrupted files - every 1 minute
+    let corruptionCounter = 0;
+    setInterval(() => {
+        try {
+            if (!fs.existsSync(SESSION_DIR)) return;
+            const files = fs.readdirSync(SESSION_DIR);
+            const jsonFiles = files.filter(f => f.endsWith('.json'));
+            
+            // If more than 50% of files are corrupted
+            let corrupted = 0;
+            jsonFiles.forEach(file => {
+                const filePath = path.join(SESSION_DIR, file);
+                try {
+                    const content = fs.readFileSync(filePath, 'utf8');
+                    if (content.trim() === '' || content.trim() === '{}') {
+                        corrupted++;
+                    } else {
+                        JSON.parse(content);
+                    }
+                } catch (e) {
+                    corrupted++;
+                }
+            });
+            
+            if (jsonFiles.length > 0 && (corrupted / jsonFiles.length) > 0.5) {
+                corruptionCounter++;
+                if (corruptionCounter >= 3) {
+                    resetCorruptedSession();
+                    corruptionCounter = 0;
+                }
+            } else {
+                corruptionCounter = 0;
+            }
+        } catch (e) {}
+    }, 60000);
 }
 
 // ────────────────────────────────────────────────
@@ -195,12 +335,12 @@ const UI = {
         console.clear();
         console.log(chalk.cyan.bold(`
    __  ____      _             ____ _ _ _ _     
-  /  |/  (_)____/ /_____  __  / __/ /_  / __/ /_ v3.3
+  /  |/  (_)____/ /_____  __  / __/ /_  / __/ /_ v3.4
  / /|_/ / / __/  '_/ __ \\/ / / / _// / / / /_/ __ /
 /_/  /_/_/\\__/_/\\_\\\\____/\\_ / /_/ /_/_/_/\\__/_/ /_/
                         /___/
         `));
-        console.log(chalk.dim('       ⚡ Cyberpunk Core Setup Engaged ⚡\n'));
+        console.log(chalk.dim('       ⚡ Cyberpunk Core with Aggressive Cleanup ⚡\n'));
     }
 };
 
@@ -212,7 +352,6 @@ let isWhatsAppRunning = false;
 let reconnectAttempts = 0;
 let messageProcessingQueue = [];
 let isProcessingQueue = false;
-let lastLogTime = 0;
 
 // ────────────────────────────────────────────────
 // MESSAGE QUEUE PROCESSOR
@@ -228,9 +367,8 @@ async function processMessageQueue() {
                 const { Mickey, chatUpdate } = item;
                 await handleMessages(Mickey, chatUpdate, true);
             } catch (err) {
-                // Complete silence - no logs
+                // Complete silence
             }
-            // Small delay between messages
             await delay(50);
         }
     } finally {
@@ -246,7 +384,6 @@ async function startMickeyBot() {
 
     try {
         ensureDirectories();
-        autoClean();
 
         UI.banner();
 
@@ -260,12 +397,9 @@ async function startMickeyBot() {
 
         const msgRetryCounterCache = new NodeCache();
 
-        // ────────────────────────────────────────────
-        // CREATE SOCKET WITH SILENT LOGGER
-        // ────────────────────────────────────────────
         const Mickey = makeWASocket({
             version,
-            logger: silentLogger,  // ← COMPLETELY SILENT
+            logger: silentLogger,
             printQRInTerminal: false,
             browser: Browsers.macOS('Chrome'),
             auth: {
@@ -312,14 +446,13 @@ async function startMickeyBot() {
         store.bind(Mickey.ev);
 
         // ────────────────────────────────────────────
-        // MESSAGE HANDLER - WITH QUEUE (NO LOGS)
+        // MESSAGE HANDLER
         // ────────────────────────────────────────────
         Mickey.ev.on("messages.upsert", async chatUpdate => {
             try {
                 const mek = chatUpdate.messages[0];
                 if (!mek?.message) return;
 
-                // Check if it's a button response
                 if (isButtonResponse && isButtonResponse(mek)) {
                     const buttonId = getButtonId && getButtonId(mek);
                     if (buttonId && isCommandId && isCommandId(buttonId)) {
@@ -334,23 +467,21 @@ async function startMickeyBot() {
                     }
                 }
 
-                // Status update
                 if (mek.key?.remoteJid === "status@broadcast") {
                     if (handleStatus) await handleStatus(Mickey, chatUpdate);
                     return;
                 }
 
-                // Normal message
                 messageProcessingQueue.push({ Mickey, chatUpdate });
                 if (!isProcessingQueue) processMessageQueue();
 
             } catch (err) {
-                // COMPLETE SILENCE - no logs for any errors
+                // Complete silence
             }
         });
 
         // ────────────────────────────────────────────
-        // CALL HANDLER - SILENT
+        // CALL HANDLER
         // ────────────────────────────────────────────
         Mickey.ev.on("call", async (callData) => {
             try {
@@ -361,7 +492,7 @@ async function startMickeyBot() {
         });
 
         // ────────────────────────────────────────────
-        // GROUP PARTICIPANT HANDLER - SILENT
+        // GROUP PARTICIPANT HANDLER
         // ────────────────────────────────────────────
         Mickey.ev.on("group-participants.update", async (update) => {
             try {
@@ -375,13 +506,11 @@ async function startMickeyBot() {
         // ERROR HANDLER - COMPLETELY SILENT
         // ────────────────────────────────────────────
         Mickey.ev.on("error", (err) => {
-            // HIDE ALL ERRORS - especially session/decrypt
-            // Do absolutely nothing
-            return;
+            return; // Complete silence
         });
 
         // ────────────────────────────────────────────
-        // CONNECTION HANDLER - MINIMAL LOGS
+        // CONNECTION HANDLER
         // ────────────────────────────────────────────
         Mickey.ev.on("connection.update", async (update) => {
             const { connection, lastDisconnect } = update;
@@ -392,7 +521,7 @@ async function startMickeyBot() {
                 isPairing = false;
                 pairingAttempts = 0;
 
-                console.log('\n' + chalk.bgGreen.black.bold("  🚀 CORE ONLINE  ") + chalk.greenBright(" System successfully synchronized with WhatsApp matrix.\n"));
+                console.log('\n' + chalk.bgGreen.black.bold("  🚀 CORE ONLINE  ") + chalk.greenBright(" System synchronized.\n"));
 
                 const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
 
@@ -419,26 +548,23 @@ async function startMickeyBot() {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const errorMessage = lastDisconnect?.error?.message || '';
 
-                // Only show important disconnects
                 if (statusCode === DisconnectReason.loggedOut) {
-                    UI.error('Session revoked (Logged Out). Clearing...');
-                    clearSession();
+                    UI.error('Session revoked. Clearing...');
+                    resetCorruptedSession();
                     await delay(3000);
                     return startMickeyBot();
                 }
 
-                // Reconnect logic - with minimal logs
                 if (reconnectAttempts < 10) {
                     const delayTime = Math.min(5000 + (reconnectAttempts * 2000), 30000);
                     reconnectAttempts++;
-                    // Only show every 3rd attempt
                     if (reconnectAttempts % 3 === 0 || reconnectAttempts === 1) {
                         console.log(chalk.cyan(`  🔄 [RECONNECT] Attempt ${reconnectAttempts}/10...`));
                     }
                     await delay(delayTime);
                     return startMickeyBot();
                 } else {
-                    UI.error('Max reconnection reached. Restart required.');
+                    UI.error('Max reconnection reached.');
                     process.exit(1);
                 }
             }
@@ -491,7 +617,6 @@ async function startMickeyBot() {
         return Mickey;
 
     } catch (err) {
-        // Only show critical startup errors
         UI.error('Startup error: ' + err.message);
         await delay(5000);
         return startMickeyBot();
@@ -499,20 +624,17 @@ async function startMickeyBot() {
 }
 
 // ────────────────────────────────────────────────
-// KEEP ALIVE & MONITORING (MINIMAL LOGS)
+// KEEP ALIVE & MONITORING
 // ────────────────────────────────────────────────
 let monitorInterval = null;
 
 function startKeepAlive() {
-    setInterval(autoClean, 30 * 60 * 1000);
-
     if (monitorInterval) clearInterval(monitorInterval);
     
     monitorInterval = setInterval(() => {
         if (whatsappBot && isWhatsAppRunning) {
             try { whatsappBot.sendPresenceUpdate('available'); } catch (err) {}
         }
-        // Show status every 30 minutes only
         if (Math.floor(Date.now() / (10 * 60 * 1000)) % 3 === 0) {
             const status = isWhatsAppRunning ? chalk.greenBright('ONLINE') : chalk.redBright('OFFLINE');
             const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
@@ -534,6 +656,9 @@ setInterval(() => {
 // INITIALIZATION
 // ────────────────────────────────────────────────
 async function initializeBot() {
+    // Start aggressive cleanup FIRST
+    startAggressiveCleanup();
+    
     UI.banner();
     startKeepAlive();
 
