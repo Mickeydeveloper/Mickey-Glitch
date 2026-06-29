@@ -73,10 +73,16 @@ async function updateCommand(sock, chatId, message, zipUrl) {
 
         // --- 🛡️ FIXED URL LOGIC ---
         const repoUrl = "https://github.com/Mickeydeveloper/Mickey-Glitch";
-        
-        // Hapa tunahakikisha kuwa lazima kuwe na URL, vinginevyo inatumia default
-        let updateZipUrl = zipUrl && zipUrl.startsWith('http') 
-            ? zipUrl.trim() 
+
+        const rawZipUrl = typeof zipUrl === 'string'
+            ? zipUrl
+            : (zipUrl && typeof zipUrl === 'object' && typeof zipUrl.url === 'string'
+                ? zipUrl.url
+                : '');
+
+        const normalizedZipUrl = rawZipUrl.trim();
+        let updateZipUrl = normalizedZipUrl && normalizedZipUrl.startsWith('http')
+            ? normalizedZipUrl
             : `${repoUrl}/archive/refs/heads/main.zip`;
 
         console.log(chalk.blue(`[Update] Link inayotumika: ${updateZipUrl}`));
