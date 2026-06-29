@@ -669,7 +669,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 'tagnotadmin': require('./commands/tagnotadmin'),
                 'hidetag': require('./commands/hidetag'),
                 'tag': require('./commands/tag'),
-                'welcome': require('./commands/welcome'),
                 'antibadword': require('./commands/antibadword'),
                 'take': require('./commands/take'),
                 'steal': require('./commands/take'),
