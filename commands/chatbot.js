@@ -168,8 +168,11 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
         const senderId = m.key.participant || m.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
-        const args = (body || '').trim().split(/\s+/);
-        const sub = args[1]?.toLowerCase() || ''; 
+        const rawBody = (body || '').trim();
+        const parts = rawBody.split(/\s+/).filter(Boolean);
+        const sub = parts[0]?.toLowerCase() === '.chatbot'
+            ? (parts[1] || '').toLowerCase()
+            : (parts[0] || '').toLowerCase();
 
         const state = await loadState();
 

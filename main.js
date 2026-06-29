@@ -732,8 +732,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.chatbot'):
                 {
-                    const args = userMessage.split(' ').slice(1).join(' ');
-                    await groupChatbotToggleCommand(sock, chatId, message, args);
+                    await groupChatbotToggleCommand(sock, chatId, message, userMessage);
                 }
                 break;
             case userMessage === '.owner':
