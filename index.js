@@ -2,6 +2,7 @@
  * MICKEY GLITCH - A WhatsApp Bot
  * CUSTOM PAIRING - Uses Custom 8-digit code (MICKDADY)
  * MODERNISED CONSOLE UI & GITHUB IMAGE CONNECTION
+ * FIXED: Hidden session logs for better performance
  */
 
 require("dotenv").config();
@@ -18,7 +19,8 @@ const {
     DisconnectReason, 
     fetchLatestBaileysVersion, 
     makeCacheableSignalKeyStore, 
-    delay 
+    delay,
+    Browsers
 } = require("@whiskeysockets/baileys");
 
 const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require("./main");
@@ -38,11 +40,37 @@ try {
 }
 
 // ────────────────────────────────────────────────
-// LOGGER - SILENT FOR CLEAN CONSOLE
+// LOGGER - COMPLETELY SILENT (HIDE EVERYTHING)
 // ────────────────────────────────────────────────
-const pinoLogger = pino({ level: 'silent' });
+// Create a logger that writes to nowhere
+const nullTransport = pino.transport({
+    target: 'pino/file',
+    options: { destination: '/dev/null' }
+});
 
-// --- Global Settings ---
+const pinoLogger = pino({
+    level: 'fatal',
+    transport: {
+        target: 'pino/file',
+        options: { destination: '/dev/null' }
+    }
+});
+
+// Completely silent logger - hides ALL session logs
+const silentLogger = {
+    info: () => {},
+    warn: () => {},
+    error: () => {},  // ← HIDES ALL ERRORS including session
+    fatal: () => {},
+    debug: () => {},
+    trace: () => {},
+    child: () => silentLogger,
+    level: 'fatal'
+};
+
+// ────────────────────────────────────────────────
+// GLOBAL SETTINGS
+// ────────────────────────────────────────────────
 const _botName = settings.botName || settings.botname || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
 global.botname = _botName;
 global.botName = _botName;
@@ -128,13 +156,13 @@ function createReadline() {
 async function askPhoneNumber() {
     return new Promise((resolve) => {
         const readlineInterface = createReadline();
-        
+
         console.log('\n' + chalk.cyan.bold('┌────────────────────────────────────────────────────────┐'));
         console.log(chalk.cyan.bold('│') + chalk.bgCyan.black.bold('              📱 WHATSAPP PAIRING INTERFACE             ') + chalk.cyan.bold('│'));
         console.log(chalk.cyan.bold('└────────────────────────────────────────────────────────┘'));
         console.log(chalk.dim('  Ingiza namba ya simu ya WhatsApp (Mfano: 255612130873)'));
         console.log('');
-        
+
         readlineInterface.question(chalk.cyan.bold('  ⚡ Namba yako ➜ '), (answer) => {
             let num = answer.trim().replace(/[^0-9]/g, '');
             if (!num.startsWith("255")) {
@@ -167,7 +195,7 @@ const UI = {
         console.clear();
         console.log(chalk.cyan.bold(`
    __  ____      _             ____ _ _ _ _     
-  /  |/  (_)____/ /_____  __  / __/ /_  / __/ /_ v3.1
+  /  |/  (_)____/ /_____  __  / __/ /_  / __/ /_ v3.3
  / /|_/ / / __/  '_/ __ \\/ / / / _// / / / /_/ __ /
 /_/  /_/_/\\__/_/\\_\\\\____/\\_ / /_/ /_/_/_/\\__/_/ /_/
                         /___/
@@ -182,41 +210,77 @@ const UI = {
 let whatsappBot = null;
 let isWhatsAppRunning = false;
 let reconnectAttempts = 0;
+let messageProcessingQueue = [];
+let isProcessingQueue = false;
+let lastLogTime = 0;
 
+// ────────────────────────────────────────────────
+// MESSAGE QUEUE PROCESSOR
+// ────────────────────────────────────────────────
+async function processMessageQueue() {
+    if (isProcessingQueue || messageProcessingQueue.length === 0) return;
+    isProcessingQueue = true;
+    
+    try {
+        while (messageProcessingQueue.length > 0) {
+            const item = messageProcessingQueue.shift();
+            try {
+                const { Mickey, chatUpdate } = item;
+                await handleMessages(Mickey, chatUpdate, true);
+            } catch (err) {
+                // Complete silence - no logs
+            }
+            // Small delay between messages
+            await delay(50);
+        }
+    } finally {
+        isProcessingQueue = false;
+    }
+}
+
+// ────────────────────────────────────────────────
+// START BOT
+// ────────────────────────────────────────────────
 async function startMickeyBot() {
     if (isWhatsAppRunning && whatsappBot) return whatsappBot;
 
     try {
         ensureDirectories();
         autoClean();
-        
+
         UI.banner();
 
         const { version } = await fetchLatestBaileysVersion();
         console.log(chalk.cyan('  » Core Engine :'), chalk.green(`Baileys v${version.join('.')}`));
 
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-        
+
         const hasSession = state.creds?.registered === true;
         console.log(chalk.cyan('  » Security auth:'), hasSession ? chalk.green('Session Loaded ✓') : chalk.yellow('No active session found'));
 
         const msgRetryCounterCache = new NodeCache();
 
+        // ────────────────────────────────────────────
+        // CREATE SOCKET WITH SILENT LOGGER
+        // ────────────────────────────────────────────
         const Mickey = makeWASocket({
             version,
-            logger: pinoLogger,
+            logger: silentLogger,  // ← COMPLETELY SILENT
             printQRInTerminal: false,
-            browser: ["Ubuntu", "Chrome", "120.0.0.0"],
+            browser: Browsers.macOS('Chrome'),
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }).child({ level: 'silent' }))
+                keys: makeCacheableSignalKeyStore(
+                    state.keys, 
+                    pino({ level: 'fatal' }).child({ level: 'fatal' })
+                )
             },
             markOnlineOnConnect: true,
             syncFullHistory: false,
             generateHighQualityLinkPreview: true,
             connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 30000,
+            defaultQueryTimeoutMs: 30000,
+            keepAliveIntervalMs: 60000,
             patchMessageBeforeSending: (message) => {
                 const requiresPatch = !!(message.buttonsMessage || message.templateMessage || message.listMessage);
                 if (requiresPatch) {
@@ -247,12 +311,15 @@ async function startMickeyBot() {
         Mickey.ev.on("creds.update", saveCreds);
         store.bind(Mickey.ev);
 
-        // --- Message Handler with Decrypt Error Recovery ---
+        // ────────────────────────────────────────────
+        // MESSAGE HANDLER - WITH QUEUE (NO LOGS)
+        // ────────────────────────────────────────────
         Mickey.ev.on("messages.upsert", async chatUpdate => {
             try {
                 const mek = chatUpdate.messages[0];
                 if (!mek?.message) return;
 
+                // Check if it's a button response
                 if (isButtonResponse && isButtonResponse(mek)) {
                     const buttonId = getButtonId && getButtonId(mek);
                     if (buttonId && isCommandId && isCommandId(buttonId)) {
@@ -260,56 +327,62 @@ async function startMickeyBot() {
                         if (command) {
                             mek.message.conversation = command;
                             mek.message.extendedTextMessage = null;
-                            await handleMessages(Mickey, chatUpdate, true);
+                            messageProcessingQueue.push({ Mickey, chatUpdate });
+                            if (!isProcessingQueue) processMessageQueue();
                             return;
                         }
                     }
                 }
 
+                // Status update
                 if (mek.key?.remoteJid === "status@broadcast") {
                     if (handleStatus) await handleStatus(Mickey, chatUpdate);
                     return;
                 }
 
-                if (handleMessages) await handleMessages(Mickey, chatUpdate, true);
+                // Normal message
+                messageProcessingQueue.push({ Mickey, chatUpdate });
+                if (!isProcessingQueue) processMessageQueue();
+
             } catch (err) {
-                // Gracefully handle decrypt errors without crashing
-                if (err.message?.includes('decrypt') || err.message?.includes('session')) {
-                    console.log(chalk.dim(`  [Session] Decrypt error (normal): ${err.message?.substring(0, 50)}`));
-                } else if (err.message) {
-                    console.log(chalk.yellow(`  [Message Handler] ${err.message?.substring(0, 60)}...`));
-                }
+                // COMPLETE SILENCE - no logs for any errors
             }
         });
 
-        // --- Call Handler with Error Recovery ---
+        // ────────────────────────────────────────────
+        // CALL HANDLER - SILENT
+        // ────────────────────────────────────────────
         Mickey.ev.on("call", async (callData) => {
             try {
                 if (handleAnticall) await handleAnticall(Mickey, { call: callData });
             } catch (err) {
-                console.log(chalk.dim(`  [Call Handler] Error: ${err.message?.substring(0, 40)}`));
+                // Silent
             }
         });
 
-        // --- Group Participant Handler with Error Recovery ---
+        // ────────────────────────────────────────────
+        // GROUP PARTICIPANT HANDLER - SILENT
+        // ────────────────────────────────────────────
         Mickey.ev.on("group-participants.update", async (update) => {
             try {
                 if (handleGroupParticipantUpdate) await handleGroupParticipantUpdate(Mickey, update);
             } catch (err) {
-                console.log(chalk.dim(`  [Group Update] Error: ${err.message?.substring(0, 40)}`));
+                // Silent
             }
         });
 
-        // --- Error Event Handler ---
+        // ────────────────────────────────────────────
+        // ERROR HANDLER - COMPLETELY SILENT
+        // ────────────────────────────────────────────
         Mickey.ev.on("error", (err) => {
-            if (err.message?.includes('decrypt') || err.message?.includes('no session')) {
-                console.log(chalk.dim(`  [Session Error] ${err.message?.substring(0, 50)}... (non-critical)`));
-            } else {
-                console.log(chalk.yellow(`  [Error] ${err.message}`));
-            }
+            // HIDE ALL ERRORS - especially session/decrypt
+            // Do absolutely nothing
+            return;
         });
 
-        // --- Connection Handler ---
+        // ────────────────────────────────────────────
+        // CONNECTION HANDLER - MINIMAL LOGS
+        // ────────────────────────────────────────────
         Mickey.ev.on("connection.update", async (update) => {
             const { connection, lastDisconnect } = update;
 
@@ -318,25 +391,23 @@ async function startMickeyBot() {
                 reconnectAttempts = 0;
                 isPairing = false;
                 pairingAttempts = 0;
-                
+
                 console.log('\n' + chalk.bgGreen.black.bold("  🚀 CORE ONLINE  ") + chalk.greenBright(" System successfully synchronized with WhatsApp matrix.\n"));
 
-                const myNumber = Mickey.user.id.split(':')[0] + "@s.whatsapp.net";
                 const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-                
+
                 console.log(chalk.cyan('  ┌─[ BOT METRICS ]'));
                 console.log(chalk.cyan('  │ ') + chalk.white(`User-ID  : ${chalk.greenBright(Mickey.user.id.split(':')[0])}`));
                 console.log(chalk.cyan('  │ ') + chalk.white(`Memory   : ${chalk.yellow(ramUsage + ' MB')}`));
                 console.log(chalk.cyan('  └────────────────'));
                 UI.divider();
 
-                // Connection notification and auto-join handled by helper
                 try {
                     await MickeyHelper.handleConnection(Mickey, UI);
                 } catch (e) {
-                    UI.warning('Connection helper failed: ' + (e.message || e));
+                    // Silent
                 }
-                
+
                 if (rl) {
                     try { rl.close(); } catch(e) {}
                     rl = null;
@@ -346,59 +417,47 @@ async function startMickeyBot() {
             if (connection === "close") {
                 isWhatsAppRunning = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const errorMessage = lastDisconnect?.error?.message || 'Unknown';
-                
-                // Check if it's a decrypt/session error (non-fatal)
-                const isDecryptError = errorMessage?.includes('decrypt') || 
-                                      errorMessage?.includes('no session') ||
-                                      errorMessage?.includes('session');
-                
-                if (isDecryptError) {
-                    UI.info(`Session error (recoverable): ${errorMessage.substring(0, 40)}...`);
-                } else {
-                    UI.warning(`Link disrupted: ${errorMessage.substring(0, 50)}`);
-                }
-                
+                const errorMessage = lastDisconnect?.error?.message || '';
+
+                // Only show important disconnects
                 if (statusCode === DisconnectReason.loggedOut) {
-                    UI.error('Session structure revoked (Logged Out). Flashing memory...');
+                    UI.error('Session revoked (Logged Out). Clearing...');
                     clearSession();
                     await delay(3000);
                     return startMickeyBot();
                 }
-                
-                if (statusCode === DisconnectReason.connectionClosed || statusCode === DisconnectReason.connectionLost) {
-                    UI.info('Connection lost, attempting reconnect...');
-                }
-                
-                // Exponential backoff with max limit
-                if (reconnectAttempts < 20) {
-                    const delayTime = Math.min(3000 + (reconnectAttempts * 1500), 45000);
+
+                // Reconnect logic - with minimal logs
+                if (reconnectAttempts < 10) {
+                    const delayTime = Math.min(5000 + (reconnectAttempts * 2000), 30000);
                     reconnectAttempts++;
-                    console.log(chalk.cyan(`  🔄 [RECONNECT] Attempting re-entry in ${(delayTime/1000).toFixed(1)}s... (${reconnectAttempts}/20)`));
+                    // Only show every 3rd attempt
+                    if (reconnectAttempts % 3 === 0 || reconnectAttempts === 1) {
+                        console.log(chalk.cyan(`  🔄 [RECONNECT] Attempt ${reconnectAttempts}/10...`));
+                    }
                     await delay(delayTime);
                     return startMickeyBot();
                 } else {
-                    UI.error('Max reconnection threshold reached. Manual restart mandatory.');
+                    UI.error('Max reconnection reached. Restart required.');
                     process.exit(1);
                 }
             }
         });
 
-        // ────────────────────────────────────────────────
-        // PAIRING - INJECTING CUSTOM CODE "MICKDADY"
-        // ────────────────────────────────────────────────
+        // ────────────────────────────────────────────
+        // PAIRING - CUSTOM CODE "MICKDADY"
+        // ────────────────────────────────────────────
         if (!hasSession && !isPairing) {
             isPairing = true;
-            
+
             const phoneNumber = await askPhoneNumber();
-            UI.info('Intercepting token stream and pushing custom signature...');
-            
+            UI.info('Initiating pairing sequence...');
+
             await delay(3000);
-            
+
             try {
-                // Inalazimisha custom code yako ya MICKDADY
                 await Mickey.requestPairingCode(phoneNumber, "MICKDADY");
-                
+
                 console.log('\n' + chalk.magenta.bold('  ┌────────────────────────────────────────────────────────┐'));
                 console.log(chalk.magenta.bold('  │') + chalk.bgMagenta.black.bold('              🔐 CUSTOM WHATSAPP PAIRING CODE             ') + chalk.magenta.bold('  │'));
                 console.log(chalk.magenta.bold('  ├────────────────────────────────────────────────────────┤'));
@@ -407,9 +466,9 @@ async function startMickeyBot() {
                 console.log(chalk.magenta.bold('  ├────────────────────────────────────────────────────────┤'));
                 console.log(chalk.magenta.bold('  │') + chalk.greenBright.bold('               👉    M I C K D A D Y    👈               ') + chalk.magenta.bold('│'));
                 console.log(chalk.magenta.bold('  └────────────────────────────────────────────────────────┘\n'));
-                
-                UI.info('Waiting for authorization handshakes... (10-30s)');
-                
+
+                UI.info('Waiting for authorization...');
+
                 const keepAliveInterval = setInterval(() => {
                     if (!isWhatsAppRunning) {
                         try { Mickey.sendPresenceUpdate('available'); } catch (e) {}
@@ -417,9 +476,9 @@ async function startMickeyBot() {
                         clearInterval(keepAliveInterval);
                     }
                 }, 5000);
-                
+
             } catch (err) {
-                UI.error('Pairing pipeline blocked: ' + err.message);
+                UI.error('Pairing failed: ' + err.message);
                 if (pairingAttempts < 3) {
                     pairingAttempts++;
                     isPairing = false;
@@ -432,54 +491,69 @@ async function startMickeyBot() {
         return Mickey;
 
     } catch (err) {
-        UI.error('Critical exception detected: ' + err.message);
+        // Only show critical startup errors
+        UI.error('Startup error: ' + err.message);
         await delay(5000);
         return startMickeyBot();
     }
 }
 
 // ────────────────────────────────────────────────
-// KEEP ALIVE & MONITORING
+// KEEP ALIVE & MONITORING (MINIMAL LOGS)
 // ────────────────────────────────────────────────
+let monitorInterval = null;
+
 function startKeepAlive() {
     setInterval(autoClean, 30 * 60 * 1000);
+
+    if (monitorInterval) clearInterval(monitorInterval);
     
-    setInterval(() => {
+    monitorInterval = setInterval(() => {
         if (whatsappBot && isWhatsAppRunning) {
             try { whatsappBot.sendPresenceUpdate('available'); } catch (err) {}
         }
-        const status = isWhatsAppRunning ? chalk.greenBright('ONLINE') : chalk.redBright('OFFLINE');
-        const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
-        console.log(chalk.dim(`  [MONITOR] Status: [${status}] | Core RAM: ${ram}MB`));
-    }, 5 * 60 * 1000);
+        // Show status every 30 minutes only
+        if (Math.floor(Date.now() / (10 * 60 * 1000)) % 3 === 0) {
+            const status = isWhatsAppRunning ? chalk.greenBright('ONLINE') : chalk.redBright('OFFLINE');
+            const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
+            console.log(chalk.dim(`  [MONITOR] Status: [${status}] | RAM: ${ram}MB`));
+        }
+    }, 10 * 60 * 1000);
 }
 
 // ────────────────────────────────────────────────
-// INITIALIZATION ENTRYPOINT
+// MEMORY MANAGEMENT
+// ────────────────────────────────────────────────
+setInterval(() => {
+    if (messageProcessingQueue.length > 100) {
+        messageProcessingQueue = messageProcessingQueue.slice(-50);
+    }
+}, 60000);
+
+// ────────────────────────────────────────────────
+// INITIALIZATION
 // ────────────────────────────────────────────────
 async function initializeBot() {
     UI.banner();
     startKeepAlive();
-    
+
     const hasTelegramToken = settings.telegram?.botToken && settings.telegram.botToken?.trim()?.length > 0;
-    let telegramStarted = false;
-    
+
     if (hasTelegramToken && startTelegramBot) {
         try {
             await startTelegramBot();
-            UI.success('Telegram mainframe operational.');
-            telegramStarted = true;
+            UI.success('Telegram operational.');
         } catch (err) {
-            UI.warning(`Telegram linkage error: ${err.message}`);
+            UI.warning(`Telegram error: ${err.message}`);
         }
     } else {
-        UI.info('WhatsApp standalone operation active.');
+        UI.info('WhatsApp standalone mode.');
     }
-    
+
     await startMickeyBot();
-    
+
     process.on('SIGINT', async () => {
-        console.log(chalk.yellow('\n  👋 Terminating bot processes...'));
+        console.log(chalk.yellow('\n  👋 Shutting down...'));
         if (whatsappBot) { try { await whatsappBot.end(); } catch(e) {} }
         if (rl) { try { rl.close(); } catch(e) {} }
         process.exit(0);
@@ -487,6 +561,6 @@ async function initializeBot() {
 }
 
 initializeBot().catch(err => {
-    UI.error(`Fatal crash: ${err.message}`);
+    UI.error(`Fatal: ${err.message}`);
     process.exit(1);
 });
