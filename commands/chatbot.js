@@ -6,7 +6,6 @@
 
 const fs = require('fs/promises');
 const path = require('path');
-const axios = require('axios'); // Upgraded from node-fetch for better stability
 
 // ============ PATHS ============
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
@@ -106,6 +105,50 @@ function extractText(m) {
     } catch (e) { 
         return ''; 
     }
+}
+
+async function getAiReply(prompt) {
+    const endpoints = [
+        `https://docs.prexzyapis.com/ai/ai4chat?prompt=${encodeURIComponent(prompt)}`,
+        `https://docs.prexzyapis.com/ai/aichat?prompt=${encodeURIComponent(prompt)}`
+    ];
+
+    for (const endpoint of endpoints) {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+                signal: controller.signal
+            });
+            clearTimeout(timeout);
+
+            if (!response.ok) continue;
+
+            const data = await response.json();
+            const candidates = [
+                data?.result,
+                data?.response,
+                data?.message,
+                data?.answer,
+                data?.reply,
+                data?.text,
+                data?.output,
+                data?.data?.result,
+                data?.data?.response,
+                data?.data?.message,
+                data?.choices?.[0]?.message?.content
+            ];
+
+            const reply = candidates.find(value => typeof value === 'string' && value.trim());
+            if (reply) return reply.trim();
+        } catch (e) {
+            // Try the next endpoint
+        }
+    }
+
+    return null;
 }
 
 // ============ CHECK IF USER IS ADMIN ============
@@ -243,13 +286,8 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
         const history = localMem.map(msg => `${msg.user}`).join('\n');
         const prompt = `Wewe ni Mickey, mtu wa kawaida kutoka TZ. Usiseme wewe ni AI au robot. Ongea Kiswahili cha mitaani. Jibu fupi sana (sentensi 1-2).\nHistory:\n${history}\n${userName}: ${text}\nMickey:`;
 
-        // Mpangilio mpya wa API kwa kutumia axios
-        const apiUrl = `https://apis.prexzyvilla.site/ai/aichat?prompt=${encodeURIComponent(prompt)}`;
-
-        const response = await axios.get(apiUrl, { timeout: 8000 });
-        
-        // Kulingana na mifumo mingi ya aina hii, jibu huwa kwenye data.result au data.response
-        let reply = response.data?.result || response.data?.response || response.data?.message || getResponse('dontKnow');
+        let reply = await getAiReply(prompt);
+        if (!reply) reply = getResponse('dontKnow');
 
         // Clean AI vocabulary
         reply = reply.replace(/I am an AI|I am a chatbot|As an AI|Mimi ni AI|Mimi ni chatbot|Mickey AI/gi, "Mimi ni Mickey");

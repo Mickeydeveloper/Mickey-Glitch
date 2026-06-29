@@ -550,11 +550,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     }
                 } catch (e) {}
 
-                await handleAutotypingForMessage(sock, chatId, userMessage);
-                await handleAutorecordingForMessage(sock, chatId, userMessage);
+                if (isGroup) {
+                    await handleAutotypingForMessage(sock, chatId, userMessage);
+                    await handleAutorecordingForMessage(sock, chatId, userMessage);
 
-                await handleTagDetection(sock, chatId, message, senderId);
-                await handleMentionDetection(sock, chatId, message);
+                    await handleTagDetection(sock, chatId, message, senderId);
+                    await handleMentionDetection(sock, chatId, message);
+                }
 
                 try {
                     if (typeof handleChatbotMessage === 'function') {
