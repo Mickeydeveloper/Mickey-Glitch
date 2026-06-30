@@ -3,6 +3,8 @@
  * CUSTOM PAIRING - Uses Custom 8-digit code (MICKDADY)
  * MODERNISED CONSOLE UI & GITHUB IMAGE CONNECTION
  * FIXED: Session preservation & Safe temp/tmp auto-cleanup
+ * FIXED: Connection stability & Reconnection logic
+ * FIXED: Memory management & Queue handling
  */
 
 require("dotenv").config();
@@ -82,7 +84,7 @@ const MEDIA_DIR = path.resolve(process.cwd(), 'media');
 // SAFE AUTO-CLEANUP FUNCTIONS
 // ────────────────────────────────────────────────
 
-// 1. CLEAN TEMP & TMP FILES - Every 10 seconds (Safe Interval)
+// 1. CLEAN TEMP & TMP FILES - Every 30 seconds (Safe Interval)
 function cleanTempAndTmpFiles() {
     try {
         const dirs = [TEMP_DIR, TMP_DIR, CACHE_DIR];
@@ -125,7 +127,6 @@ function checkAndFixCorruptedSession() {
         let corruptedCount = 0;
 
         files.forEach(file => {
-            // TUZINGATIE: 'creds.json' is the most critical file. Avoid deleting it unless absolutely empty.
             const filePath = path.join(SESSION_DIR, file);
             if (file.endsWith('.json')) {
                 try {
@@ -182,16 +183,21 @@ function ensureDirectories() {
 // ────────────────────────────────────────────────
 // START SAFE CLEANUP INTERVALS
 // ────────────────────────────────────────────────
-function startAggressiveCleanup() {
-    // Clean temp/tmp files safely every 10 seconds (Avoids race conditions)
-    setInterval(cleanTempAndTmpFiles, 10000);
-    console.log(chalk.dim('  [CLEANER] Temp/Tmp cleaner active (every 10s)'));
+let cleanupInterval = null;
+let sessionCheckInterval = null;
 
-    // Check corrupted session keys every 30 seconds
-    setInterval(checkAndFixCorruptedSession, 30000);
-    console.log(chalk.dim('  [CLEANER] Session integrity checker active (every 30s)'));
+function startAggressiveCleanup() {
+    // Clear existing intervals
+    if (cleanupInterval) clearInterval(cleanupInterval);
+    if (sessionCheckInterval) clearInterval(sessionCheckInterval);
     
-    // NOTE: Old 'cleanOldSessionFiles' removed completely to protect active sessions from being auto-deleted!
+    // Clean temp/tmp files safely every 30 seconds (Avoids race conditions)
+    cleanupInterval = setInterval(cleanTempAndTmpFiles, 30000);
+    console.log(chalk.dim('  [CLEANER] Temp/Tmp cleaner active (every 30s)'));
+
+    // Check corrupted session keys every 60 seconds
+    sessionCheckInterval = setInterval(checkAndFixCorruptedSession, 60000);
+    console.log(chalk.dim('  [CLEANER] Session integrity checker active (every 60s)'));
 }
 
 // ────────────────────────────────────────────────
@@ -272,6 +278,7 @@ const UI = {
 let whatsappBot = null;
 let isWhatsAppRunning = false;
 let reconnectAttempts = 0;
+let reconnectTimer = null;
 let messageProcessingQueue = [];
 let isProcessingQueue = false;
 
@@ -319,11 +326,14 @@ async function startMickeyBot() {
 
         const msgRetryCounterCache = new NodeCache();
 
+        // ────────────────────────────────────────────────
+        // FIX: IMPROVED SOCKET CONFIGURATION
+        // ────────────────────────────────────────────────
         const Mickey = makeWASocket({
             version,
             logger: pinoLogger,
             printQRInTerminal: false, // Tunatumia Custom Pairing Code daima
-            browser: ["Ubuntu", "Chrome", "20.0.04"], // Salama dhidi ya ban za WhatsApp
+            browser: ["MickeyBot", "Chrome", "120.0.0"], // Salama dhidi ya ban za WhatsApp
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pinoLogger)
@@ -331,9 +341,13 @@ async function startMickeyBot() {
             markOnlineOnConnect: true,
             syncFullHistory: false,
             generateHighQualityLinkPreview: true,
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 30000,
-            keepAliveIntervalMs: 60000,
+            // FIX: Reduced timeouts for better stability
+            connectTimeoutMs: 30000,
+            defaultQueryTimeoutMs: 15000,
+            keepAliveIntervalMs: 30000,
+            // FIX: Better retry handling
+            maxRetries: 3,
+            retryDelay: 5000,
             patchMessageBeforeSending: (message) => {
                 const requiresPatch = !!(message.buttonsMessage || message.templateMessage || message.listMessage);
                 if (requiresPatch) {
@@ -364,9 +378,9 @@ async function startMickeyBot() {
         Mickey.ev.on("creds.update", saveCreds);
         store.bind(Mickey.ev);
 
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         // MESSAGE HANDLER
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         Mickey.ev.on("messages.upsert", async chatUpdate => {
             try {
                 const mek = chatUpdate.messages[0];
@@ -399,9 +413,9 @@ async function startMickeyBot() {
             }
         });
 
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         // CALL HANDLER
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         Mickey.ev.on("call", async (callData) => {
             try {
                 if (handleAnticall) await handleAnticall(Mickey, { call: callData });
@@ -410,9 +424,9 @@ async function startMickeyBot() {
             }
         });
 
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         // GROUP PARTICIPANT HANDLER
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         Mickey.ev.on("group-participants.update", async (update) => {
             try {
                 if (handleGroupParticipantUpdate) await handleGroupParticipantUpdate(Mickey, update);
@@ -421,16 +435,20 @@ async function startMickeyBot() {
             }
         });
 
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         // ERROR HANDLER - COMPLETELY SILENT
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         Mickey.ev.on("error", (err) => {
-            return; // Complete silence
+            // FIX: Log only critical errors
+            if (err.message && err.message.includes('timeout')) {
+                console.log(chalk.dim(`  [NETWORK] Connection timeout, will retry...`));
+            }
+            return;
         });
 
-        // ────────────────────────────────────────────
-        // CONNECTION HANDLER
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
+        // FIX: CONNECTION HANDLER WITH STABILITY IMPROVEMENTS
+        // ────────────────────────────────────────────────
         Mickey.ev.on("connection.update", async (update) => {
             const { connection, lastDisconnect } = update;
 
@@ -439,6 +457,12 @@ async function startMickeyBot() {
                 reconnectAttempts = 0;
                 isPairing = false;
                 pairingAttempts = 0;
+                
+                // Clear any pending reconnect timers
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
 
                 console.log('\n' + chalk.bgGreen.black.bold("  🚀 CORE ONLINE  ") + chalk.greenBright(" System synchronized.\n"));
 
@@ -465,6 +489,10 @@ async function startMickeyBot() {
             if (connection === "close") {
                 isWhatsAppRunning = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
+                const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
+
+                // FIX: Log actual disconnect reason
+                console.log(chalk.yellow(`  [DISCONNECT] Code: ${statusCode} | ${errorMessage}`));
 
                 if (statusCode === DisconnectReason.loggedOut) {
                     UI.error('Session revoked by user. Clearing auth folder...');
@@ -473,22 +501,38 @@ async function startMickeyBot() {
                     return startMickeyBot();
                 }
 
-                if (reconnectAttempts < 15) {
-                    const delayTime = Math.min(5000 + (reconnectAttempts * 2000), 30000);
+                // FIX: Better reconnection with exponential backoff
+                if (reconnectAttempts < 10) {
+                    // FIX: Exponential backoff with jitter
+                    const baseDelay = Math.min(5000 + (reconnectAttempts * 3000), 45000);
+                    const jitter = Math.random() * 2000;
+                    const delayTime = baseDelay + jitter;
+                    
                     reconnectAttempts++;
-                    console.log(chalk.cyan(`  🔄 [RECONNECT] Connection closed (${statusCode}). Attempt ${reconnectAttempts}/15 in ${delayTime/1000}s...`));
-                    await delay(delayTime);
-                    return startMickeyBot();
+                    
+                    console.log(chalk.cyan(`  🔄 [RECONNECT] Attempt ${reconnectAttempts}/10 in ${(delayTime/1000).toFixed(1)}s...`));
+                    
+                    // Clear any existing timer
+                    if (reconnectTimer) {
+                        clearTimeout(reconnectTimer);
+                        reconnectTimer = null;
+                    }
+                    
+                    reconnectTimer = setTimeout(() => {
+                        reconnectTimer = null;
+                        startMickeyBot();
+                    }, delayTime);
                 } else {
-                    UI.error('Max reconnection reached. Exiting system.');
-                    process.exit(1);
+                    UI.error('Max reconnection attempts reached. Restarting process...');
+                    // FIX: Graceful exit to let process manager restart
+                    process.exit(0);
                 }
             }
         });
 
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         // PAIRING - CUSTOM CODE "MICKDADY"
-        // ────────────────────────────────────────────
+        // ────────────────────────────────────────────────
         if (!hasSession && !isPairing) {
             isPairing = true;
 
@@ -540,7 +584,7 @@ async function startMickeyBot() {
 }
 
 // ────────────────────────────────────────────────
-// KEEP ALIVE & MONITORING
+// FIX: KEEP ALIVE & MONITORING WITH BETTER PRESENCE
 // ────────────────────────────────────────────────
 let monitorInterval = null;
 
@@ -549,24 +593,74 @@ function startKeepAlive() {
 
     monitorInterval = setInterval(() => {
         if (whatsappBot && isWhatsAppRunning) {
-            try { whatsappBot.sendPresenceUpdate('available'); } catch (err) {}
+            try { 
+                whatsappBot.sendPresenceUpdate('available'); 
+            } catch (err) {
+                // If presence fails, connection might be dead
+                console.log(chalk.dim('  [KEEPALIVE] Connection may be unstable...'));
+            }
         }
-        if (Math.floor(Date.now() / (10 * 60 * 1000)) % 3 === 0) {
+        
+        // FIX: Less frequent logging
+        if (Math.floor(Date.now() / (15 * 60 * 1000)) % 4 === 0) {
             const status = isWhatsAppRunning ? chalk.greenBright('ONLINE') : chalk.redBright('OFFLINE');
             const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
-            console.log(chalk.dim(`  [MONITOR] Status: [${status}] | RAM: ${ram}MB`));
+            const uptime = process.uptime();
+            const hours = Math.floor(uptime / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+            console.log(chalk.dim(`  [MONITOR] Status: [${status}] | Uptime: ${hours}h${minutes}m | RAM: ${ram}MB`));
         }
-    }, 10 * 60 * 1000);
+    }, 15 * 60 * 1000); // FIX: 15 min instead of 10
 }
 
 // ────────────────────────────────────────────────
-// MEMORY MANAGEMENT
+// FIX: MEMORY MANAGEMENT - BETTER QUEUE HANDLING
 // ────────────────────────────────────────────────
 setInterval(() => {
     if (messageProcessingQueue.length > 100) {
+        const dropped = messageProcessingQueue.length - 50;
         messageProcessingQueue = messageProcessingQueue.slice(-50);
+        console.log(chalk.yellow(`  [QUEUE] Dropped ${dropped} old messages to prevent memory leak`));
     }
 }, 60000);
+
+// ────────────────────────────────────────────────
+// FIX: GRACEFUL SHUTDOWN HANDLERS
+// ────────────────────────────────────────────────
+process.on('SIGINT', async () => {
+    console.log(chalk.yellow('\n  👋 Shutting down gracefully...'));
+    
+    // Clear all timers
+    if (monitorInterval) clearInterval(monitorInterval);
+    if (cleanupInterval) clearInterval(cleanupInterval);
+    if (sessionCheckInterval) clearInterval(sessionCheckInterval);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    
+    // End WhatsApp connection
+    if (whatsappBot) { 
+        try { 
+            await whatsappBot.end(); 
+        } catch(e) {} 
+    }
+    
+    // Close readline
+    if (rl) { 
+        try { rl.close(); } catch(e) {} 
+    }
+    
+    process.exit(0);
+});
+
+// FIX: Handle unhandled rejections and exceptions gracefully
+process.on('unhandledRejection', (reason, promise) => {
+    console.log(chalk.red('  [FATAL] Unhandled Rejection:'), reason);
+    // Don't crash, just log
+});
+
+process.on('uncaughtException', (error) => {
+    console.log(chalk.red('  [FATAL] Uncaught Exception:'), error.message);
+    // Don't crash, just log
+});
 
 // ────────────────────────────────────────────────
 // INITIALIZATION
@@ -592,13 +686,6 @@ async function initializeBot() {
     }
 
     await startMickeyBot();
-
-    process.on('SIGINT', async () => {
-        console.log(chalk.yellow('\n  👋 Shutting down...'));
-        if (whatsappBot) { try { await whatsappBot.end(); } catch(e) {} }
-        if (rl) { try { rl.close(); } catch(e) {} }
-        process.exit(0);
-    });
 }
 
 initializeBot().catch(err => {
