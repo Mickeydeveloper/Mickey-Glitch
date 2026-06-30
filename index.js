@@ -397,11 +397,11 @@ async function startMickeyBot() {
 
         const msgRetryCounterCache = new NodeCache();
 
-        const Mickey = makeWASocket({
+                 const Mickey = makeWASocket({
             version,
-            logger: silentLogger,
-            printQRInTerminal: false,
-            browser: Browsers.macOS('Chrome'),
+            logger: pinoLogger,
+            printQRInTerminal: !pairingCode, // Kama pairingCode ipo, haita-print QR
+            browser: ["Ubuntu", "Chrome", "20.0.04"], // Salama zaidi dhidi ya ban
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(
