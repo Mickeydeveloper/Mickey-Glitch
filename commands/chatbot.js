@@ -19,6 +19,12 @@ function setBotNumber(number) {
     BOT_NUMBER = number;
 }
 
+// UTILITY: Kusafisha JID ili kuondoa mambo ya vikolombizo vya kifaa (device suffix)
+function cleanJid(jid) {
+    if (!jid) return '';
+    return jid.split(':')[0] + '@' + jid.split('@')[1];
+}
+
 function isOwner(userId) {
     if (!BOT_NUMBER) return false;
     return userId.split('@')[0] === BOT_NUMBER.split('@')[0];
@@ -119,7 +125,10 @@ async function getAiReply(prompt) {
             const timeout = setTimeout(() => controller.abort(), 8000);
             const response = await fetch(endpoint, {
                 method: 'GET',
-                headers: { Accept: 'application/json' },
+                headers: { 
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                },
                 signal: controller.signal
             });
             clearTimeout(timeout);
@@ -155,18 +164,19 @@ async function getAiReply(prompt) {
 async function isGroupAdmin(sock, chatId, senderId) {
     try {
         const groupMetadata = await sock.groupMetadata(chatId);
+        const cleanSender = cleanJid(senderId);
         return groupMetadata.participants
             .filter(p => p.admin === 'admin' || p.admin === 'superadmin')
-            .some(admin => admin.id === senderId);
+            .some(admin => cleanJid(admin.id) === cleanSender);
     } catch (error) {
         return false;
     }
 }
 
-// ============ COMMAND HANDLER (SHORTENED TEXT) ============
+// ============ COMMAND HANDLER ============
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
-        const senderId = m.key.participant || m.key.remoteJid;
+        const senderId = cleanJid(m.key.participant || m.key.remoteJid);
         const isGroup = chatId.endsWith('@g.us');
         const rawBody = (body || '').trim();
         const parts = rawBody.split(/\s+/).filter(Boolean);
@@ -181,49 +191,49 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
             if (sub === 'on') {
                 state.private[senderId] = { enabled: true };
                 await saveState(state);
-                return await sock.sendMessage(chatId, { text: '✅ *Chatbot:* ON (DM)' });
+                return await sock.sendMessage(chatId, { text: '✅ *Chatbot:* ON (DM)' }, { quoted: m });
             }
             if (sub === 'off') {
                 state.private[senderId] = { enabled: false };
                 await saveState(state);
-                return await sock.sendMessage(chatId, { text: '❌ *Chatbot:* OFF (DM)' });
+                return await sock.sendMessage(chatId, { text: '❌ *Chatbot:* OFF (DM)' }, { quoted: m });
             }
             if (sub === 'status') {
                 const status = state.private?.[senderId]?.enabled ? '🟢 ON' : '🔴 OFF';
-                return await sock.sendMessage(chatId, { text: `📊 *Chatbot Status:* ${status}` });
+                return await sock.sendMessage(chatId, { text: `📊 *Chatbot Status:* ${status}` }, { quoted: m });
             }
 
             return await sock.sendMessage(chatId, { 
                 text: `🤖 *Mickey Chatbot*\n• _.chatbot on_ - Washa\n• _.chatbot off_ - Zima\n• _.chatbot status_ - Hali` 
-            });
+            }, { quoted: m });
         }
 
         // ============ GROUP CHAT ============
-        const isAdmin = await isGroupAdmin(sock, chatId, senderId);
+        const isAdmin = await isGroupAdmin(sock, chatId, m.key.participant || m.key.remoteJid);
         const isOwnerUser = isOwner(senderId);
 
         if (sub === 'on') {
-            if (!isAdmin && !isOwnerUser) return await sock.sendMessage(chatId, { text: '❌ Admin pekee anaweza kuwasha.' });
+            if (!isAdmin && !isOwnerUser) return await sock.sendMessage(chatId, { text: '❌ Admin pekee anaweza kuwasha.' }, { quoted: m });
             state.groups[chatId] = { enabled: true };
             await saveState(state);
-            return await sock.sendMessage(chatId, { text: '✅ *Chatbot:* ON (Group)' });
+            return await sock.sendMessage(chatId, { text: '✅ *Chatbot:* ON (Group)' }, { quoted: m });
         }
 
         if (sub === 'off') {
-            if (!isAdmin && !isOwnerUser) return await sock.sendMessage(chatId, { text: '❌ Admin pekee anaweza kuzima.' });
+            if (!isAdmin && !isOwnerUser) return await sock.sendMessage(chatId, { text: '❌ Admin pekee anaweza kuzima.' }, { quoted: m });
             state.groups[chatId] = { enabled: false };
             await saveState(state);
-            return await sock.sendMessage(chatId, { text: '❌ *Chatbot:* OFF (Group)' });
+            return await sock.sendMessage(chatId, { text: '❌ *Chatbot:* OFF (Group)' }, { quoted: m });
         }
 
         if (sub === 'status') {
             const status = state.groups?.[chatId]?.enabled ? '🟢 ON' : '🔴 OFF';
-            return await sock.sendMessage(chatId, { text: `📊 *Chatbot Group:* ${status}` });
+            return await sock.sendMessage(chatId, { text: `📊 *Chatbot Group:* ${status}` }, { quoted: m });
         }
 
         return await sock.sendMessage(chatId, { 
             text: `🤖 *Mickey Chatbot (Group)*\n• _.chatbot on_ - Washa (Admin)\n• _.chatbot off_ - Zima (Admin)\n• _.chatbot status_ - Hali` 
-        });
+        }, { quoted: m });
 
     } catch (e) {
         console.error('Command error:', e);
@@ -240,7 +250,7 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
         const text = userText || extractText(m);
         if (!text) return;
 
-        const senderId = m.key.participant || m.key.remoteJid;
+        const senderId = cleanJid(m.key.participant || m.key.remoteJid);
         const userName = m.pushName || 'Mshkaji';
         const isGroup = chatId.endsWith('@g.us');
 
@@ -249,11 +259,12 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
             return await groupChatbotToggleCommand(sock, chatId, m, text);
         }
 
-        // Check if enabled
+        // Check if enabled (Kutumia Clean ID)
         const state = await loadState();
         const enabled = isGroup ? (state.groups?.[chatId]?.enabled || false) : (state.private?.[senderId]?.enabled || false);
 
         if (!enabled) {
+            // Kama ipo DM na haijawashwa, inamwambia jinsi ya kuwasha
             if (!isGroup && text.length > 0 && !text.startsWith('.')) {
                 await sock.sendMessage(chatId, { text: '🔴 Chatbot imezimwa hapa. Tumia _.chatbot on_ kuwasha.' }, { quoted: m });
             }
@@ -285,7 +296,7 @@ async function handleChatbotMessage(sock, chatId, m, userText = null) {
             return await sock.sendMessage(chatId, { text: greeting }, { quoted: m });
         }
 
-        // 3. API Fallback for complex queries (UPDATED API)
+        // 3. API Fallback for complex queries
         const history = localMem.map(msg => `${msg.user}`).join('\n');
         const prompt = `Wewe ni Mickey, mtu wa kawaida kutoka TZ. Usiseme wewe ni AI au robot. Ongea Kiswahili cha mitaani. Jibu fupi sana (sentensi 1-2).\nHistory:\n${history}\n${userName}: ${text}\nMickey:`;
 
