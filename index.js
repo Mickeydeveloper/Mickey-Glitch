@@ -2,7 +2,7 @@
  * MICKEY GLITCH - A WhatsApp Bot
  * CUSTOM PAIRING - Uses Custom 8-digit code (MICKDADY)
  * MODERNISED CONSOLE UI & GITHUB IMAGE CONNECTION
- * FIXED: Aggressive auto-cleanup for session/temp/tmp files
+ * FIXED: Session preservation & Safe temp/tmp auto-cleanup
  */
 
 require("dotenv").config();
@@ -79,15 +79,15 @@ const CACHE_DIR = path.resolve(process.cwd(), 'cache');
 const MEDIA_DIR = path.resolve(process.cwd(), 'media');
 
 // ────────────────────────────────────────────────
-// AGGRESSIVE AUTO-CLEANUP FUNCTIONS
+// SAFE AUTO-CLEANUP FUNCTIONS
 // ────────────────────────────────────────────────
 
-// 1. CLEAN TEMP & TMP FILES - Every 3 seconds
+// 1. CLEAN TEMP & TMP FILES - Every 10 seconds (Safe Interval)
 function cleanTempAndTmpFiles() {
     try {
-        const dirs = [TEMP_DIR, TMP_DIR];
+        const dirs = [TEMP_DIR, TMP_DIR, CACHE_DIR];
         let totalDeleted = 0;
-        
+
         dirs.forEach(dir => {
             if (fs.existsSync(dir)) {
                 const files = fs.readdirSync(dir);
@@ -95,7 +95,6 @@ function cleanTempAndTmpFiles() {
                     const filePath = path.join(dir, file);
                     try {
                         const stats = fs.statSync(filePath);
-                        // Delete all files in temp/tmp regardless of age
                         if (stats.isDirectory()) {
                             fs.rmSync(filePath, { recursive: true, force: true });
                         } else {
@@ -103,73 +102,30 @@ function cleanTempAndTmpFiles() {
                         }
                         totalDeleted++;
                     } catch (e) {
-                        // Skip if file is in use
+                        // Skip if file is currently locked/in use
                     }
                 });
             }
         });
-        
+
         if (totalDeleted > 0) {
-            console.log(chalk.dim(`  [CLEANER] Purged ${totalDeleted} temp/tmp files`));
+            console.log(chalk.dim(`  [CLEANER] Purged ${totalDeleted} temp/tmp/cache files`));
         }
     } catch (err) {
         // Silent fail
     }
 }
 
-// 2. CLEAN OLD SESSION FILES - Every 5 minutes
-function cleanOldSessionFiles() {
-    try {
-        if (!fs.existsSync(SESSION_DIR)) return;
-        
-        const files = fs.readdirSync(SESSION_DIR);
-        const now = Date.now();
-        const SESSION_MAX_AGE = 5 * 60 * 1000; // 5 minutes
-        let deletedCount = 0;
-        
-        files.forEach(file => {
-            const filePath = path.join(SESSION_DIR, file);
-            try {
-                const stats = fs.statSync(filePath);
-                const fileAge = now - stats.mtimeMs;
-                
-                // Delete session files older than 5 minutes
-                if (fileAge > SESSION_MAX_AGE) {
-                    if (stats.isDirectory()) {
-                        fs.rmSync(filePath, { recursive: true, force: true });
-                    } else {
-                        fs.unlinkSync(filePath);
-                    }
-                    deletedCount++;
-                }
-            } catch (e) {
-                // If file is corrupted or can't be read, delete it
-                try {
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                        deletedCount++;
-                    }
-                } catch (e2) {}
-            }
-        });
-        
-        if (deletedCount > 0) {
-            console.log(chalk.dim(`  [CLEANER] Removed ${deletedCount} old session files (>5min)`));
-        }
-    } catch (err) {
-        // Silent fail
-    }
-}
-
-// 3. CHECK AND FIX CORRUPTED SESSION FILES
+// 2. CHECK AND FIX CORRUPTED SESSION FILES ONLY (NEVER DELETE VALID FILES)
 function checkAndFixCorruptedSession() {
     try {
         if (!fs.existsSync(SESSION_DIR)) return;
-        
+
         const files = fs.readdirSync(SESSION_DIR);
         let corruptedCount = 0;
-        
+
         files.forEach(file => {
+            // TUZINGATIE: 'creds.json' is the most critical file. Avoid deleting it unless absolutely empty.
             const filePath = path.join(SESSION_DIR, file);
             if (file.endsWith('.json')) {
                 try {
@@ -178,31 +134,33 @@ function checkAndFixCorruptedSession() {
                         fs.unlinkSync(filePath);
                         corruptedCount++;
                     } else {
-                        JSON.parse(content);
+                        JSON.parse(content); // Test json validity
                     }
                 } catch (e) {
-                    // Corrupted JSON - delete it
-                    try {
-                        fs.unlinkSync(filePath);
-                        corruptedCount++;
-                    } catch (e2) {}
+                    // Prevent deleting main creds if it can be recovered, but remove broken pre-keys
+                    if (file !== 'creds.json') {
+                        try {
+                            fs.unlinkSync(filePath);
+                            corruptedCount++;
+                        } catch (e2) {}
+                    }
                 }
             }
         });
-        
+
         if (corruptedCount > 0) {
-            console.log(chalk.yellow(`  [CLEANER] Removed ${corruptedCount} corrupted session files`));
+            console.log(chalk.yellow(`  [CLEANER] Removed ${corruptedCount} corrupted session keys`));
         }
     } catch (err) {
         // Silent fail
     }
 }
 
-// 4. COMPLETE SESSION RESET (when too corrupted)
+// 3. COMPLETE SESSION RESET (Only on absolute logout)
 function resetCorruptedSession() {
     try {
         if (fs.existsSync(SESSION_DIR)) {
-            console.log(chalk.yellow('  [CLEANER] Resetting corrupted session...'));
+            console.log(chalk.yellow('  [CLEANER] Resetting revoked session...'));
             fs.rmSync(SESSION_DIR, { recursive: true, force: true });
             console.log(chalk.green('  [CLEANER] Session reset complete!'));
         }
@@ -214,7 +172,7 @@ function resetCorruptedSession() {
     }
 }
 
-// 5. ENSURE DIRECTORIES EXIST
+// 4. ENSURE DIRECTORIES EXIST
 function ensureDirectories() {
     [SESSION_DIR, TEMP_DIR, TMP_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -222,56 +180,18 @@ function ensureDirectories() {
 }
 
 // ────────────────────────────────────────────────
-// START AGGRESSIVE CLEANUP INTERVALS
+// START SAFE CLEANUP INTERVALS
 // ────────────────────────────────────────────────
 function startAggressiveCleanup() {
-    // Clean temp/tmp every 3 seconds
-    setInterval(cleanTempAndTmpFiles, 3000);
-    console.log(chalk.dim('  [CLEANER] Temp/Tmp cleaner active (every 3s)'));
+    // Clean temp/tmp files safely every 10 seconds (Avoids race conditions)
+    setInterval(cleanTempAndTmpFiles, 10000);
+    console.log(chalk.dim('  [CLEANER] Temp/Tmp cleaner active (every 10s)'));
 
-    // Check corrupted session files every 10 seconds
-    setInterval(checkAndFixCorruptedSession, 10000);
-    console.log(chalk.dim('  [CLEANER] Session corruption checker active (every 10s)'));
-
-    // Clean old session files every 5 minutes
-    setInterval(cleanOldSessionFiles, 5 * 60 * 1000);
-    console.log(chalk.dim('  [CLEANER] Old session cleaner active (every 5min)'));
-
-    // Full session reset if too many corrupted files - every 1 minute
-    let corruptionCounter = 0;
-    setInterval(() => {
-        try {
-            if (!fs.existsSync(SESSION_DIR)) return;
-            const files = fs.readdirSync(SESSION_DIR);
-            const jsonFiles = files.filter(f => f.endsWith('.json'));
-            
-            // If more than 50% of files are corrupted
-            let corrupted = 0;
-            jsonFiles.forEach(file => {
-                const filePath = path.join(SESSION_DIR, file);
-                try {
-                    const content = fs.readFileSync(filePath, 'utf8');
-                    if (content.trim() === '' || content.trim() === '{}') {
-                        corrupted++;
-                    } else {
-                        JSON.parse(content);
-                    }
-                } catch (e) {
-                    corrupted++;
-                }
-            });
-            
-            if (jsonFiles.length > 0 && (corrupted / jsonFiles.length) > 0.5) {
-                corruptionCounter++;
-                if (corruptionCounter >= 3) {
-                    resetCorruptedSession();
-                    corruptionCounter = 0;
-                }
-            } else {
-                corruptionCounter = 0;
-            }
-        } catch (e) {}
-    }, 60000);
+    // Check corrupted session keys every 30 seconds
+    setInterval(checkAndFixCorruptedSession, 30000);
+    console.log(chalk.dim('  [CLEANER] Session integrity checker active (every 30s)'));
+    
+    // NOTE: Old 'cleanOldSessionFiles' removed completely to protect active sessions from being auto-deleted!
 }
 
 // ────────────────────────────────────────────────
@@ -305,7 +225,9 @@ async function askPhoneNumber() {
 
         readlineInterface.question(chalk.cyan.bold('  ⚡ Namba yako ➜ '), (answer) => {
             let num = answer.trim().replace(/[^0-9]/g, '');
-            if (!num.startsWith("255")) {
+            if (!num.startsWith("255") && num.startsWith("0")) {
+                num = "255" + num.substring(1);
+            } else if (!num.startsWith("255")) {
                 num = "255" + num;
             }
             UI.success(`Namba imethibitishwa: ${num}`);
@@ -340,7 +262,7 @@ const UI = {
 /_/  /_/_/\\__/_/\\_\\\\____/\\_ / /_/ /_/_/_/\\__/_/ /_/
                         /___/
         `));
-        console.log(chalk.dim('       ⚡ Cyberpunk Core with Aggressive Cleanup ⚡\n'));
+        console.log(chalk.dim('       ⚡ Cyberpunk Core with Safe Session Management ⚡\n'));
     }
 };
 
@@ -359,7 +281,7 @@ let isProcessingQueue = false;
 async function processMessageQueue() {
     if (isProcessingQueue || messageProcessingQueue.length === 0) return;
     isProcessingQueue = true;
-    
+
     try {
         while (messageProcessingQueue.length > 0) {
             const item = messageProcessingQueue.shift();
@@ -397,17 +319,14 @@ async function startMickeyBot() {
 
         const msgRetryCounterCache = new NodeCache();
 
-                 const Mickey = makeWASocket({
+        const Mickey = makeWASocket({
             version,
             logger: pinoLogger,
-            printQRInTerminal: !pairingCode, // Kama pairingCode ipo, haita-print QR
-            browser: ["Ubuntu", "Chrome", "20.0.04"], // Salama zaidi dhidi ya ban
+            printQRInTerminal: false, // Tunatumia Custom Pairing Code daima
+            browser: ["Ubuntu", "Chrome", "20.0.04"], // Salama dhidi ya ban za WhatsApp
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(
-                    state.keys, 
-                    pino({ level: 'fatal' }).child({ level: 'fatal' })
-                )
+                keys: makeCacheableSignalKeyStore(state.keys, pinoLogger)
             },
             markOnlineOnConnect: true,
             syncFullHistory: false,
@@ -546,25 +465,22 @@ async function startMickeyBot() {
             if (connection === "close") {
                 isWhatsAppRunning = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const errorMessage = lastDisconnect?.error?.message || '';
 
                 if (statusCode === DisconnectReason.loggedOut) {
-                    UI.error('Session revoked. Clearing...');
+                    UI.error('Session revoked by user. Clearing auth folder...');
                     resetCorruptedSession();
                     await delay(3000);
                     return startMickeyBot();
                 }
 
-                if (reconnectAttempts < 10) {
+                if (reconnectAttempts < 15) {
                     const delayTime = Math.min(5000 + (reconnectAttempts * 2000), 30000);
                     reconnectAttempts++;
-                    if (reconnectAttempts % 3 === 0 || reconnectAttempts === 1) {
-                        console.log(chalk.cyan(`  🔄 [RECONNECT] Attempt ${reconnectAttempts}/10...`));
-                    }
+                    console.log(chalk.cyan(`  🔄 [RECONNECT] Connection closed (${statusCode}). Attempt ${reconnectAttempts}/15 in ${delayTime/1000}s...`));
                     await delay(delayTime);
                     return startMickeyBot();
                 } else {
-                    UI.error('Max reconnection reached.');
+                    UI.error('Max reconnection reached. Exiting system.');
                     process.exit(1);
                 }
             }
@@ -630,7 +546,7 @@ let monitorInterval = null;
 
 function startKeepAlive() {
     if (monitorInterval) clearInterval(monitorInterval);
-    
+
     monitorInterval = setInterval(() => {
         if (whatsappBot && isWhatsAppRunning) {
             try { whatsappBot.sendPresenceUpdate('available'); } catch (err) {}
@@ -656,9 +572,9 @@ setInterval(() => {
 // INITIALIZATION
 // ────────────────────────────────────────────────
 async function initializeBot() {
-    // Start aggressive cleanup FIRST
+    // Kazi ya kusafisha ifanye kazi mwanzo kabisa
     startAggressiveCleanup();
-    
+
     UI.banner();
     startKeepAlive();
 
