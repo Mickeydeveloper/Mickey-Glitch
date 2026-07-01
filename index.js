@@ -31,12 +31,21 @@ const { getButtonId, isButtonResponse, autoDetectButtonCommand, isCommandId } = 
 const store = require("./lib/lightweight_store");
 const settings = require("./settings");
 const MickeyHelper = require("./lib/Mickey");
+const credentials = require("./lib/credentials");
 
 // Try to load telegram module
 let startTelegramBot = null;
 try {
     const telegramModule = require("./telegram-bot");
     startTelegramBot = telegramModule.startTelegramBot;
+} catch (err) {
+    // Silent fail if not found
+}
+
+// Try to load pair command
+let pairCmdModule = null;
+try {
+    pairCmdModule = require("./commands/pair");
 } catch (err) {
     // Silent fail if not found
 }
