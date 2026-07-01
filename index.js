@@ -540,15 +540,51 @@ async function startMickeyBot() {
         });
 
         // ────────────────────────────────────────────────
-        // PAIRING - CUSTOM CODE "MICKDADY"
+        // PAIRING - TELEGRAM or CONSOLE SUPPORT
         // ────────────────────────────────────────────────
         if (!hasSession && !isPairing) {
             isPairing = true;
+            let phoneNumber = null;
+            let telegramPairingChatId = null;
 
-            const phoneNumber = await askPhoneNumber();
+            // Check if pairing was requested via Telegram
+            const currentCreds = credentials.readCreds();
+            if (currentCreds && !currentCreds.paired && currentCreds.phoneNumber) {
+                // Telegram pairing in progress
+                phoneNumber = currentCreds.phoneNumber;
+                telegramPairingChatId = currentCreds.telegramChatId;
+                UI.info(`Telegram pairing detected: ${phoneNumber}`);
+            } else {
+                // Console pairing (fallback)
+                phoneNumber = await askPhoneNumber();
+            }
+
             UI.info('Initiating pairing sequence...');
-
             await delay(3000);
+
+            // Handle QR code from pairing
+            const qrHandler = async (qr) => {
+                if (telegramPairingChatId && pairCmdModule && pairCmdModule.handleQRCode) {
+                    try {
+                        await pairCmdModule.handleQRCode(qr, telegramPairingChatId);
+                    } catch (e) {
+                        console.log(chalk.dim(`  [PAIRING] QR telegram send: ${e.message}`));
+                    }
+                } else {
+                    // Console fallback - show QR in terminal
+                    console.log(chalk.magenta.bold('\n  ┌────────────────────────────────────────────────────────┐'));
+                    console.log(chalk.magenta.bold('  │') + chalk.bgMagenta.black.bold('                    📱 QR CODE GENERATED                    ') + chalk.magenta.bold('  │'));
+                    console.log(chalk.magenta.bold('  └────────────────────────────────────────────────────────┘\n'));
+                }
+            };
+
+            // Register temporary QR handler
+            const tempQRHandler = (qr) => qrHandler(qr);
+            Mickey.ev.on('connection.update', async (update) => {
+                if (update.qr && tempQRHandler) {
+                    await tempQRHandler(update.qr);
+                }
+            });
 
             try {
                 await Mickey.requestPairingCode(phoneNumber, "MICKDADY");
@@ -564,16 +600,37 @@ async function startMickeyBot() {
 
                 UI.info('Waiting for authorization...');
 
+                // Set pairing credentials
+                credentials.setPairingInProgress(phoneNumber, telegramPairingChatId);
+
                 const keepAliveInterval = setInterval(() => {
                     if (!isWhatsAppRunning) {
                         try { Mickey.sendPresenceUpdate('available'); } catch (e) {}
                     } else {
                         clearInterval(keepAliveInterval);
+                        // On successful connection, mark as paired
+                        if (telegramPairingChatId) {
+                            credentials.markAsPaired(phoneNumber, telegramPairingChatId);
+                            if (pairCmdModule && pairCmdModule.handlePairingSuccess) {
+                                pairCmdModule.handlePairingSuccess(phoneNumber, telegramPairingChatId, `session_${Date.now()}`).catch(e => 
+                                    console.log(chalk.dim(`  [PAIRING] Telegram notification: ${e.message}`))
+                                );
+                            }
+                        }
                     }
                 }, 5000);
 
             } catch (err) {
                 UI.error('Pairing failed: ' + err.message);
+                // Notify Telegram if applicable
+                if (telegramPairingChatId && pairCmdModule && pairCmdModule.handlePairingFailure) {
+                    try {
+                        await pairCmdModule.handlePairingFailure(telegramPairingChatId, err);
+                    } catch (e) {
+                        console.log(chalk.dim(`  [PAIRING] Telegram error notification: ${e.message}`));
+                    }
+                }
+                credentials.clearPairing();
                 if (pairingAttempts < 3) {
                     pairingAttempts++;
                     isPairing = false;
