@@ -80,19 +80,34 @@ async function pingCommand(sock, chatId, message) {
         // 🌍 Imetofautishwa: Inasoma LOCAL time ya vigezo vya server yako moja kwa moja
         const localTime = new Date().toLocaleString(undefined, { hour12: false });
 
+        // Get bot runtime (process uptime)
+        const botRuntimeSeconds = Math.floor(process.uptime());
+        const botRuntimeDays = Math.floor(botRuntimeSeconds / 86400);
+        const botRuntimeHours = Math.floor((botRuntimeSeconds % 86400) / 3600);
+        const botRuntimeMins = Math.floor((botRuntimeSeconds % 3600) / 60);
+        const botRuntimeSecs = botRuntimeSeconds % 60;
+        let botRuntimeStr = '';
+        if (botRuntimeDays > 0) botRuntimeStr += `${botRuntimeDays}d `;
+        if (botRuntimeHours > 0) botRuntimeStr += `${botRuntimeHours}h `;
+        if (botRuntimeMins > 0) botRuntimeStr += `${botRuntimeMins}m `;
+        botRuntimeStr += `${botRuntimeSecs}s`;
+
         const diagnosticsText = `✨ *MICKEY DIAGNOSTICS* ✨
 ─────────────────────────────
 📡 *STATUS*
 • Latency: *${latency}ms* 🚀
-• Uptime: *${formatTime(sysInfo.os.uptime)}*
+• Server Uptime: *${formatTime(sysInfo.os.uptime)}*
+• 🤖 Bot Uptime: *${botRuntimeStr}*
 
 💻 *CPU*
 • Model: \`${sysInfo.cpu.model}\`
 • Usage: [${cpuBar}] *${sysInfo.cpu.load.toFixed(1)}%*
+• Cores: *${sysInfo.cpu.cores}*
 
 💾 *RAM*
 • Usage: [${memBar}] *${sysInfo.memory.percent.toFixed(1)}%*
 • Used: *${formatBytes(sysInfo.memory.used)}* / ${formatBytes(sysInfo.memory.total)}
+• Free: *${formatBytes(sysInfo.memory.free)}*
 
 ⚙️ *ENV*
 • OS: *${sysInfo.os.platform}* | Node: *${sysInfo.process.version}*

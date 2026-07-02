@@ -146,18 +146,22 @@ const aliveCommand = async (sock, chatId, message) => {
 🕐 *Time:* ${time} EAT
 ⚡ *Ping:* ${latency}ms ${pingEmoji}
 
+*— BOT RUNTIME —*
+🤖 *Bot Uptime:* ${botUptime}
+🖥️ *Server Uptime:* ${uptime}
+
 *— SYSTEM —*
-⏳ *Uptime:* ${uptime}
 💾 *RAM:* ${ramPercent}% (${usedRam.toFixed(1)}GB)
 📊 ${ramBar}
-🖥️ *CPU:* ${cpuModel.split(' ').slice(0, 2).join(' ')}
-🐧 *OS:* ${platform}
+🖥️ *CPU:* ${cpuModel.split(' ').slice(0, 2).join(' ')} (${cpuCores} cores)
+🐧 *OS:* ${platform} (${arch})
+📍 *IP:* \`${network.ipAddress}\`
 
 *— HEALTH —*
 ${ramPercent < 70 ? '🟢 Status: Perfect' : ramPercent < 85 ? '🟡 Status: Stable' : '🔴 Status: Heavy'}
 💡 *Free:* ${freeRam.toFixed(2)}GB
 
-_Mickey Glitch Technology_`;
+_Mickey Glitch Technology™_`;
 
         await sendInteractiveMessage(sock, chatId, {
             text: statusMessage,
