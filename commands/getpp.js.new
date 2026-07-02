@@ -1,0 +1,106 @@
+const FOOTER = '© Mickey Glith ™';
+
+function normalizeJid(value, fallback = '') {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) return trimmed;
+    } else if (typeof value === 'number' || typeof value === 'bigint') {
+        return String(value);
+    } else if (Array.isArray(value) && value.length > 0) {
+        return normalizeJid(value[0], fallback);
+    } else if (value && typeof value === 'object') {
+        const candidate = value.jid || value.id || value.userJid || value.participant || value.remoteJid || value.sender;
+        if (candidate) return normalizeJid(candidate, fallback);
+    }
+
+    return typeof fallback === 'string' ? fallback.trim() : '';
+}
+
+function toWhatsAppJid(value, fallback = '') {
+    const normalized = normalizeJid(value, fallback);
+    if (!normalized) return '';
+
+    if (normalized.includes('@')) return normalized;
+
+    const digitsOnly = normalized.replace(/\D/g, '');
+    if (digitsOnly.length >= 10) return `${digitsOnly}@s.whatsapp.net`;
+
+    return normalized;
+}
+
+async function getppCommand(sock, chatId, senderId, message, args = []) {
+    try {
+        const normalizedSenderJid = toWhatsAppJid(senderId, '');
+        let targetJid = normalizedSenderJid;
+
+        const mentionedJids = message?.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+        if (mentionedJids.length > 0) {
+            targetJid = toWhatsAppJid(mentionedJids[0], normalizedSenderJid);
+        } else {
+            const quoted = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage || null;
+            const replyJid = quoted?.participant || quoted?.key?.participant || quoted?.key?.remoteJid || null;
+            if (replyJid) {
+                targetJid = toWhatsAppJid(replyJid, normalizedSenderJid);
+            }
+        }
+
+        const rawArgs = Array.isArray(args) ? args : [args];
+        if (!mentionedJids.length && rawArgs.length > 0) {
+            const rawArg = normalizeJid(rawArgs[0], '');
+            const num = rawArg.replace(/[^0-9]/g, '');
+            if (num.length >= 10) {
+                targetJid = `${num}@s.whatsapp.net`;
+            }
+        }
+
+        const normalizedTargetJid = toWhatsAppJid(targetJid || normalizedSenderJid, normalizedSenderJid);
+        const contact = global.store?.contacts?.[normalizedTargetJid];
+        let displayName = normalizedTargetJid ? normalizedTargetJid.split('@')[0] : 'Muhusika';
+
+        if (contact?.name || contact?.notify) {
+            displayName = contact.name || contact.notify || displayName;
+        } else if (message?.pushName && normalizedTargetJid === normalizedSenderJid) {
+            displayName = message.pushName;
+        }
+
+        if (!sock || typeof sock.sendMessage !== 'function') {
+            throw new Error('WhatsApp socket is not available.');
+        }
+
+        if (typeof sock.profilePictureUrl !== 'function') {
+            return await sock.sendMessage(chatId, {
+                text: `❌ Profile picture lookup is not supported by this connection.`
+            }, { quoted: message });
+        }
+
+        let ppUrl = null;
+        try {
+            ppUrl = await sock.profilePictureUrl(normalizedTargetJid, 'image');
+        } catch (err) {
+            ppUrl = null;
+        }
+
+        if (!ppUrl) {
+            return await sock.sendMessage(chatId, {
+                text: `❌ ${displayName} hana picha ya profaili.`
+            }, { quoted: message });
+        }
+
+        const caption = `👤 *Profile Picture*\n\n📋 *Name:* ${displayName}\n🆔 *ID:* ${normalizedTargetJid.split('@')[0]}\n\n${FOOTER}`;
+
+        await sock.sendMessage(chatId, {
+            image: { url: ppUrl },
+            caption
+        }, { quoted: message });
+
+        return true;
+    } catch (err) {
+        console.error('GetPP Error:', err);
+        await sock.sendMessage(chatId, {
+            text: `❌ Imeshindwa kupata picha ya profaili: ${err.message || err}`
+        }, { quoted: message });
+        return false;
+    }
+}
+
+module.exports = getppCommand;

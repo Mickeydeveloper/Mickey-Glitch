@@ -83,7 +83,7 @@ const { autoBioCommand } = require('./commands/autobio');
 // Command imports
 const tagAllCommand = require('./commands/tagall');
 const helpCommand = require('./commands/menu');
-const getppCommand = require('./commands/getpp'); 
+const getppCommand = require('./commands/getpp-direct'); 
 const banCommand = require('./commands/ban');
 const addCommand = require('./commands/add');
 const { promoteCommand } = require('./commands/promote');
@@ -1046,6 +1046,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
             // .surrender (tictactoe) command removed
             case userMessage === '.cleartmp':
                 await clearTmpCommand(sock, chatId, message);
+                break;
+            case userMessage === '.getpp':
+            case userMessage === '.ppic':
+            case userMessage === '.profile':
+                await getppCommand(sock, chatId, senderId, message, userMessage.split(' ').slice(1));
+                commandExecuted = true;
                 break;
             case userMessage === '.setpp':
                 await setProfilePicture(sock, chatId, message);

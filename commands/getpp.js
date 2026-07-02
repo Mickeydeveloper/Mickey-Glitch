@@ -1,6 +1,3 @@
-const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
-const axios = require('axios');
-
 const FOOTER = '© Mickey Glith ™';
 
 function normalizeJid(value, fallback = '') {
