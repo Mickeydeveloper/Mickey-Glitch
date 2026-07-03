@@ -68,7 +68,6 @@ const loadDynamicMenu = () => {
             const baseName = file.replace('.js', '');
             try {
                 const cmdModule = require(path.join(commandsDir, file));
-                // Tunatumia baseName (jina la file) ili kuepuka majina ya export kama 'aliveCommand'
                 const commandTrigger = baseName;
 
                 addItem(cmdModule.category || fileMapping[baseName], {
@@ -86,7 +85,7 @@ const loadDynamicMenu = () => {
         });
     }
 
-    // 2. Sync from global registry (if main handler registered them)
+    // 2. Sync from global registry
     if (global.commands && typeof global.commands === 'object') {
         Object.values(global.commands).forEach(cmd => {
             if (cmd.name) {
@@ -106,33 +105,34 @@ const loadDynamicMenu = () => {
     }));
 };
 
-// Build compact interactive sections
+// Build compact interactive sections (FIXED rowId -> id)
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
-        title: `${icons[cat.title] || ''} ${cat.title}`.trim(),
+        title: `${icons[cat.title] || '📌'} ${cat.title}`,
         rows: cat.items.map(item => ({
-            title: item.cmd, // show the command as the row title
-            description: item.eg ? item.eg : '', // short example or empty
-            rowId: item.cmd.toLowerCase()
+            title: item.cmd, 
+            description: item.desc ? item.desc : item.eg, 
+            id: item.cmd.toLowerCase() // FIX: WhatsApp inatumia 'id' na sio 'rowId'
         }))
     }));
 };
 
 // Get dynamic greeting
 const getGreeting = (hour) => {
-    if (hour < 12) return { text: 'Asubuhi', emoji: '☀️' };
-    if (hour < 18) return { text: 'Mchana', emoji: '🌤️' };
-    return { text: 'Jioni', emoji: '🌙' };
+    if (hour < 12) return { text: 'Habari za Asubuhi', emoji: '🌅' };
+    if (hour < 16) return { text: 'Habari za Mchana', emoji: '☀️' };
+    if (hour < 19) return { text: 'Habari za Jioni', emoji: '🌤️' };
+    return { text: 'Usiku Mwema', emoji: '🌙' };
 };
 
 // Get random quotes
 const getMotivationalQuote = () => {
     const quotes = [
-        '✨ "Code is poetry in motion"',
-        '⚡ "Stay hungry, stay foolish"',
-        '🚀 "Dream it, code it"',
-        '💎 "Innovation distinguishes leaders"',
-        '🌟 "Make it work, make it right"'
+        '✨ Code is poetry in motion.',
+        '⚡ Stay hungry, stay foolish.',
+        '🚀 Dream it, code it.',
+        '💎 Innovation distinguishes leaders.',
+        '🌟 Make it work, make it right.'
     ];
     return quotes[Math.floor(Math.random() * quotes.length)];
 };
@@ -144,8 +144,8 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const hour = now.hour();
         const greeting = getGreeting(hour);
 
-        // User data
-        const userName = m.pushName || 'User';
+        // User data & Stats
+        const userName = m.pushName || 'Mteja';
         const userCmds = userDb?.commandsCount || 0;
         const userRank = getRank(userCmds);
         const stats = getStats();
@@ -153,25 +153,36 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const dynamicMenu = loadDynamicMenu();
 
         // Format date & time
-        const date = now.format('DD MMMM YYYY');
-        const time = now.format('HH:mm:ss');
-        const day = now.format('dddd');
+        const date = now.format('DD-MM-YYYY');
+        const time = now.format('HH:mm');
 
-        // Compact menu text (short & clear)
-        const menuText = `*MICKEY BOT* — ${userName}\n${greeting.emoji} ${greeting.text} • ${userRank}\n` +
-                 `Cmds: ${userCmds} • ${day} ${now.format('DD/MM')} • ${time}\n\n` +
-                 `Chagua kutoka kwenye list hapa chini:`;
+        // Modernized & Clean Text Layout
+        const menuText = `╭━━━〔 𝗠𝗜𝗖𝗞𝗘𝗬 𝗠𝗘𝗡𝗨 〕━━━┈⊷
+│
+├─ ${greeting.emoji} *${greeting.text}, ${userName}*
+├─ 🎖️ *Rank:* ${userRank}
+├─ 📊 *Matumizi:* ${userCmds} cmds
+│
+├─ ⏳ *Uptime:* ${stats.uptime}
+├─ 💾 *RAM:* ${stats.memory} MB
+├─ 📆 *Tarehe:* ${date} | ${time}
+│
+├─ 💡 *Quote:* _${quote}_
+│
+╰━━━━━━━━━━━━━━━━━━┈⊷
 
-        // Send interactive message with Image and Single Select button
+Gusa kifungo cha *"Fungua Menu 📂"* hapo chini ili kuona na kuchagua amri (commands) zote zilizopo kwenye mfumo wetu.`;
+
+        // Send interactive message
         await sendInteractiveMessage(sock, chatId, {
             image: { url: "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg" },
             text: menuText,
-            footer: "MICKEY BOT",
+            footer: "⚡ Powered by Mickey Bot v3.0.5",
             interactiveButtons: [
                 {
                     name: 'single_select',
                     buttonParamsJson: JSON.stringify({
-                        title: 'Menu',
+                        title: 'Fungua Menu 📂', // Jina la button kuu
                         sections: buildSections(dynamicMenu)
                     })
                 }
@@ -181,7 +192,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
     } catch (e) {
         console.error('Menu Error:', e);
         await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu!* Menu haikufunguka. Jaribu tena kwa .help'
+            text: '❌ *Hitilafu!* Menu imeshindwa kufunguka kwa sasa. Tafadhali jaribu tena baadae.'
         }, { quoted: m });
     }
 };
