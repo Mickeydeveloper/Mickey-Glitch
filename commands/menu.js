@@ -1,15 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { sendButtons } = require('../lib/myfunc');
+// Hakikisha sendList au sendButtons yako inasupport interactive messages
+const { sendList } = require('../lib/myfunc'); 
 
 /**
  * @project: MICKEY GLITCH V3.0.5
  * @author: Quantum Base Developer (TZ)
- * @description: Fast & Clean Menu - Minimalist Design with Image Payment
+ * @description: Fast & Clean Menu - Minimalist Single Select Design
  */
 
-// Quick rank system
 const getRank = (total) => {
     if (total < 10) return '🌟 Newbie';
     if (total < 50) return '⭐ Regular';
@@ -18,7 +18,6 @@ const getRank = (total) => {
     return '💎 Legend';
 };
 
-// Quick stats
 const getStats = () => {
     const uptime = process.uptime();
     return {
@@ -28,7 +27,6 @@ const getStats = () => {
     };
 };
 
-// Category icons
 const icons = {
     'GENERAL': '🏠', 'GROUP': '👥', 'MODERATION': '🛡️',
     'MEDIA': '🎨', 'AUDIO/VIDEO': '🎵', 'DOWNLOAD': '📥',
@@ -36,7 +34,6 @@ const icons = {
     'EFFECTS': '✨', 'OWNER/ADMIN': '👑', 'OTHER': '📂'
 };
 
-// Dynamic menu synchronization
 const loadDynamicMenu = () => {
     const commandsDir = path.join(process.cwd(), 'commands');
     const dynamicMenu = {};
@@ -49,129 +46,108 @@ const loadDynamicMenu = () => {
         }
     };
 
-    // Default mapping for core files
     const fileMapping = {
         'alive': 'GENERAL', 'ping': 'GENERAL', 'stats': 'GENERAL', 'owner': 'GENERAL', 'repo': 'GENERAL',
-        'text': 'GENERAL', 'kick': 'GROUP', 'promote': 'GROUP', 'demote': 'GROUP', 'hidetag': 'GROUP', 'newgroup': 'GROUP', 
-        'resetlink': 'GROUP', 'getlink': 'GROUP', 'staff': 'GROUP', 'groupmanage': 'GROUP',
-        'sticker': 'MEDIA', 'stickercrop': 'MEDIA', 'emojimix': 'MEDIA', 'imagine': 'MEDIA', 'img-blur': 'MEDIA',
-        'facebook': 'DOWNLOAD', 'gdrive': 'DOWNLOAD', 'instagram': 'DOWNLOAD', 'igs': 'DOWNLOAD',
-        'play': 'AUDIO/VIDEO', 'lyrics': 'AUDIO/VIDEO', 'shazam': 'AUDIO/VIDEO',
-        'ai': 'AI/BOT', 'chatbot': 'AI/BOT',
-        'update': 'OWNER/ADMIN', 'cleartmp': 'OWNER/ADMIN', 'pmblocker': 'OWNER/ADMIN', 'settings': 'OWNER/ADMIN', 'pin': 'OWNER/ADMIN', 'getcode': 'OWNER/ADMIN'
+        'kick': 'GROUP', 'promote': 'GROUP', 'demote': 'GROUP', 'hidetag': 'GROUP',
+        'sticker': 'MEDIA', 'imagine': 'MEDIA', 'facebook': 'DOWNLOAD', 'instagram': 'DOWNLOAD',
+        'play': 'AUDIO/VIDEO', 'ai': 'AI/BOT', 'update': 'OWNER/ADMIN'
     };
 
-    // 1. Sync from commands folder
     if (fs.existsSync(commandsDir)) {
         const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.js'));
         files.forEach(file => {
             const baseName = file.replace('.js', '');
             try {
                 const cmdModule = require(path.join(commandsDir, file));
-                // Tunatumia baseName (jina la file) ili kuepuka majina ya export kama 'aliveCommand'
-                const commandTrigger = baseName;
-
                 addItem(cmdModule.category || fileMapping[baseName], {
-                    cmd: `.${commandTrigger}`,
-                    desc: cmdModule.description || `Command: ${commandTrigger}`,
-                    eg: `.${commandTrigger}`
+                    cmd: `.${baseName}`,
+                    desc: cmdModule.description || `Fungua amri ya ${baseName}`
                 });
             } catch (e) {
-                addItem(fileMapping[baseName], {
-                    cmd: `.${baseName}`,
-                    desc: `Command: ${baseName}`,
-                    eg: `.${baseName}`
-                });
+                addItem(fileMapping[baseName], { cmd: `.${baseName}`, desc: `Amri ya ${baseName}` });
             }
         });
     }
 
-    // 2. Sync from global registry (if main handler registered them)
     if (global.commands && typeof global.commands === 'object') {
         Object.values(global.commands).forEach(cmd => {
             if (cmd.name) {
-                addItem(cmd.category, {
-                    cmd: `.${cmd.name}`,
-                    desc: cmd.description || `Registered command: ${cmd.name}`,
-                    eg: `.${cmd.name}`
-                });
+                addItem(cmd.category, { cmd: `.${cmd.name}`, desc: cmd.description || `Amri ya ${cmd.name}` });
             }
         });
     }
 
-    // Sort and return
     return Object.keys(dynamicMenu).sort().map(title => ({
         title,
         items: dynamicMenu[title].sort((a, b) => a.cmd.localeCompare(b.cmd))
     }));
 };
 
-// Get dynamic greeting
 const getGreeting = (hour) => {
     if (hour < 12) return { text: 'Asubuhi', emoji: '☀️' };
     if (hour < 18) return { text: 'Mchana', emoji: '🌤️' };
     return { text: 'Jioni', emoji: '🌙' };
 };
 
-// Get random quotes
-const getMotivationalQuote = () => {
-    const quotes = [
-        '✨ "Code is poetry in motion"',
-        '⚡ "Stay hungry, stay foolish"',
-        '🚀 "Dream it, code it"',
-        '💎 "Innovation distinguishes leaders"',
-        '🌟 "Make it work, make it right"'
-    ];
-    return quotes[Math.floor(Math.random() * quotes.length)];
-};
-
-// Main menu function
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
         const now = moment().tz('Africa/Dar_es_Salaam');
-        const hour = now.hour();
-        const greeting = getGreeting(hour);
-
-        // User data
-        const userName = m.pushName || 'User';
-        const userCmds = userDb?.commandsCount || 0;
-        const userRank = getRank(userCmds);
+        const greeting = getGreeting(now.hour());
         const stats = getStats();
-        const quote = getMotivationalQuote();
         const dynamicMenu = loadDynamicMenu();
 
-        // Format date & time
-        const date = now.format('DD MMMM YYYY');
-        const time = now.format('HH:mm:ss');
-        const day = now.format('dddd');
+        const userName = m.pushName || 'Mtumiaji';
+        const userCmds = userDb?.commandsCount || 0;
+        const userRank = getRank(userCmds);
 
-        // Muonekano mpya wa kisasa na mdogo (Clean & Minimalist text)
-        const menuText = `✨ *𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐕𝟑.𝟎.𝟓* ✨\n\n` +
-                         `👋 Habari ya ${greeting.text} ${greeting.emoji}, *${userName}*\n` +
-                         `🏆 *Rank:* ${userRank}\n` +
-                         `📊 *Commands:* ${userCmds.toLocaleString()}\n\n` +
-                         `📅 *Siku:* ${day}, ${date}\n` +
-                         `⏰ *Muda:* ${time} EAT\n` +
-                         `⚡ *Uptime:* ${stats.uptime}\n` +
-                         `💾 *Memory:* ${stats.memory}MB\n` +
-                         `👥 *Watumiaji:* ${stats.users}\n\n` +
-                         `💡 _"${quote}"_\n\n` +
-                         `👇 *Gusa button hapo chini kufungua menu:*`;
+        // Muonekano safi (Clean & Aesthetic Header)
+        const menuText = `╭━━━〔 𝐌𝐈𝐂𝐊𝐄𝐘-𝐁𝐎𝐓 〕━━━┈⊷\n` +
+                         `┃ 👋 Habari ${greeting.text} *${userName}* ${greeting.emoji}\n` +
+                         `┃ 🏆 *Cheo:* ${userRank}\n` +
+                         `┃ 📊 *Matumizi:* ${userCmds.toLocaleString()} cmds\n` +
+                         `┣━━━━━━━━━━━━━━━━━━┈⊷\n` +
+                         `┃ 📅 *Tarehe:* ${now.format('DD/MM/YYYY')}\n` +
+                         `┃ ⏰ *Muda:* ${now.format('HH:mm:ss')} EAT\n` +
+                         `┃ ⏳ *Uptime:* ${stats.uptime}\n` +
+                         `┃ 💾 *Ram:* ${stats.memory} MB\n` +
+                         `╰━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                         `💡 _Gusa button ya single-select hapo chini kuona list ya menu zote zilizopangwa kwa category._`;
 
-        const buttons = [
-            { id: '.menu', text: '⦂ Menu' },
-            { id: '.ping', text: '📡 Ping' },
-            { id: '.alive', text: '⚡ Alive' }
+        // Kuunda rows za Single Select List kutoka kwenye Dynamic Menu
+        const rows = dynamicMenu.map(cat => {
+            const icon = icons[cat.title] || '📂';
+            return {
+                title: `${icon} ${cat.title} MENU`,
+                rowId: `.menu_cat ${cat.title.toLowerCase()}`, // Itatuma hii id mtumiaji akiclick
+                description: `Inajumuisha amri ${cat.items.length} za ${cat.title.toLowerCase()}`
+            };
+        });
+
+        // Kuongeza njia za mkato (Quick links) mwanzoni mwa list
+        const sections = [
+            {
+                title: "📌 NJIA ZA MKATO",
+                rows: [
+                    { title: "📡 Ping Bot", rowId: ".ping", description: "Angalia kasi ya bot" },
+                    { title: "⚡ Alive", rowId: ".alive", description: "Angalia kama bot iko hewani" }
+                ]
+            },
+            {
+                title: "📂 CATEGORIES",
+                rows: rows
+            }
         ];
-        const footer = '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐';
 
-        await sendButtons(sock, chatId, menuText, footer, buttons, m);
+        const footer = '🔥 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐕𝟑 • 𝐐𝐮𝐚𝐧𝐭𝐮𝐦 𝐁𝐚𝐬𝐞 🔥';
+        const buttonText = '🔍 Fungua Menu Hapa';
 
+        // Tuma kwa kutumia function yako ya list/single-select
+        await sendList(sock, chatId, menuText, footer, buttonText, sections, m);
 
     } catch (e) {
         console.error('Menu Error:', e);
         await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu!* Menu haikufunguka. Jaribu tena kwa .help'
+            text: '❌ *Hitilafu!* Imeshindwa kufungua single-select menu.'
         }, { quoted: m });
     }
 };
