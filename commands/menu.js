@@ -121,12 +121,12 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                 header: icon,
                 title: `${cat.title} MENU`,
                 description: `Inajumuisha jumla ya amri (${cat.items.length})`,
-                id: `.menu_cat ${cat.title.toLowerCase()}` // ID itakayorudishwa mtumiaji akiclick
+                rowId: `.menu_cat ${cat.title.toLowerCase()}` // rowId returned when user clicks
             };
         });
 
         // Hapa tunatuma kwa kutumia muundo sahihi wa sendInteractiveMessage
-        await sendInteractiveMessage(sock, chatId, {
+            sendInteractiveMessage(sock, chatId, {
             text: menuText,
             interactiveButtons: [
                 {
@@ -137,19 +137,19 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                             {
                                 title: '📌 NJIA ZA MKATO',
                                 rows: [
-                                    { header: '📡', title: 'Ping Bot', description: 'Angalia kasi na mtandao wa bot', id: '.ping' },
-                                    { header: '⚡', title: 'Alive', description: 'Angalia kama bot ipo hewani', id: '.alive' }
+                                    { header: '📡', title: 'Ping Bot', description: 'Angalia kasi na mtandao wa bot', rowId: '.ping' },
+                                    { header: '⚡', title: 'Alive', description: 'Angalia kama bot ipo hewani', rowId: '.alive' }
                                 ]
                             },
                             {
                                 title: '📂 MAKUNDI YA MENU',
-                                rows: menuRows // Hapa zinaingia zile categories zote zilizosomwa dynamic
+                                rows: menuRows // Hapa zinaingia zile categories zote zilizosomwa dynamic (rows must use rowId)
                             }
                         ]
                     })
                 }
             ]
-        }, m); // Added 'm' if your function requires context for quoting
+        }, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
