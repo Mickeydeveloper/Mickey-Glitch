@@ -107,13 +107,13 @@ const loadDynamicMenu = () => {
 };
 
 // Build interactive sections
-const buildSections = (menuData) => {
+const buildNativeFlowSections = (menuData) => {
     return menuData.map(cat => ({
         title: `${icons[cat.title]} ${cat.title} ━━━ (${cat.items.length})`,
         rows: cat.items.map(item => ({
             title: item.desc,
-            rowId: item.cmd.toLowerCase(),
-            description: `📌 ${item.eg}`
+            description: `📌 ${item.eg}`,
+            id: item.cmd.toLowerCase()
         }))
     }));
 };
@@ -170,21 +170,46 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                          `💡 _"${quote}"_\n\n` +
                          `👇 *Gusa button hapo chini kufungua menu:*`;
 
-        // Send interactive message with Image and Single Select button
-        await sendInteractiveMessage(sock, chatId, {
-            image: { url: "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg" },
+        const payload = {
             text: menuText,
             footer: "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐",
-            interactiveButtons: [
+            title: "📋 𝐌𝐄𝐍𝐔",
+            buttons: [
                 {
-                    name: 'single_select',
-                    buttonParamsJson: JSON.stringify({
-                        title: '📋 𝐎𝐏𝐄𝐍 𝐌𝐄𝐍𝐔',
-                        sections: buildSections(dynamicMenu)
-                    })
+                    buttonText: { displayText: "⦂ Navigation" },
+                    buttonId: ".menu",
+                    type: 1,
+                    nativeFlowInfo: {
+                        name: "single_select",
+                        paramsJson: JSON.stringify({
+                            title: "Command Menu",
+                            sections: buildNativeFlowSections(dynamicMenu)
+                        })
+                    }
+                },
+                {
+                    buttonText: { displayText: "📡 Ping" },
+                    buttonId: ".ping",
+                    type: 1
+                },
+                {
+                    buttonText: { displayText: "⚡ Alive" },
+                    buttonId: ".alive",
+                    type: 1
                 }
-            ]
-        }, { quoted: m });
+            ],
+            contextInfo: {
+                externalAdReply: {
+                    showAdAttribution: true,
+                    title: "Mickey Glitch",
+                    body: "Open navigation menu",
+                    thumbnailUrl: "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg",
+                    sourceUrl: "https://github.com/Mickeydeveloper/Mickey-Glitch"
+                }
+            },
+            nativeFlowMessage: 0
+        };
+        await sendInteractiveMessage(sock, chatId, payload, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);

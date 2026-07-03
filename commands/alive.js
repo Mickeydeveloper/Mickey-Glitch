@@ -158,17 +158,57 @@ ${ramPercent < 70 ? '🟢 Status: Perfect' : ramPercent < 85 ? '🟡 Status: Sta
 
 _Mickey Glitch Technology™_`;
 
-        // Build buttons + AIRich via wrapper. Provide rows as arrays to keep layout.
-        const rows = [
-            [ { label: '📜 𝐌𝐄𝐍𝐔', command: '.menu' }, { label: '📡 𝐒𝐏𝐄𝐄𝐃', command: '.ping' } ],
-            [ { label: '👑 𝐎𝐖𝐍𝐄𝐑', command: '.owner' }, { label: '⚡ 𝐑𝐔𝐍𝐓𝐈𝐌𝐄', command: '.runtime' } ]
-        ];
+        const payload = {
+            text: statusMessage,
+            footer: '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲',
+            title: `🚀 ${botName} | 𝐎𝐍𝐋𝐈𝐍𝐄`,
+            buttons: [
+                {
+                    buttonText: { displayText: '⦂ Navigation' },
+                    buttonId: '.menu',
+                    type: 1,
+                    nativeFlowInfo: {
+                        name: 'single_select',
+                        paramsJson: JSON.stringify({
+                            title: 'Promotion',
+                            sections: [
+                                {
+                                    title: 'Built by 𝐌𝐢𝐜𝐤𝐞𝐲',
+                                    rows: [
+                                        { title: 'Main Menu', description: 'Open Main Menu', id: '.menu' },
+                                        { title: 'All Commands', description: 'View all commands', id: '.help' },
+                                        { title: 'Ping', description: 'Check latency', id: '.ping' },
+                                        { title: 'Owner', description: 'Show owner info', id: '.owner' }
+                                    ]
+                                }
+                            ]
+                        })
+                    }
+                },
+                {
+                    buttonText: { displayText: '📡 Ping' },
+                    buttonId: '.ping',
+                    type: 1
+                },
+                {
+                    buttonText: { displayText: '⚡ Alive' },
+                    buttonId: '.alive',
+                    type: 1
+                }
+            ],
+            contextInfo: {
+                externalAdReply: {
+                    showAdAttribution: true,
+                    title: `${botName} Status`,
+                    body: 'Mickey Glitch Technology',
+                    thumbnailUrl: imageUrl,
+                    sourceUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch'
+                }
+            },
+            nativeFlowMessage: 0
+        };
 
-        const finalMessage = MBuilderWrapper.createButtons(sock, statusMessage, rows, '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲');
-
-        // Ensure we mention the chat and send
-        const sendOptions = { quoted: message };
-        await sock.sendMessage(chatId, finalMessage, sendOptions);
+        await sock.sendMessage(chatId, payload, { quoted: message });
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);
