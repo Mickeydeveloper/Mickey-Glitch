@@ -33,6 +33,14 @@ const settings = require("./settings");
 const MickeyHelper = require("./lib/Mickey");
 const credentials = require("./lib/credentials");
 const MBuilderWrapper = require("./lib/mbuilder-wrapper");
+// Expose legacy shims globally so older code referencing `MBuilder` or `MB` doesn't crash.
+try {
+    const localMBModule = require('./lib/mbuilder');
+    global.MBuilder = localMBModule.MBuilder;
+    global.MB = localMBModule.MB;
+} catch (e) {
+    // ignore if local shim not available
+}
 
 // Try to load telegram module
 let startTelegramBot = null;
