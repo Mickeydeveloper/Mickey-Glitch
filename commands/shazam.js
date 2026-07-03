@@ -92,7 +92,7 @@ async function shazamCommand(sock, chatId, message) {
                 `━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `_Bonyeza button kupata wimbo huu._`;
 
-            await sendButtons(sock, chatId, caption, 'MICKEY GLITCH V3.0', [ { id: playCmd, text: buttonText } ], { quoted: message });
+            await sendButtons(sock, chatId, caption, 'MICKEY GLITCH V3.0', [ { id: playCmd, text: buttonText } ], message);
 
         } else {
             await sock.sendMessage(chatId, { text: '❌ *Wimbo haukutambulika.*' });
