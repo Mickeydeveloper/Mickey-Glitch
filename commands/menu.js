@@ -1,13 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-// Hakikisha sendList au sendButtons yako inasupport interactive messages
-const { sendList } = require('../lib/myfunc'); 
+// Tumeingiza function yako ya sendInteractiveMessage hapa
+const { sendInteractiveMessage } = require('../lib/myfunc'); 
 
 /**
  * @project: MICKEY GLITCH V3.0.5
  * @author: Quantum Base Developer (TZ)
- * @description: Fast & Clean Menu - Minimalist Single Select Design
+ * @description: Fast & Clean Menu - Gifted Interactive Single Select Picker
  */
 
 const getRank = (total) => {
@@ -100,7 +100,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const userCmds = userDb?.commandsCount || 0;
         const userRank = getRank(userCmds);
 
-        // Muonekano safi (Clean & Aesthetic Header)
+        // Muonekano maridadi na wa kisasa (Clean Aesthetic Look)
         const menuText = `╭━━━〔 𝐌𝐈𝐂𝐊𝐄𝐘-𝐁𝐎𝐓 〕━━━┈⊷\n` +
                          `┃ 👋 Habari ${greeting.text} *${userName}* ${greeting.emoji}\n` +
                          `┃ 🏆 *Cheo:* ${userRank}\n` +
@@ -111,43 +111,50 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                          `┃ ⏳ *Uptime:* ${stats.uptime}\n` +
                          `┃ 💾 *Ram:* ${stats.memory} MB\n` +
                          `╰━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-                         `💡 _Gusa button ya single-select hapo chini kuona list ya menu zote zilizopangwa kwa category._`;
+                         `💡 _Gusa button ya list hapo chini ili kuchagua na kufungua menu ya kundi unalotaka._\n\n` +
+                         `*🔥 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐕𝟑.𝟎.𝟓 • 𝟐𝟎𝟐𝟔*`;
 
-        // Kuunda rows za Single Select List kutoka kwenye Dynamic Menu
-        const rows = dynamicMenu.map(cat => {
+        // Kutengeneza rows za categories dynamically kutoka kwenye commands zako
+        const menuRows = dynamicMenu.map(cat => {
             const icon = icons[cat.title] || '📂';
             return {
-                title: `${icon} ${cat.title} MENU`,
-                rowId: `.menu_cat ${cat.title.toLowerCase()}`, // Itatuma hii id mtumiaji akiclick
-                description: `Inajumuisha amri ${cat.items.length} za ${cat.title.toLowerCase()}`
+                header: icon,
+                title: `${cat.title} MENU`,
+                description: `Inajumuisha jumla ya amri (${cat.items.length})`,
+                id: `.menu_cat ${cat.title.toLowerCase()}` // ID itakayorudishwa mtumiaji akiclick
             };
         });
 
-        // Kuongeza njia za mkato (Quick links) mwanzoni mwa list
-        const sections = [
-            {
-                title: "📌 NJIA ZA MKATO",
-                rows: [
-                    { title: "📡 Ping Bot", rowId: ".ping", description: "Angalia kasi ya bot" },
-                    { title: "⚡ Alive", rowId: ".alive", description: "Angalia kama bot iko hewani" }
-                ]
-            },
-            {
-                title: "📂 CATEGORIES",
-                rows: rows
-            }
-        ];
-
-        const footer = '🔥 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐕𝟑 • 𝐐𝐮𝐚𝐧𝐭𝐮𝐦 𝐁𝐚𝐬𝐞 🔥';
-        const buttonText = '🔍 Fungua Menu Hapa';
-
-        // Tuma kwa kutumia function yako ya list/single-select
-        await sendList(sock, chatId, menuText, footer, buttonText, sections, m);
+        // Hapa tunatuma kwa kutumia muundo sahihi wa sendInteractiveMessage
+        await sendInteractiveMessage(sock, chatId, {
+            text: menuText,
+            interactiveButtons: [
+                {
+                    name: 'single_select',
+                    buttonParamsJson: JSON.stringify({
+                        title: '🔍 Fungua Menu Hapa',
+                        sections: [
+                            {
+                                title: '📌 NJIA ZA MKATO',
+                                rows: [
+                                    { header: '📡', title: 'Ping Bot', description: 'Angalia kasi na mtandao wa bot', id: '.ping' },
+                                    { header: '⚡', title: 'Alive', description: 'Angalia kama bot ipo hewani', id: '.alive' }
+                                ]
+                            },
+                            {
+                                title: '📂 MAKUNDI YA MENU',
+                                rows: menuRows // Hapa zinaingia zile categories zote zilizosomwa dynamic
+                            }
+                        ]
+                    })
+                }
+            ]
+        }, m); // Added 'm' if your function requires context for quoting
 
     } catch (e) {
         console.error('Menu Error:', e);
         await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu!* Imeshindwa kufungua single-select menu.'
+            text: '❌ *Hitilafu!* Imeshindwa kufungua Interactive List Menu.'
         }, { quoted: m });
     }
 };
