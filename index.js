@@ -76,7 +76,7 @@ const silentLogger = {
 // ────────────────────────────────────────────────
 // GLOBAL SETTINGS
 // ────────────────────────────────────────────────
-const _botName = settings.botName || settings.botname || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
+const _botName = settings.botName || settings.botname || "𝙼𝚒𝚌𝚔𝚎yka 𝙶𝚕𝚒𝚝𝚌𝚑™";
 global.botname = _botName;
 global.botName = _botName;
 global.themeemoji = '•';
@@ -200,7 +200,7 @@ function startAggressiveCleanup() {
     // Clear existing intervals
     if (cleanupInterval) clearInterval(cleanupInterval);
     if (sessionCheckInterval) clearInterval(sessionCheckInterval);
-    
+
     // Clean temp/tmp files safely every 30 seconds (Avoids race conditions)
     cleanupInterval = setInterval(cleanTempAndTmpFiles, 30000);
     console.log(chalk.dim('  [CLEANER] Temp/Tmp cleaner active (every 30s)'));
@@ -388,18 +388,31 @@ async function startMickeyBot() {
         Mickey.ev.on("creds.update", saveCreds);
         store.bind(Mickey.ev);
 
+        // ────────────────────────────────────────────────
+        // Mfumo wa ALRICH kwa Ujumbe Wote Unaotoka (sendMessage)
+        // ────────────────────────────────────────────────
         const originalSendMessage = Mickey.sendMessage.bind(Mickey);
         Mickey.sendMessage = async (jid, message, options = {}) => {
-            if (message && typeof message === 'object' && typeof message.text === 'string') {
-                const textOnly = Object.keys(message).every(key => ['text', 'contextInfo'].includes(key));
-                if (textOnly) {
+            if (message && typeof message === 'object') {
+                // 1. Kama ni Text ya Kawaida
+                if (typeof message.text === 'string') {
                     const aiRichPayload = MBuilder.buildAIRich(message.text);
                     if (aiRichPayload) {
-                        const result = await originalSendMessage(jid, {
+                        return originalSendMessage(jid, {
                             ...aiRichPayload,
                             ...(message.contextInfo ? { contextInfo: message.contextInfo } : {}),
                         }, options);
-                        return result;
+                    }
+                }
+                // 2. Kama ni Ujumbe wenye Media (Image, Video, n.k.) na una Caption
+                else if (typeof message.caption === 'string') {
+                    const aiRichPayload = MBuilder.buildAIRich(message.caption);
+                    if (aiRichPayload) {
+                        // Tunaingiza ALRICH ndani ya text property ya media layout badala ya caption ya kawaida
+                        return originalSendMessage(jid, {
+                            ...message,
+                            ...aiRichPayload
+                        }, options);
                     }
                 }
             }
@@ -485,7 +498,7 @@ async function startMickeyBot() {
                 reconnectAttempts = 0;
                 isPairing = false;
                 pairingAttempts = 0;
-                
+
                 // Clear any pending reconnect timers
                 if (reconnectTimer) {
                     clearTimeout(reconnectTimer);
@@ -535,17 +548,17 @@ async function startMickeyBot() {
                     const baseDelay = Math.min(5000 + (reconnectAttempts * 3000), 45000);
                     const jitter = Math.random() * 2000;
                     const delayTime = baseDelay + jitter;
-                    
+
                     reconnectAttempts++;
-                    
+
                     console.log(chalk.cyan(`  🔄 [RECONNECT] Attempt ${reconnectAttempts}/10 in ${(delayTime/1000).toFixed(1)}s...`));
-                    
+
                     // Clear any existing timer
                     if (reconnectTimer) {
                         clearTimeout(reconnectTimer);
                         reconnectTimer = null;
                     }
-                    
+
                     reconnectTimer = setTimeout(() => {
                         reconnectTimer = null;
                         startMickeyBot();
@@ -685,7 +698,7 @@ function startKeepAlive() {
                 console.log(chalk.dim('  [KEEPALIVE] Connection may be unstable...'));
             }
         }
-        
+
         // FIX: Less frequent logging
         if (Math.floor(Date.now() / (15 * 60 * 1000)) % 4 === 0) {
             const status = isWhatsAppRunning ? chalk.greenBright('ONLINE') : chalk.redBright('OFFLINE');
@@ -714,25 +727,25 @@ setInterval(() => {
 // ────────────────────────────────────────────────
 process.on('SIGINT', async () => {
     console.log(chalk.yellow('\n  👋 Shutting down gracefully...'));
-    
+
     // Clear all timers
     if (monitorInterval) clearInterval(monitorInterval);
     if (cleanupInterval) clearInterval(cleanupInterval);
     if (sessionCheckInterval) clearInterval(sessionCheckInterval);
     if (reconnectTimer) clearTimeout(reconnectTimer);
-    
+
     // End WhatsApp connection
     if (whatsappBot) { 
         try { 
             await whatsappBot.end(); 
         } catch(e) {} 
     }
-    
+
     // Close readline
     if (rl) { 
         try { rl.close(); } catch(e) {} 
     }
-    
+
     process.exit(0);
 });
 
