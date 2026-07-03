@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
-const { sendInteractiveMessage } = require('../lib/myfunc');
+const { sendInteractiveMessage } = require('gifted-btns');
 
 // CONFIGURATION
 const CONFIG = {

@@ -1,15 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-// Tumeingiza function yako ya sendInteractiveMessage hapa
-const { sendInteractiveMessage } = require('../lib/myfunc'); 
+const { sendInteractiveMessage } = require('gifted-btns');
 
 /**
  * @project: MICKEY GLITCH V3.0.5
  * @author: Quantum Base Developer (TZ)
- * @description: Fast & Clean Menu - Gifted Interactive Single Select Picker
+ * @description: Fast & Clean Menu - Minimalist Design with Image Payment
  */
 
+// Quick rank system
 const getRank = (total) => {
     if (total < 10) return '🌟 Newbie';
     if (total < 50) return '⭐ Regular';
@@ -18,6 +18,7 @@ const getRank = (total) => {
     return '💎 Legend';
 };
 
+// Quick stats
 const getStats = () => {
     const uptime = process.uptime();
     return {
@@ -27,6 +28,7 @@ const getStats = () => {
     };
 };
 
+// Category icons
 const icons = {
     'GENERAL': '🏠', 'GROUP': '👥', 'MODERATION': '🛡️',
     'MEDIA': '🎨', 'AUDIO/VIDEO': '🎵', 'DOWNLOAD': '📥',
@@ -34,6 +36,7 @@ const icons = {
     'EFFECTS': '✨', 'OWNER/ADMIN': '👑', 'OTHER': '📂'
 };
 
+// Dynamic menu synchronization
 const loadDynamicMenu = () => {
     const commandsDir = path.join(process.cwd(), 'commands');
     const dynamicMenu = {};
@@ -46,106 +49,139 @@ const loadDynamicMenu = () => {
         }
     };
 
+    // Default mapping for core files
     const fileMapping = {
         'alive': 'GENERAL', 'ping': 'GENERAL', 'stats': 'GENERAL', 'owner': 'GENERAL', 'repo': 'GENERAL',
-        'kick': 'GROUP', 'promote': 'GROUP', 'demote': 'GROUP', 'hidetag': 'GROUP',
-        'sticker': 'MEDIA', 'imagine': 'MEDIA', 'facebook': 'DOWNLOAD', 'instagram': 'DOWNLOAD',
-        'play': 'AUDIO/VIDEO', 'ai': 'AI/BOT', 'update': 'OWNER/ADMIN'
+        'text': 'GENERAL', 'kick': 'GROUP', 'promote': 'GROUP', 'demote': 'GROUP', 'hidetag': 'GROUP', 'newgroup': 'GROUP', 
+        'resetlink': 'GROUP', 'getlink': 'GROUP', 'staff': 'GROUP', 'groupmanage': 'GROUP',
+        'sticker': 'MEDIA', 'stickercrop': 'MEDIA', 'emojimix': 'MEDIA', 'imagine': 'MEDIA', 'img-blur': 'MEDIA',
+        'facebook': 'DOWNLOAD', 'gdrive': 'DOWNLOAD', 'instagram': 'DOWNLOAD', 'igs': 'DOWNLOAD',
+        'play': 'AUDIO/VIDEO', 'lyrics': 'AUDIO/VIDEO', 'shazam': 'AUDIO/VIDEO',
+        'ai': 'AI/BOT', 'chatbot': 'AI/BOT',
+        'update': 'OWNER/ADMIN', 'cleartmp': 'OWNER/ADMIN', 'pmblocker': 'OWNER/ADMIN', 'settings': 'OWNER/ADMIN', 'pin': 'OWNER/ADMIN', 'getcode': 'OWNER/ADMIN'
     };
 
+    // 1. Sync from commands folder
     if (fs.existsSync(commandsDir)) {
         const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.js'));
         files.forEach(file => {
             const baseName = file.replace('.js', '');
             try {
                 const cmdModule = require(path.join(commandsDir, file));
+                // Tunatumia baseName (jina la file) ili kuepuka majina ya export kama 'aliveCommand'
+                const commandTrigger = baseName;
+
                 addItem(cmdModule.category || fileMapping[baseName], {
-                    cmd: `.${baseName}`,
-                    desc: cmdModule.description || `Fungua amri ya ${baseName}`
+                    cmd: `.${commandTrigger}`,
+                    desc: cmdModule.description || `Command: ${commandTrigger}`,
+                    eg: `.${commandTrigger}`
                 });
             } catch (e) {
-                addItem(fileMapping[baseName], { cmd: `.${baseName}`, desc: `Amri ya ${baseName}` });
+                addItem(fileMapping[baseName], {
+                    cmd: `.${baseName}`,
+                    desc: `Command: ${baseName}`,
+                    eg: `.${baseName}`
+                });
             }
         });
     }
 
+    // 2. Sync from global registry (if main handler registered them)
     if (global.commands && typeof global.commands === 'object') {
         Object.values(global.commands).forEach(cmd => {
             if (cmd.name) {
-                addItem(cmd.category, { cmd: `.${cmd.name}`, desc: cmd.description || `Amri ya ${cmd.name}` });
+                addItem(cmd.category, {
+                    cmd: `.${cmd.name}`,
+                    desc: cmd.description || `Registered command: ${cmd.name}`,
+                    eg: `.${cmd.name}`
+                });
             }
         });
     }
 
+    // Sort and return
     return Object.keys(dynamicMenu).sort().map(title => ({
         title,
         items: dynamicMenu[title].sort((a, b) => a.cmd.localeCompare(b.cmd))
     }));
 };
 
+// Build interactive sections
+const buildSections = (menuData) => {
+    return menuData.map(cat => ({
+        title: `${icons[cat.title]} ${cat.title} ━━━ (${cat.items.length})`,
+        rows: cat.items.map(item => ({
+            header: item.cmd,
+            title: item.desc,
+            description: `📌 ${item.eg}`,
+            id: item.cmd.toLowerCase()
+        }))
+    }));
+};
+
+// Get dynamic greeting
 const getGreeting = (hour) => {
     if (hour < 12) return { text: 'Asubuhi', emoji: '☀️' };
     if (hour < 18) return { text: 'Mchana', emoji: '🌤️' };
     return { text: 'Jioni', emoji: '🌙' };
 };
 
+// Get random quotes
+const getMotivationalQuote = () => {
+    const quotes = [
+        '✨ "Code is poetry in motion"',
+        '⚡ "Stay hungry, stay foolish"',
+        '🚀 "Dream it, code it"',
+        '💎 "Innovation distinguishes leaders"',
+        '🌟 "Make it work, make it right"'
+    ];
+    return quotes[Math.floor(Math.random() * quotes.length)];
+};
+
+// Main menu function
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
         const now = moment().tz('Africa/Dar_es_Salaam');
-        const greeting = getGreeting(now.hour());
-        const stats = getStats();
-        const dynamicMenu = loadDynamicMenu();
+        const hour = now.hour();
+        const greeting = getGreeting(hour);
 
-        const userName = m.pushName || 'Mtumiaji';
+        // User data
+        const userName = m.pushName || 'User';
         const userCmds = userDb?.commandsCount || 0;
         const userRank = getRank(userCmds);
+        const stats = getStats();
+        const quote = getMotivationalQuote();
+        const dynamicMenu = loadDynamicMenu();
 
-        // Muonekano maridadi na wa kisasa (Clean Aesthetic Look)
-        const menuText = `╭━━━〔 𝐌𝐈𝐂𝐊𝐄𝐘-𝐁𝐎𝐓 〕━━━┈⊷\n` +
-                         `┃ 👋 Habari ${greeting.text} *${userName}* ${greeting.emoji}\n` +
-                         `┃ 🏆 *Cheo:* ${userRank}\n` +
-                         `┃ 📊 *Matumizi:* ${userCmds.toLocaleString()} cmds\n` +
-                         `┣━━━━━━━━━━━━━━━━━━┈⊷\n` +
-                         `┃ 📅 *Tarehe:* ${now.format('DD/MM/YYYY')}\n` +
-                         `┃ ⏰ *Muda:* ${now.format('HH:mm:ss')} EAT\n` +
-                         `┃ ⏳ *Uptime:* ${stats.uptime}\n` +
-                         `┃ 💾 *Ram:* ${stats.memory} MB\n` +
-                         `╰━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-                         `💡 _Gusa button ya list hapo chini ili kuchagua na kufungua menu ya kundi unalotaka._\n\n` +
-                         `*🔥 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐕𝟑.𝟎.𝟓 • 𝟐𝟎𝟐𝟔*`;
+        // Format date & time
+        const date = now.format('DD MMMM YYYY');
+        const time = now.format('HH:mm:ss');
+        const day = now.format('dddd');
 
-        // Kutengeneza rows za categories dynamically kutoka kwenye commands zako
-        const menuRows = dynamicMenu.map(cat => {
-            const icon = icons[cat.title] || '📂';
-            return {
-                header: icon,
-                title: `${cat.title} MENU`,
-                description: `Inajumuisha jumla ya amri (${cat.items.length})`,
-                rowId: `.menu_cat ${cat.title.toLowerCase()}` // rowId returned when user clicks
-            };
-        });
+        // Muonekano mpya wa kisasa na mdogo (Clean & Minimalist text)
+        const menuText = `✨ *𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐕𝟑.𝟎.𝟓* ✨\n\n` +
+                         `👋 Habari ya ${greeting.text} ${greeting.emoji}, *${userName}*\n` +
+                         `🏆 *Rank:* ${userRank}\n` +
+                         `📊 *Commands:* ${userCmds.toLocaleString()}\n\n` +
+                         `📅 *Siku:* ${day}, ${date}\n` +
+                         `⏰ *Muda:* ${time} EAT\n` +
+                         `⚡ *Uptime:* ${stats.uptime}\n` +
+                         `💾 *Memory:* ${stats.memory}MB\n` +
+                         `👥 *Watumiaji:* ${stats.users}\n\n` +
+                         `💡 _"${quote}"_\n\n` +
+                         `👇 *Gusa button hapo chini kufungua menu:*`;
 
-        // Hapa tunatuma kwa kutumia muundo sahihi wa sendInteractiveMessage
-            sendInteractiveMessage(sock, chatId, {
+        // Send interactive message with Image and Single Select button
+        await sendInteractiveMessage(sock, chatId, {
+            image: { url: "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg" },
             text: menuText,
+            footer: "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐",
             interactiveButtons: [
                 {
                     name: 'single_select',
                     buttonParamsJson: JSON.stringify({
-                        title: '🔍 Fungua Menu Hapa',
-                        sections: [
-                            {
-                                title: '📌 NJIA ZA MKATO',
-                                rows: [
-                                    { header: '📡', title: 'Ping Bot', description: 'Angalia kasi na mtandao wa bot', rowId: '.ping' },
-                                    { header: '⚡', title: 'Alive', description: 'Angalia kama bot ipo hewani', rowId: '.alive' }
-                                ]
-                            },
-                            {
-                                title: '📂 MAKUNDI YA MENU',
-                                rows: menuRows // Hapa zinaingia zile categories zote zilizosomwa dynamic (rows must use rowId)
-                            }
-                        ]
+                        title: '📋 𝐎𝐏𝐄𝐍 𝐌𝐄𝐍𝐔',
+                        sections: buildSections(dynamicMenu)
                     })
                 }
             ]
@@ -154,7 +190,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
     } catch (e) {
         console.error('Menu Error:', e);
         await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu!* Imeshindwa kufungua Interactive List Menu.'
+            text: '❌ *Hitilafu!* Menu haikufunguka. Jaribu tena kwa .help'
         }, { quoted: m });
     }
 };
