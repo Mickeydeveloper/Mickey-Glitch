@@ -84,6 +84,33 @@ async function createProjectZipBuffer() {
     return { buffer: await bufferPromise, name: zipFileName };
 }
 
+// SEND ZIP helper: builds and sends ZIP buffer to chat
+async function sendRepoZip(sock, chatId, quotedMessage) {
+    try {
+        try { await sock.sendMessage(chatId, { react: { text: '📦', key: quotedMessage?.key } }); } catch (e) {}
+        const processingMsg = await sock.sendMessage(chatId, {
+            text: 'Processing archive, please wait...'
+        });
+
+        const zipData = await createProjectZipBuffer();
+        await sock.sendMessage(chatId, {
+            document: zipData.buffer,
+            mimetype: 'application/zip',
+            fileName: zipData.name,
+            caption: `✅ ZIP ready: ${zipData.name}`
+        }, { quoted: quotedMessage });
+
+        try { await sock.sendMessage(chatId, { delete: processingMsg.key }); } catch (e) {}
+        return true;
+    } catch (err) {
+        console.error('sendRepoZip error:', err);
+        try {
+            await sock.sendMessage(chatId, { text: '❌ Failed to build ZIP. Try again later.' }, { quoted: quotedMessage });
+        } catch (e) {}
+        return false;
+    }
+}
+
 // MAIN REPO COMMAND HANDLER
 async function repoCommand(sock, chatId, m, body = '') {
     try {
@@ -116,78 +143,29 @@ async function repoCommand(sock, chatId, m, body = '') {
         
         // ========== HANDLE DOWNLOAD ZIP ==========
         if (input === 'download_zip') {
-            // React to message
-            try {
-                await sock.sendMessage(chatId, { react: { text: '📦', key: safeKey } });
-            } catch(e) {}
-            
-            // Send processing message
-            const processingMsg = await sock.sendMessage(chatId, {
-                text: '┏━━━━━━━━━━━━━━━━━━━━━━┓\n' +
-                      '┃  📦 *BUILDING ARCHIVE*  ┃\n' +
-                      '┗━━━━━━━━━━━━━━━━━━━━━━┛\n\n' +
-                      '⚙️ *Status:* Processing files...\n' +
-                      '📁 *Source:* Bot directory\n' +
-                      '💿 *Method:* Secure Buffer\n\n' +
-                      '_Please wait a moment..._'
-            });
-            
-            try {
-                const zipData = await createProjectZipBuffer();
-                
-                // Send ZIP file
-                await sock.sendMessage(chatId, {
-                    document: zipData.buffer,
-                    mimetype: 'application/zip',
-                    fileName: zipData.name,
-                    caption: `✅ *ZIP READY!*\n📦 File: ${zipData.name}\n🛸 Bot: Mickey Glitch MD`
-                }, { quoted: safeM });
-                
-                // Delete processing message
-                try {
-                    await sock.sendMessage(chatId, { delete: processingMsg.key });
-                } catch(e) {}
-                
-            } catch (error) {
-                console.error('Zip stream error:', error);
-                await sock.sendMessage(chatId, {
-                    text: `❌ *ARCHIVE CREATION FAILED*\n\n` +
-                          `📝 *Error:* ${error.message || 'Unknown error'}\n\n` +
-                          `📌 *Alternative:* Clone directly from GitHub\n` +
-                          `${CONFIG.REPO_URL}`
-                });
-            }
+            await sendRepoZip(sock, chatId, safeM);
             return;
         }
         
         // ========== HANDLE VIEW REPO ==========
         if (input === 'view_repo') {
-            try {
-                await sock.sendMessage(chatId, { react: { text: '🌐', key: safeKey } });
-            } catch(e) {}
-            
-            const repoMessage = `┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃  🛸 *MICKEY GLITCH GITHUB*  ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+            try { await sock.sendMessage(chatId, { react: { text: '🌐', key: safeKey } }); } catch(e) {}
 
-✨ *Repository:* 
-${CONFIG.REPO_URL}
+            const repoMessage = `🛸 MICKEY GLITCH GITHUB\n\nRepository: ${CONFIG.REPO_URL}\n\nBenefits: Latest features, bug fixes, community support`;
 
-📊 *Quick Actions:*
-├── ⭐ Star the repo
-├── 🔱 Fork to your account
-└── 👁️ Watch for updates
+            // Use Baileys templateButtons with a CTA url and quick replies for actions
+            const templateButtons = [
+                { urlButton: { displayText: 'Open GitHub', url: CONFIG.REPO_URL } },
+                { quickReplyButton: { displayText: '📦 Download ZIP', id: 'download_zip' } },
+                { quickReplyButton: { displayText: '📜 Menu', id: '.menu' } }
+            ];
 
-💡 *Benefits:*
-• Latest features
-• Bug fixes
-• Community support
-• Regular updates
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-*© 2026 Mickey Glitch Labs*`;
-
-            return await sock.sendMessage(chatId, { text: repoMessage }, { quoted: safeM });
+            return await sock.sendMessage(chatId, {
+                image: { url: CONFIG.BANNER },
+                caption: repoMessage,
+                footer: CONFIG.FOOTER,
+                templateButtons
+            }, { quoted: safeM });
         }
         
         // ========== MAIN REPO MENU ==========
