@@ -405,7 +405,7 @@ async function startMickeyBot() {
                 if (message && typeof message === 'object') {
                     // 1. Plain text -> try to attach AIRich
                     if (typeof message.text === 'string') {
-                        const aiRichPayload = MBuilderWrapper.createAIRich(message.text, {});
+                        const aiRichPayload = MBuilderWrapper.createAIRich(Mickey, message.text, {});
                         if (aiRichPayload) {
                             const payload = { ...aiRichPayload };
                             if (message.contextInfo) payload.contextInfo = { ...(payload.contextInfo || {}), ...message.contextInfo };
@@ -416,7 +416,7 @@ async function startMickeyBot() {
                     }
                     // 2. Media with caption -> embed AIRich based on caption
                     else if (typeof message.caption === 'string') {
-                        const aiRichPayload = MBuilderWrapper.createAIRich(message.caption, {});
+                        const aiRichPayload = MBuilderWrapper.createAIRich(Mickey, message.caption, {});
                         if (aiRichPayload) return originalSendMessage(jid, { ...message, ...aiRichPayload }, options);
                     }
                 }
