@@ -393,51 +393,27 @@ async function startMickeyBot() {
         // ────────────────────────────────────────────────
         const originalSendMessage = Mickey.sendMessage.bind(Mickey);
         Mickey.sendMessage = async (jid, message, options = {}) => {
-            if (message && typeof message === 'object') {
-                // 1. Kama ni Text ya Kawaida
-                if (typeof message.text === 'string') {
-                    const aiRichPayload = MBuilder.buildAIRich(message.text);
-                    if (aiRichPayload) {
-
-                        if (message.contextInfo) {
-                            aiRichPayload.messageContextInfo = {
-                                ...aiRichPayload.messageContextInfo,
-                                ...message.contextInfo,
-                            };
-                            aiRichPayload.botForwardedMessage.message.richResponseMessage.contextInfo = {
-                                ...aiRichPayload.botForwardedMessage.message.richResponseMessage.contextInfo,
-                                ...message.contextInfo,
-                            };
+            try {
+                if (message && typeof message === 'object') {
+                    // 1. Plain text -> try to attach AIRich
+                    if (typeof message.text === 'string') {
+                        const aiRichPayload = MBuilderWrapper.createAIRich(message.text, {});
+                        if (aiRichPayload) {
+                            const payload = { ...aiRichPayload };
+                            if (message.contextInfo) payload.contextInfo = { ...(payload.contextInfo || {}), ...message.contextInfo };
+                            const sendOptions = { ...options };
+                            if (aiRichPayload.additionalNodes) sendOptions.additionalNodes = [ ...(options.additionalNodes || []), ...aiRichPayload.additionalNodes ];
+                            return originalSendMessage(jid, payload, sendOptions);
                         }
-                        const { additionalNodes, ...payload } = aiRichPayload;
-                        const sendOptions = {
-                            ...options,
-                            ...(additionalNodes ? { additionalNodes: [
-                                ...(options.additionalNodes || []),
-                                ...additionalNodes,
-                            ] } : {}),
-                        };
-                        const result = await originalSendMessage(jid, payload, sendOptions);
-                        return result;
-
-                        return originalSendMessage(jid, {
-                            ...aiRichPayload,
-                            ...(message.contextInfo ? { contextInfo: message.contextInfo } : {}),
-                        }, options);
-
+                    }
+                    // 2. Media with caption -> embed AIRich based on caption
+                    else if (typeof message.caption === 'string') {
+                        const aiRichPayload = MBuilderWrapper.createAIRich(message.caption, {});
+                        if (aiRichPayload) return originalSendMessage(jid, { ...message, ...aiRichPayload }, options);
                     }
                 }
-                // 2. Kama ni Ujumbe wenye Media (Image, Video, n.k.) na una Caption
-                else if (typeof message.caption === 'string') {
-                    const aiRichPayload = MBuilder.buildAIRich(message.caption);
-                    if (aiRichPayload) {
-                        // Tunaingiza ALRICH ndani ya text property ya media layout badala ya caption ya kawaida
-                        return originalSendMessage(jid, {
-                            ...message,
-                            ...aiRichPayload
-                        }, options);
-                    }
-                }
+            } catch (err) {
+                console.error('ALRICH processing failed:', err && err.message ? err.message : err);
             }
             return originalSendMessage(jid, message, options);
         };

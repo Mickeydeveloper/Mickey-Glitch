@@ -3,7 +3,7 @@
  * KAZI: Inauza bando, server specs, na data bundles kwa buttons
  */
 
-const { sendInteractiveMessage } = require('gifted-btns');
+const { sendInteractiveMessage } = require('../lib/myfunc');
 const axios = require('axios');
 const settings = require('./settings');
 

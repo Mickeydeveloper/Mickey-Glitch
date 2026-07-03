@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { sendInteractiveMessage } = require('gifted-btns');
+const { sendInteractiveMessage } = require('../lib/myfunc');
 
 /**
  * @project: MICKEY GLITCH V3.0.5

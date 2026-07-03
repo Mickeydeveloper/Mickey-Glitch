@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { sendInteractiveMessage } = require('gifted-btns');
+const { sendInteractiveMessage } = require('../lib/myfunc');
 
 /**
  * Mickey Glitch - Text Styling Command

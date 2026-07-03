@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { sendInteractiveMessage } = require('gifted-btns');
+const { sendInteractiveMessage } = require('../lib/myfunc');
 
 async function getcodeCommand(sock, chatId, message, args) {
     try {
