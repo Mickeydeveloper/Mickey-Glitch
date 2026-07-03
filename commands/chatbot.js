@@ -1,327 +1,181 @@
-/**
- * MICKEY CHATBOT - Enhanced & Shorter Text Output
- * Private: Anyone can toggle
- * Group: Admin only can toggle
- */
-
-const fs = require('fs/promises');
+const fs = require('fs');
 const path = require('path');
+const fetch = require('node-fetch');
+const settings = require('../settings');
+const { isAdmin } = require('../lib/isAdmin');
 
-// ============ PATHS ============
-const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
-const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
+const CHATBOT_DATA_PATH = path.join(process.cwd(), 'data', 'chatbot.json');
 
-let BOT_NUMBER = null;
-let stateCache = null;
-const memoryCache = new Map(); // In-memory cache for ultra-fast performance
-
-function setBotNumber(number) {
-    BOT_NUMBER = number;
-}
-
-// UTILITY: Kusafisha JID ili kuondoa mambo ya vikolombizo vya kifaa (device suffix)
-function cleanJid(jid) {
-    if (!jid) return '';
-    return jid.split(':')[0] + '@' + jid.split('@')[1];
-}
-
-function isOwner(userId) {
-    if (!BOT_NUMBER) return false;
-    return userId.split('@')[0] === BOT_NUMBER.split('@')[0];
-}
-
-// ============ DATA FUNCTIONS ============
-async function loadState() {
-    if (stateCache) return stateCache;
-    try {
-        const data = await fs.readFile(STATE_PATH, 'utf8');
-        stateCache = JSON.parse(data);
-    } catch (e) { 
-        stateCache = { groups: {}, private: {} }; 
-    }
-    return stateCache;
-}
-
-async function saveState(state) {
-    stateCache = state;
-    try {
-        await fs.mkdir(path.dirname(STATE_PATH), { recursive: true });
-        await fs.writeFile(STATE_PATH, JSON.stringify(state, null, 2));
-    } catch (e) { 
-        console.error('Save error:', e); 
-    }
-}
-
-// ============ HUMAN RESPONSES ============
-const responses = {
-    greetings: ["Oya mambo vipi mazee?", "Niaje mkuu, mambo poa?", "Yo! Niaje, upo freshi?", "Mambo mambo! Unaendeleaje?", "Sema mkuu, niko hapa kusikiliza"],
-    howAreYou: ["Poa tu mazee, shukrani. Na wewe?", "Freshi kabisa! Siku inaenda poa, na wewe?", "Nzuri tu mkuu. Wewe unaendelea aje?", "Safi tu. Wewe mambo gani?", "Poa poa. Wewe?"],
-    thanks: ["Karibu mazee, raha yangu", "Ahsante, naomba tena", "Karibu sana mkuu", "Sawa kabisa rafiki yako"],
-    jokes: ["Simu haicheki... Ina data chache! 😂", "Kwanini tombo anakimbia? Anafuata ndoto zake! 😅", "Kwanini nyoka hajisalimii? Anajisikia mnyama! 🐍", "Mwalimu: 'Nipe sentensi na neno matunda'... Matunda yanauzwa sokoni! 💀"],
-    advice: ["Ukiwa na shida, usibebe mzigo peke yako", "Maisha ni mafupi mazee, furahia kila dakika", "Watu watasema mengi, wewe fanya yako tu", "Kupata rafiki wa kweli ni kama dhahabu"],
-    love: ["Ah mapenzi! Fanya moyo wako useme", "Mapenzi si mchezo mkuu. Hakikisha unampata anayekufaa", "Moyo unasema nini? Fanya hivyo, usiogope", "Mapenzi yana changamoto zake. Subiri uwe tayari"],
-    work: ["Endelea kujituma mazee. Bidii yako itakupeleka mbali", "Kazi ni nzuri, lakini pumzika pia", "Ukiwa na nidhamu, mafanikio yatakujia", "Endelea kujituma, mafanikio yako karibu"],
-    problem: ["Usijali mazee, kila tatizo lina suluhisho", "Nimekuelewa. Wakati mgumu hupita", "Shida ni sehemu ya maisha. Usikate tamaa", "Ukipata nafasi, tembea kidogo. Hewa safi inasaidia"],
-    dontKnow: ["Sijui mazee, siyo eneo langu", "Hapo nimeshindwa mkuu, samahani", "Samahani, sijui hilo. Mengine nikusaidie?", "Leta swali lingine, hili nimeshindwa"],
-    goodbye: ["Kwaheri mazee, tutaonana! 👋", "Bye mkuu, kesho! 😎", "Later mazee, nitarudi!", "Tutaonana baadaye! ✌️"]
+const defaultChatbotData = {
+  perGroup: {},
+  private: false
 };
 
-function getResponse(category) {
-    const list = responses[category] || responses.dontKnow;
-    return list[Math.floor(Math.random() * list.length)];
-}
-
-function getTimeGreeting() {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Habari za asubuhi mazee! ☀️";
-    if (hour < 18) return "Habari za mchana mkuu! 🌤️";
-    return "Habari za jioni mazee! 🌙";
-}
-
-// ============ DETECT INTENT ============
-function detectIntent(text) {
-    const lower = text.toLowerCase().trim();
-    if (lower.match(/^(mambo|vipi|niaje|sema|yo|hi|hello|hey|sasa|habari|hujambo|ujambo)$/i)) return 'greetings';
-    if (lower.match(/^(habari|how are you|unaendelea aje|poa|fresh|hujambo|ujambo|mambo poa|mambo vipi)/i)) return 'howAreYou';
-    if (lower.match(/^(asante|thanks|thank you|shukran|ahsante|karibu)/i)) return 'thanks';
-    if (lower.match(/(joke|utani|cheka|funny|comedy|aniambie utani|nitanii)/i)) return 'jokes';
-    if (lower.match(/(advice|ushauri|nisaidie|shida|tatizo|help|nasaha|mawaidha)/i)) return 'advice';
-    if (lower.match(/(mapenzi|love|boyfriend|girlfriend|crush|mpenzi|pendo|nampenda)/i)) return 'love';
-    if (lower.match(/(kazi|work|school|shule|job|studies|masomo|biashara)/i)) return 'work';
-    if (lower.match(/(problem|tatizo|shida|mgumu|nimeshinda|challenging|ngumu|msongo)/i)) return 'problem';
-    if (lower.match(/(kwaheri|bye|goodbye|tutaonana|later|ninaondoka)/i)) return 'goodbye';
-    if (text.length < 3) return 'greetings';
-    return null;
-}
-
-// ============ EXTRACT TEXT ============
-function extractText(m) {
-    try {
-        if (!m || !m.message) return '';
-        const msg = m.message;
-        return (
-            msg.conversation || 
-            msg.extendedTextMessage?.text || 
-            msg.imageMessage?.caption || 
-            msg.videoMessage?.caption || 
-            msg.buttonsResponseMessage?.selectedDisplayText ||
-            msg.listResponseMessage?.singleSelectReply?.selectedRowId ||
-            ''
-        ).trim();
-    } catch (e) { 
-        return ''; 
+const loadChatbotData = () => {
+  try {
+    if (!fs.existsSync(CHATBOT_DATA_PATH)) {
+      fs.writeFileSync(CHATBOT_DATA_PATH, JSON.stringify(defaultChatbotData, null, 2));
+      return { ...defaultChatbotData };
     }
-}
+    const raw = fs.readFileSync(CHATBOT_DATA_PATH, 'utf8');
+    return raw.trim() ? JSON.parse(raw) : { ...defaultChatbotData };
+  } catch (error) {
+    console.error('loadChatbotData error:', error);
+    return { ...defaultChatbotData };
+  }
+};
 
-async function getAiReply(prompt) {
-    const endpoints = [
-        `https://docs.prexzyapis.com/ai/ai4chat?prompt=${encodeURIComponent(prompt)}`,
-        `https://docs.prexzyapis.com/ai/aichat?prompt=${encodeURIComponent(prompt)}`
-    ];
+const saveChatbotData = (data) => {
+  try {
+    fs.writeFileSync(CHATBOT_DATA_PATH, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.error('saveChatbotData error:', error);
+  }
+};
 
-    for (const endpoint of endpoints) {
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 8000);
-            const response = await fetch(endpoint, {
-                method: 'GET',
-                headers: { 
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-                },
-                signal: controller.signal
-            });
-            clearTimeout(timeout);
+const getSenderId = (message) => {
+  return message.key.participant || message.key.remoteJid || '';
+};
 
-            if (!response.ok) continue;
+const isOwner = (message) => {
+  const sender = getSenderId(message);
+  const ownerJid = `${settings.ownerNumber}@s.whatsapp.net`;
+  return message.key.fromMe || sender === ownerJid;
+};
 
-            const data = await response.json();
-            const candidates = [
-                data?.result,
-                data?.response,
-                data?.message,
-                data?.answer,
-                data?.reply,
-                data?.text,
-                data?.output,
-                data?.data?.result,
-                data?.data?.response,
-                data?.data?.message,
-                data?.choices?.[0]?.message?.content
-            ];
+const getChatbotStatus = (chatId) => {
+  const data = loadChatbotData();
+  return {
+    group: Boolean(data.perGroup[chatId]),
+    private: Boolean(data.private)
+  };
+};
 
-            const reply = candidates.find(value => typeof value === 'string' && value.trim());
-            if (reply) return reply.trim();
-        } catch (e) {
-            // Try the next endpoint
-        }
+const buildChatbotStatusText = (chatId) => {
+  const status = getChatbotStatus(chatId);
+  return `🤖 *Chatbot Status*
+
+` +
+    `• Group chatbot for this chat: ${status.group ? '✅ Enabled' : '❌ Disabled'}
+` +
+    `• Private chatbot: ${status.private ? '✅ Enabled' : '❌ Disabled'}
+
+` +
+    `Usage:
+` +
+    `- .chatbot on -> Enable chatbot in this group
+` +
+    `- .chatbot off -> Disable chatbot in this group
+` +
+    `- .chatbot private on -> Enable chatbot in private chats
+` +
+    `- .chatbot private off -> Disable chatbot in private chats
+` +
+    `- .chatbot status -> Show current chatbot mode`;
+};
+
+const groupChatbotToggleCommand = async (sock, chatId, message, userMessage) => {
+  const isGroupChat = chatId.endsWith('@g.us');
+  const args = userMessage.trim().split(/\s+/).slice(1);
+  const action = args[0]?.toLowerCase() || '';
+  const value = args[1]?.toLowerCase() || '';
+  const data = loadChatbotData();
+
+  if (!action || action === 'status' || action === 'help') {
+    return await sock.sendMessage(chatId, { text: buildChatbotStatusText(chatId) }, { quoted: message });
+  }
+
+  if (action === 'private') {
+    if (!isOwner(message)) {
+      return await sock.sendMessage(chatId, { text: '❌ Only the bot owner can change private chatbot mode.' }, { quoted: message });
     }
 
-    return null;
-}
-
-// ============ CHECK IF USER IS ADMIN ============
-async function isGroupAdmin(sock, chatId, senderId) {
-    try {
-        const groupMetadata = await sock.groupMetadata(chatId);
-        const cleanSender = cleanJid(senderId);
-        return groupMetadata.participants
-            .filter(p => p.admin === 'admin' || p.admin === 'superadmin')
-            .some(admin => cleanJid(admin.id) === cleanSender);
-    } catch (error) {
-        return false;
+    if (!value || !['on', 'off'].includes(value)) {
+      return await sock.sendMessage(chatId, { text: 'Usage: .chatbot private on|off' }, { quoted: message });
     }
-}
 
-// ============ COMMAND HANDLER ============
-async function groupChatbotToggleCommand(sock, chatId, m, body) {
-    try {
-        const senderId = cleanJid(m.key.participant || m.key.remoteJid);
-        const isGroup = chatId.endsWith('@g.us');
-        const rawBody = (body || '').trim();
-        const parts = rawBody.split(/\s+/).filter(Boolean);
-        const sub = parts[0]?.toLowerCase() === '.chatbot'
-            ? (parts[1] || '').toLowerCase()
-            : (parts[0] || '').toLowerCase();
+    data.private = value === 'on';
+    saveChatbotData(data);
 
-        const state = await loadState();
+    return await sock.sendMessage(chatId, { text: `✅ Private chatbot is now *${data.private ? 'enabled' : 'disabled'}*. ${data.private ? 'Chatbot replies are active in private chats.' : 'Private chatbot replies are turned off.'}` }, { quoted: message });
+  }
 
-        // ============ PRIVATE CHAT (DM) ============
-        if (!isGroup) {
-            if (sub === 'on') {
-                state.private[senderId] = { enabled: true };
-                await saveState(state);
-                return await sock.sendMessage(chatId, { text: '✅ *Chatbot:* ON (DM)' }, { quoted: m });
-            }
-            if (sub === 'off') {
-                state.private[senderId] = { enabled: false };
-                await saveState(state);
-                return await sock.sendMessage(chatId, { text: '❌ *Chatbot:* OFF (DM)' }, { quoted: m });
-            }
-            if (sub === 'status') {
-                const status = state.private?.[senderId]?.enabled ? '🟢 ON' : '🔴 OFF';
-                return await sock.sendMessage(chatId, { text: `📊 *Chatbot Status:* ${status}` }, { quoted: m });
-            }
+  if (!isGroupChat) {
+    return await sock.sendMessage(chatId, { text: '⚠️ Use `.chatbot private on|off` in private chat to control private chatbot mode.' }, { quoted: message });
+  }
 
-            return await sock.sendMessage(chatId, { 
-                text: `🤖 *Mickey Chatbot*\n• _.chatbot on_ - Washa\n• _.chatbot off_ - Zima\n• _.chatbot status_ - Hali` 
-            }, { quoted: m });
-        }
+  const senderId = getSenderId(message);
+  const adminCheck = await isAdmin(sock, chatId, senderId).catch(() => ({ isSenderAdmin: false }));
+  if (!adminCheck.isSenderAdmin && !isOwner(message)) {
+    return await sock.sendMessage(chatId, { text: '❌ Only group admins can enable or disable chatbot in this group.' }, { quoted: message });
+  }
 
-        // ============ GROUP CHAT ============
-        const isAdmin = await isGroupAdmin(sock, chatId, m.key.participant || m.key.remoteJid);
-        const isOwnerUser = isOwner(senderId);
+  let target = action;
+  if (['on', 'off'].includes(action)) {
+    target = action;
+  } else if (action === 'group' && ['on', 'off'].includes(value)) {
+    target = value;
+  } else {
+    return await sock.sendMessage(chatId, { text: 'Usage: .chatbot on|off or .chatbot private on|off' }, { quoted: message });
+  }
 
-        if (sub === 'on') {
-            if (!isAdmin && !isOwnerUser) return await sock.sendMessage(chatId, { text: '❌ Admin pekee anaweza kuwasha.' }, { quoted: m });
-            state.groups[chatId] = { enabled: true };
-            await saveState(state);
-            return await sock.sendMessage(chatId, { text: '✅ *Chatbot:* ON (Group)' }, { quoted: m });
-        }
+  data.perGroup[chatId] = target === 'on';
+  saveChatbotData(data);
 
-        if (sub === 'off') {
-            if (!isAdmin && !isOwnerUser) return await sock.sendMessage(chatId, { text: '❌ Admin pekee anaweza kuzima.' }, { quoted: m });
-            state.groups[chatId] = { enabled: false };
-            await saveState(state);
-            return await sock.sendMessage(chatId, { text: '❌ *Chatbot:* OFF (Group)' }, { quoted: m });
-        }
+  return await sock.sendMessage(chatId, { text: `✅ Group chatbot is now *${data.perGroup[chatId] ? 'enabled' : 'disabled'}* for this chat.` }, { quoted: message });
+};
 
-        if (sub === 'status') {
-            const status = state.groups?.[chatId]?.enabled ? '🟢 ON' : '🔴 OFF';
-            return await sock.sendMessage(chatId, { text: `📊 *Chatbot Group:* ${status}` }, { quoted: m });
-        }
+const handleChatbotMessage = async (sock, chatId, message, userMessage) => {
+  const isGroupChat = chatId.endsWith('@g.us');
+  const data = loadChatbotData();
+  const isGroupActive = Boolean(data.perGroup[chatId]);
+  const isPrivateActive = Boolean(data.private);
 
-        return await sock.sendMessage(chatId, { 
-            text: `🤖 *Mickey Chatbot (Group)*\n• _.chatbot on_ - Washa (Admin)\n• _.chatbot off_ - Zima (Admin)\n• _.chatbot status_ - Hali` 
-        }, { quoted: m });
+  if (isGroupChat && !isGroupActive) return;
+  if (!isGroupChat && !isPrivateActive) return;
 
-    } catch (e) {
-        console.error('Command error:', e);
-    }
-}
+  const stickerMessage = message.message?.stickerMessage;
+  const rawText = (
+    message.message?.conversation ||
+    message.message?.extendedTextMessage?.text ||
+    message.message?.imageMessage?.caption ||
+    message.message?.videoMessage?.caption ||
+    ''
+  ).trim();
 
-// ============ MAIN CHATBOT ============
-async function handleChatbotMessage(sock, chatId, m, userText = null) {
-    try {
-        if (!chatId || m.key?.fromMe) return;
+  if (!rawText && !stickerMessage) return;
 
-        if (!BOT_NUMBER && sock.user) setBotNumber(sock.user.id);
+  if (stickerMessage) {
+    return await sock.sendMessage(chatId, { text: 'opindi' }, { quoted: message });
+  }
 
-        const text = userText || extractText(m);
-        if (!text) return;
+  const prompt = rawText;
+  if (!prompt) return;
 
-        const senderId = cleanJid(m.key.participant || m.key.remoteJid);
-        const userName = m.pushName || 'Mshkaji';
-        const isGroup = chatId.endsWith('@g.us');
+  const apiUrl = `https://prexzyapis.com/ai/ai4chat?prompt=${encodeURIComponent(prompt)}`;
 
-        // Handle .chatbot command
-        if (text.startsWith('.chatbot')) {
-            return await groupChatbotToggleCommand(sock, chatId, m, text);
-        }
+  try {
+    await sock.sendMessage(chatId, { react: { text: '🧠', key: message.key } }).catch(() => {});
+    const response = await fetch(apiUrl, { method: 'GET', timeout: 15000 });
+    const json = await response.json();
+    const reply = json?.data?.response || json?.response || 'Samahani, sijapata jibu kutoka kwa AI.';
 
-        // Check if enabled (Kutumia Clean ID)
-        const state = await loadState();
-        const enabled = isGroup ? (state.groups?.[chatId]?.enabled || false) : (state.private?.[senderId]?.enabled || false);
+    await sock.sendMessage(chatId, {
+      text: `╭━〔 *CHATBOT* 〕━
+┃
+┃ ${reply.trim()}
+┃
+╰━━━━━━━━━━━━━`
+    }, { quoted: message });
+  } catch (error) {
+    console.error('Chatbot API error:', error);
+    await sock.sendMessage(chatId, {
+      text: '❌ *Chatbot imeshindwa kupata jibu. Jaribu tena baadae.*'
+    }, { quoted: message });
+  }
+};
 
-        if (!enabled) {
-            // Kama ipo DM na haijawashwa, inamwambia jinsi ya kuwasha
-            if (!isGroup && text.length > 0 && !text.startsWith('.')) {
-                await sock.sendMessage(chatId, { text: '🔴 Chatbot imezimwa hapa. Tumia _.chatbot on_ kuwasha.' }, { quoted: m });
-            }
-            return;
-        }
-
-        sock.sendPresenceUpdate('composing', chatId).catch(() => {});
-
-        // Load Memory from cache
-        if (!memoryCache.has(chatId)) memoryCache.set(chatId, []);
-        let localMem = memoryCache.get(chatId);
-
-        if (localMem.length > 4) localMem = localMem.slice(-4);
-
-        // 1. Detect Local Intent
-        const intent = detectIntent(text);
-        if (intent) {
-            const reply = getResponse(intent);
-            localMem.push({ user: text, bot: reply });
-            memoryCache.set(chatId, localMem);
-            return await sock.sendMessage(chatId, { text: reply }, { quoted: m });
-        }
-
-        // 2. New Conversation Greeting
-        if (localMem.length === 0) {
-            const greeting = getTimeGreeting();
-            localMem.push({ user: text, bot: greeting });
-            memoryCache.set(chatId, localMem);
-            return await sock.sendMessage(chatId, { text: greeting }, { quoted: m });
-        }
-
-        // 3. API Fallback for complex queries
-        const history = localMem.map(msg => `${msg.user}`).join('\n');
-        const prompt = `Wewe ni Mickey, mtu wa kawaida kutoka TZ. Usiseme wewe ni AI au robot. Ongea Kiswahili cha mitaani. Jibu fupi sana (sentensi 1-2).\nHistory:\n${history}\n${userName}: ${text}\nMickey:`;
-
-        let reply = await getAiReply(prompt);
-        if (!reply) reply = getResponse('dontKnow');
-
-        // Clean AI vocabulary
-        reply = reply.replace(/I am an AI|I am a chatbot|As an AI|Mimi ni AI|Mimi ni chatbot|Mickey AI/gi, "Mimi ni Mickey");
-        if (reply.length > 150) reply = reply.substring(0, 150) + '...';
-
-        localMem.push({ user: text, bot: reply });
-        memoryCache.set(chatId, localMem);
-
-        await sock.sendMessage(chatId, { text: reply }, { quoted: m });
-
-    } catch (e) { 
-        console.error('Chatbot Error:', e.message);
-        try {
-            await sock.sendMessage(chatId, { text: getResponse('dontKnow') }, { quoted: m });
-        } catch (err) {}
-    }
-}
-
-module.exports = { 
-    handleChatbotMessage,      
-    groupChatbotToggleCommand, 
-    setBotNumber              
+module.exports = {
+  handleChatbotMessage,
+  groupChatbotToggleCommand
 };
