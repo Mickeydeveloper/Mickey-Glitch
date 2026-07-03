@@ -32,6 +32,7 @@ const store = require("./lib/lightweight_store");
 const settings = require("./settings");
 const MickeyHelper = require("./lib/Mickey");
 const credentials = require("./lib/credentials");
+const { MB, MBuilder } = require("./lib/mbuilder");
 
 // Try to load telegram module
 let startTelegramBot = null;
@@ -386,6 +387,24 @@ async function startMickeyBot() {
         whatsappBot = Mickey;
         Mickey.ev.on("creds.update", saveCreds);
         store.bind(Mickey.ev);
+
+        const originalSendMessage = Mickey.sendMessage.bind(Mickey);
+        Mickey.sendMessage = async (jid, message, options = {}) => {
+            if (message && typeof message === 'object' && typeof message.text === 'string') {
+                const textOnly = Object.keys(message).every(key => ['text', 'contextInfo'].includes(key));
+                if (textOnly) {
+                    const aiRichPayload = MBuilder.buildAIRich(message.text);
+                    if (aiRichPayload) {
+                        const result = await originalSendMessage(jid, {
+                            ...aiRichPayload,
+                            ...(message.contextInfo ? { contextInfo: message.contextInfo } : {}),
+                        }, options);
+                        return result;
+                    }
+                }
+            }
+            return originalSendMessage(jid, message, options);
+        };
 
         // ────────────────────────────────────────────────
         // MESSAGE HANDLER
