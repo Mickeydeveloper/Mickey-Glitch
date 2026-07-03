@@ -81,6 +81,7 @@
     "youtubedl-core": "^4.11.7",
     "yt-search": "^2.13.1",
     "ytdl-core": "^4.11.5",
+    "baileys-mbuilder": "4.6.0-lts",
     "gifted-btns": "^1.0.2"
   },
   "overrides": {

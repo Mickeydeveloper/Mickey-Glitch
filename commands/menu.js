@@ -2,15 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
 const { sendButtons } = require('../lib/myfunc');
-
-// Optional: use baileys-mbuilder if installed for native button building
-let MB = null;
-try {
-    MB = require('baileys-mbuilder');
-    MB = MB && MB.default ? MB.default : MB;
-} catch (e) {
-    MB = null;
-}
+const MBuilderWrapper = require('../lib/mbuilder-wrapper');
 
 /**
  * @project: MICKEY GLITCH V3.0.5
@@ -167,29 +159,26 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                          `💡 _"${quote}"_\n\n` +
                          `👇 *Gusa button hapo chini kufungua menu:*`;
 
-        if (MB && typeof MB.Button === 'function') {
+        const buttons = [
+            { id: '.menu', text: '⦂ Menu' },
+            { id: '.ping', text: '📡 Ping' },
+            { id: '.alive', text: '⚡ Alive' }
+        ];
+        const footer = '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐';
+
+        if (MBuilderWrapper._useExternal()) {
             try {
-                const built = new MB.Button()
-                    .text(menuText)
-                    .button('⦂ Menu', '.menu')
-                    .button('📡 Ping', '.ping')
-                    .button('⚡ Alive', '.alive')
-                    .footer('⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐')
-                    .build();
-                await sock.sendMessage(chatId, built, { quoted: m });
+                const built = MBuilderWrapper.createButtons(sock, menuText, buttons, footer);
+                if (built && built.buttons && built.buttons.length > 0) {
+                    await sock.sendMessage(chatId, built, { quoted: m });
+                } else {
+                    await sendButtons(sock, chatId, menuText, footer, buttons, m);
+                }
             } catch (err) {
-                await sendButtons(sock, chatId, menuText, "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐", [
-                    { id: '.menu', text: '⦂ Menu' },
-                    { id: '.ping', text: '📡 Ping' },
-                    { id: '.alive', text: '⚡ Alive' }
-                ], m);
+                await sendButtons(sock, chatId, menuText, footer, buttons, m);
             }
         } else {
-            await sendButtons(sock, chatId, menuText, "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐", [
-                { id: '.menu', text: '⦂ Menu' },
-                { id: '.ping', text: '📡 Ping' },
-                { id: '.alive', text: '⚡ Alive' }
-            ], m);
+            await sendButtons(sock, chatId, menuText, footer, buttons, m);
         }
 
 
