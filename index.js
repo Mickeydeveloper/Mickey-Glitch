@@ -32,7 +32,7 @@ const store = require("./lib/lightweight_store");
 const settings = require("./settings");
 const MickeyHelper = require("./lib/Mickey");
 const credentials = require("./lib/credentials");
-const { MB, MBuilder } = require("./lib/mbuilder");
+const MBuilderWrapper = require("./lib/mbuilder-wrapper");
 
 // Try to load telegram module
 let startTelegramBot = null;
