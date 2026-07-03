@@ -1,5 +1,5 @@
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
-const { sendButtons } = require('gifted-btns');
+const { sendButtons } = require('../lib/myfunc');
 const acrcloud = require('acrcloud');
 const fs = require('fs-extra');
 const path = require('path');
@@ -92,14 +92,7 @@ async function shazamCommand(sock, chatId, message) {
                 `━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `_Bonyeza button kupata wimbo huu._`;
 
-            await sendButtons(sock, chatId, {
-                title: '🎧 SONG FINDER',
-                text: caption,
-                footer: 'MICKEY GLITCH V3.0',
-                buttons: [
-                    { id: playCmd, text: buttonText }
-                ]
-            }, { quoted: message });
+            await sendButtons(sock, chatId, caption, 'MICKEY GLITCH V3.0', [ { id: playCmd, text: buttonText } ], { quoted: message });
 
         } else {
             await sock.sendMessage(chatId, { text: '❌ *Wimbo haukutambulika.*' });
