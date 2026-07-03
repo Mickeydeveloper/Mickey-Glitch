@@ -164,19 +164,11 @@ _Mickey Glitch Technology™_`;
             [ { label: '👑 𝐎𝐖𝐍𝐄𝐑', command: '.owner' }, { label: '⚡ 𝐑𝐔𝐍𝐓𝐈𝐌𝐄', command: '.runtime' } ]
         ];
 
-        const finalMessage = MBuilderWrapper.createButtonWithAIRich(sock, statusMessage, rows, '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲', {
-            title: `🚀 ${botName} | 𝐎𝐍𝐋𝐈𝐍𝐄`,
-            body: '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲',
-            thumbnailUrl: imageUrl,
-            sourceUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
-            showAdAttribution: true
-        });
+        const finalMessage = MBuilderWrapper.createButtons(sock, statusMessage, rows, '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲');
 
         // Ensure we mention the chat and send
-        finalMessage.contextInfo = finalMessage.contextInfo || {};
-        finalMessage.contextInfo.mentionedJid = [chatId];
-
-        await sock.sendMessage(chatId, finalMessage, { quoted: message });
+        const sendOptions = { quoted: message };
+        await sock.sendMessage(chatId, finalMessage, sendOptions);
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);

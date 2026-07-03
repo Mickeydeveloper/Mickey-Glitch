@@ -111,10 +111,9 @@ const buildSections = (menuData) => {
     return menuData.map(cat => ({
         title: `${icons[cat.title]} ${cat.title} ━━━ (${cat.items.length})`,
         rows: cat.items.map(item => ({
-            header: item.cmd,
             title: item.desc,
-            description: `📌 ${item.eg}`,
-            id: item.cmd.toLowerCase()
+            rowId: item.cmd.toLowerCase(),
+            description: `📌 ${item.eg}`
         }))
     }));
 };
