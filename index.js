@@ -5,6 +5,7 @@
  * FIXED: Session preservation & Safe temp/tmp auto-cleanup
  * FIXED: Connection stability & Reconnection logic
  * FIXED: Memory management & Queue handling
+ * FIXED: AIRich formatting guard filter (No more blank ad boxes)
  */
 
 require("dotenv").config();
@@ -33,6 +34,7 @@ const settings = require("./settings");
 const MickeyHelper = require("./lib/Mickey");
 const credentials = require("./lib/credentials");
 const MBuilderWrapper = require("./lib/mbuilder-wrapper");
+
 // Expose `MB` globally so older code using `new MB.Button()` continues to work.
 try {
     global.MB = MBuilderWrapper.MB || require('./lib/mbuilder').MB;
@@ -403,8 +405,11 @@ async function startMickeyBot() {
         Mickey.sendMessage = async (jid, message, options = {}) => {
             try {
                 if (message && typeof message === 'object') {
-                    // 1. Plain text -> try to attach AIRich
-                    if (typeof message.text === 'string') {
+                    // Check kama text ina muundo sahihi wa markdown link: [Name](http...)
+                    const isRichLink = (text) => /\[.+?\]\(https?:\/\/\S+?\)/.test(text);
+
+                    // 1. Plain text -> badilisha kwenda AIRich TU kama ina rich links ndani yake!
+                    if (typeof message.text === 'string' && isRichLink(message.text)) {
                         const aiRichPayload = MBuilderWrapper.createAIRich(Mickey, message.text, {});
                         if (aiRichPayload) {
                             const payload = { ...aiRichPayload };
@@ -414,8 +419,8 @@ async function startMickeyBot() {
                             return originalSendMessage(jid, payload, sendOptions);
                         }
                     }
-                    // 2. Media with caption -> embed AIRich based on caption
-                    else if (typeof message.caption === 'string') {
+                    // 2. Media yenye caption -> badilisha TU kama caption ina links
+                    else if (typeof message.caption === 'string' && isRichLink(message.caption)) {
                         const aiRichPayload = MBuilderWrapper.createAIRich(Mickey, message.caption, {});
                         if (aiRichPayload) return originalSendMessage(jid, { ...message, ...aiRichPayload }, options);
                     }
