@@ -2,7 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
 const { sendButtons } = require('../lib/myfunc');
-const MBuilderWrapper = require('../lib/mbuilder-wrapper');
 
 /**
  * @project: MICKEY GLITCH V3.0.5
@@ -166,20 +165,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         ];
         const footer = '⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐';
 
-        if (MBuilderWrapper._useExternal()) {
-            try {
-                const built = MBuilderWrapper.createButtons(sock, menuText, buttons, footer);
-                if (built && built.buttons && built.buttons.length > 0) {
-                    await sock.sendMessage(chatId, built, { quoted: m });
-                } else {
-                    await sendButtons(sock, chatId, menuText, footer, buttons, m);
-                }
-            } catch (err) {
-                await sendButtons(sock, chatId, menuText, footer, buttons, m);
-            }
-        } else {
-            await sendButtons(sock, chatId, menuText, footer, buttons, m);
-        }
+        await sendButtons(sock, chatId, menuText, footer, buttons, m);
 
 
     } catch (e) {

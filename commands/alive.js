@@ -3,7 +3,6 @@ const { performance } = require('perf_hooks');
 const fs = require('fs');
 const path = require('path');
 const { sendButtons } = require('../lib/myfunc');
-const MBuilderWrapper = require('../lib/mbuilder-wrapper');
 
 /**
  * Formats seconds into a human-readable string (d h m s)
@@ -166,20 +165,7 @@ _Mickey Glitch Technology™_`;
         ];
         const footer = '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲';
 
-        if (MBuilderWrapper._useExternal()) {
-            try {
-                const built = MBuilderWrapper.createButtons(sock, statusMessage, buttons, footer);
-                if (built && built.buttons && built.buttons.length > 0) {
-                    await sock.sendMessage(chatId, built, { quoted: message });
-                } else {
-                    await sendButtons(sock, chatId, statusMessage, footer, buttons, message);
-                }
-            } catch (e) {
-                await sendButtons(sock, chatId, statusMessage, footer, buttons, message);
-            }
-        } else {
-            await sendButtons(sock, chatId, statusMessage, footer, buttons, message);
-        }
+        await sendButtons(sock, chatId, statusMessage, footer, buttons, message);
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);
