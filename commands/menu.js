@@ -106,15 +106,14 @@ const loadDynamicMenu = () => {
     }));
 };
 
-// Build interactive sections
+// Build compact interactive sections
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
-        title: `${icons[cat.title]} ${cat.title} ━━━ (${cat.items.length})`,
+        title: `${icons[cat.title] || ''} ${cat.title}`.trim(),
         rows: cat.items.map(item => ({
-            header: item.cmd,
-            title: item.desc,
-            description: `📌 ${item.eg}`,
-            id: item.cmd.toLowerCase()
+            title: item.cmd, // show the command as the row title
+            description: item.eg ? item.eg : '', // short example or empty
+            rowId: item.cmd.toLowerCase()
         }))
     }));
 };
@@ -158,29 +157,21 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const time = now.format('HH:mm:ss');
         const day = now.format('dddd');
 
-        // Muonekano mpya wa kisasa na mdogo (Clean & Minimalist text)
-        const menuText = `✨ *𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐕𝟑.𝟎.𝟓* ✨\n\n` +
-                         `👋 Habari ya ${greeting.text} ${greeting.emoji}, *${userName}*\n` +
-                         `🏆 *Rank:* ${userRank}\n` +
-                         `📊 *Commands:* ${userCmds.toLocaleString()}\n\n` +
-                         `📅 *Siku:* ${day}, ${date}\n` +
-                         `⏰ *Muda:* ${time} EAT\n` +
-                         `⚡ *Uptime:* ${stats.uptime}\n` +
-                         `💾 *Memory:* ${stats.memory}MB\n` +
-                         `👥 *Watumiaji:* ${stats.users}\n\n` +
-                         `💡 _"${quote}"_\n\n` +
-                         `👇 *Gusa button hapo chini kufungua menu:*`;
+        // Compact menu text (short & clear)
+        const menuText = `*MICKEY BOT* — ${userName}\n${greeting.emoji} ${greeting.text} • ${userRank}\n` +
+                 `Cmds: ${userCmds} • ${day} ${now.format('DD/MM')} • ${time}\n\n` +
+                 `Chagua kutoka kwenye list hapa chini:`;
 
         // Send interactive message with Image and Single Select button
         await sendInteractiveMessage(sock, chatId, {
             image: { url: "https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg" },
             text: menuText,
-            footer: "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐",
+            footer: "MICKEY BOT",
             interactiveButtons: [
                 {
                     name: 'single_select',
                     buttonParamsJson: JSON.stringify({
-                        title: '📋 𝐎𝐏𝐄𝐍 𝐌𝐄𝐍𝐔',
+                        title: 'Menu',
                         sections: buildSections(dynamicMenu)
                     })
                 }

@@ -131,8 +131,11 @@ const handleChatbotMessage = async (sock, chatId, message, userMessage) => {
   const isGroupActive = Boolean(data.perGroup[chatId]);
   const isPrivateActive = Boolean(data.private);
 
-  if (isGroupChat && !isGroupActive) return;
-  if (!isGroupChat && !isPrivateActive) return;
+  if (isGroupChat && !isGroupActive) return false;
+  if (!isGroupChat && !isPrivateActive) return false;
+
+  // Prevent bot from replying to its own messages
+  if (message.key?.fromMe) return false;
 
   const stickerMessage = message.message?.stickerMessage;
   const rawText = (
@@ -143,15 +146,22 @@ const handleChatbotMessage = async (sock, chatId, message, userMessage) => {
     ''
   ).trim();
 
-  if (!rawText && !stickerMessage) return;
+  if (!rawText && !stickerMessage) return false;
 
   if (stickerMessage) {
     await sock.sendMessage(chatId, { text: 'opindi' }, { quoted: message });
     return true;
   }
 
-  const prompt = rawText;
-  if (!prompt) return false;
+  const prompt = rawText.trim();
+  if (!prompt || prompt.length < 2) return false;
+
+  // simple per-chat cooldown to avoid spam (5s)
+  if (!global._chatbotCooldowns) global._chatbotCooldowns = new Map();
+  const last = global._chatbotCooldowns.get(chatId) || 0;
+  const now = Date.now();
+  if (now - last < 5000) return false;
+  global._chatbotCooldowns.set(chatId, now);
 
   const apiUrl = `https://prexzyapis.com/ai/ai4chat?prompt=${encodeURIComponent(prompt)}`;
 
@@ -169,27 +179,25 @@ const handleChatbotMessage = async (sock, chatId, message, userMessage) => {
     await setTyping('composing');
     await sock.sendPresenceUpdate('composing', chatId).catch(() => {});
     await sock.sendMessage(chatId, { react: { text: '🧠', key: message.key } }).catch(() => {});
-
     const response = await axios.get(apiUrl, { timeout: 15000 });
-    const json = response.data;
-    const reply = json?.data?.response || json?.response || 'Samahani, sijapata jibu kutoka kwa AI.';
+    const json = response.data || {};
+    const reply = (json?.data?.response || json?.response || '').toString().trim() || 'Samahani, sijapata jibu kutoka kwa AI.';
 
+    // send concise reply
     await sock.sendMessage(chatId, {
-      text: `╭━〔 *CHATBOT* 〕━
-┃
-┃ ${reply.trim()}
-┃
-╰━━━━━━━━━━━━━`
+      text: `🤖 ${reply}`
     }, { quoted: message });
+    return true;
   } catch (error) {
     console.error('Chatbot API error:', error);
     await sock.sendMessage(chatId, {
       text: '❌ *Chatbot imeshindwa kupata jibu. Jaribu tena baadae.*'
     }, { quoted: message });
-    return true;
+    return false;
   } finally {
     await setTyping('paused');
   }
+  return false;
 };
 
 module.exports = {
