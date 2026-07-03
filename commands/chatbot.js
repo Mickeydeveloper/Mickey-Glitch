@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const fetch = require('node-fetch');
+const axios = require('axios');
 const settings = require('../settings');
 const { isAdmin } = require('../lib/isAdmin');
 
@@ -146,18 +146,32 @@ const handleChatbotMessage = async (sock, chatId, message, userMessage) => {
   if (!rawText && !stickerMessage) return;
 
   if (stickerMessage) {
-    return await sock.sendMessage(chatId, { text: 'opindi' }, { quoted: message });
+    await sock.sendMessage(chatId, { text: 'opindi' }, { quoted: message });
+    return true;
   }
 
   const prompt = rawText;
-  if (!prompt) return;
+  if (!prompt) return false;
 
   const apiUrl = `https://prexzyapis.com/ai/ai4chat?prompt=${encodeURIComponent(prompt)}`;
 
+  const setTyping = async (state) => {
+    try {
+      if (typeof sock.sendPresenceUpdate === 'function') {
+        await sock.sendPresenceUpdate(state, chatId);
+      }
+    } catch (err) {
+      // ignore presence update errors
+    }
+  };
+
   try {
+    await setTyping('composing');
+    await sock.sendPresenceUpdate('composing', chatId).catch(() => {});
     await sock.sendMessage(chatId, { react: { text: '🧠', key: message.key } }).catch(() => {});
-    const response = await fetch(apiUrl, { method: 'GET', timeout: 15000 });
-    const json = await response.json();
+
+    const response = await axios.get(apiUrl, { timeout: 15000 });
+    const json = response.data;
     const reply = json?.data?.response || json?.response || 'Samahani, sijapata jibu kutoka kwa AI.';
 
     await sock.sendMessage(chatId, {
@@ -172,6 +186,9 @@ const handleChatbotMessage = async (sock, chatId, message, userMessage) => {
     await sock.sendMessage(chatId, {
       text: '❌ *Chatbot imeshindwa kupata jibu. Jaribu tena baadae.*'
     }, { quoted: message });
+    return true;
+  } finally {
+    await setTyping('paused');
   }
 };
 
