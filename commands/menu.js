@@ -3,6 +3,15 @@ const path = require('path');
 const moment = require('moment-timezone');
 const { sendButtons } = require('../lib/myfunc');
 
+// Optional: use baileys-mbuilder if installed for native button building
+let MB = null;
+try {
+    MB = require('baileys-mbuilder');
+    MB = MB && MB.default ? MB.default : MB;
+} catch (e) {
+    MB = null;
+}
+
 /**
  * @project: MICKEY GLITCH V3.0.5
  * @author: Quantum Base Developer (TZ)
@@ -158,11 +167,30 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                          `💡 _"${quote}"_\n\n` +
                          `👇 *Gusa button hapo chini kufungua menu:*`;
 
-        await sendButtons(sock, chatId, menuText, "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐", [
-            { id: '.menu', text: '⦂ Menu' },
-            { id: '.ping', text: '📡 Ping' },
-            { id: '.alive', text: '⚡ Alive' }
-        ], m);
+        if (MB && typeof MB.Button === 'function') {
+            try {
+                const built = new MB.Button()
+                    .text(menuText)
+                    .button('⦂ Menu', '.menu')
+                    .button('📡 Ping', '.ping')
+                    .button('⚡ Alive', '.alive')
+                    .footer('⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐')
+                    .build();
+                await sock.sendMessage(chatId, built, { quoted: m });
+            } catch (err) {
+                await sendButtons(sock, chatId, menuText, "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐", [
+                    { id: '.menu', text: '⦂ Menu' },
+                    { id: '.ping', text: '📡 Ping' },
+                    { id: '.alive', text: '⚡ Alive' }
+                ], m);
+            }
+        } else {
+            await sendButtons(sock, chatId, menuText, "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐", [
+                { id: '.menu', text: '⦂ Menu' },
+                { id: '.ping', text: '📡 Ping' },
+                { id: '.alive', text: '⚡ Alive' }
+            ], m);
+        }
 
 
     } catch (e) {

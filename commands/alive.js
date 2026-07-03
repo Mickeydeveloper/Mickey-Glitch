@@ -4,6 +4,15 @@ const fs = require('fs');
 const path = require('path');
 const { sendButtons } = require('../lib/myfunc');
 
+// Optional: use baileys-mbuilder if installed
+let MB = null;
+try {
+    MB = require('baileys-mbuilder');
+    MB = MB && MB.default ? MB.default : MB;
+} catch (e) {
+    MB = null;
+}
+
 /**
  * Formats seconds into a human-readable string (d h m s)
  */
@@ -158,11 +167,31 @@ ${ramPercent < 70 ? '🟢 Status: Perfect' : ramPercent < 85 ? '🟡 Status: Sta
 
 _Mickey Glitch Technology™_`;
 
-        await sendButtons(sock, chatId, statusMessage, '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲', [
-            { id: '.menu', text: '⦂ Menu' },
-            { id: '.ping', text: '📡 Ping' },
-            { id: '.owner', text: '👑 Owner' }
-        ], message);
+        // If MB available, use MB.Button for richer buttons; otherwise fallback
+        try {
+            if (MB && typeof MB.Button === 'function') {
+                const built = new MB.Button()
+                    .text(statusMessage)
+                    .button('⦂ Menu', '.menu')
+                    .button('📡 Ping', '.ping')
+                    .button('👑 Owner', '.owner')
+                    .footer('𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲')
+                    .build();
+                await sock.sendMessage(chatId, built, { quoted: message });
+            } else {
+                await sendButtons(sock, chatId, statusMessage, '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲', [
+                    { id: '.menu', text: '⦂ Menu' },
+                    { id: '.ping', text: '📡 Ping' },
+                    { id: '.owner', text: '👑 Owner' }
+                ], message);
+            }
+        } catch (e) {
+            await sendButtons(sock, chatId, statusMessage, '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲', [
+                { id: '.menu', text: '⦂ Menu' },
+                { id: '.ping', text: '📡 Ping' },
+                { id: '.owner', text: '👑 Owner' }
+            ], message);
+        }
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);
