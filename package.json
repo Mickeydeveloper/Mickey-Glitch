@@ -82,7 +82,7 @@
     "youtubedl-core": "^4.11.7",
     "yt-search": "^2.13.1",
     "ytdl-core": "^4.11.5",
-    "gifted-btns": "^1.0.2",
+    "gifted-btns": "^1.0.2"
   },
   "overrides": {
     "jimp": "^1.6.0"
