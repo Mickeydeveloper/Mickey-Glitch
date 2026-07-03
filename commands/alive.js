@@ -2,7 +2,7 @@ const os = require('os');
 const { performance } = require('perf_hooks');
 const fs = require('fs');
 const path = require('path');
-const { MB } = require('../lib/mbuilder'); // Tunatumia MB kutoka hapa au baileys-mbuilder moja kwa moja
+const MBuilderWrapper = require('../lib/mbuilder-wrapper'); // Use wrapper for safe button/AIRich creation
 
 /**
  * Formats seconds into a human-readable string (d h m s)
@@ -17,7 +17,7 @@ const formatUptime = (seconds) => {
     if (d > 0) parts.push(`${d}ᴅ`);
     if (h > 0) parts.push(`${h}ʜ`);
     if (m > 0) parts.push(`${m}ᴍ`);
-    parts.push(`${s}─ꜱ`);
+    parts.push(`${s}ꜱ`);
 
     return parts.join(' ');
 };
@@ -158,32 +158,24 @@ ${ramPercent < 70 ? '🟢 Status: Perfect' : ramPercent < 85 ? '🟡 Status: Sta
 
 _Mickey Glitch Technology™_`;
 
-        // ── Kutengeneza Multi-row Button kutumia mbuilder ─────────────────────
-        const buttonMessage = new MB.ButtonV2()
-            .text(statusMessage)
-            .footer('𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲')
-            .row((r) => r.button("📜 𝐌𝐄𝐍𝐔", ".menu").button("📡 𝐒𝐏𝐄𝐄𝐃", ".ping"))
-            .row((r) => r.button("👑 𝐎𝐖𝐍𝐄𝐑", ".owner").button("⚡ 𝐑𝐔𝐍𝐓𝐈𝐌𝐄", ".runtime"))
-            .build();
+        // Build buttons + AIRich via wrapper. Provide rows as arrays to keep layout.
+        const rows = [
+            [ { label: '📜 𝐌𝐄𝐍𝐔', command: '.menu' }, { label: '📡 𝐒𝐏𝐄𝐄𝐃', command: '.ping' } ],
+            [ { label: '👑 𝐎𝐖𝐍𝐄𝐑', command: '.owner' }, { label: '⚡ 𝐑𝐔𝐍𝐓𝐈𝐌𝐄', command: '.runtime' } ]
+        ];
 
-        // Kuingiza externalAdReply ndani ya contextInfo ya button payload
-        const finalMessage = {
-            ...buttonMessage,
-            contextInfo: {
-                mentionedJid: [chatId],
-                externalAdReply: {
-                    title: `🚀 ${botName} | 𝐎𝐍𝐋𝐈𝐍𝐄`,
-                    body: '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲',
-                    thumbnailUrl: imageUrl,
-                    sourceUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: true
-                }
-            }
-        };
+        const finalMessage = MBuilderWrapper.createButtonWithAIRich(sock, statusMessage, rows, '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲', {
+            title: `🚀 ${botName} | 𝐎𝐍𝐋𝐈𝐍𝐄`,
+            body: '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲',
+            thumbnailUrl: imageUrl,
+            sourceUrl: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
+            showAdAttribution: true
+        });
 
-        // Tuma ujumbe kupitia sock.sendMessage (index.js itauona na kuweka AIRICH moja kwa moja!)
+        // Ensure we mention the chat and send
+        finalMessage.contextInfo = finalMessage.contextInfo || {};
+        finalMessage.contextInfo.mentionedJid = [chatId];
+
         await sock.sendMessage(chatId, finalMessage, { quoted: message });
 
     } catch (error) {

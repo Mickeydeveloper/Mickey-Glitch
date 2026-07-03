@@ -398,10 +398,33 @@ async function startMickeyBot() {
                 if (typeof message.text === 'string') {
                     const aiRichPayload = MBuilder.buildAIRich(message.text);
                     if (aiRichPayload) {
+<<<<<<< HEAD
+                        if (message.contextInfo) {
+                            aiRichPayload.messageContextInfo = {
+                                ...aiRichPayload.messageContextInfo,
+                                ...message.contextInfo,
+                            };
+                            aiRichPayload.botForwardedMessage.message.richResponseMessage.contextInfo = {
+                                ...aiRichPayload.botForwardedMessage.message.richResponseMessage.contextInfo,
+                                ...message.contextInfo,
+                            };
+                        }
+                        const { additionalNodes, ...payload } = aiRichPayload;
+                        const sendOptions = {
+                            ...options,
+                            ...(additionalNodes ? { additionalNodes: [
+                                ...(options.additionalNodes || []),
+                                ...additionalNodes,
+                            ] } : {}),
+                        };
+                        const result = await originalSendMessage(jid, payload, sendOptions);
+                        return result;
+=======
                         return originalSendMessage(jid, {
                             ...aiRichPayload,
                             ...(message.contextInfo ? { contextInfo: message.contextInfo } : {}),
                         }, options);
+>>>>>>> 966d5a23cd1bccc642913d85c08146ee758a8f66
                     }
                 }
                 // 2. Kama ni Ujumbe wenye Media (Image, Video, n.k.) na una Caption
