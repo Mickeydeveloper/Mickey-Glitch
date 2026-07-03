@@ -365,26 +365,8 @@ async function startMickeyBot() {
             connectTimeoutMs: 30000,
             defaultQueryTimeoutMs: 15000,
             keepAliveIntervalMs: 30000,
-            // FIX: Better retry handling
-            maxRetries: 3,
-            retryDelay: 5000,
-            patchMessageBeforeSending: (message) => {
-                const requiresPatch = !!(message.buttonsMessage || message.templateMessage || message.listMessage);
-                if (requiresPatch) {
-                    message = {
-                        viewOnceMessage: {
-                            message: {
-                                messageContextInfo: {
-                                    deviceListMetadataVersion: 2,
-                                    deviceListMetadata: {},
-                                },
-                                ...message,
-                            },
-                        },
-                    };
-                }
-                return message;
-            },
+            // Preserve raw payloads for buttons and lists, do not wrap them unexpectedly.
+            patchMessageBeforeSending: (message) => message,
             getMessage: async (key) => {
                 if (!key || !key.id) return undefined;
                 const jid = key.remoteJid || key.participant || key.sender || '';
