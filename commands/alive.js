@@ -1,9 +1,8 @@
 const os = require('os');
 const { performance } = require('perf_hooks');
-const { sendInteractiveMessage } = require('gifted-btns');
 const fs = require('fs');
 const path = require('path');
-const { MBuilder } = require('../lib/mbuilder'); // Imeongezwa kwa ajili ya ALRICH
+const { MB } = require('../lib/mbuilder'); // Tunatumia MB kutoka hapa au baileys-mbuilder moja kwa moja
 
 /**
  * Formats seconds into a human-readable string (d h m s)
@@ -15,10 +14,10 @@ const formatUptime = (seconds) => {
     const s = Math.floor(seconds % 60);
 
     const parts = [];
-    if (d > 0) parts.push(`${d}${d === 1 ? 'ᴅ' : 'ᴅ'}`);
-    if (h > 0) parts.push(`${h}${h === 1 ? 'ʜ' : 'ʜ'}`);
-    if (m > 0) parts.push(`${m}${m === 1 ? 'ᴍ' : 'ᴍ'}`);
-    parts.push(`${s}${s === 1 ? 'ꜱ' : 'ꜱ'}`);
+    if (d > 0) parts.push(`${d}ᴅ`);
+    if (h > 0) parts.push(`${h}ʜ`);
+    if (m > 0) parts.push(`${m}ᴍ`);
+    parts.push(`${s}─ꜱ`);
 
     return parts.join(' ');
 };
@@ -123,17 +122,12 @@ const aliveCommand = async (sock, chatId, message) => {
 
         const cpuModel = os.cpus()[0]?.model.split('@')[0].trim() || 'Generic CPU';
         const cpuCores = os.cpus().length;
-        const cpuLoad = getSystemLoad();
 
         const network = getNetworkStats();
         const uptime = formatUptime(process.uptime());
-        const platform = os.platform() === 'linux' ? '🐧 𝐋𝐢𝐧𝐮𝐱' : os.platform() === 'win32' ? '🪟 𝐖𝐢𝐧𝐝𝐨𝐰𝐬' : '📱 𝐀𝐧𝐝𝐫𝐨𝐢𝐝';
+        const platform = os.platform() === 'linux' ? '🐧 𝐋𝐢𝐧𝐮𝐱' : os.platform() === 'win32' ? '🪟 𝐖𝐢𝐧𝐝𝐨𝐰𝐬' : '📱 𝐀𝐧𝐝𝐫𝐨𝐢ډ';
         const arch = os.arch() === 'x64' ? '64-ʙɪᴛ' : os.arch();
 
-        // Node.js version
-        const nodeVersion = process.version.replace('v', '');
-
-        // Get bot uptime
         const botStartTime = global.botStartTime || Date.now();
         const botUptime = formatUptime(Math.floor((Date.now() - botStartTime) / 1000));
 
@@ -164,15 +158,17 @@ ${ramPercent < 70 ? '🟢 Status: Perfect' : ramPercent < 85 ? '🟡 Status: Sta
 
 _Mickey Glitch Technology™_`;
 
-        // Huundaji wa payload ya ALRICH kwa ajili ya maandishi ya ujumbe
-        let richTextPayload = { text: statusMessage };
-        const aiRich = MBuilder.buildAIRich(statusMessage);
-        if (aiRich) {
-            richTextPayload = aiRich;
-        }
+        // ── Kutengeneza Multi-row Button kutumia mbuilder ─────────────────────
+        const buttonMessage = new MB.ButtonV2()
+            .text(statusMessage)
+            .footer('𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲')
+            .row((r) => r.button("📜 𝐌𝐄𝐍𝐔", ".menu").button("📡 𝐒𝐏𝐄𝐄𝐃", ".ping"))
+            .row((r) => r.button("👑 𝐎𝐖𝐍𝐄𝐑", ".owner").button("⚡ 𝐑𝐔𝐍𝐓𝐈𝐌𝐄", ".runtime"))
+            .build();
 
-        await sendInteractiveMessage(sock, chatId, {
-            ...richTextPayload,
+        // Kuingiza externalAdReply ndani ya contextInfo ya button payload
+        const finalMessage = {
+            ...buttonMessage,
             contextInfo: {
                 mentionedJid: [chatId],
                 externalAdReply: {
@@ -184,46 +180,18 @@ _Mickey Glitch Technology™_`;
                     renderLargerThumbnail: true,
                     showAdAttribution: true
                 }
-            },
-            interactiveButtons: [
-                {
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '📜 𝐌𝐄𝐍𝐔', 
-                        id: '.menu' 
-                    })
-                },
-                {
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '📡 𝐒𝐏𝐄𝐄𝐃', 
-                        id: '.ping' 
-                    })
-                },
-                {
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '👑 𝐎𝐖𝐍𝐄𝐑', 
-                        id: '.owner' 
-                    })
-                },
-                {
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '⚡ 𝐑𝐔𝐍𝐓𝐈𝐌𝐄', 
-                        id: '.runtime' 
-                    })
-                }
-            ]
-        }, { quoted: message });
+            }
+        };
+
+        // Tuma ujumbe kupitia sock.sendMessage (index.js itauona na kuweka AIRICH moja kwa moja!)
+        await sock.sendMessage(chatId, finalMessage, { quoted: message });
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);
         try {
-            let errorText = '❌ *System Error:* Unable to fetch status.\n```' + error.message + '```';
-            const aiRichError = MBuilder.buildAIRich(errorText);
-            
-            await sock.sendMessage(chatId, aiRichError ? aiRichError : { text: errorText }, { quoted: message });
+            await sock.sendMessage(chatId, { 
+                text: '❌ *System Error:* Unable to fetch status.\n```' + error.message + '```' 
+            }, { quoted: message });
         } catch (e) { }
     }
 };
