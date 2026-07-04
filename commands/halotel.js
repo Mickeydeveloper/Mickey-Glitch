@@ -16,7 +16,7 @@ const SAFE_CONFIG = CONFIG || {
     FOOTER: '🚀 Powered by Mickey Glitch Tech'
 };
 
-// Server Packages (Updated)
+// Server Packages
 const SERVER_PACKAGES = [
     { 
         name: 'SMALL', 
@@ -65,20 +65,6 @@ const DATA_PACKAGES = [
     { gb: 50, label: 'Business Pack', price: 50000 }
 ];
 
-
-
-// Generate random password
-function generateRandomPassword() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$';
-    let password = '';
-    for (let i = 0; i < 12; i++) {
-        password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
-}
-
-
-
 function sendServerPaymentDetails(sock, chatId, selectedPackage, quotedMsg) {
     const paymentButtons = [
         {
@@ -110,7 +96,6 @@ async function askMickeyBiz(query, userName) {
 async function halotelCommand(sock, chatId, m, body = '') {
     try {
         const userName = m.pushName || 'Mteja';
-        const userJid = m.key.participant || m.key.remoteJid;
 
         let input = (
             m.message?.conversation || 
@@ -120,12 +105,9 @@ async function halotelCommand(sock, chatId, m, body = '') {
             body || ''
         ).toLowerCase().trim();
 
-        if (input === 'halotel') {
-            input = '.halotel';
-        }
+        if (input === 'halotel') input = '.halotel';
 
-
-        // ============= SERVER PACKAGE SELECTION (BUTTONS) =============
+        // ============= SERVER PACKAGE SELECTION =============
         if (input === '.halotel server') {
             await sock.sendMessage(chatId, { react: { text: '🖥️', key: m.key } });
 
@@ -165,18 +147,18 @@ async function halotelCommand(sock, chatId, m, body = '') {
         // ============= DATA PACKAGE HANDLER =============
         if (input.includes('gb') && (input.startsWith('.halotel') || input.includes('data_'))) {
             let gbValue;
-            
+
             if (input.startsWith('data_')) {
                 gbValue = parseInt(input.replace('data_', ''));
             } else {
                 const gbMatch = input.match(/\d+/);
                 gbValue = gbMatch ? parseInt(gbMatch[0]) : null;
             }
-            
+
             if (!gbValue) {
                 return await sock.sendMessage(chatId, { text: '❌ Tafadhali chagua kiasi sahihi cha GB.' }, { quoted: m });
             }
-            
+
             const selectedData = DATA_PACKAGES.find(d => d.gb === gbValue);
             if (!selectedData) {
                 return await sock.sendMessage(chatId, { text: '❌ Package hiyo haipo. Tumia .halotel kuona orodha.' }, { quoted: m });
@@ -221,13 +203,6 @@ async function halotelCommand(sock, chatId, m, body = '') {
                     })
                 }
             ];
-
-            const dataRows = DATA_PACKAGES.map(p => ({
-                header: `${p.gb}GB`,
-                title: p.label,
-                description: `TSh ${p.price.toLocaleString()}`,
-                id: `data_${p.gb}`
-            }));
 
             return await sendInteractiveMessage(sock, chatId, {
                 image: { url: SAFE_CONFIG.BANNER },
