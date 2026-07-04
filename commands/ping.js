@@ -1,21 +1,16 @@
 /**
- * PING & SYSTEM COMMANDS - MICKEY GLITCH ULTIMATE
- * Highly Optimized UI/UX & Built-in Modules Only
+ * PING & SYSTEM COMMANDS - MICKEY GLITCH
+ * Optimized UI/UX - Clean & Fast
  */
 
-const fs = require('fs');
-const path = require('path');
 const os = require('os');
 const { performance } = require('perf_hooks');
 
-// 🔗 Picha kutoka GitHub uliyoweka (sasa inatumia link sahihi)
-const BOT_IMAGE_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
-
 // ============================================================
-// 🎨 FORMATTING & UTILITY FUNCTIONS
+// 🎨 FORMATTING FUNCTIONS
 // ============================================================
 
-function formatTime(seconds) {
+function formatUptime(seconds) {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -28,27 +23,20 @@ function formatTime(seconds) {
 }
 
 function formatBytes(bytes) {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return '0B';
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i];
 }
 
-function createProgressBar(percent) {
-    const filled = Math.floor((Math.min(100, Math.max(0, percent)) / 100) * 10);
-    return '🟩'.repeat(filled) + '⬜'.repeat(10 - filled);
-}
-
-function getAdvancedSystemInfo() {
+function getSystemInfo() {
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
     const usedMem = totalMem - freeMem;
     const memPercent = (usedMem / totalMem) * 100;
 
     const cpus = os.cpus() || [];
-    const cpuModel = cpus[0]?.model?.replace(/\s+/g, ' ').trim() || 'Host CPU';
-
     let cpuLoad = 10.0;
     try {
         const loadAvg = os.loadavg();
@@ -56,132 +44,53 @@ function getAdvancedSystemInfo() {
     } catch (e) {}
 
     return {
-        cpu: { model: cpuModel, cores: cpus.length, load: cpuLoad },
-        memory: { total: totalMem, used: usedMem, free: freeMem, percent: memPercent },
-        os: { platform: os.platform(), distro: os.type(), uptime: os.uptime() },
-        process: { pid: process.pid, uptime: process.uptime(), version: process.version }
+        cpu: { cores: cpus.length, load: cpuLoad },
+        memory: { used: usedMem, total: totalMem, percent: memPercent },
+        os: { uptime: os.uptime() },
+        process: { uptime: process.uptime() }
     };
 }
 
 // ============================================================
-// 🖥️ COMMANDS (CLEAN & LOCAL TIME)
+// 🖥️ PING COMMAND
 // ============================================================
 
 async function pingCommand(sock, chatId, message) {
     try {
         const start = performance.now();
-        const sysInfo = getAdvancedSystemInfo();
+        const info = getSystemInfo();
         const latency = Math.round(performance.now() - start);
 
-        const cpuBar = createProgressBar(sysInfo.cpu.load);
-        const memBar = createProgressBar(sysInfo.memory.percent);
-
-        // 🌍 Imetofautishwa: Inasoma LOCAL time ya vigezo vya server yako moja kwa moja
         const localTime = new Date().toLocaleString(undefined, { hour12: false });
+        const botUptime = formatUptime(info.process.uptime);
+        const serverUptime = formatUptime(info.os.uptime);
 
-        // Get bot runtime (process uptime)
-        const botRuntimeSeconds = Math.floor(process.uptime());
-        const botRuntimeDays = Math.floor(botRuntimeSeconds / 86400);
-        const botRuntimeHours = Math.floor((botRuntimeSeconds % 86400) / 3600);
-        const botRuntimeMins = Math.floor((botRuntimeSeconds % 3600) / 60);
-        const botRuntimeSecs = botRuntimeSeconds % 60;
-        let botRuntimeStr = '';
-        if (botRuntimeDays > 0) botRuntimeStr += `${botRuntimeDays}d `;
-        if (botRuntimeHours > 0) botRuntimeStr += `${botRuntimeHours}h `;
-        if (botRuntimeMins > 0) botRuntimeStr += `${botRuntimeMins}m `;
-        botRuntimeStr += `${botRuntimeSecs}s`;
+        const text = `╔══════════════════════════╗
+║  ✨ MICKEY GLITCH ✨    ║
+╚══════════════════════════╝
 
-        const diagnosticsText = `✨ *MICKEY DIAGNOSTICS* ✨
+📡 *PING:* ${latency}ms
+⏱️ *UPTIME:* ${botUptime}
+
+💻 *CPU:* ${info.cpu.cores} Core
+💾 *RAM:* ${formatBytes(info.memory.used)}/${formatBytes(info.memory.total)}
+
+🕐 *TIME:* ${localTime}
 ─────────────────────────────
-📡 *STATUS*
-• Latency: *${latency}ms* 🚀
-• Server Uptime: *${formatTime(sysInfo.os.uptime)}*
-• 🤖 Bot Uptime: *${botRuntimeStr}*
+_Mickey Glitch Technology™_`;
 
-💻 *CPU*
-• Model: \`${sysInfo.cpu.model}\`
-• Usage: [${cpuBar}] *${sysInfo.cpu.load.toFixed(1)}%*
-• Cores: *${sysInfo.cpu.cores}*
-
-💾 *RAM*
-• Usage: [${memBar}] *${sysInfo.memory.percent.toFixed(1)}%*
-• Used: *${formatBytes(sysInfo.memory.used)}* / ${formatBytes(sysInfo.memory.total)}
-• Free: *${formatBytes(sysInfo.memory.free)}*
-
-⚙️ *ENV*
-• OS: *${sysInfo.os.platform}* | Node: *${sysInfo.process.version}*
-• Time (Local): *${localTime}*
-─────────────────────────────
-*© 2026 Mickey Glitch Labs™*`;
-
-        await sock.sendMessage(chatId, {
-            image: { url: BOT_IMAGE_URL },
-            caption: diagnosticsText
-        }, { quoted: message });
+        await sock.sendMessage(chatId, { text }, { quoted: message });
 
     } catch (error) {
         console.error('Ping Error:', error);
-        // Fallback: tuma text tu ikiwa picha haiwezi kupakiwa
-        try {
-            await sock.sendMessage(chatId, { 
-                text: `⚠️ *Picha haiwezi kupakiwa, lakini diagnostics zipo:*\n\n${diagnosticsText}` 
-            }, { quoted: message });
-        } catch (e) {
-            console.error('Fallback Error:', e);
-        }
+        await sock.sendMessage(chatId, { 
+            text: '❌ *Error:* Tafadhali jaribu tena.' 
+        }, { quoted: message });
     }
 }
 
-async function sysInfoCommand(sock, chatId, message) {
-    try {
-        const sysInfo = getAdvancedSystemInfo();
-        const infoText = `📊 *SPECIFICATIONS*
-─────────────────────────────
-🖥️ *CPU*: ${sysInfo.cpu.model} (${sysInfo.cpu.cores} Cores)
-💾 *RAM*: ${formatBytes(sysInfo.memory.used)} / ${formatBytes(sysInfo.memory.total)} (${sysInfo.memory.percent.toFixed(1)}%)
-🌐 *OS*: ${sysInfo.os.platform} (${os.arch()})
-─────────────────────────────`;
-        await sock.sendMessage(chatId, { text: infoText }, { quoted: message });
-    } catch (e) { console.error(e); }
-}
-
-async function statusCommand(sock, chatId, message) {
-    try {
-        const sysInfo = getAdvancedSystemInfo();
-        const statusText = `📈 *LIVE STATS*
-─────────────────────────────
-• CPU: ${sysInfo.cpu.load.toFixed(1)}%
-• RAM: ${sysInfo.memory.percent.toFixed(1)}%
-• Uptime: ${formatTime(sysInfo.os.uptime)}
-─────────────────────────────`;
-        await sock.sendMessage(chatId, { text: statusText }, { quoted: message });
-    } catch (e) { console.error(e); }
-}
-
-async function reportCommand(sock, chatId, message) {
-    try {
-        const sysInfo = getAdvancedSystemInfo();
-        const report = `📋 SYSTEM REPORT\n\nTimestamp: ${new Date().toLocaleString()}\nPlatform: ${sysInfo.os.platform}\nNode: ${sysInfo.process.version}`;
-
-        const tmpDir = path.join(__dirname, '..', 'tmp');
-        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-
-        const reportPath = path.join(tmpDir, `report_${Date.now()}.txt`);
-        fs.writeFileSync(reportPath, report, 'utf8');
-
-        await sock.sendMessage(chatId, {
-            document: fs.readFileSync(reportPath),
-            filename: `mickey_report.txt`,
-            mimetype: 'text/plain',
-            caption: '📋 *System Log Generated.*'
-        }, { quoted: message });
-
-        fs.unlinkSync(reportPath);
-    } catch (e) { console.error(e); }
-}
-
 // ============================================================
-// 📦 MODULE EXPORTS
+// 📦 EXPORT
 // ============================================================
 
 module.exports = pingCommand;
