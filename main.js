@@ -158,6 +158,9 @@ const telebotCommand = require('./commands/telebot');
 const tiktokCommand = require('./commands/tiktok');
 const aiCommand = require('./commands/ai');
 const aiVoiceCommand = require('./commands/ai');
+// ==============================================
+// 🤖 CHATBOT IMPORT - IKO HAPA
+// ==============================================
 const { handleChatbotMessage, groupChatbotToggleCommand } = require('./commands/chatbot');
 const urlCommand = require('./commands/url');
 const { handleTranslateCommand } = require('./commands/translate');
@@ -489,10 +492,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     await handleMentionDetection(sock, chatId, message);
                 }
 
-                // Chatbot handling: try to respond in groups or private chats if enabled
+                // ==========================================
+                // 🤖 CHATBOT HANDLING - IKO HAPA
+                // ==========================================
+                // Hii inasimamia chatbot kwenye groups na private
                 try {
                     if (typeof handleChatbotMessage === 'function') {
-                        await handleChatbotMessage(sock, chatId, message, userMessage);
+                        await handleChatbotMessage(sock, chatId, message);
                     }
                 } catch (e) {
                     console.error('handleChatbotMessage error:', e?.message || e);
@@ -730,6 +736,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 commandExecuted = true;
                 break;
+            // ==========================================
+            // 🤖 CHATBOT TOGGLE COMMAND - IKO HAPA
+            // ==========================================
             case userMessage.startsWith('.chatbot'):
                 {
                     await groupChatbotToggleCommand(sock, chatId, message, userMessage);
@@ -830,23 +839,23 @@ async function handleMessages(sock, messageUpdate, printLog) {
             //     const phoneQuery = userMessage.slice(6).trim();
             //     await phoneCommand(sock, chatId, message, phoneQuery);
             //     break;
-           
+
             // .move command removed
             case userMessage === '.topmembers':
                 topMembers(sock, chatId, isGroup);
                 break;
-           
+
             // .answer command removed
             case userMessage.startsWith('.compliment'):
                 await complimentCommand(sock, chatId, message);
                 break;
-            
+
             // .8ball command removed
             case userMessage.startsWith('.lyrics'):
                 const songTitle = userMessage.split(' ').slice(1).join(' ');
                 await lyricsCommand(sock, chatId, songTitle, message);
                 break;
-           
+
             // .truth command removed
             case userMessage === '.clear':
                 if (isGroup) await clearCommand(sock, chatId);
@@ -944,7 +953,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await wastedCommand(sock, chatId, message);
                 break;
             // .ship command removed
-            
+
             case userMessage === '.resetlink' || userMessage === '.revoke' || userMessage === '.anularlink':
                 if (!isGroup) {
                     await sock.sendMessage(chatId, { text: 'This command can only be used in groups!' }, { quoted: message });
