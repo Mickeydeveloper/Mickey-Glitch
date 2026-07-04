@@ -33,9 +33,6 @@ async function ownerCommand(sock, chatId, message) {
                       "▪️ Country-Tanzania\n" +
                       "▪️ Status-Active\n\n" +
                       "━━━━━━━━━━━━━━━━\n\n" +
-                      "Muundaji wa Mickey Glitch\n" +
-                      "Bot. Mtaalamu wa usalama\n" +
-                      "na teknolojia za kisasa.\n\n" +
                       "━━━━━━━━━━━━━━━━",
                 image: CONFIG.IMAGES[0] 
             },
@@ -47,9 +44,6 @@ async function ownerCommand(sock, chatId, message) {
                       "▪️ Status-Encrypted\n" +
                       "▪️ Protocol-AES-256\n\n" +
                       "━━━━━━━━━━━━━━━━\n\n" +
-                      "Mifumo yote inalindwa kwa\n" +
-                      "usalama wa hali ya juu.\n" +
-                      "Hakuna data zinazohifadhiwa.\n\n" +
                       "━━━━━━━━━━━━━━━━",
                 image: CONFIG.IMAGES[1] 
             },
@@ -60,10 +54,7 @@ async function ownerCommand(sock, chatId, message) {
                       "▪️ Type-Full-Access\n" +
                       "▪️ Status-Owner-Only\n" +
                       "▪️ Command-.owner\n\n" +
-                      "━━━━━━━━━━━━━━━━\n\n" +
-                      "Amri maalum kwa ajili ya\n" +
-                      "developer pekee. Udhibiti\n" +
-                      "kamili wa mfumo wote.\n\n" +
+                      "━━━━━━━━━━━━━━━━\n\n" 
                       "━━━━━━━━━━━━━━━━",
                 image: CONFIG.IMAGES[2] 
             },
@@ -75,9 +66,6 @@ async function ownerCommand(sock, chatId, message) {
                       "▪️ Status-Approved\n" +
                       "▪️ Policy-Transparent\n\n" +
                       "━━━━━━━━━━━━━━━━\n\n" +
-                      "Matumizi ya bot hii inakubali\n" +
-                      "sheria na kanuni za WhatsApp.\n" +
-                      "Faragha ni haki yako!\n\n" +
                       "━━━━━━━━━━━━━━━━",
                 image: CONFIG.IMAGES[3] 
             }
@@ -107,7 +95,7 @@ async function ownerCommand(sock, chatId, message) {
                         {
                             name: "cta_call",
                             buttonParamsJson: JSON.stringify({
-                                display_text: "📞 CALL-OWNER",
+                                display_text: " CALL-OWNER",
                                 phone_number: `+${CONFIG.OWNER.PHONE}`
                             })
                         },
@@ -131,14 +119,7 @@ async function ownerCommand(sock, chatId, message) {
                 message: {
                     interactiveMessage: {
                         body: { 
-                            text: "════════════════════════\n\n" +
-                                  "👑 *MICKEY GLITCH* 👑\n\n" +
-                                  "════════════════════════\n\n" +
-                                  "▪️ Owner-Mickdady\n" +
-                                  "▪️ Title-Quantum-Dev\n" +
-                                  "▪️ Country-Tanzania\n" +
-                                  "▪️ Version-4.0\n\n" +
-                                  "════════════════════════\n\n" +
+                            text: 
                                   "_📱 Teleza kuona vipengele_\n\n" +
                                   "════════════════════════" 
                         },
