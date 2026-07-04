@@ -65,7 +65,7 @@ const getSystemStats = () => {
     const cmdCount = global.commands ? Object.keys(global.commands).length : 0;
     const plugins = fs.existsSync(path.join(process.cwd(), 'plugins')) ? 
         fs.readdirSync(path.join(process.cwd(), 'plugins')).length : 0;
-    
+
     return {
         uptime: `${Math.floor(uptime / 86400)}d ${Math.floor((uptime % 86400) / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`,
         memoryUsed: (memUsage.heapUsed / 1024 / 1024).toFixed(2),
@@ -107,7 +107,7 @@ const categoryColors = {
 };
 
 // ==============================================
-:// 📂 LOAD DYNAMIC MENU
+// 📂 LOAD DYNAMIC MENU
 // ==============================================
 const loadDynamicMenu = (showAll = true) => {
     const commandsDir = path.join(process.cwd(), 'commands');
@@ -230,7 +230,7 @@ const getMotivationalQuote = () => {
 };
 
 // ==============================================
-:// 📱 BUILD SECTIONS
+// 📱 BUILD SECTIONS
 // ==============================================
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
@@ -277,8 +277,10 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 │  ⏰ *Time:* ${time}
 └───────────────────────────┘
 
-  📂 *Menu:* ${menuData.length} Categories
-  📋 *Commands:* ${totalCommands}
+
+
+📂 *Menu:* ${menuData.length} Categories
+📋 *Commands:* ${totalCommands}
 
 ┌  📌 *Chagua kundi la amri*
 │  👇 Bonyeza "Fungua Menu 📂"
@@ -335,7 +337,7 @@ if (typeof global !== 'undefined') {
             if (global.botStats) botStats = { ...botStats, ...global.botStats };
         } catch (e) {}
     }, 60000);
-    
+
     try {
         const statsPath = path.join(process.cwd(), 'bot_stats.json');
         if (fs.existsSync(statsPath)) {
