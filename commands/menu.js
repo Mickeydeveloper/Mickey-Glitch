@@ -267,26 +267,22 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         // ==============================================
         // 📝 PROFESSIONAL MENU TEXT
         // ==============================================
-        const menuText = `╔════════════════════════════╗
+        const menuText = `╔══════════════════════╗
 ║  ✨ MICKEY GLITCH — V3.0.5  ║
-╚════════════════════════════╝
-
+ ╚══════════════════════╝
 ┌  👋 *${greeting.text}* ${greeting.emoji}
 │  👤 *User:* ${userName}
 │  📅 *Date:* ${date}
 │  ⏰ *Time:* ${time}
-└───────────────────────────┘
-
-
-
+└───────────────────────┘
 📂 *Menu:* ${menuData.length} Categories
 📋 *Commands:* ${totalCommands}
 
 ┌  📌 *Chagua kundi la amri*
 │  👇 Bonyeza "Fungua Menu 📂"
-└───────────────────────────┘
+└───────────────────────┘
 
-_🔄 Bot Version: 3.0.5_`;
+_❤️ i love mom: _`;
 
         // ==============================================
         // 📤 SEND INTERACTIVE MENU
