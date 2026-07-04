@@ -3,7 +3,10 @@
  * CUSTOM PAIRING - Uses Custom 8-digit code (MICKDADY)
  * MODERNISED CONSOLE UI & GITHUB IMAGE CONNECTION
  * 
- * VERSION: 3.2 - Enhanced Stability & Auto-Recovery
+ * VERSION: 4.0 - SESSION PERSISTENCE & STABILITY UPGRADE
+ * - Session haifutiki wakati wa update
+ * - Auto-recovery improved
+ * - Manual session clear only
  */
 
 require("dotenv").config();
@@ -57,9 +60,10 @@ const SESSION_DIR = path.resolve(process.cwd(), 'session');
 const TEMP_DIR = path.resolve(process.cwd(), 'tmp');
 const CACHE_DIR = path.resolve(process.cwd(), 'cache');
 const MEDIA_DIR = path.resolve(process.cwd(), 'media');
+const SESSION_BACKUP_DIR = path.resolve(process.cwd(), 'session_backup');
 
 function ensureDirectories() {
-    [SESSION_DIR, TEMP_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
+    [SESSION_DIR, TEMP_DIR, CACHE_DIR, MEDIA_DIR, SESSION_BACKUP_DIR].forEach(dir => {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     });
 }
@@ -91,15 +95,64 @@ function autoClean() {
 }
 
 // ────────────────────────────────────────────────
-// SESSION MANAGEMENT WITH AUTO-REPAIR
+// SESSION MANAGEMENT WITH BACKUP & PERSISTENCE
 // ────────────────────────────────────────────────
-function clearSession() {
+function backupSession() {
     try {
-        if (fs.existsSync(SESSION_DIR)) {
-            UI.warning('Clearing corrupted/expired session files...');
+        if (!fs.existsSync(SESSION_DIR)) return false;
+        
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = path.join(SESSION_BACKUP_DIR, `session_${timestamp}`);
+        
+        // Copy session directory to backup
+        fs.cpSync(SESSION_DIR, backupPath, { recursive: true, force: true });
+        
+        // Keep only last 5 backups
+        const backups = fs.readdirSync(SESSION_BACKUP_DIR)
+            .filter(f => f.startsWith('session_'))
+            .sort()
+            .reverse();
+        
+        if (backups.length > 5) {
+            backups.slice(5).forEach(b => {
+                fs.rmSync(path.join(SESSION_BACKUP_DIR, b), { recursive: true, force: true });
+            });
+        }
+        
+        console.log(chalk.dim(`  [BACKUP] Session backed up to: ${backupPath}`));
+        return true;
+    } catch (err) {
+        console.log(chalk.dim(`  [BACKUP] Failed: ${err.message}`));
+        return false;
+    }
+}
+
+function clearSession(force = false) {
+    try {
+        if (!fs.existsSync(SESSION_DIR)) {
+            ensureDirectories();
+            return true;
+        }
+
+        // Check if auto-clear is disabled (default: disabled)
+        const autoClearEnabled = process.env.ENABLE_AUTO_CLEAR_SESSION === 'true';
+        
+        if (!force && !autoClearEnabled) {
+            UI.info('🛡️ Session clearing is DISABLED by default (ENABLE_AUTO_CLEAR_SESSION=true to enable)');
+            UI.info('📌 To manually clear: delete session folder or use --clear-session flag');
+            return false;
+        }
+
+        // Backup before clearing
+        if (force || autoClearEnabled) {
+            UI.warning('Creating session backup before clearing...');
+            backupSession();
+            
+            UI.warning('Clearing session directory...');
             fs.rmSync(SESSION_DIR, { recursive: true, force: true });
             UI.success('Session directory wiped successfully!');
         }
+        
         ensureDirectories();
         return true;
     } catch (err) {
@@ -108,7 +161,7 @@ function clearSession() {
     }
 }
 
-// Function to validate and repair session files
+// Function to validate session without auto-deleting
 async function validateAndRepairSession() {
     try {
         if (!fs.existsSync(SESSION_DIR)) {
@@ -127,22 +180,49 @@ async function validateAndRepairSession() {
         if (fs.existsSync(credsPath)) {
             try {
                 const credsData = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+                
+                // Check if credentials exist but might be invalid
                 if (!credsData.creds || !credsData.creds.registered) {
-                    UI.warning('Session credentials appear invalid, regenerating...');
-                    clearSession();
-                    return false;
+                    UI.warning('⚠️ Session credentials appear invalid, but PRESERVING session...');
+                    UI.info('🔄 Attempting to use existing session despite validation warning');
+                    
+                    // Create backup of invalid session for debugging
+                    try {
+                        const debugPath = path.join(SESSION_BACKUP_DIR, `invalid_session_${Date.now()}.json`);
+                        fs.copyFileSync(credsPath, debugPath);
+                        UI.dim(`📁 Invalid session saved for debugging: ${debugPath}`);
+                    } catch (e) {}
+                    
+                    return true; // Don't delete, try to use anyway
                 }
+                
+                UI.success('✅ Session credentials validated successfully');
+                return true;
+                
             } catch (e) {
-                UI.warning('Session credentials corrupted, regenerating...');
-                clearSession();
-                return false;
+                UI.warning('⚠️ Session credentials file corrupted, but PRESERVING session...');
+                UI.info('🔄 Attempting session recovery without deletion');
+                
+                // Create backup of corrupted file
+                try {
+                    const backupPath = path.join(SESSION_BACKUP_DIR, `corrupted_creds_${Date.now()}.json`);
+                    fs.copyFileSync(credsPath, backupPath);
+                    UI.dim(`📁 Corrupted file saved: ${backupPath}`);
+                } catch (backupErr) {
+                    // Ignore backup errors
+                }
+                
+                // Try to recover by attempting to use the session anyway
+                UI.info('🔄 Continuing with session despite corruption...');
+                return true;
             }
         }
 
         return true;
     } catch (err) {
         UI.error(`Session validation error: ${err.message}`);
-        return false;
+        UI.info('🔄 Continuing with session despite validation error...');
+        return true; // Don't delete on validation error
     }
 }
 
@@ -205,17 +285,20 @@ const UI = {
     error: (text) => console.log(chalk.redBright.bold('  ✖ [ERROR]   ') + chalk.red(text)),
     warning: (text) => console.log(chalk.yellowBright.bold('  ⚠ [WARNING] ') + chalk.yellow(text)),
     info: (text) => console.log(chalk.blueBright.bold('  ℹ [INFO]    ') + chalk.dim(text)),
+    dim: (text) => console.log(chalk.dim(`  ${text}`)),
     divider: () => console.log(chalk.cyan.dim('  ─'.repeat(45))),
     banner: () => {
         console.clear();
         console.log(chalk.cyan.bold(`
    __  ____      _             ____ _ _ _ _     
-  /  |/  (_)____/ /_____  __  / __/ /_  / __/ /_ v3.2
+  /  |/  (_)____/ /_____  __  / __/ /_  / __/ /_ v4.0
  / /|_/ / / __/  '_/ __ \\/ / / / _// / / / /_/ __ /
 /_/  /_/_/\\__/_/\\_\\\\____/\\_ / /_/ /_/_/_/\\__/_/ /_/
                         /___/
         `));
-        console.log(chalk.dim('       ⚡ Enhanced Stability Core Engaged ⚡\n'));
+        console.log(chalk.dim('       ⚡ Session Persistence & Stability Core Engaged ⚡\n'));
+        console.log(chalk.green('  🛡️  Session Auto-Clear: ') + (process.env.ENABLE_AUTO_CLEAR_SESSION === 'true' ? chalk.red('ENABLED') : chalk.green('DISABLED ✓')));
+        console.log(chalk.dim('  📌  Session persists across updates unless manually cleared\n'));
     }
 };
 
@@ -232,9 +315,9 @@ class ErrorRecovery {
             'ECONNRESET': this.handleNetworkError,
             'ETIMEDOUT': this.handleNetworkError,
             'SOCKET': this.handleNetworkError,
-            'DECRYPT': this.handleSessionError,
-            'SESSION': this.handleSessionError,
-            'AUTH': this.handleAuthError
+            'DECRYPT': this.handleSessionWarning,
+            'SESSION': this.handleSessionWarning,
+            'AUTH': this.handleSessionWarning
         };
     }
 
@@ -246,7 +329,7 @@ class ErrorRecovery {
             stack: error.stack,
             context
         };
-        
+
         this.errorLogs.push(errorEntry);
         if (this.errorLogs.length > this.maxLogs) {
             this.errorLogs.shift();
@@ -276,18 +359,13 @@ class ErrorRecovery {
     }
 
     handleNetworkError(error, bot) {
-        UI.info('Network error detected - auto-recovery initiated');
+        UI.info('🌐 Network error detected - auto-recovery initiated');
         return { action: 'reconnect', delay: 3000 };
     }
 
-    handleSessionError(error, bot) {
-        UI.warning('Session error detected - attempting repair...');
-        return { action: 'repair_session', delay: 2000 };
-    }
-
-    handleAuthError(error, bot) {
-        UI.error('Authentication error - re-pairing required');
-        return { action: 'repair_session', delay: 5000 };
+    handleSessionWarning(error, bot) {
+        UI.warning('🔑 Session warning detected - attempting recovery without deletion');
+        return { action: 'reconnect', delay: 2000 };
     }
 
     shouldAutoFix(error) {
@@ -304,7 +382,7 @@ class ErrorRecovery {
 
     getRecoveryAction(error, bot) {
         const message = error.message || String(error);
-        
+
         for (const [key, handler] of Object.entries(this.recoveryActions)) {
             if (message.includes(key)) {
                 return handler(error, bot);
@@ -352,7 +430,27 @@ async function startMickeyBot() {
         ensureDirectories();
         autoClean();
 
-        // Validate session before starting
+        // Check for manual clear flag
+        if (process.argv.includes('--clear-session') || process.argv.includes('-c')) {
+            UI.warning('Manual session clear requested via command line');
+            const confirmed = await new Promise((resolve) => {
+                const rl = createReadline();
+                rl.question(chalk.yellow('  Type "CONFIRM" to clear session: '), (answer) => {
+                    resolve(answer.trim() === 'CONFIRM');
+                    rl.close();
+                });
+            });
+            
+            if (confirmed) {
+                clearSession(true);
+                UI.success('Session cleared manually. Restarting...');
+                process.exit(0);
+            } else {
+                UI.info('Session clear cancelled.');
+            }
+        }
+
+        // Validate session BEFORE starting (without auto-deleting)
         await validateAndRepairSession();
 
         UI.banner();
@@ -363,7 +461,7 @@ async function startMickeyBot() {
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
         const hasSession = state.creds?.registered === true;
-        console.log(chalk.cyan('  » Security auth:'), hasSession ? chalk.green('Session Loaded ✓') : chalk.yellow('No active session found'));
+        console.log(chalk.cyan('  » Security auth:'), hasSession ? chalk.green('✅ Session Loaded ✓') : chalk.yellow('🔄 No active session found - Pairing Required'));
 
         const msgRetryCounterCache = new NodeCache();
 
@@ -438,11 +536,10 @@ async function startMickeyBot() {
 
                 if (handleMessages) await handleMessages(Mickey, chatUpdate, true);
             } catch (err) {
-                // Enhanced error handling with auto-recovery
                 errorRecovery.logError(err, 'messages.upsert');
-                
+
                 if (errorRecovery.shouldAutoFix(err)) {
-                    UI.info(`Auto-recovering from message error: ${err.message?.substring(0, 50)}...`);
+                    UI.info(`🔄 Auto-recovering from message error: ${err.message?.substring(0, 50)}...`);
                     await delay(1000);
                 } else if (err.message) {
                     console.log(chalk.yellow(`  [Message Handler] ${err.message?.substring(0, 60)}...`));
@@ -473,24 +570,16 @@ async function startMickeyBot() {
         // --- Enhanced Error Event Handler with Auto-Fix ---
         Mickey.ev.on("error", (err) => {
             errorRecovery.logError(err, 'socket.error');
-            
+
             if (errorRecovery.shouldAutoFix(err)) {
-                UI.info(`Auto-fixing error: ${err.message?.substring(0, 40)}...`);
-                if (err.message?.includes('decrypt') || err.message?.includes('session')) {
-                    setTimeout(() => {
-                        if (!isWhatsAppRunning) {
-                            UI.info('Initiating session repair...');
-                            clearSession();
-                            startMickeyBot();
-                        }
-                    }, 3000);
-                }
+                UI.info(`🔄 Auto-fixing error: ${err.message?.substring(0, 40)}...`);
+                // Don't clear session, just reconnect
             } else {
                 console.log(chalk.yellow(`  [Error] ${err.message}`));
             }
         });
 
-        // --- Enhanced Connection Handler with Auto-Recovery ---
+        // --- Enhanced Connection Handler with Session Persistence ---
         Mickey.ev.on("connection.update", async (update) => {
             const { connection, lastDisconnect } = update;
 
@@ -512,8 +601,9 @@ async function startMickeyBot() {
                 console.log(chalk.cyan('  ┌─[ BOT METRICS ]'));
                 console.log(chalk.cyan('  │ ') + chalk.white(`User-ID  : ${chalk.greenBright(Mickey.user.id.split(':')[0])}`));
                 console.log(chalk.cyan('  │ ') + chalk.white(`Memory   : ${chalk.yellow(ramUsage + ' MB')}`));
-                console.log(chalk.cyan('  │ ') + chalk.white(`Uptime   : ${chalk.yellow(this.formatUptime(uptime))}`));
+                console.log(chalk.cyan('  │ ') + chalk.white(`Uptime   : ${chalk.yellow(UI.formatUptime(uptime))}`));
                 console.log(chalk.cyan('  │ ') + chalk.white(`Errors   : ${chalk.yellow(errorRecovery.getErrorStats().totalErrors)}`));
+                console.log(chalk.cyan('  │ ') + chalk.white(`Session  : ${chalk.green('PERSISTED ✓')}`));
                 console.log(chalk.cyan('  └────────────────'));
                 UI.divider();
 
@@ -541,7 +631,7 @@ async function startMickeyBot() {
                     errorRecovery.logError(error, 'connection.close');
                 }
 
-                // Check if it's a decrypt/session error (auto-fixable)
+                // 🛡️ SESSION PERSISTENCE: Don't auto-clear for any session errors
                 const isDecryptError = errorMessage?.includes('decrypt') || 
                                       errorMessage?.includes('no session') ||
                                       errorMessage?.includes('session') ||
@@ -549,50 +639,61 @@ async function startMickeyBot() {
                                       errorMessage?.includes('credentials');
 
                 if (isDecryptError) {
-                    UI.info(`Session error (auto-fixing): ${errorMessage.substring(0, 40)}...`);
+                    UI.warning(`🔑 Session warning: ${errorMessage.substring(0, 40)}...`);
+                    UI.info('🛡️ PRESERVING session - attempting reconnection without clearing');
+                    UI.info('📌 If issues persist, manually clear with: node bot.js --clear-session');
+                    
                     await delay(2000);
-                    clearSession();
-                    await delay(1000);
-                    return startMickeyBot();
+                    reconnectAttempts++;
+                    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        const delayTime = Math.min(2000 + (reconnectAttempts * 1500), 60000);
+                        UI.info(`🔄 Reconnecting in ${(delayTime/1000).toFixed(1)}s... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                        await delay(delayTime);
+                        return startMickeyBot();
+                    }
+                    return;
                 }
 
                 if (statusCode === DisconnectReason.loggedOut) {
-                    UI.error('Session structure revoked (Logged Out). Auto-repairing...');
-                    clearSession();
-                    await delay(3000);
-                    return startMickeyBot();
+                    UI.error('🔴 Session logged out permanently.');
+                    UI.info('📌 You need to re-pair manually.');
+                    UI.info('📌 To clear session and re-pair: node bot.js --clear-session');
+                    // Don't auto-clear, just attempt reconnect with existing session
+                    reconnectAttempts++;
+                    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        const delayTime = Math.min(5000 + (reconnectAttempts * 2000), 60000);
+                        UI.info(`🔄 Attempting reconnection in ${(delayTime/1000).toFixed(1)}s...`);
+                        await delay(delayTime);
+                        return startMickeyBot();
+                    }
+                    return;
                 }
 
                 if (statusCode === DisconnectReason.connectionClosed || statusCode === DisconnectReason.connectionLost) {
-                    UI.info('Connection lost, auto-reconnecting...');
+                    UI.info('🌐 Connection lost, auto-reconnecting...');
                 }
 
-                // Exponential backoff with intelligent recovery
+                // Exponential backoff with intelligent recovery - WITHOUT clearing session
                 if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     const delayTime = Math.min(2000 + (reconnectAttempts * 1500), 60000);
                     reconnectAttempts++;
-                    
+
                     // Reset attempts if we've been running for a while
                     if (Date.now() - botStartTime > 3600000) {
                         reconnectAttempts = Math.max(0, reconnectAttempts - 5);
                     }
-                    
+
                     console.log(chalk.cyan(`  🔄 [RECONNECT] Attempting re-entry in ${(delayTime/1000).toFixed(1)}s... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`));
                     await delay(delayTime);
-                    
-                    // Auto-fix if too many attempts
-                    if (reconnectAttempts > 10) {
-                        UI.info('Multiple reconnection attempts - refreshing session...');
-                        clearSession();
-                        await delay(2000);
-                    }
-                    
+
+                    // 🛡️ NO SESSION CLEAR - just reconnect
                     return startMickeyBot();
                 } else {
-                    UI.error('Max reconnection threshold reached. Automatic session reset initiated...');
-                    clearSession();
+                    UI.error('⚠️ Max reconnection threshold reached.');
+                    UI.info('📌 Please restart the bot or clear session manually if needed.');
+                    UI.info('📌 To clear: node bot.js --clear-session');
                     reconnectAttempts = 0;
-                    await delay(5000);
+                    await delay(30000); // Wait 30 seconds before retry
                     return startMickeyBot();
                 }
             }
@@ -605,12 +706,12 @@ async function startMickeyBot() {
             isPairing = true;
 
             const phoneNumber = await askPhoneNumber();
-            UI.info('Intercepting token stream and pushing custom signature...');
+            UI.info('🔑 Intercepting token stream and pushing custom signature...');
 
             await delay(3000);
 
             try {
-                // Inalazimisha custom code yako ya MICKDADY
+                // Force custom code MICKDADY
                 await Mickey.requestPairingCode(phoneNumber, "MICKDADY");
 
                 console.log('\n' + chalk.magenta.bold('  ┌────────────────────────────────────────────────────────┐'));
@@ -622,7 +723,7 @@ async function startMickeyBot() {
                 console.log(chalk.magenta.bold('  │') + chalk.greenBright.bold('               👉    M I C K D A D Y    👈               ') + chalk.magenta.bold('│'));
                 console.log(chalk.magenta.bold('  └────────────────────────────────────────────────────────┘\n'));
 
-                UI.info('Waiting for authorization handshakes... (10-30s)');
+                UI.info('⏳ Waiting for authorization handshakes... (10-30s)');
 
                 const keepAliveInterval = setInterval(() => {
                     if (!isWhatsAppRunning) {
@@ -633,17 +734,18 @@ async function startMickeyBot() {
                 }, 5000);
 
             } catch (err) {
-                UI.error('Pairing pipeline blocked: ' + err.message);
+                UI.error('❌ Pairing pipeline blocked: ' + err.message);
                 errorRecovery.logError(err, 'pairing');
-                
+
                 if (pairingAttempts < MAX_PAIRING_ATTEMPTS) {
                     pairingAttempts++;
                     isPairing = false;
-                    UI.info(`Retrying pairing (${pairingAttempts}/${MAX_PAIRING_ATTEMPTS})...`);
+                    UI.info(`🔄 Retrying pairing (${pairingAttempts}/${MAX_PAIRING_ATTEMPTS})...`);
                     await delay(5000);
                     return startMickeyBot();
                 } else {
-                    UI.error('Max pairing attempts reached. Please restart manually.');
+                    UI.error('❌ Max pairing attempts reached. Please restart manually.');
+                    UI.info('📌 To clear session: node bot.js --clear-session');
                     process.exit(1);
                 }
             }
@@ -652,15 +754,17 @@ async function startMickeyBot() {
         return Mickey;
 
     } catch (err) {
-        UI.error('Critical exception detected: ' + err.message);
+        UI.error('❌ Critical exception detected: ' + err.message);
         errorRecovery.logError(err, 'startMickeyBot');
-        
-        // Try to recover
+
+        // Try to recover without clearing session
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            UI.info('🔄 Attempting recovery in 5 seconds...');
             await delay(5000);
             return startMickeyBot();
         } else {
-            UI.error('Unable to recover from critical error. Please restart.');
+            UI.error('❌ Unable to recover from critical error.');
+            UI.info('📌 Try manually restarting or clearing session: node bot.js --clear-session');
             process.exit(1);
         }
     }
@@ -684,7 +788,7 @@ function startKeepAlive() {
     // Check bot health every 2 minutes
     setInterval(() => {
         if (!whatsappBot || !isWhatsAppRunning) {
-            UI.warning('Bot health check failed - attempting recovery...');
+            UI.warning('🔄 Bot health check failed - attempting recovery...');
             if (!isReconnecting) {
                 isReconnecting = true;
                 setTimeout(() => {
@@ -705,7 +809,7 @@ function startKeepAlive() {
         // Monitor memory usage and auto-clean if too high
         const ramUsage = process.memoryUsage().rss / 1024 / 1024;
         if (ramUsage > 500) { // 500MB threshold
-            UI.warning(`High memory usage detected (${ramUsage.toFixed(1)}MB) - cleaning...`);
+            UI.warning(`⚠️ High memory usage detected (${ramUsage.toFixed(1)}MB) - cleaning...`);
             autoClean();
             if (global.gc) {
                 try { global.gc(); } catch(e) {}
@@ -713,10 +817,10 @@ function startKeepAlive() {
         }
 
         // Display status
-        const status = isWhatsAppRunning ? chalk.greenBright('ONLINE') : chalk.redBright('OFFLINE');
+        const status = isWhatsAppRunning ? chalk.greenBright('ONLINE ✅') : chalk.redBright('OFFLINE ❌');
         const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
         const errors = errorRecovery.getErrorStats().totalErrors;
-        console.log(chalk.dim(`  [MONITOR] Status: [${status}] | Core RAM: ${ram}MB | Errors: ${errors}`));
+        console.log(chalk.dim(`  [MONITOR] Status: [${status}] | Core RAM: ${ram}MB | Errors: ${errors} | Session: ${chalk.green('PERSISTED')}`));
     }, 2 * 60 * 1000);
 
     // Deep health check every 10 minutes
@@ -729,7 +833,7 @@ function startKeepAlive() {
                     new Promise((_, reject) => setTimeout(() => reject(new Error('Ping timeout')), 5000))
                 ]);
             } catch (err) {
-                UI.warning('Health check failed - connection may be dead');
+                UI.warning('🔴 Health check failed - connection may be dead');
                 if (!isReconnecting) {
                     isReconnecting = true;
                     setTimeout(() => {
@@ -743,9 +847,35 @@ function startKeepAlive() {
 }
 
 // ────────────────────────────────────────────────
+// MANUAL SESSION MANAGEMENT COMMANDS
+// ────────────────────────────────────────────────
+async function showHelp() {
+    console.log(chalk.cyan.bold('\n  📖 MICKEY GLITCH - COMMANDS'));
+    console.log(chalk.dim('  ─'.repeat(40)));
+    console.log(chalk.white('  --clear-session, -c     Clear WhatsApp session'));
+    console.log(chalk.white('  --help, -h              Show this help'));
+    console.log(chalk.white('  --version, -v           Show version'));
+    console.log(chalk.dim('  ─'.repeat(40)));
+    console.log(chalk.dim('  Session Status: ') + (fs.existsSync(SESSION_DIR) ? chalk.green('Active ✅') : chalk.yellow('None ❌')));
+    console.log(chalk.dim('  Auto-Clear: ') + (process.env.ENABLE_AUTO_CLEAR_SESSION === 'true' ? chalk.red('ENABLED ⚠️') : chalk.green('DISABLED ✅')));
+    console.log('');
+}
+
+// ────────────────────────────────────────────────
 // INITIALIZATION ENTRYPOINT
 // ────────────────────────────────────────────────
 async function initializeBot() {
+    // Check for help flags
+    if (process.argv.includes('--help') || process.argv.includes('-h')) {
+        await showHelp();
+        process.exit(0);
+    }
+    
+    if (process.argv.includes('--version') || process.argv.includes('-v')) {
+        console.log(chalk.green('MICKEY GLITCH v4.0 - Session Persistence Edition'));
+        process.exit(0);
+    }
+
     UI.banner();
     startKeepAlive();
 
@@ -755,14 +885,14 @@ async function initializeBot() {
     if (hasTelegramToken && startTelegramBot) {
         try {
             await startTelegramBot();
-            UI.success('Telegram mainframe operational.');
+            UI.success('📡 Telegram mainframe operational.');
             telegramStarted = true;
         } catch (err) {
-            UI.warning(`Telegram linkage error: ${err.message}`);
+            UI.warning(`⚠️ Telegram linkage error: ${err.message}`);
             errorRecovery.logError(err, 'telegram.init');
         }
     } else {
-        UI.info('WhatsApp standalone operation active.');
+        UI.info('📱 WhatsApp standalone operation active.');
     }
 
     // Start main bot
@@ -779,21 +909,21 @@ async function initializeBot() {
             } catch(e) {}
         }
         if (rl) { try { rl.close(); } catch(e) {} }
-        
+
         // Save any pending data
         try { store.writeToFile(); } catch(e) {}
-        
+
         console.log(chalk.green('  ✅ Clean shutdown complete'));
         process.exit(0);
     });
 
     // Uncaught exception handler
     process.on('uncaughtException', async (err) => {
-        console.error(chalk.red('Uncaught Exception:'), err);
+        console.error(chalk.red('❌ Uncaught Exception:'), err);
         errorRecovery.logError(err, 'uncaughtException');
-        
+
         if (errorRecovery.shouldAutoFix(err)) {
-            UI.info('Attempting auto-recovery from uncaught exception...');
+            UI.info('🔄 Attempting auto-recovery from uncaught exception...');
             await delay(3000);
             if (!isReconnecting) {
                 isReconnecting = true;
@@ -803,18 +933,19 @@ async function initializeBot() {
                 }, 5000);
             }
         } else {
-            UI.error('Critical uncaught exception - restart required');
+            UI.error('❌ Critical uncaught exception - restart required');
+            UI.info('📌 To clear session: node bot.js --clear-session');
             setTimeout(() => process.exit(1), 3000);
         }
     });
 
     // Unhandled rejection handler
     process.on('unhandledRejection', async (err) => {
-        console.error(chalk.red('Unhandled Rejection:'), err);
+        console.error(chalk.red('❌ Unhandled Rejection:'), err);
         errorRecovery.logError(err, 'unhandledRejection');
-        
+
         if (errorRecovery.shouldAutoFix(err)) {
-            UI.info('Auto-recovering from unhandled rejection...');
+            UI.info('🔄 Auto-recovering from unhandled rejection...');
             await delay(2000);
         }
     });
@@ -824,15 +955,15 @@ async function initializeBot() {
 UI.formatUptime = formatUptime;
 
 initializeBot().catch(err => {
-    UI.error(`Fatal crash: ${err.message}`);
+    UI.error(`💀 Fatal crash: ${err.message}`);
     errorRecovery.logError(err, 'initializeBot.fatal');
-    
+
     // Last resort recovery
     setTimeout(() => {
-        UI.info('Attempting final recovery...');
+        UI.info('🔄 Attempting final recovery...');
         initializeBot();
     }, 10000);
 });
 
 // Export for potential external use
-module.exports = { startMickeyBot, UI, errorRecovery };
+module.exports = { startMickeyBot, UI, errorRecovery, clearSession, backupSession };
