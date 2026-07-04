@@ -1,11 +1,16 @@
 const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 // ==============================================
-// 🛡️ CONFIGURATION - MICKEY GLITCH BOT 🛡️
+// 🛡️ MICKEY GLITCH - OWNER PRIVACY 🛡️
 // ==============================================
 const CONFIG = {
-    FOOTER: '👑 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ʙᴏᴛ • 𝟸𝟶𝟸𝟼 👑',
-    OWNER_PHONE: '255615944741',
+    FOOTER: '👑 MICKEY GLITCH • 2026 👑',
+    OWNER: {
+        NAME: 'Mickdady',
+        PHONE: '255615944741',
+        COUNTRY: 'Tanzania',
+        TITLE: 'Quantum Base Developer'
+    },
     IMAGES: [
         'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg',
         'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg',
@@ -14,128 +19,103 @@ const CONFIG = {
     ]
 };
 
-/**
- * 🚀 OWNER COMMAND - PRIVACY & SECURITY CAROUSEL
- * @param {Object} sock - WhatsApp socket connection
- * @param {String} chatId - Target chat ID
- * @param {Object} message - Quoted message object
- * @returns {Promise} - Relayed message
- */
 async function ownerCommand(sock, chatId, message) {
     try {
         // ============================================
-        // 📋 CARD DEFINITIONS - PRIVACY FEATURES
+        // 📋 OWNER INFO CARDS
         // ============================================
         const cards = [
             { 
-                title: "🛡️ ᴍɪᴄᴋᴇʏ-ᴘʀɪᴠᴀᴄʏ 🛡️", 
-                text: "━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                      "▪️ Name-Mickey-Privacy\n" +
-                      "▪️ Type-Data-Protection\n" +
-                      "▪️ Status-Active\n" +
-                      "▪️ Level-Maximum\n\n" +
-                      "━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                      "Ulinzi wa faragha yako ndio\n" +
-                      "kipaumbele chetu kikuu. Mfumo\n" +
-                      "wa Mickey Glitch hautunzi\n" +
-                      "taarifa zako binafsi, chats,\n" +
-                      "wala namba za siri kwenye\n" +
-                      "server zetu.\n\n" +
-                      "━━━━━━━━━━━━━━━━━━━━━━━",
+                title: "👑 MICKEY-OWNER", 
+                text: "━━━━━━━━━━━━━━━━\n\n" +
+                      "▪️ Name-Mickdady\n" +
+                      "▪️ Title-Quantum-Dev\n" +
+                      "▪️ Country-Tanzania\n" +
+                      "▪️ Status-Active\n\n" +
+                      "━━━━━━━━━━━━━━━━\n\n" +
+                      "Muundaji wa Mickey Glitch\n" +
+                      "Bot. Mtaalamu wa usalama\n" +
+                      "na teknolojia za kisasa.\n\n" +
+                      "━━━━━━━━━━━━━━━━",
                 image: CONFIG.IMAGES[0] 
             },
             { 
-                title: "🔐 ᴍɪᴄᴋᴇʏ-ᴇɴᴄʀʏᴘᴛɪᴏɴ 🔐", 
-                text: "━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                      "▪️ Name-Mickey-Encryption\n" +
+                title: "🔐 MICKEY-SECURITY", 
+                text: "━━━━━━━━━━━━━━━━\n\n" +
+                      "▪️ Name-Mickey-Secure\n" +
                       "▪️ Type-End-to-End\n" +
-                      "▪️ Status-Enabled\n" +
+                      "▪️ Status-Encrypted\n" +
                       "▪️ Protocol-AES-256\n\n" +
-                      "━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                      "Mifumo yote inayopita kwenye\n" +
-                      "bot hii inalindwa kwa itifaki\n" +
-                      "thabiti ya usalama (Encryption).\n" +
-                      "Hakuna mtu wa tatu (ikiwemo\n" +
-                      "mimi developer) anayeweza\n" +
-                      "kusoma data zako.\n\n" +
-                      "━━━━━━━━━━━━━━━━━━━━━━━",
+                      "━━━━━━━━━━━━━━━━\n\n" +
+                      "Mifumo yote inalindwa kwa\n" +
+                      "usalama wa hali ya juu.\n" +
+                      "Hakuna data zinazohifadhiwa.\n\n" +
+                      "━━━━━━━━━━━━━━━━",
                 image: CONFIG.IMAGES[1] 
             },
             { 
-                title: "⚙️ ᴍɪᴄᴋᴇʏ-ᴄᴏɴᴛʀᴏʟ ⚙️", 
-                text: "━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                      "▪️ Name-Mickey-Control\n" +
-                      "▪️ Type-User-Session\n" +
-                      "▪️ Status-Full-Access\n" +
-                      "▪️ Command-.clearsession\n\n" +
-                      "━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                      "Una mamlaka kamili 100%\n" +
-                      "juu ya bot yako. Unaweza\n" +
-                      "kufuta session yako wakati\n" +
-                      "wowote ukitumia amri ya\n" +
-                      "`.clearsession` ili kusafisha\n" +
-                      "data zako zote.\n\n" +
-                      "━━━━━━━━━━━━━━━━━━━━━━━",
+                title: "⚙️ MICKEY-CONTROL", 
+                text: "━━━━━━━━━━━━━━━━\n\n" +
+                      "▪️ Name-Mickey-Admin\n" +
+                      "▪️ Type-Full-Access\n" +
+                      "▪️ Status-Owner-Only\n" +
+                      "▪️ Command-.owner\n\n" +
+                      "━━━━━━━━━━━━━━━━\n\n" +
+                      "Amri maalum kwa ajili ya\n" +
+                      "developer pekee. Udhibiti\n" +
+                      "kamili wa mfumo wote.\n\n" +
+                      "━━━━━━━━━━━━━━━━",
                 image: CONFIG.IMAGES[2] 
             },
             { 
-                title: "📜 ᴍɪᴄᴋᴇʏ-ᴛᴇʀᴍs 📜", 
-                text: "━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                      "▪️ Name-Mickey-Terms\n" +
+                title: "📜 MICKEY-TERMS", 
+                text: "━━━━━━━━━━━━━━━━\n\n" +
+                      "▪️ Name-Mickey-Policy\n" +
                       "▪️ Type-Compliance\n" +
                       "▪️ Status-Approved\n" +
                       "▪️ Policy-Transparent\n\n" +
-                      "━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                      "Kwa kutumia bot hii, unakubali\n" +
-                      "kutumia teknolojia hii kwa\n" +
-                      "malengo halali bila kukiuka\n" +
-                      "sheria za WhatsApp. Tunaamini\n" +
-                      "katika teknolojia salama na\n" +
-                      "yenye uwazi!\n\n" +
-                      "━━━━━━━━━━━━━━━━━━━━━━━",
+                      "━━━━━━━━━━━━━━━━\n\n" +
+                      "Matumizi ya bot hii inakubali\n" +
+                      "sheria na kanuni za WhatsApp.\n" +
+                      "Faragha ni haki yako!\n\n" +
+                      "━━━━━━━━━━━━━━━━",
                 image: CONFIG.IMAGES[3] 
             }
         ];
 
         // ============================================
-        // 🎨 CARD PAYLOAD GENERATION
+        // 🎨 BUILD CARDS
         // ============================================
         let cardsPayload = [];
 
         for (const card of cards) {
-            // Prepare image media
             const media = await prepareWAMessageMedia(
                 { image: { url: card.image } }, 
                 { upload: sock.waUploadToServer }
             );
 
-            // Build card structure
             cardsPayload.push({
                 header: {
                     title: card.title,
                     hasMediaAttachment: true,
                     imageMessage: media.imageMessage
                 },
-                body: { 
-                    text: card.text 
-                },
-                footer: { 
-                    text: CONFIG.FOOTER 
-                },
+                body: { text: card.text },
+                footer: { text: CONFIG.FOOTER },
                 nativeFlowMessage: {
                     buttons: [
                         {
                             name: "cta_call",
                             buttonParamsJson: JSON.stringify({
                                 display_text: "📞 CALL-OWNER",
-                                phone_number: `+${CONFIG.OWNER_PHONE}`
+                                phone_number: `+${CONFIG.OWNER.PHONE}`
                             })
                         },
                         {
                             name: "cta_url",
                             buttonParamsJson: JSON.stringify({
-                                display_text: "💬 WHATSAPP-CHAT",
-                                url: `https://wa.me/${CONFIG.OWNER_PHONE}`
+                                display_text: "💬 WHATSAPP",
+                                url: `https://wa.me/${CONFIG.OWNER.PHONE}`
                             })
                         }
                     ]
@@ -144,25 +124,23 @@ async function ownerCommand(sock, chatId, message) {
         }
 
         // ============================================
-        // 🚀 MAIN CAROUSEL MESSAGE STRUCTURE
+        // 📤 SEND CAROUSEL
         // ============================================
         let carouselMessage = {
             viewOnceMessage: {
                 message: {
                     interactiveMessage: {
                         body: { 
-                            text: "═══════════════════════════════\n\n" +
-                                  "🔒 *ᴍɪᴄᴋᴇʏ-ɢʟɪᴛᴄʜ-ᴘʀɪᴠᴀᴄʏ* 🔒\n\n" +
-                                  "═══════════════════════════════\n\n" +
-                                  "▪️ Name-Mickey-Security\n" +
-                                  "▪️ Type-Data-Protection\n" +
-                                  "▪️ Status-Active\n" +
+                            text: "════════════════════════\n\n" +
+                                  "👑 *MICKEY GLITCH* 👑\n\n" +
+                                  "════════════════════════\n\n" +
+                                  "▪️ Owner-Mickdady\n" +
+                                  "▪️ Title-Quantum-Dev\n" +
+                                  "▪️ Country-Tanzania\n" +
                                   "▪️ Version-4.0\n\n" +
-                                  "═══════════════════════════════\n\n" +
-                                  "_📱 Teleza (slide) kushoto kuona_\n" +
-                                  "_vipengele vikuu 4 vya ulinzi_\n" +
-                                  "_wa faragha yako._\n\n" +
-                                  "═══════════════════════════════" 
+                                  "════════════════════════\n\n" +
+                                  "_📱 Teleza kuona vipengele_\n\n" +
+                                  "════════════════════════" 
                         },
                         carouselMessage: {
                             cards: cardsPayload
@@ -172,26 +150,20 @@ async function ownerCommand(sock, chatId, message) {
             }
         };
 
-        // ============================================
-        // 📤 SEND CAROUSEL MESSAGE
-        // ============================================
         const msg = generateWAMessageFromContent(
             chatId, 
             carouselMessage, 
             { quoted: message }
         );
-        
+
         return await sock.relayMessage(chatId, msg.message, { 
             messageId: msg.key.id 
         });
 
     } catch (error) {
-        console.error("❌ Owner Carousel Error:", error);
+        console.error("❌ Error:", error);
         await sock.sendMessage(chatId, { 
-            text: `❌ *Error-Mickey:* ${error.message}\n\n` +
-                  `▪️ Status-Failed\n` +
-                  `▪️ Action-Retry\n` +
-                  `▪️ Contact-Owner` 
+            text: `❌ *Error*\n\n▪️ Status-Failed\n▪️ Contact-Owner` 
         });
     }
 }
