@@ -7,7 +7,7 @@ const moment = require('moment-timezone');
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
 
-// --- MSAIDIZI WA DATA (HELPERS) ---
+// --- MSAIDIZI WA DATA ---
 function loadState() {
     try {
         if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
@@ -33,7 +33,6 @@ function loadMemory() {
         const now = Date.now();
         let changed = false;
         for (const id in data) {
-            // Memory inafutwa baada ya dk 5 za ukimya
             if (data[id].lastUpdate && (now - data[id].lastUpdate > 300000)) {
                 delete data[id];
                 changed = true;
@@ -64,7 +63,7 @@ function extractText(m) {
     } catch (e) { return ''; }
 }
 
-// --- 1. MAIN CHATBOT HANDLER ---
+// --- MAIN CHATBOT HANDLER ---
 async function handleChatbotMessage(sock, chatId, m) {
     try {
         if (!chatId || m.key?.fromMe) return;
@@ -75,7 +74,7 @@ async function handleChatbotMessage(sock, chatId, m) {
         const state = loadState();
         const isGroup = chatId.endsWith('@g.us');
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
-        
+
         if (!enabled) return;
 
         console.log(`\x1b[36m🤖 [MICKEY AI]:\x1b[0m ${userText.substring(0, 40)}...`);
@@ -94,7 +93,6 @@ async function handleChatbotMessage(sock, chatId, m) {
 
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (e) {}
 
-        // --- SYSTEM PROMPT KALI (Persona Branding) ---
         const systemPrompt = `Wewe unaitwa MICKEY, mshkaji wa karibu na Genius Support wa Mickey Glitch Bot. 
         PERSONA: Ongea kishkaji (Tanzanian Slang kiasi kama 'fresh', 'niaje', 'mambo vipi'). USISAHAU: Wewe siyo AI, wewe ni Mickey. Jibu kifupi na kishkaji.
         KNOWLEDGE: Bot ni Mickey Glitch V3, imeundwa na Mickdadi Hamza (Mickey Developer). Inadownload kila kitu na ina AI.
@@ -118,7 +116,7 @@ async function handleChatbotMessage(sock, chatId, m) {
     }
 }
 
-// --- 2. TOGGLE COMMAND (.chatbot on/off) ---
+// --- TOGGLE COMMAND (.chatbot on/off) ---
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
         const state = loadState();
@@ -132,7 +130,6 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
 
         const firstArg = args[0].toLowerCase();
 
-        // Private Mode Toggle
         if (firstArg === 'private') {
             const mode = args[1]?.toLowerCase();
             state.private = (mode === 'on');
@@ -140,7 +137,6 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
             return await sock.sendMessage(chatId, { text: `✅ Chatbot Private Mode: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: m });
         }
 
-        // Group/Standard Toggle
         if (['on', 'off'].includes(firstArg)) {
             const modeStatus = (firstArg === 'on');
             if (chatId.endsWith('@g.us')) {
@@ -163,5 +159,8 @@ module.exports = {
     groupChatbotToggleCommand,
     name: 'chatbot',
     category: 'main',
+    description: 'AI Chatbot kwa Mickey Glitch',
+    usage: '.chatbot on/off',
+    example: '.chatbot on',
     execute: groupChatbotToggleCommand 
 };
