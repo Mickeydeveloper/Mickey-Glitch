@@ -1,206 +1,167 @@
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
-const settings = require('../settings');
-const { isAdmin } = require('../lib/isAdmin');
+const fetch = require('node-fetch');
+const moment = require('moment-timezone');
 
-const CHATBOT_DATA_PATH = path.join(process.cwd(), 'data', 'chatbot.json');
+// Paths za kuhifadhi data
+const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
+const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
 
-const defaultChatbotData = {
-  perGroup: {},
-  private: false
-};
-
-const loadChatbotData = () => {
-  try {
-    if (!fs.existsSync(CHATBOT_DATA_PATH)) {
-      fs.writeFileSync(CHATBOT_DATA_PATH, JSON.stringify(defaultChatbotData, null, 2));
-      return { ...defaultChatbotData };
-    }
-    const raw = fs.readFileSync(CHATBOT_DATA_PATH, 'utf8');
-    return raw.trim() ? JSON.parse(raw) : { ...defaultChatbotData };
-  } catch (error) {
-    console.error('loadChatbotData error:', error);
-    return { ...defaultChatbotData };
-  }
-};
-
-const saveChatbotData = (data) => {
-  try {
-    fs.writeFileSync(CHATBOT_DATA_PATH, JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error('saveChatbotData error:', error);
-  }
-};
-
-const getSenderId = (message) => {
-  return message.key.participant || message.key.remoteJid || '';
-};
-
-const isOwner = (message) => {
-  const sender = getSenderId(message);
-  const ownerJid = `${settings.ownerNumber}@s.whatsapp.net`;
-  return message.key.fromMe || sender === ownerJid;
-};
-
-const getChatbotStatus = (chatId) => {
-  const data = loadChatbotData();
-  return {
-    group: Boolean(data.perGroup[chatId]),
-    private: Boolean(data.private)
-  };
-};
-
-const buildChatbotStatusText = (chatId) => {
-  const status = getChatbotStatus(chatId);
-  return `🤖 *Chatbot Status*
-
-` +
-    `• Group chatbot for this chat: ${status.group ? '✅ Enabled' : '❌ Disabled'}
-` +
-    `• Private chatbot: ${status.private ? '✅ Enabled' : '❌ Disabled'}
-
-` +
-    `Usage:
-` +
-    `- .chatbot on -> Enable chatbot in this group
-` +
-    `- .chatbot off -> Disable chatbot in this group
-` +
-    `- .chatbot private on -> Enable chatbot in private chats
-` +
-    `- .chatbot private off -> Disable chatbot in private chats
-` +
-    `- .chatbot status -> Show current chatbot mode`;
-};
-
-const groupChatbotToggleCommand = async (sock, chatId, message, userMessage) => {
-  const isGroupChat = chatId.endsWith('@g.us');
-  const args = userMessage.trim().split(/\s+/).slice(1);
-  const action = args[0]?.toLowerCase() || '';
-  const value = args[1]?.toLowerCase() || '';
-  const data = loadChatbotData();
-
-  if (!action || action === 'status' || action === 'help') {
-    return await sock.sendMessage(chatId, { text: buildChatbotStatusText(chatId) }, { quoted: message });
-  }
-
-  if (action === 'private') {
-    if (!isOwner(message)) {
-      return await sock.sendMessage(chatId, { text: '❌ Only the bot owner can change private chatbot mode.' }, { quoted: message });
-    }
-
-    if (!value || !['on', 'off'].includes(value)) {
-      return await sock.sendMessage(chatId, { text: 'Usage: .chatbot private on|off' }, { quoted: message });
-    }
-
-    data.private = value === 'on';
-    saveChatbotData(data);
-
-    return await sock.sendMessage(chatId, { text: `✅ Private chatbot is now *${data.private ? 'enabled' : 'disabled'}*. ${data.private ? 'Chatbot replies are active in private chats.' : 'Private chatbot replies are turned off.'}` }, { quoted: message });
-  }
-
-  if (!isGroupChat) {
-    return await sock.sendMessage(chatId, { text: '⚠️ Use `.chatbot private on|off` in private chat to control private chatbot mode.' }, { quoted: message });
-  }
-
-  const senderId = getSenderId(message);
-  const adminCheck = await isAdmin(sock, chatId, senderId).catch(() => ({ isSenderAdmin: false }));
-  if (!adminCheck.isSenderAdmin && !isOwner(message)) {
-    return await sock.sendMessage(chatId, { text: '❌ Only group admins can enable or disable chatbot in this group.' }, { quoted: message });
-  }
-
-  let target = action;
-  if (['on', 'off'].includes(action)) {
-    target = action;
-  } else if (action === 'group' && ['on', 'off'].includes(value)) {
-    target = value;
-  } else {
-    return await sock.sendMessage(chatId, { text: 'Usage: .chatbot on|off or .chatbot private on|off' }, { quoted: message });
-  }
-
-  data.perGroup[chatId] = target === 'on';
-  saveChatbotData(data);
-
-  return await sock.sendMessage(chatId, { text: `✅ Group chatbot is now *${data.perGroup[chatId] ? 'enabled' : 'disabled'}* for this chat.` }, { quoted: message });
-};
-
-const handleChatbotMessage = async (sock, chatId, message, userMessage) => {
-  const isGroupChat = chatId.endsWith('@g.us');
-  const data = loadChatbotData();
-  const isGroupActive = Boolean(data.perGroup[chatId]);
-  const isPrivateActive = Boolean(data.private);
-
-  if (isGroupChat && !isGroupActive) return false;
-  if (!isGroupChat && !isPrivateActive) return false;
-
-  // Prevent bot from replying to its own messages
-  if (message.key?.fromMe) return false;
-
-  const stickerMessage = message.message?.stickerMessage;
-  const rawText = (
-    message.message?.conversation ||
-    message.message?.extendedTextMessage?.text ||
-    message.message?.imageMessage?.caption ||
-    message.message?.videoMessage?.caption ||
-    ''
-  ).trim();
-
-  if (!rawText && !stickerMessage) return false;
-
-  if (stickerMessage) {
-    await sock.sendMessage(chatId, { text: 'opindi' }, { quoted: message });
-    return true;
-  }
-
-  const prompt = rawText.trim();
-  if (!prompt || prompt.length < 2) return false;
-
-  // simple per-chat cooldown to avoid spam (5s)
-  if (!global._chatbotCooldowns) global._chatbotCooldowns = new Map();
-  const last = global._chatbotCooldowns.get(chatId) || 0;
-  const now = Date.now();
-  if (now - last < 5000) return false;
-  global._chatbotCooldowns.set(chatId, now);
-
-  const apiUrl = `https://prexzyapis.com/ai/ai4chat?prompt=${encodeURIComponent(prompt)}`;
-
-  const setTyping = async (state) => {
+// --- MSAIDIZI WA DATA (HELPERS) ---
+function loadState() {
     try {
-      if (typeof sock.sendPresenceUpdate === 'function') {
-        await sock.sendPresenceUpdate(state, chatId);
-      }
-    } catch (err) {
-      // ignore presence update errors
+        if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
+        const data = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
+        return { perGroup: {}, private: false, ...data };
+    } catch (e) { 
+        return { perGroup: {}, private: false }; 
     }
-  };
+}
 
-  try {
-    await setTyping('composing');
-    await sock.sendPresenceUpdate('composing', chatId).catch(() => {});
-    await sock.sendMessage(chatId, { react: { text: '🧠', key: message.key } }).catch(() => {});
-    const response = await axios.get(apiUrl, { timeout: 15000 });
-    const json = response.data || {};
-    const reply = (json?.data?.response || json?.response || '').toString().trim() || 'Samahani, sijapata jibu kutoka kwa AI.';
+function saveState(state) {
+    try {
+        const dir = path.dirname(STATE_PATH);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
+    } catch (e) { console.error('❌ State Save Err:', e); }
+}
 
-    // send concise reply
-    await sock.sendMessage(chatId, {
-      text: `🤖 ${reply}`
-    }, { quoted: message });
-    return true;
-  } catch (error) {
-    console.error('Chatbot API error:', error);
-    await sock.sendMessage(chatId, {
-      text: '❌ *Chatbot imeshindwa kupata jibu. Jaribu tena baadae.*'
-    }, { quoted: message });
-    return false;
-  } finally {
-    await setTyping('paused');
-  }
-  return false;
-};
+function loadMemory() {
+    try {
+        if (!fs.existsSync(MEMORY_PATH)) return {};
+        const data = JSON.parse(fs.readFileSync(MEMORY_PATH, 'utf8'));
+        const now = Date.now();
+        let changed = false;
+        for (const id in data) {
+            // Memory inafutwa baada ya dk 5 za ukimya
+            if (data[id].lastUpdate && (now - data[id].lastUpdate > 300000)) {
+                delete data[id];
+                changed = true;
+            }
+        }
+        if (changed) saveMemory(data);
+        return data;
+    } catch (e) { return {}; }
+}
 
-module.exports = {
-  handleChatbotMessage,
-  groupChatbotToggleCommand
+function saveMemory(memory) {
+    try {
+        const dir = path.dirname(MEMORY_PATH);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(MEMORY_PATH, JSON.stringify(memory, null, 2));
+    } catch (e) { console.error('❌ Memory Save Err:', e); }
+}
+
+function extractText(m) {
+    try {
+        if (!m || !m.message) return '';
+        const msg = m.message;
+        const text = msg.conversation || 
+                     msg.extendedTextMessage?.text || 
+                     msg.imageMessage?.caption || 
+                     msg.videoMessage?.caption || '';
+        return text.trim();
+    } catch (e) { return ''; }
+}
+
+// --- 1. MAIN CHATBOT HANDLER ---
+async function handleChatbotMessage(sock, chatId, m) {
+    try {
+        if (!chatId || m.key?.fromMe) return;
+
+        const userText = extractText(m);
+        if (!userText || userText.startsWith('.')) return; 
+
+        const state = loadState();
+        const isGroup = chatId.endsWith('@g.us');
+        const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
+        
+        if (!enabled) return;
+
+        console.log(`\x1b[36m🤖 [MICKEY AI]:\x1b[0m ${userText.substring(0, 40)}...`);
+
+        let memory = loadMemory();
+        if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
+
+        memory[chatId].chats.push({ role: "user", content: userText });
+        memory[chatId].lastUpdate = Date.now();
+
+        if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
+
+        const history = memory[chatId].chats
+            .map(msg => `${msg.role === 'user' ? 'Mteja' : 'Mickey'}: ${msg.content}`)
+            .join("\n");
+
+        try { await sock.sendPresenceUpdate('composing', chatId); } catch (e) {}
+
+        // --- SYSTEM PROMPT KALI (Persona Branding) ---
+        const systemPrompt = `Wewe unaitwa MICKEY, mshkaji wa karibu na Genius Support wa Mickey Glitch Bot. 
+        PERSONA: Ongea kishkaji (Tanzanian Slang kiasi kama 'fresh', 'niaje', 'mambo vipi'). USISAHAU: Wewe siyo AI, wewe ni Mickey. Jibu kifupi na kishkaji.
+        KNOWLEDGE: Bot ni Mickey Glitch V3, imeundwa na Mickdadi Hamza (Mickey Developer). Inadownload kila kitu na ina AI.
+        RULES: Usitumie 'bro' au 'sister'. Ukikwama, waambie wamchek owner (Mickdadi) au kujiunga na group la support. Be chill.`;
+
+        const fullPrompt = `SYSTEM: ${systemPrompt}\n\nSTORY:\n${history}\n\nUSER: ${userText}\nMICKEY:`;
+        const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
+
+        const res = await fetch(apiUrl).then(r => r.json());
+        const reply = res?.response || res?.result || res?.message;
+
+        if (!reply) return;
+
+        memory[chatId].chats.push({ role: "assistant", content: reply });
+        saveMemory(memory);
+
+        await sock.sendMessage(chatId, { text: reply }, { quoted: m });
+
+    } catch (e) { 
+        console.error('❌ Chatbot Error:', e); 
+    }
+}
+
+// --- 2. TOGGLE COMMAND (.chatbot on/off) ---
+async function groupChatbotToggleCommand(sock, chatId, m, body) {
+    try {
+        const state = loadState();
+        const args = (body || '').trim().split(/\s+/).slice(1);
+
+        if (args.length === 0) {
+            return await sock.sendMessage(chatId, { 
+                text: '💡 *MATUMIZI:* \n.chatbot on/off\n.chatbot private on/off' 
+            }, { quoted: m });
+        }
+
+        const firstArg = args[0].toLowerCase();
+
+        // Private Mode Toggle
+        if (firstArg === 'private') {
+            const mode = args[1]?.toLowerCase();
+            state.private = (mode === 'on');
+            saveState(state);
+            return await sock.sendMessage(chatId, { text: `✅ Chatbot Private Mode: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: m });
+        }
+
+        // Group/Standard Toggle
+        if (['on', 'off'].includes(firstArg)) {
+            const modeStatus = (firstArg === 'on');
+            if (chatId.endsWith('@g.us')) {
+                if (!state.perGroup) state.perGroup = {};
+                state.perGroup[chatId] = { enabled: modeStatus };
+                saveState(state);
+                return await sock.sendMessage(chatId, { text: `✅ Chatbot Group: *${modeStatus ? 'ON' : 'OFF'}*` }, { quoted: m });
+            } else {
+                state.private = modeStatus;
+                saveState(state);
+                return await sock.sendMessage(chatId, { text: `✅ Chatbot Private: *${modeStatus ? 'ON' : 'OFF'}*` }, { quoted: m });
+            }
+        }
+
+    } catch (e) { console.error('❌ Toggle Error:', e); }
+}
+
+module.exports = { 
+    handleChatbotMessage, 
+    groupChatbotToggleCommand,
+    name: 'chatbot',
+    category: 'main',
+    execute: groupChatbotToggleCommand 
 };
