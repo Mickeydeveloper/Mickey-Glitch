@@ -11,6 +11,9 @@ const { sendInteractiveMessage } = require('gifted-btns');
 const os = require('os');
 const chalk = require('chalk');
 
+// ==============================================
+// 📊 BOT STATS
+// ==============================================
 let botStats = {
     users: 0,
     groups: 0,
@@ -29,6 +32,9 @@ try {
     }
 } catch (e) {}
 
+// ==============================================
+// 🏆 RANK SYSTEM
+// ==============================================
 const getRank = (total, userLevel = 0) => {
     const ranks = [
         { min: 0, max: 9, title: '🌱 Newbie' },
@@ -43,23 +49,12 @@ const getRank = (total, userLevel = 0) => {
     return rank;
 };
 
+// ==============================================
+// 📊 SYSTEM STATS
+// ==============================================
 const getSystemStats = () => {
     const uptime = process.uptime();
     const memUsage = process.memoryUsage();
-    const networkInterfaces = os.networkInterfaces();
-    let ipAddress = 'N/A';
-    try {
-        const interfaces = Object.values(networkInterfaces);
-        for (const iface of interfaces) {
-            for (const addr of iface) {
-                if (addr.family === 'IPv4' && !addr.internal) {
-                    ipAddress = addr.address;
-                    break;
-                }
-            }
-            if (ipAddress !== 'N/A') break;
-        }
-    } catch (e) {}
     const cpuCount = os.cpus().length;
     const cpuSpeed = os.cpus()[0]?.speed || 0;
     const totalMem = os.totalmem();
@@ -67,22 +62,17 @@ const getSystemStats = () => {
     const memUsedPercent = ((totalMem - freeMem) / totalMem * 100).toFixed(1);
     const platform = os.platform();
     const release = os.release();
-    const hostname = os.hostname();
     const cmdCount = global.commands ? Object.keys(global.commands).length : 0;
     const plugins = fs.existsSync(path.join(process.cwd(), 'plugins')) ? 
         fs.readdirSync(path.join(process.cwd(), 'plugins')).length : 0;
+    
     return {
         uptime: `${Math.floor(uptime / 86400)}d ${Math.floor((uptime % 86400) / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`,
         memoryUsed: (memUsage.heapUsed / 1024 / 1024).toFixed(2),
         memoryTotal: (memUsage.heapTotal / 1024 / 1024).toFixed(2),
-        rss: (memUsage.rss / 1024 / 1024).toFixed(2),
-        externalMem: (totalMem / 1024 / 1024 / 1024).toFixed(1) + 'GB',
-        memUsedPercent,
         cpuCores: cpuCount,
         cpuSpeed: (cpuSpeed / 1000).toFixed(1) + 'GHz',
         platform: `${platform} ${release}`,
-        hostname,
-        ipAddress,
         cmdCount,
         plugins,
         users: botStats.users || 0,
@@ -95,6 +85,9 @@ const getSystemStats = () => {
     };
 };
 
+// ==============================================
+// 🎨 MENU ICONS & COLORS
+// ==============================================
 const icons = {
     'GENERAL': '🏠', 'GROUP': '👥', 'MODERATION': '🛡️',
     'MEDIA': '🎨', 'AUDIO/VIDEO': '🎵', 'DOWNLOAD': '📥',
@@ -113,6 +106,9 @@ const categoryColors = {
     'TOOLS': '#9E9E9E', 'ANIME': '#E040FB'
 };
 
+// ==============================================
+:// 📂 LOAD DYNAMIC MENU
+// ==============================================
 const loadDynamicMenu = (showAll = true) => {
     const commandsDir = path.join(process.cwd(), 'commands');
     const dynamicMenu = {};
@@ -154,14 +150,11 @@ const loadDynamicMenu = (showAll = true) => {
             const baseName = file.replace('.js', '');
             try {
                 const cmdModule = require(path.join(commandsDir, file));
-                const commandTrigger = baseName;
                 const category = cmdModule.category || fileMapping[baseName] || 'OTHER';
                 addItem(category, {
-                    cmd: `.${commandTrigger}`,
-                    desc: cmdModule.description || `Command: ${commandTrigger}`,
-                    eg: `.${commandTrigger}`,
-                    usage: cmdModule.usage || '',
-                    example: cmdModule.example || `.${commandTrigger}`
+                    cmd: `.${baseName}`,
+                    desc: cmdModule.description || `Command: ${baseName}`,
+                    eg: `.${baseName}`
                 });
             } catch (e) {
                 addItem(fileMapping[baseName] || 'OTHER', {
@@ -179,10 +172,8 @@ const loadDynamicMenu = (showAll = true) => {
                 const category = cmd.category || fileMapping[cmd.name] || 'OTHER';
                 addItem(category, {
                     cmd: `.${cmd.name}`,
-                    desc: cmd.description || `Registered command: ${cmd.name}`,
-                    eg: `.${cmd.name}`,
-                    usage: cmd.usage || '',
-                    example: cmd.example || `.${cmd.name}`
+                    desc: cmd.description || `Command: ${cmd.name}`,
+                    eg: `.${cmd.name}`
                 });
             }
         });
@@ -203,6 +194,9 @@ const loadDynamicMenu = (showAll = true) => {
     }));
 };
 
+// ==============================================
+// 💬 GREETING SYSTEM
+// ==============================================
 const getGreeting = (hour, userLevel = 0) => {
     const greetings = [
         { range: [0, 4], text: 'Habari za Usiku sana', emoji: '🌙' },
@@ -218,6 +212,9 @@ const getGreeting = (hour, userLevel = 0) => {
     return greeting;
 };
 
+// ==============================================
+// 💡 QUOTE SYSTEM
+// ==============================================
 const getMotivationalQuote = () => {
     const quotes = [
         { text: 'Code is poetry in motion.', author: 'Quantum' },
@@ -225,15 +222,20 @@ const getMotivationalQuote = () => {
         { text: 'Innovation distinguishes leaders.', author: 'Steve Jobs' },
         { text: 'Make it work, make it right.', author: 'Programmer\'s Mantra' },
         { text: 'The best way to predict the future is to create it.', author: 'Alan Kay' },
-        { text: 'Success is not final, failure is not fatal.', author: 'Winston Churchill' }
+        { text: 'Success is not final, failure is not fatal.', author: 'Winston Churchill' },
+        { text: 'Dream big, work hard, stay focused.', author: 'Motivation' },
+        { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' }
     ];
     return quotes[Math.floor(Math.random() * quotes.length)];
 };
 
+// ==============================================
+:// 📱 BUILD SECTIONS
+// ==============================================
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
         title: `${cat.icon} ${cat.title}`,
-        highlight_label: `${cat.items.length} commands`,
+        highlight_label: `${cat.items.length} cmd`,
         rows: cat.items.slice(0, 15).map(item => ({
             title: item.cmd,
             description: item.desc ? item.desc.substring(0, 25) + (item.desc.length > 25 ? '...' : '') : item.eg,
@@ -242,6 +244,9 @@ const buildSections = (menuData) => {
     }));
 };
 
+// ==============================================
+// 🚀 MAIN MENU COMMAND
+// ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
         const now = moment().tz('Africa/Dar_es_Salaam');
@@ -259,51 +264,46 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const time = now.format('HH:mm:ss');
         const dayName = now.format('dddd');
 
-        const menuText = `╔════════════════════╗
-  ✨ *MICKEY GLITCH* — *V3.0.5*
-╚════════════════════╝
-┌  👋 *${greeting.text} ${greeting.emoji}*
+        // ==============================================
+        // 📝 PROFESSIONAL MENU TEXT
+        // ==============================================
+        const menuText = `╔════════════════════════════╗
+║  ✨ MICKEY GLITCH — V3.0.5  ║
+╚════════════════════════════╝
+
+┌  👋 *${greeting.text}* ${greeting.emoji}
 │  👤 *User:* ${userName}
 │  📅 *Date:* ${date}
 │  ⏰ *Time:* ${time}
-└────────────────────┘
-*Quantum Base Developer (TZ)*
+└───────────────────────────┘
 
-👤 *User Stats:*
-│  ├ 📝 Commands: ${userCmds}
-│  ├ 🌟 Level: ${userLevel || 0}
-│  └ 🏆 Rank: ${rank.title}
+  📂 *Menu:* ${menuData.length} Categories
+  📋 *Commands:* ${totalCommands}
 
-⚙️ *Bot System:*
-│  ├ 💾 RAM: ${stats.memoryUsed}MB/${stats.memoryTotal}MB
-│  ├ 🖥️ CPU: ${stats.cpuCores} Core
-│  ├ 📡 Uptime: ${stats.uptime}
-│  └ 📦 Commands: ${stats.cmdCount}
+┌  📌 *Chagua kundi la amri*
+│  👇 Bonyeza "Fungua Menu 📂"
+└───────────────────────────┘
 
-📈 *Bot Stats:*
-│  ├ 👥 Users: ${stats.users}
-│  ├ 💬 Messages: ${stats.totalMessages}
-│  └ ⚡ Executed: ${stats.commandsExecuted}
+_🔄 Bot Version: 3.0.5_`;
 
-💡 *"${quote.text}"*
-└ ✍️ _${quote.author}_
-
-📂 *Menu:* ${menuData.length} Categories
-📋 *Commands:* ${totalCommands}
-
-👇 *Chagua kundi la amri hapo chini:*`;
-
+        // ==============================================
+        // 📤 SEND INTERACTIVE MENU
+        // ==============================================
         await sendInteractiveMessage(sock, chatId, {
-            image: { url: "https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png" },
+            image: { 
+                url: "https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png" 
+            },
             text: menuText,
             footer: `⚡ ${stats.platform}`,
-            interactiveButtons: [{
-                name: 'single_select',
-                buttonParamsJson: JSON.stringify({
-                    title: '📂 Fungua Menu',
-                    sections: buildSections(menuData)
-                })
-            }]
+            interactiveButtons: [
+                {
+                    name: 'single_select',
+                    buttonParamsJson: JSON.stringify({
+                        title: '📂 Fungua Menu',
+                        sections: buildSections(menuData)
+                    })
+                }
+            ]
         }, { quoted: m });
 
     } catch (e) {
@@ -318,17 +318,24 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
     }
 };
 
+// ==============================================
+// 📤 EXPORTS
+// ==============================================
 module.exports = menuCommand;
 module.exports.loadDynamicMenu = loadDynamicMenu;
 module.exports.getSystemStats = getSystemStats;
 module.exports.getRank = getRank;
 
+// ==============================================
+// 🔄 AUTO-UPDATE STATS
+// ==============================================
 if (typeof global !== 'undefined') {
     setInterval(() => {
         try {
             if (global.botStats) botStats = { ...botStats, ...global.botStats };
         } catch (e) {}
     }, 60000);
+    
     try {
         const statsPath = path.join(process.cwd(), 'bot_stats.json');
         if (fs.existsSync(statsPath)) {
@@ -338,7 +345,7 @@ if (typeof global !== 'undefined') {
     } catch (e) {}
 }
 
-console.log(chalk.green('✓ Menu System Loaded'));
+console.log(chalk.green('✓ Menu System Loaded Successfully'));
 console.log(chalk.cyan(`  » Version: 3.0.5`));
 console.log(chalk.cyan(`  » Categories: ${Object.keys(icons).length}`));
 console.log(chalk.cyan(`  » Commands: ${loadDynamicMenu().reduce((acc, cat) => acc + cat.items.length, 0)}`));
