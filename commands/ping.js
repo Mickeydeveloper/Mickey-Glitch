@@ -8,8 +8,8 @@ const path = require('path');
 const os = require('os');
 const { performance } = require('perf_hooks');
 
-// 🔗 Picha kutoka GitHub uliyoweka
-const BOT_IMAGE_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Water/main/1761205727440.png';
+// 🔗 Picha kutoka GitHub uliyoweka (sasa inatumia link sahihi)
+const BOT_IMAGE_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
 
 // ============================================================
 // 🎨 FORMATTING & UTILITY FUNCTIONS
@@ -48,8 +48,7 @@ function getAdvancedSystemInfo() {
 
     const cpus = os.cpus() || [];
     const cpuModel = cpus[0]?.model?.replace(/\s+/g, ' ').trim() || 'Host CPU';
-    
-    // Kurahisisha hesabu ya CPU Load (Safi na nyepesi)
+
     let cpuLoad = 10.0;
     try {
         const loadAvg = os.loadavg();
@@ -73,7 +72,7 @@ async function pingCommand(sock, chatId, message) {
         const start = performance.now();
         const sysInfo = getAdvancedSystemInfo();
         const latency = Math.round(performance.now() - start);
-        
+
         const cpuBar = createProgressBar(sysInfo.cpu.load);
         const memBar = createProgressBar(sysInfo.memory.percent);
 
@@ -122,6 +121,14 @@ async function pingCommand(sock, chatId, message) {
 
     } catch (error) {
         console.error('Ping Error:', error);
+        // Fallback: tuma text tu ikiwa picha haiwezi kupakiwa
+        try {
+            await sock.sendMessage(chatId, { 
+                text: `⚠️ *Picha haiwezi kupakiwa, lakini diagnostics zipo:*\n\n${diagnosticsText}` 
+            }, { quoted: message });
+        } catch (e) {
+            console.error('Fallback Error:', e);
+        }
     }
 }
 
