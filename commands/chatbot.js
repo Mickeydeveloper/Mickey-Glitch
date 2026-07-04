@@ -154,7 +154,7 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
     } catch (e) { console.error('❌ Toggle Error:', e); }
 }
 
-module.exports = { 
+module.exports = 
     handleChatbotMessage, 
     groupChatbotToggleCommand,
     name: 'chatbot',
@@ -163,4 +163,4 @@ module.exports = {
     usage: '.chatbot on/off',
     example: '.chatbot on',
     execute: groupChatbotToggleCommand 
-};
+;
