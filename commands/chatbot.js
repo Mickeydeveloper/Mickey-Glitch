@@ -7,7 +7,7 @@ const moment = require('moment-timezone');
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
 
-// --- MSAIDIZI WA DATA ---
+// --- DATA HELPERS ---
 function loadState() {
     try {
         if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
@@ -55,11 +55,7 @@ function extractText(m) {
     try {
         if (!m || !m.message) return '';
         const msg = m.message;
-        const text = msg.conversation || 
-                     msg.extendedTextMessage?.text || 
-                     msg.imageMessage?.caption || 
-                     msg.videoMessage?.caption || '';
-        return text.trim();
+        return (msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption || '').trim();
     } catch (e) { return ''; }
 }
 
@@ -154,8 +150,8 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
     } catch (e) { console.error('❌ Toggle Error:', e); }
 }
 
-module.exports = 
-    aliveCommand,
+// --- CORRECT EXPORT SYNTAX ---
+module.exports = {
     handleChatbotMessage, 
-    groupChatbotToggleCommand, 
-;
+    groupChatbotToggleCommand
+};
