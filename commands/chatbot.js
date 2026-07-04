@@ -155,12 +155,7 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
 }
 
 module.exports = 
+    aliveCommand,
     handleChatbotMessage, 
-    groupChatbotToggleCommand,
-    name: 'chatbot',
-    category: 'main',
-    description: 'AI Chatbot kwa Mickey Glitch',
-    usage: '.chatbot on/off',
-    example: '.chatbot on',
-    execute: groupChatbotToggleCommand 
+    groupChatbotToggleCommand, 
 ;
