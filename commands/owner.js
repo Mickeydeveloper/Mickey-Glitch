@@ -1,15 +1,15 @@
 const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 // ==============================================
-// 🛡️ MICKEY GLITCH - OWNER PRIVACY 🛡️
+// 👑 OWNER INFO CONFIG
 // ==============================================
 const CONFIG = {
-    FOOTER: '👑 MICKEY GLITCH • 2026 👑',
+    FOOTER: '👑 MICKDADY • PROFILE 👑',
     OWNER: {
         NAME: 'Mickdady',
         PHONE: '255615944741',
         COUNTRY: 'Tanzania',
-        TITLE: 'Quantum Base Developer'
+        TITLE: 'Quantum Base Dev'
     },
     IMAGES: [
         'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg',
@@ -22,51 +22,39 @@ const CONFIG = {
 async function ownerCommand(sock, chatId, message) {
     try {
         // ============================================
-        // 📋 OWNER INFO CARDS
+        // 📋 PERSONAL INFO CARDS (Taarifa za Mtu)
         // ============================================
         const cards = [
             { 
-                title: "👑 MICKEY-OWNER", 
-                text: "━━━━━━━━━━━━━━━━\n\n" +
-                      "▪️ Name-Mickdady\n" +
-                      "▪️ Title-Quantum-Dev\n" +
-                      "▪️ Country-Tanzania\n" +
-                      "▪️ Status-Active\n\n" +
-                      "━━━━━━━━━━━━━━━━\n\n" +
-                      "━━━━━━━━━━━━━━━━",
+                title: "👤 ABOUT ME", 
+                text: "✨ *MICKDADY*\n\n" +
+                      "▪️ *Role:* Quantum Dev\n" +
+                      "▪️ *Loc:* Tanzania 🇹🇿\n" +
+                      "▪️ *Status:* Available",
                 image: CONFIG.IMAGES[0] 
             },
             { 
-                title: "🔐 MICKEY-SECURITY", 
-                text: "━━━━━━━━━━━━━━━━\n\n" +
-                      "▪️ Name-Mickey-Secure\n" +
-                      "▪️ Type-End-to-End\n" +
-                      "▪️ Status-Encrypted\n" +
-                      "▪️ Protocol-AES-256\n\n" +
-                      "━━━━━━━━━━━━━━━━\n\n" +
-                      "━━━━━━━━━━━━━━━━",
+                title: "💻 SKILLS & STACK", 
+                text: "🚀 *EXPERTISE*\n\n" +
+                      "▪️ *Tech:* Node.js & Bot Dev\n" +
+                      "▪️ *Focus:* Automation\n" +
+                      "▪️ *Level:* Advanced",
                 image: CONFIG.IMAGES[1] 
             },
             { 
-                title: "⚙️ MICKEY-CONTROL", 
-                text: "━━━━━━━━━━━━━━━━\n\n" +
-                      "▪️ Name-Mickey-Admin\n" +
-                      "▪️ Type-Full-Access\n" +
-                      "▪️ Status-Owner-Only\n" +
-                      "▪️ Command-.owner\n\n" +
-                      "━━━━━━━━━━━━━━━━\n\n" 
-                      "━━━━━━━━━━━━━━━━",
+                title: "📞 MY CONTACTS", 
+                text: "📱 *GET IN TOUCH*\n\n" +
+                      "▪️ *WhatsApp:* Active\n" +
+                      "▪️ *Call:* Direct Line\n" +
+                      "▪️ *Response:* Fast",
                 image: CONFIG.IMAGES[2] 
             },
             { 
-                title: "📜 MICKEY-TERMS", 
-                text: "━━━━━━━━━━━━━━━━\n\n" +
-                      "▪️ Name-Mickey-Policy\n" +
-                      "▪️ Type-Compliance\n" +
-                      "▪️ Status-Approved\n" +
-                      "▪️ Policy-Transparent\n\n" +
-                      "━━━━━━━━━━━━━━━━\n\n" +
-                      "━━━━━━━━━━━━━━━━",
+                title: "🌐 SOCIAL & PROJECTS", 
+                text: "📂 *WORK & LIFE*\n\n" +
+                      "▪️ *GitHub:* Mickeymozy\n" +
+                      "▪️ *Hobby:* Coding\n" +
+                      "▪️ *Aim:* Innovation",
                 image: CONFIG.IMAGES[3] 
             }
         ];
@@ -95,7 +83,7 @@ async function ownerCommand(sock, chatId, message) {
                         {
                             name: "cta_call",
                             buttonParamsJson: JSON.stringify({
-                                display_text: " CALL-OWNER",
+                                display_text: "📞 CALL OWNER",
                                 phone_number: `+${CONFIG.OWNER.PHONE}`
                             })
                         },
@@ -119,9 +107,7 @@ async function ownerCommand(sock, chatId, message) {
                 message: {
                     interactiveMessage: {
                         body: { 
-                            text: 
-                                  "_📱 Teleza kuona vipengele_\n\n" +
-                                  "════════════════════════" 
+                            text: "*MICKDADY OFFICIAL PROFILE*\n_👉 Teleza kushoto (swipe) kuona taarifa zangu_" 
                         },
                         carouselMessage: {
                             cards: cardsPayload
@@ -144,7 +130,7 @@ async function ownerCommand(sock, chatId, message) {
     } catch (error) {
         console.error("❌ Error:", error);
         await sock.sendMessage(chatId, { 
-            text: `❌ *Error*\n\n▪️ Status-Failed\n▪️ Contact-Owner` 
+            text: `❌ *Error!*\n\nJaribu tena baadae.` 
         });
     }
 }
