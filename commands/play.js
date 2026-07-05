@@ -165,7 +165,7 @@ async function getAudioFromPrexzyAPI(ytUrl) {
     if (!videoId) throw new Error('Invalid YouTube URL for Prexzy API');
 
     const encodedYoutubeUrl = encodeURIComponent(`https://youtu.be/${videoId}`);
-    const apiUrl = `https://apis.prexzyvilla.site/download/youtube-audio?url=${encodedYoutubeUrl}`;
+    const apiUrl = `https://prexzyapis.com/download/youtube-audio?url=${encodedYoutubeUrl}`;
 
     try {
         const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
