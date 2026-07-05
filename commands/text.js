@@ -24,7 +24,7 @@ async function textCommand(sock, chatId, m, body = '') {
             
             await sock.sendMessage(chatId, { react: { text: '✨', key: m.key } });
             
-            const res = await axios.get(`https://apis.prexzyvilla.site/tools/allstyles?text=${encodeURIComponent(originalText)}`);
+            const res = await axios.get(`https://prexzyapis.com/tools/allstyles?text=${encodeURIComponent(originalText)}`);
             const style = res.data.styles[parseInt(index)];
 
             if (!style) return sock.sendMessage(chatId, { text: '❌ Style haikupatikana.' });
