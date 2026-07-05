@@ -466,47 +466,48 @@ async function handleMessages(sock, messageUpdate, printLog) {
             } catch (e) {
                 // ignore failures here and continue normal flow
             }
-
-            // If userMessage is still not a command, check for active halotel pending state first
-            if (!userMessage.startsWith('.')) {
-                // Safe check for pending request (will not fail if getPendingRequest is undefined)
-                try {
-                    if (getPendingRequest && typeof getPendingRequest === 'function') {
-                        const pendingReq = getPendingRequest(chatId);
-                        if (pendingReq) {
-                            await halotelCommand(sock, chatId, message, userMessage);
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    console.error('Error checking pending request:', e.message);
-                }
-
-                // Show typing/recording indicators if enabled
-                await handleAutotypingForMessage(sock, chatId, userMessage);
-                await handleAutorecordingForMessage(sock, chatId, userMessage);
-
-                if (isGroup) {
-                    // Always run moderation features (antitag) regardless of mode
-                    await handleTagDetection(sock, chatId, message, senderId);
-                    await handleMentionDetection(sock, chatId, message);
-                }
-
-                // ==========================================
-                // 🤖 CHATBOT HANDLING - IKO HAPA
-                // ==========================================
-                // Hii inasimamia chatbot kwenye groups na private
-                try {
-                    if (typeof handleChatbotMessage === 'function') {
-                        await handleChatbotMessage(sock, chatId, message);
-                    }
-                } catch (e) {
-                    console.error('handleChatbotMessage error:', e?.message || e);
-                }
-                return;
-            }
-            // else: userMessage now starts with '.' so fall through to command handling
         }
+
+        // If userMessage is still not a command, check for active halotel pending state first
+        if (!userMessage.startsWith('.')) {
+            // Safe check for pending request (will not fail if getPendingRequest is undefined)
+            try {
+                if (getPendingRequest && typeof getPendingRequest === 'function') {
+                    const pendingReq = getPendingRequest(chatId);
+                    if (pendingReq) {
+                        await halotelCommand(sock, chatId, message, userMessage);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error('Error checking pending request:', e.message);
+            }
+
+            // Show typing/recording indicators if enabled
+            await handleAutotypingForMessage(sock, chatId, userMessage);
+            await handleAutorecordingForMessage(sock, chatId, userMessage);
+
+            if (isGroup) {
+                // Always run moderation features (antitag) regardless of mode
+                await handleTagDetection(sock, chatId, message, senderId);
+                await handleMentionDetection(sock, chatId, message);
+            }
+
+            // ==========================================
+            // 🤖 CHATBOT HANDLING - IKO HAPA
+            // ==========================================
+            // Hii inasimamia chatbot kwenye groups na private
+            try {
+                if (typeof handleChatbotMessage === 'function') {
+                    await handleChatbotMessage(sock, chatId, message);
+                }
+            } catch (e) {
+                console.error('handleChatbotMessage error:', e?.message || e);
+            }
+            return;
+        }
+        // else: userMessage now starts with '.' so fall through to command handling
+
         // In private mode, only owner/sudo can run commands
         if (!isPublic && !isOwnerOrSudoCheck) {
             return;
