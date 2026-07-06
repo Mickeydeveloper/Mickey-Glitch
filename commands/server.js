@@ -3,28 +3,53 @@ const halotel = require('./halotel');
 const axios = require('axios');
 const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 
+// Kuchukua tu vile vitu vilivyopo salama halotel.js
 const { 
     PANEL_PACKAGES, 
     createPterodactylUser,
     createPterodactylServer,
-    storePendingRequest,
-    getPendingRequest,
-    removePendingRequest,
     BANNER,
     FOOTER,
     OWNER_NUMBER,
     PANEL_URL
 } = halotel;
 
+// Local Session Management ili kuzuia "getPendingRequest is not a function" error
+const serverSessions = new Map();
+
+function storePendingRequest(chatId, userName, selectedPackage, specs) {
+    serverSessions.set(chatId, {
+        step: 'awaiting_email',
+        userName,
+        package: selectedPackage,
+        specs,
+        time: Date.now()
+    });
+}
+
+function getPendingRequest(chatId) {
+    if (!serverSessions.has(chatId)) return null;
+    const session = serverSessions.get(chatId);
+    // Expire baada ya dakika 10
+    if (Date.now() - session.time > 10 * 60 * 1000) {
+        serverSessions.delete(chatId);
+        return null;
+    }
+    return session;
+}
+
+function removePendingRequest(chatId) {
+    serverSessions.delete(chatId);
+}
+
 // ========== SEND INTERACTIVE BOOKING MENU ==========
 async function sendPackageMenu(sock, chatId, userName, quotedMsg) {
-    const textBody = `🤖 *${settings.botName} - SERVER HOSTING*\n\nHabari *${userName}*! 👋\nKaribu kwenye mfumo wa uundaji wa seva (Pterodactyl Panel).\n\n📌 *JINSI YA KUTUMIA:*\n1. Bonyeza *"📅 CHAGUA PACKAGE YA SEVA"* hapo chini.\n2. Chagua seva unayotaka.\n3. Andika email yako.\n4. Subiri sekunde chache seva ikamilike.`;
+    const textBody = `🤖 *${settings.botName || 'SERVER'} - SERVER HOSTING*\n\nHabari *${userName}*! 👋\nKaribu kwenye mfumo wa uundaji wa seva (Pterodactyl Panel).\n\n📌 *JINSI YA KUTUMIA:*\n1. Bonyeza *"📅 CHAGUA PACKAGE YA SEVA"* hapo chini.\n2. Chagua seva unayotaka.\n3. Andika email yako.\n4. Subiri sekunde chache seva ikamilike.`;
 
-    // Kutengeneza list ya packages kwa ajili ya Booking Flow
     const sections = [
         {
             title: "🖥️ PTERODACTYL SERVER PACKAGES",
-            rows: PANEL_PACKAGES.map(pkg => ({
+            rows: (PANEL_PACKAGES || []).map(pkg => ({
                 rowId: pkg.id,
                 title: `🖥️ ${pkg.name}`,
                 description: `💰 TSh ${pkg.price.toLocaleString()} | RAM: ${pkg.specs.ram}GB | CPU: ${pkg.specs.cpu}%`
@@ -59,10 +84,10 @@ async function createUserAndServer(sock, chatId, email, pendingReq, quotedMsg) {
 
     const userCreation = await createPterodactylUser(email, pendingReq.userName, chatId);
 
-    if (!userCreation.success) {
+    if (!userCreation || !userCreation.success) {
         removePendingRequest(chatId);
         await sock.sendMessage(chatId, {
-            text: `❌ *Imeshindwa kuunda account!*\n\nTatizo: ${userCreation.error}`
+            text: `❌ *Imeshindwa kuunda account!*\n\nTatizo: ${userCreation?.error || 'Unknown Error'}`
         }, { quoted: quotedMsg });
         return false;
     }
@@ -73,10 +98,10 @@ async function createUserAndServer(sock, chatId, email, pendingReq, quotedMsg) {
 
     const serverCreation = await createPterodactylServer(userCreation.userId, pendingReq.userName, pendingReq.specs, email);
 
-    if (!serverCreation.success) {
+    if (!serverCreation || !serverCreation.success) {
         removePendingRequest(chatId);
         await sock.sendMessage(chatId, {
-            text: `❌ *Server haikuundwa!*\n\nTatizo: ${serverCreation.error}`
+            text: `❌ *Server haikuundwa!*\n\nTatizo: ${serverCreation?.error || 'Unknown Error'}`
         }, { quoted: quotedMsg });
         return false;
     }
@@ -105,7 +130,7 @@ async function createUserAndServer(sock, chatId, email, pendingReq, quotedMsg) {
 // ========== MAIN COMMAND HANDLER ==========
 async function serverCommand(sock, chatId, m, body = '') {
     try {
-        const userName = m.pushName || 'Mteja';
+        const userName = m?.pushName || 'Mteja';
         const safeM = m || {};
 
         let input = (body || 
@@ -116,7 +141,6 @@ async function serverCommand(sock, chatId, m, body = '') {
             ''
         ).toLowerCase().trim();
 
-        // Check input fallback
         if (input === 'server') input = '.server';
 
         // ========== CHECK PENDING REQUEST (EMAIL INPUT) ==========
@@ -139,47 +163,40 @@ async function serverCommand(sock, chatId, m, body = '') {
         }
 
         // ========== SHOW SERVER MENU (BOOKING INTERACTIVE) ==========
-        if (input === '.server') {
+        if (input === '.server' || !input) {
             await sendPackageMenu(sock, chatId, userName, safeM);
             return;
         }
 
         // ========== HANDLE PACKAGE SELECTION ==========
-        const selectedPanel = PANEL_PACKAGES.find(p => p.id === input);
+        const selectedPanel = (PANEL_PACKAGES || []).find(p => p.id === input);
         if (selectedPanel) {
             await askForEmail(sock, chatId, userName, selectedPanel, selectedPanel.specs, safeM);
             return;
         }
 
-        // ========== FALLBACK LIST ==========
-        if (!input || input === '') {
-            await sendPackageMenu(sock, chatId, userName, safeM);
-        }
-
     } catch (e) {
         console.error('❌ Server Command Error:', e);
-        try {
-            await sock.sendMessage(chatId, { text: `❌ *Hitilafu ya kiufundi!* Jaribu tena baadae.` });
-        } catch(err) {}
     }
 }
 
-// Mfumo halisi wa kuunda Booking/List Flow Message yenye picha ya Banner juu na muonekano safi
+// Safe Booking Flow Message
 async function sendBookingFlowMessage(sock, chatId, message, textBody, footerText, buttonTitle, sectionsList) {
     try {
-        const fetchBuffer = async (url) => {
-            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
-            return Buffer.from(res.data);
-        };
-
         let thumbnailBuffer = null;
-        if (BANNER) {
+        
+        if (BANNER && BANNER.startsWith('http')) {
             try {
-                const sharp = require('sharp');
-                const buf = await fetchBuffer(BANNER);
-                thumbnailBuffer = await sharp(buf).resize(300, 300, { fit: 'cover' }).toBuffer();
+                const res = await axios.get(BANNER, { responseType: 'arraybuffer', timeout: 5000 });
+                const buf = Buffer.from(res.data);
+                try {
+                    const sharp = require('sharp');
+                    thumbnailBuffer = await sharp(buf).resize(300, 300, { fit: 'cover' }).toBuffer();
+                } catch {
+                    thumbnailBuffer = buf;
+                }
             } catch (e) {
-                console.error('[server-ui] thumbnail error:', e.message);
+                console.log('[UI Warning] Image fetch skipped');
             }
         }
 
@@ -194,7 +211,7 @@ async function sendBookingFlowMessage(sock, chatId, message, textBody, footerTex
                 contextInfo: {
                     forwardingScore: 999,
                     isForwarded: true,
-                    headerType: 6,
+                    headerType: thumbnailBuffer ? 6 : 1,
                     locationMessage: {
                         degreesLatitude: 0,
                         degreesLongitude: 0,
@@ -204,10 +221,10 @@ async function sendBookingFlowMessage(sock, chatId, message, textBody, footerTex
                     }
                 }
             }
-        }, { userJid: sock.user.id, quoted: message });
+        }, { userJid: sock.user?.id || '', quoted: message });
 
         await sock.relayMessage(chatId, msg.message, {
-            messageId: msg.key.id,
+            messageId: msg.key?.id || sock.generateMessageID(),
             additionalNodes: [
                 {
                     tag: 'biz',
@@ -223,7 +240,7 @@ async function sendBookingFlowMessage(sock, chatId, message, textBody, footerTex
             ]
         });
     } catch (err) {
-        console.error('Booking Flow Error inside Server Command:', err);
+        console.error('Booking Flow Fallback:', err);
         await sock.sendMessage(chatId, { text: textBody }, { quoted: message });
     }
 }
