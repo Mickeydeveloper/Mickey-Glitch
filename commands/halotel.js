@@ -1,59 +1,26 @@
 /**
- * halotel.js - Mickey Glitch Business AI with Buttons & Payment-Only Server Flow
- * KAZI: Inauza bando, server specs, na data bundles kwa buttons
+ * halotel.js - Mickey Glitch Business AI with Booking/Flow Message System
+ * KAZI: Inauza bando na server specs kwa kutumia muundo wa Interactive Booking/List Flows
  */
 
-const { sendInteractiveMessage } = require('../lib/myfunc');
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 const axios = require('axios');
-const settings = require('./settings');
+const path = require('path');
+const fs = require('fs');
 
-const CONFIG = settings.CONFIG;
-
-const SAFE_CONFIG = CONFIG || {
-    PRICE_PER_GB: 1000,
-    PAYMENT_NO: '0615944741',
-    BANNER: 'https://files.catbox.moe/ljabyq.png',
-    FOOTER: '🚀 Powered by Mickey Glitch Tech'
+// CONFIGURATION
+const CONFIG = {
+    FOOTER: '🚀 Powered by Mickey Glitch Tech',
+    BANNER: 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png?raw=true',
+    PAYMENT_NO: '0615944741'
 };
 
 // Server Packages
 const SERVER_PACKAGES = [
-    { 
-        name: 'SMALL', 
-        price: 15000, 
-        id: 'pkg_small',
-        specs: { ram: '1', cpu: '50', disk: '10' },
-        databases: 1,
-        backups: 1,
-        emoji: '🚀'
-    },
-    { 
-        name: 'MEDIUM', 
-        price: 35000, 
-        id: 'pkg_medium',
-        specs: { ram: '2', cpu: '100', disk: '25' },
-        databases: 2,
-        backups: 2,
-        emoji: '⚡'
-    },
-    { 
-        name: 'LARGE', 
-        price: 65000, 
-        id: 'pkg_large',
-        specs: { ram: '4', cpu: '200', disk: '50' },
-        databases: 3,
-        backups: 3,
-        emoji: '💪'
-    },
-    { 
-        name: 'PRO', 
-        price: 120000, 
-        id: 'pkg_pro',
-        specs: { ram: '8', cpu: '400', disk: '100' },
-        databases: 5,
-        backups: 5,
-        emoji: '🔥'
-    }
+    { name: 'SMALL', price: 15000, id: 'pkg_small', specs: 'RAM: 1GB | CPU: 50% | DISK: 10GB' },
+    { name: 'MEDIUM', price: 35000, id: 'pkg_medium', specs: 'RAM: 2GB | CPU: 100% | DISK: 25GB' },
+    { name: 'LARGE', price: 65000, id: 'pkg_large', specs: 'RAM: 4GB | CPU: 200% | DISK: 50GB' },
+    { name: 'PRO', price: 120000, id: 'pkg_pro', specs: 'RAM: 8GB | CPU: 400% | DISK: 100GB' }
 ];
 
 // Data Packages
@@ -65,27 +32,9 @@ const DATA_PACKAGES = [
     { gb: 50, label: 'Business Pack', price: 50000 }
 ];
 
-function sendServerPaymentDetails(sock, chatId, selectedPackage, quotedMsg) {
-    const paymentButtons = [
-        {
-            name: "cta_copy",
-            buttonParamsJson: JSON.stringify({
-                display_text: `📋 Copy Number: ${SAFE_CONFIG.PAYMENT_NO}`,
-                copy_code: SAFE_CONFIG.PAYMENT_NO
-            })
-        }
-    ];
-
-    return sendInteractiveMessage(sock, chatId, {
-        text: `✨ *MICKEY BIZ - SERVER ORDER*\n\n📦 *Package:* ${selectedPackage.name}\n💰 *Amount:* TSh ${selectedPackage.price.toLocaleString()}\n\n*SPECIFICATIONS:*\n• 🧠 RAM: ${selectedPackage.specs.ram}GB\n• 🏎️ CPU: ${selectedPackage.specs.cpu}%\n• 💾 DISK: ${selectedPackage.specs.disk}GB\n• 🗄️ Databases: ${selectedPackage.databases}\n• 💾 Backups: ${selectedPackage.backups}\n\n*PAYMENT DETAILS:*\n💳 *Number:* ${SAFE_CONFIG.PAYMENT_NO}\n💵 *Amount:* TSh ${selectedPackage.price.toLocaleString()}\n\n*Baada ya malipo:*\n1. Tuma screenshot ya malipo hapa.\n2. Admin atawasiliana nawe kwa muendelezo.\n3. Hii ni huduma ya server specifications pekee, bila uundaji wa moja kwa moja.\n\n🚀 Powered by Mickey Glitch Tech`,
-        footer: SAFE_CONFIG.FOOTER,
-        interactiveButtons: paymentButtons
-    }, { quoted: quotedMsg });
-}
-
 async function askMickeyBiz(query, userName) {
     try {
-        const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando na panel. Mteja ni ${userName}. Jibu kwa mfumo wa biashara.`;
+        const bizPrompt = `Wewe ni Mickey Biz AI. Unauza bando na panel. Jibu kwa kifupi.`;
         const res = await axios.get(`https://apiskeith.top/ai/gpt?q=${encodeURIComponent(bizPrompt + query)}`);
         return res.data.data || res.data.result || "Lipia mwanangu tuwashe mitambo.";
     } catch (e) { 
@@ -96,156 +45,143 @@ async function askMickeyBiz(query, userName) {
 async function halotelCommand(sock, chatId, m, body = '') {
     try {
         const userName = m.pushName || 'Mteja';
+        const safeM = m || {};
 
         let input = (
-            m.message?.conversation || 
-            m.message?.extendedTextMessage?.text || 
-            m.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
-            m.message?.buttonsResponseMessage?.selectedButtonId ||
+            safeM.message?.conversation || 
+            safeM.message?.extendedTextMessage?.text || 
+            safeM.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+            safeM.message?.buttonsResponseMessage?.selectedButtonId ||
             body || ''
         ).toLowerCase().trim();
 
         if (input === 'halotel') input = '.halotel';
 
-        // ============= SERVER PACKAGE SELECTION =============
-        if (input === '.halotel server') {
-            await sock.sendMessage(chatId, { react: { text: '🖥️', key: m.key } });
+        // ============= MAIN MENU (BOOKING / SELECTION FLOW) =============
+        if (input === '.halotel') {
+            await sock.sendMessage(chatId, { react: { text: '🏪', key: safeM.key } });
 
-            const serverButtons = SERVER_PACKAGES.map(pkg => ({
-                name: "quick_reply",
-                buttonParamsJson: JSON.stringify({
-                    display_text: `${pkg.emoji} ${pkg.name} - TSh ${pkg.price.toLocaleString()}`,
-                    id: `server_${pkg.id}`
-                })
-            }));
+            const textBody = `🏪 *MICKEY GLITCH STORE — INTERACTIVE BOOKING*\n\nMambo vipi *${userName}*! 👋\n\nKaribu kwenye mfumo wa kuagiza na ku-book huduma kidijitali. Bonyeza *"📅 OPEN BOOKING SYSTEM"* hapo chini kuchagua bando au seva unayotaka papo hapo.`;
 
-            const text = `🤖 *${userName} - SERVER HOSTING*\n\nKaribu kwenye huduma yetu ya server hosting. Chagua package ya server specification hapa chini.\n\n*PACKAGES ZINAZOPATIKANA:*\n\n${SERVER_PACKAGES.map(pkg => 
-                `${pkg.emoji} *${pkg.name}*\n` +
-                `   💰 TSh ${pkg.price.toLocaleString()}\n` +
-                `   💾 RAM: ${pkg.specs.ram}GB | CPU: ${pkg.specs.cpu}% | DISK: ${pkg.specs.disk}GB\n` +
-                `   📊 Databases: ${pkg.databases} | Backups: ${pkg.backups}\n`
-            ).join('\n')}\n\n*✏️ BONYEZA PACKAGE ULIYOIPENDA KUENDELEA NA MALIPO.*\n\n🚀 Powered by Mickey Glitch Tech`;
+            // Muundo wa Sections kwa ajili ya Booking Flow
+            const sections = [
+                {
+                    title: "🖥️ SERVER HOSTING PACKS",
+                    rows: SERVER_PACKAGES.map(pkg => ({
+                        rowId: `server_${pkg.id}`,
+                        title: `🖥️ Seva: ${pkg.name}`,
+                        description: `💰 TSh ${pkg.price.toLocaleString()} — ${pkg.specs}`
+                    }))
+                },
+                {
+                    title: "📱 HALOTEL DATA BUNDLES",
+                    rows: DATA_PACKAGES.map(p => ({
+                        rowId: `data_${p.gb}`,
+                        title: `📱 Halotel ${p.gb}GB`,
+                        description: `💰 TSh ${p.price.toLocaleString()} — ${p.label}`
+                    }))
+                }
+            ];
 
-            return await sendInteractiveMessage(sock, chatId, {
-                image: { url: SAFE_CONFIG.BANNER },
-                text: text,
-                footer: SAFE_CONFIG.FOOTER,
-                interactiveButtons: serverButtons
-            }, { quoted: m });
+            await sendBookingFlowMessage(sock, chatId, safeM, textBody, CONFIG.FOOTER, "📅 OPEN BOOKING SYSTEM", sections);
+            return;
         }
 
-        // ============= HANDLE SERVER PACKAGE SELECTION =============
+        // ============= HANDLE SERVER SELECTION =============
         if (input.startsWith('server_')) {
             const packageId = input.replace('server_', '');
             const selectedPackage = SERVER_PACKAGES.find(pkg => pkg.id === packageId);
             if (selectedPackage) {
-                return await sendServerPaymentDetails(sock, chatId, selectedPackage, m);
+                const textDetail = `✨ *ORDER CONFIRMED — SERVER HOSTING*\n\n📦 *Package:* ${selectedPackage.name}\n💰 *Price:* TSh ${selectedPackage.price.toLocaleString()}\n⚙️ *Specs:* ${selectedPackage.specs}\n\n*PAYMENT DETAILS:*\n💳 *M-Pesa/Tigo/Airtel:* \`${CONFIG.PAYMENT_NO}\`\n\n_Baada ya kulipia, tuma screenshot hapa ili kuwasha mitambo yako ya seva chap!_`;
+                await sock.sendMessage(chatId, { text: textDetail }, { quoted: safeM });
             }
             return;
         }
 
-        // ============= DATA PACKAGE HANDLER =============
-        if (input.includes('gb') && (input.startsWith('.halotel') || input.includes('data_'))) {
-            let gbValue;
-
-            if (input.startsWith('data_')) {
-                gbValue = parseInt(input.replace('data_', ''));
-            } else {
-                const gbMatch = input.match(/\d+/);
-                gbValue = gbMatch ? parseInt(gbMatch[0]) : null;
-            }
-
-            if (!gbValue) {
-                return await sock.sendMessage(chatId, { text: '❌ Tafadhali chagua kiasi sahihi cha GB.' }, { quoted: m });
-            }
-
+        // ============= HANDLE DATA SELECTION =============
+        if (input.startsWith('data_')) {
+            const gbValue = parseInt(input.replace('data_', ''));
             const selectedData = DATA_PACKAGES.find(d => d.gb === gbValue);
-            if (!selectedData) {
-                return await sock.sendMessage(chatId, { text: '❌ Package hiyo haipo. Tumia .halotel kuona orodha.' }, { quoted: m });
+            if (selectedData) {
+                const textData = `✨ *ORDER CONFIRMED — DATA BUNDLE*\n\n📊 *Bando:* ${selectedData.gb}GB (${selectedData.label})\n💰 *Price:* TSh ${selectedData.price.toLocaleString()}\n📌 *Network:* Halotel\n\n*PAYMENT DETAILS:*\n💳 *Namba ya Malipo:* \`${CONFIG.PAYMENT_NO}\`\n\n_Tuma screenshot ya muamala hapa ili bando liingizwe kwenye namba yako mara moja._`;
+                await sock.sendMessage(chatId, { text: textData }, { quoted: safeM });
             }
-
-            await sock.sendMessage(chatId, { react: { text: '💰', key: m.key } });
-
-            const paymentButtons = [
-                {
-                    name: "cta_copy",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: `📋 Copy Number: ${SAFE_CONFIG.PAYMENT_NO}`,
-                        copy_code: SAFE_CONFIG.PAYMENT_NO
-                    })
-                }
-            ];
-
-            return await sendInteractiveMessage(sock, chatId, {
-                text: `✨ *MICKEY BIZ - DATA ORDER*\n\n📊 *Package:* ${selectedData.gb}GB - ${selectedData.label}\n💰 *Amount:* TSh ${selectedData.price.toLocaleString()}\n📌 *Network:* Halotel\n\n*PAYMENT DETAILS:*\n💳 *Number:* ${SAFE_CONFIG.PAYMENT_NO}\n💵 *Amount:* TSh ${selectedData.price.toLocaleString()}\n\n*After payment:*\n1. Take a screenshot\n2. Send it here\n3. Your data will be activated immediately\n\n📱 *M-Pesa/Tigo/Airtel users:* Send payment to the number above\n\n🚀 Powered by Mickey Glitch Tech`,
-                footer: SAFE_CONFIG.FOOTER,
-                interactiveButtons: paymentButtons
-            }, { quoted: m });
-        }
-
-        // ============= MAIN MENU =============
-        if (input === '.halotel') {
-            await sock.sendMessage(chatId, { react: { text: '🏪', key: m.key } });
-
-            const mainButtons = [
-                {
-                    name: "quick_reply",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "🖥️ SERVER HOSTING",
-                        id: ".halotel server"
-                    })
-                },
-                {
-                    name: "quick_reply",
-                    buttonParamsJson: JSON.stringify({
-                        display_text: "📱 DATA BUNDLES",
-                        id: "show_data_menu"
-                    })
-                }
-            ];
-
-            return await sendInteractiveMessage(sock, chatId, {
-                image: { url: SAFE_CONFIG.BANNER },
-                text: `🏪 *MICKEY GLITCH STORE*\n\nMambo vipi *${userName}*! 👋\n\nKaribu kwenye duka letu. Tunauza:\n\n🖥️ *SERVER HOSTING* - Server specifications na malipo\n📱 *DATA BUNDLES* - Halotel internet packages\n\nChagua huduma unayoitaka kwa kubonyeza button hapo chini:\n\n🚀 Powered by Mickey Glitch Tech`,
-                footer: SAFE_CONFIG.FOOTER,
-                interactiveButtons: mainButtons
-            }, { quoted: m });
-        }
-
-        // ============= SHOW DATA MENU =============
-        if (input === 'show_data_menu') {
-            const dataRows = DATA_PACKAGES.map(p => ({
-                header: `${p.gb}GB`,
-                title: p.label,
-                description: `💰 TSh ${p.price.toLocaleString()}`,
-                id: `data_${p.gb}`
-            }));
-
-            return await sendInteractiveMessage(sock, chatId, {
-                image: { url: SAFE_CONFIG.BANNER },
-                text: `📱 *HALOTEL DATA BUNDLES*\n\nChagua package yako ya data hapa chini:\n\n*Prices:*\n${DATA_PACKAGES.map(p => `• ${p.gb}GB - ${p.label}: TSh ${p.price.toLocaleString()}`).join('\n')}\n\nBonyeza package unayoitaka kuendelea na malipo.`,
-                footer: SAFE_CONFIG.FOOTER,
-                interactiveButtons: [{
-                    name: "single_select",
-                    buttonParamsJson: JSON.stringify({
-                        title: "📦 SELECT DATA PACKAGE",
-                        sections: [{ title: "HALOTEL BUNDLES", rows: dataRows }]
-                    })
-                }]
-            }, { quoted: m });
+            return;
         }
 
         // ============= AI CHAT =============
         if (input.length > 2 && !input.startsWith('.') && !input.startsWith('data_') && !input.startsWith('server_')) {
             const aiReply = await askMickeyBiz(input, userName);
-            return await sock.sendMessage(chatId, { text: `💼 *MICKEY BIZ:* ${aiReply}` }, { quoted: m });
+            return await sock.sendMessage(chatId, { text: `💼 *MICKEY BIZ:* ${aiReply}` }, { quoted: safeM });
         }
 
     } catch (e) {
-        console.error("Halotel Command Error:", e);
-        await sock.sendMessage(chatId, { 
-            text: `❌ *ERROR OCCURRED*\n\nSamahani, kuna hitilafu: ${e.message}\n\nTafadhali jaribu tena baadae.` 
-        }, { quoted: m });
+        console.error("Halotel Flow Error:", e);
+    }
+}
+
+// Mfumo halisi wa kuunda Booking/List Flow Message yenye Beji ya AI na picha ya Banner juu
+async function sendBookingFlowMessage(sock, chatId, message, textBody, footerText, buttonTitle, sectionsList) {
+    try {
+        const fetchBuffer = async (url) => {
+            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
+            return Buffer.from(res.data);
+        };
+
+        let thumbnailBuffer = null;
+        if (CONFIG.BANNER) {
+            try {
+                const sharp = require('sharp');
+                const buf = await fetchBuffer(CONFIG.BANNER);
+                thumbnailBuffer = await sharp(buf).resize(300, 300, { fit: 'cover' }).toBuffer();
+            } catch (e) {
+                console.error('Thumbnail error:', e.message);
+            }
+        }
+
+        const msg = generateWAMessageFromContent(chatId, {
+            listMessage: {
+                title: "🏪 MICKEY BIZ TECH",
+                description: textBody,
+                buttonText: buttonTitle, // Hii inatengeneza ile fomu/drawer ya booking
+                listType: 1,
+                sections: sectionsList,
+                footerText: footerText,
+                contextInfo: {
+                    forwardingScore: 999,
+                    isForwarded: true,
+                    // Kumalizia muonekano kamili wa location header juu ya list
+                    headerType: 6,
+                    locationMessage: {
+                        degreesLatitude: 0,
+                        degreesLongitude: 0,
+                        name: "📅 HUDUMA YA MIADI & PACKAGES",
+                        address: "Mickey Glitch Automated Server",
+                        jpegThumbnail: thumbnailBuffer
+                    }
+                }
+            }
+        }, { userJid: sock.user.id, quoted: message });
+
+        await sock.relayMessage(chatId, msg.message, {
+            messageId: msg.key.id,
+            additionalNodes: [
+                {
+                    tag: 'biz',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: 'interactive',
+                            attrs: { type: 'native_flow', v: '1' },
+                            content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+                        }
+                    ]
+                }
+            ]
+        });
+    } catch (err) {
+        console.error('Booking Flow Error:', err);
+        await sock.sendMessage(chatId, { text: textBody }, { quoted: message });
     }
 }
 
