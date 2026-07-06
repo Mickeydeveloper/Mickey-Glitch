@@ -1,6 +1,7 @@
 /**
  * TELEGRAM BOT MODULE - MICKEY GLITCH ULTIMATE
  * Version 2.0 - Fully Enhanced with African Charts, Downloader, and AI Features
+ * Autofix & Crash Prevention Enabled
  */
 
 const fs = require('fs');
@@ -127,24 +128,35 @@ async function sendTelegramButtons(chatId, text, buttons, options = {}) {
             let row = [];
             for (const btn of buttons) {
                 const button = {
-                    text: btn.text || btn.label || 'Button'
+                    text: btn.text || btn.label || btn.display_text || 'Button'
                 };
 
-                if (btn.url) {
+                // Autofix nativeflow button mapping to telegram inline callback
+                if (btn.buttonParamsJson) {
+                    try {
+                        const parsedParams = JSON.parse(btn.buttonParamsJson);
+                        button.text = parsedParams.display_text || button.text;
+                        button.callback_data = String(parsedParams.id || 'action_flow');
+                    } catch (e) {
+                        button.callback_data = 'action_flow_err';
+                    }
+                } else if (btn.url) {
                     button.url = btn.url;
                 } else if (btn.callback_data) {
                     button.callback_data = String(btn.callback_data);
                 } else if (btn.command) {
                     button.callback_data = String(btn.command);
+                } else if (btn.id) {
+                    button.callback_data = String(btn.id);
                 } else if (btn.switch_inline_query) {
                     button.switch_inline_query = btn.switch_inline_query;
                 } else {
-                    button.callback_data = 'action_' + (btn.text || 'button');
+                    button.callback_data = 'action_' + (button.text.toLowerCase().replace(/\s+/g, '_'));
                 }
 
                 row.push(button);
 
-                if (row.length === 3) {
+                if (row.length === 2) { // 2 Buttons per row looks cleaner on mobile devices
                     keyboard.inline_keyboard.push(row);
                     row = [];
                 }
@@ -177,10 +189,9 @@ async function sendTelegramButtons(chatId, text, buttons, options = {}) {
 
 async function sendInteractiveMessage(sock, chatId, content, options = {}) {
     try {
-        // Send interactive message with buttons
         const text = content.text || '';
         const buttons = content.interactiveButtons || content.buttons || [];
-        
+
         if (buttons.length > 0) {
             return await sendTelegramButtons(chatId, text, buttons, {
                 reply_to_message_id: options.quoted?.message_id || options.reply_to_message_id
@@ -199,15 +210,17 @@ async function sendInteractiveMessage(sock, chatId, content, options = {}) {
 // ============================================================
 
 function createTelegramSock(chatId, messageId) {
-    return {
+    const token = settings.telegram?.botToken?.trim();
+    const currentChatId = String(chatId);
+
+    const baseSock = {
         sendMessage: async (jid, content, options = {}) => {
             try {
-                const id = String(jid);
+                const id = String(jid || currentChatId);
                 if (!content || typeof content !== 'object') {
                     throw new Error('Invalid content format');
                 }
 
-                // Handle various content types
                 if (content.text) {
                     return await sendTelegramMessage(id, content.text, {}, messageId);
                 } else if (content.image) {
@@ -226,11 +239,7 @@ function createTelegramSock(chatId, messageId) {
                     const url = content.document.url || content.document;
                     if (!url) throw new Error('Document URL missing');
                     return await sendTelegramDocument(id, url, content.caption || '', messageId);
-                } else if (content.sticker) {
-                    const url = content.sticker.url || content.sticker;
-                    if (!url) throw new Error('Sticker URL missing');
-                    return await sendTelegramSticker(id, url, messageId);
-                } else if (content.buttons || content.interactiveButtons) {
+                } else if (content.hasOwnProperty('buttons') || content.hasOwnProperty('interactiveButtons')) {
                     return await sendInteractiveMessage(null, id, content, { quoted: { message_id: messageId } });
                 } else if (content.poll) {
                     return await sendTelegramPoll(id, content.poll.question, content.poll.options, {
@@ -244,7 +253,7 @@ function createTelegramSock(chatId, messageId) {
             } catch (error) {
                 logError(`[Sock.sendMessage] Error: ${error.message}`);
                 try {
-                    await sendTelegramMessage(String(jid), `❌ *Error:* ${error.message.substring(0, 200)}`, {}, messageId);
+                    await sendTelegramMessage(String(jid || currentChatId), `❌ *Error:* ${error.message.substring(0, 200)}`, {}, messageId);
                 } catch (e) {}
                 return false;
             }
@@ -252,13 +261,19 @@ function createTelegramSock(chatId, messageId) {
         sendMessageAck: async () => true,
         react: async (jid, { text }) => {
             try {
-                return await sendTelegramMessage(String(jid), text, {}, messageId);
+                return await sendTelegramMessage(String(jid || currentChatId), text, {}, messageId);
             } catch (error) {
                 return false;
             }
         },
         sendPresenceUpdate: async (presence) => {
             try {
+                if (!token) return false;
+                const action = presence === 'composing' ? 'typing' : presence === 'recording' ? 'upload_audio' : 'typing';
+                await axios.post(`${TELEGRAM_BASE_URL(token)}/sendChatAction`, {
+                    chat_id: currentChatId,
+                    action: action
+                });
                 return true;
             } catch (error) {
                 return false;
@@ -266,18 +281,11 @@ function createTelegramSock(chatId, messageId) {
         },
         readMessages: async (messages) => {
             try {
-                const token = settings.telegram?.botToken?.trim();
                 if (!token) return false;
-
-                const chatId = String(jid || chatId);
-                if (messages && messages.length > 0) {
-                    for (const msg of messages) {
-                        await axios.post(`${TELEGRAM_BASE_URL(token)}/sendChatAction`, {
-                            chat_id: chatId,
-                            action: 'typing'
-                        });
-                    }
-                }
+                await axios.post(`${TELEGRAM_BASE_URL(token)}/sendChatAction`, {
+                    chat_id: currentChatId,
+                    action: 'typing'
+                });
                 return true;
             } catch (error) {
                 return false;
@@ -285,7 +293,7 @@ function createTelegramSock(chatId, messageId) {
         },
         updateMessage: async (jid, message, content) => {
             try {
-                return await sendTelegramMessage(String(jid), content, {}, messageId);
+                return await sendTelegramMessage(String(jid || currentChatId), content, {}, messageId);
             } catch (error) {
                 return false;
             }
@@ -296,9 +304,15 @@ function createTelegramSock(chatId, messageId) {
             warn: logWarning,
             debug: logDebug
         },
-        getChatId: () => chatId,
+        // [Autofix] WhatsApp mock properties to prevent breakdown inside native modules
+        user: { id: 'telegram_bridge@s.whatsapp.net', name: 'Mickey Bridge' },
+        profilePictureUrl: async () => 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png',
+        groupMetadata: async () => ({ id: currentChatId, subject: 'Telegram Chat Group', participants: [] }),
+        getChatId: () => currentChatId,
         getMessageId: () => messageId
     };
+
+    return baseSock;
 }
 
 // ============================================================
@@ -409,7 +423,7 @@ function loadWhatsappCommands() {
 
             delete require.cache[require.resolve(filePath)];
             const cmdModule = require(filePath);
-            
+
             const commandEntries = collectCommandEntries(cmdModule, baseName);
 
             if (commandEntries.length > 0) {
@@ -519,7 +533,6 @@ async function sendTelegramAudio(chatId, audioUrl, caption = '', messageId = nul
 
     try {
         logDebug(`Sending audio to ${chatId}`);
-
         const audioInfo = await getAudioInfo(audioUrl);
 
         const payload = {
@@ -983,7 +996,7 @@ function logToFile(chatId, username, command, message) {
 }
 
 // ============================================================
-// 🤖 COMMAND EXECUTION WITH ERROR HANDLING
+// 🤖 COMMAND EXECUTION WITH AUTOFIX ERROR HANDLING
 // ============================================================
 
 async function executeCommand(commandName, sock, chatId, args, message, commandConfig = {}) {
@@ -991,12 +1004,12 @@ async function executeCommand(commandName, sock, chatId, args, message, commandC
     const cmd = whatsappCommands.get(normalizedName);
     if (!cmd) {
         logError(`Command not found: ${commandName}`);
-        return await sendTelegramMessage(chatId, `❌ Command "${commandName}" not found.`, {}, message?.message_id);
+        return await sendTelegramMessage(chatId, `❌ Command "${commandName}" haijapatikana (not found).`, {}, message?.message_id);
     }
 
     try {
         if (!checkRateLimit(chatId, normalizedName)) {
-            await sendTelegramMessage(chatId, '⏳ *Too many requests!* Please wait a moment.', {}, message?.message_id);
+            await sendTelegramMessage(chatId, '⏳ *Meseji ni nyingi sana!* Tafadhali subiri kidogo (Rate limited).', {}, message?.message_id);
             return;
         }
 
@@ -1005,8 +1018,8 @@ async function executeCommand(commandName, sock, chatId, args, message, commandC
         logInfo(`Executing command "${normalizedName}" from ${username}`);
 
         let result;
-        
-        // Try different invocation patterns
+
+        // [Autofix Pattern Router] - Inajaribu mifumo yote inayoweza kutumika kwenye WhatsApp/Telegram
         const invocationCandidates = [
             () => cmd.execute(sock, chatId, message, args, commandConfig),
             () => cmd.execute(sock, chatId, args, message, commandConfig),
@@ -1019,10 +1032,11 @@ async function executeCommand(commandName, sock, chatId, args, message, commandC
         for (const candidate of invocationCandidates) {
             try {
                 result = await candidate();
+                lastError = null; // Imefanikiwa, futa kumbukumbu ya error ya nyuma
                 break;
             } catch (error) {
                 lastError = error;
-                logDebug(`Invocation attempt failed: ${error.message}`);
+                logDebug(`Autofix Attempt: Routing fallback triggered for ${normalizedName} -> ${error.message}`);
             }
         }
 
@@ -1030,7 +1044,7 @@ async function executeCommand(commandName, sock, chatId, args, message, commandC
             throw lastError;
         }
 
-        // Handle different return types
+        // Kushughulikia Majibu (Response Handler)
         if (result && typeof result === 'string') {
             await sendTelegramMessage(chatId, result, {}, message?.message_id);
         } else if (result && typeof result === 'object') {
@@ -1047,15 +1061,22 @@ async function executeCommand(commandName, sock, chatId, args, message, commandC
                 await sendTelegramVideo(chatId, result.video.url || result.video, result.caption || '', message?.message_id);
             }
             if (result.buttons || result.interactiveButtons) {
-                await sendInteractiveMessage(null, chatId, result, { quoted: { message_id: message?.message_id } });
+                await sendInteractiveMessage(sock, chatId, result, { quoted: { message_id: message?.message_id } });
             }
         }
     } catch (error) {
-        logError(`Command "${normalizedName}" error: ${error.message}`);
-        await sendTelegramMessage(chatId, `❌ *Error executing command:* ${error.message.substring(0, 200)}`, {}, message?.message_id);
+        // [Autofix Engine] - Zuia bot isianguke, ikitoa ujumbe mzuri wa makosa
+        logError(`Command "${normalizedName}" critical breakdown: ${error.message}`);
+        
+        let customErrorMessage = `❌ *Autofix Alert:* Hitilafu imetokea wakati wa kuendesha command hiyo.\n\n*Error:* ${error.message.substring(0, 150)}`;
+        if (error.message.includes('Cannot read properties of undefined')) {
+            customErrorMessage += `\n💡 *Ushauri:* Muundo wa file la command linajaribu kusoma data za mazingira ya WhatsApp pekee.`;
+        }
+        
+        await sendTelegramMessage(chatId, customErrorMessage, {}, message?.message_id);
 
         const username = message?.from?.username || message?.chat?.username || message?.pushName || 'Unknown';
-        logToFile(chatId, username, normalizedName, `ERROR: ${error.message}`);
+        logToFile(chatId, username, normalizedName, `CRITICAL ERROR: ${error.message}`);
     }
 }
 
@@ -1191,11 +1212,17 @@ async function startTelegramBot() {
             if (response?.data?.ok) {
                 const updates = response.data.result || [];
                 for (const update of updates) {
-                    const message = update.message || update.edited_message;
+                    const message = update.message || update.edited_message || update.callback_query?.message;
                     if (!message) continue;
 
                     const chatId = message.chat?.id;
-                    const text = message.text || message.caption || '';
+                    let text = message.text || message.caption || '';
+                    
+                    // Kama ni callback kutoka kwenye button ya telegram, ibadilishe iwe text command
+                    if (update.callback_query) {
+                        text = update.callback_query.data || '';
+                    }
+
                     const parsed = parseCommandText(text);
                     if (!chatId || !parsed) continue;
 
@@ -1235,9 +1262,6 @@ async function startTelegramBot() {
 // 📝 EXAMPLE COMMAND - ALIVE/STATUS
 // ============================================================
 
-/**
- * Get bot name from config
- */
 const getBotName = () => {
     try {
         const configPath = path.join(__dirname, 'config', 'config.json');
@@ -1249,9 +1273,6 @@ const getBotName = () => {
     return '𝐌𝐈𝐂𝐊𝐄𝐘-𝐕𝟑';
 };
 
-/**
- * Get formatted date with fancy emojis
- */
 const getFormattedDate = () => {
     const now = new Date();
     const days = ['𝐒𝐮𝐧𝐝𝐚𝐲', '𝐌𝐨𝐧𝐝𝐚𝐲', '𝐓𝐮𝐞𝐬𝐝𝐚𝐲', '𝐖𝐞𝐝𝐧𝐞𝐬𝐝𝐚𝐲', '𝐓𝐡𝐮𝐫𝐬𝐝𝐚𝐲', '𝐅𝐫𝐢𝐝𝐚𝐲', '𝐒𝐚𝐭𝐮𝐫𝐝𝐚𝐲'];
@@ -1260,9 +1281,6 @@ const getFormattedDate = () => {
     return `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
 };
 
-/**
- * Get network stats
- */
 const getNetworkStats = () => {
     const networkInterfaces = os.networkInterfaces();
     let ipAddress = 'N/A';
@@ -1283,9 +1301,6 @@ const getNetworkStats = () => {
     return { ipAddress, macAddress };
 };
 
-/**
- * Main alive command function
- */
 const aliveCommand = async (sock, chatId, message, args, config) => {
     const startTime = performance.now();
 
@@ -1316,11 +1331,10 @@ const aliveCommand = async (sock, chatId, message, args, config) => {
 
         const network = getNetworkStats();
         const uptime = formatUptime(process.uptime());
-        const platform = os.platform() === 'linux' ? '🐧 𝐋𝐢𝐧𝐮𝐱' : os.platform() === 'win32' ? '🪟 𝐖𝐢𝐧𝐝𝐨𝐰𝐬' : '📱 𝐀𝐧𝐝𝐫𝐨𝐢𝐝';
+        const platform = os.platform() === 'linux' ? '🐧 𝐋𝐢𝐧𝐮𝐱' : os.platform() === 'win32' ? '🪟 𝐖𝐢𝐧𝐝𝐨𝐰𝐬' : '📱 𝐀𝐧𝐝𝐫𝐨𝐢dz';
         const arch = os.arch() === 'x64' ? '64-ʙɪᴛ' : os.arch();
 
         const nodeVersion = process.version.replace('v', '');
-
         const botStartTime = global.botStartTime || Date.now();
         const botUptime = formatUptime(Math.floor((Date.now() - botStartTime) / 1000));
 
@@ -1364,31 +1378,19 @@ _Mickey Glitch Technology_`;
             interactiveButtons: [
                 {
                     name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '📜 𝐌𝐄𝐍𝐔', 
-                        id: '.menu' 
-                    })
+                    buttonParamsJson: JSON.stringify({ display_text: '📜 𝐌𝐄𝐍𝐔', id: '.menu' })
                 },
                 {
                     name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '📡 𝐒𝐏𝐄𝐄𝐃', 
-                        id: '.ping' 
-                    })
+                    buttonParamsJson: JSON.stringify({ display_text: '📡 𝐒𝐏𝐄𝐄𝐃', id: '.ping' })
                 },
                 {
                     name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '👑 𝐎𝐖𝐍𝐄𝐑', 
-                        id: '.owner' 
-                    })
+                    buttonParamsJson: JSON.stringify({ display_text: '👑 𝐎𝐖𝐍𝐄𝐑', id: '.owner' })
                 },
                 {
                     name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({ 
-                        display_text: '⚡ 𝐑𝐔𝐍𝐓𝐈𝐌𝐄', 
-                        id: '.runtime' 
-                    })
+                    buttonParamsJson: JSON.stringify({ display_text: '⚡ 𝐑𝐔𝐍𝐓𝐈𝐌𝐄', id: '.runtime' })
                 }
             ]
         }, { quoted: message });
@@ -1403,9 +1405,7 @@ _Mickey Glitch Technology_`;
     }
 };
 
-// Export all functions
 module.exports = {
-    // Core functions
     sendTelegramMessage,
     sendTelegramPhoto,
     sendTelegramAudio,
@@ -1416,13 +1416,9 @@ module.exports = {
     sendTelegramButtons,
     sendInteractiveMessage,
     createTelegramSock,
-
-    // Command management
     loadWhatsappCommands,
     executeCommand,
     whatsappCommands,
-
-    // Data management
     isChatAllowed,
     addAllowedChat,
     removeAllowedChat,
@@ -1430,19 +1426,11 @@ module.exports = {
     saveAllowedChats,
     loadTelegramSettings,
     saveTelegramSettings,
-
-    // YouTube functions
     getYoutubeAudio,
     searchYoutubeAudio,
     extractVideoId,
-
-    // African charts
     getAfricanMusicCharts,
-
-    // WhatsApp pairing
     pairWhatsApp,
-
-    // Utility
     checkRateLimit,
     logToFile,
     parseCommandText,
@@ -1455,8 +1443,6 @@ module.exports = {
     logInfo,
     logDebug,
     logSystem,
-    
-    // Example commands
     aliveCommand,
     formatUptime,
     progressBar,
