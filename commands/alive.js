@@ -254,19 +254,21 @@ _Mickey Glitch Technology™_`;
             }
         }
 
-        // send using new ButtonV2
-        await new ButtonV2(sock)
-            .setTitle(botName)
-            .setSubtitle('Status')
-            .setBody(statusMessage)
-            .setFooter(footer)
-            .setThumbnail(imageUrl)
-            .setContextInfo({ mentionedJid: [message.key?.participant || message.key?.remoteJid] })
-            .setMentions([message.key?.participant || message.key?.remoteJid])
-            .addButton('⦂ Menu', '.menu')
-            .addButton('📡 Ping', '.ping')
-            .addButton('👑 Owner', '.owner')
-            .send(chatId, message);
+        // Use existing helper which handles different client jid forms and fallbacks
+        const { sendButtons } = require('../lib/myfunc');
+        const buttons = [
+            { id: '.menu', text: '⦂ Menu' },
+            { id: '.ping', text: '📡 Ping' },
+            { id: '.owner', text: '👑 Owner' }
+        ];
+
+        try {
+            await sendButtons(sock, chatId, statusMessage, footer, buttons, message, { title: botName, image: { url: imageUrl } });
+        } catch (e) {
+            console.error('[alive] sendButtons failed:', e && e.message ? e.message : e);
+            // fallback to plain text
+            try { await sock.sendMessage(chatId, { text: statusMessage }, { quoted: message }); } catch (ee) { console.error('[alive] fallback send failed', ee); }
+        }
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);
