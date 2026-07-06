@@ -1,4 +1,8 @@
-// Mfano wa muundo sahihi wa halotel.js
+const settings = require('./settings');
+const axios = require('axios');
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+
+// ========== CONFIGURATIONS & PACKAGES ==========
 const PANEL_PACKAGES = [
     {
         id: "pkg_small",
@@ -19,10 +23,10 @@ const FOOTER = "𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜�
 const OWNER_NUMBER = "255615944741";
 const PANEL_URL = "https://panel.mickeypannel.dpdns.org";
 
-// Kazi za uundaji (Piga API zako za pterodactyl hapa)
+// ========== PTERODACTYL FUNCTIONS ==========
 async function createPterodactylUser(email, username, chatId) {
     try {
-        // Kodi zako za Pterodactyl API hapa
+        // API zako za Pterodactyl zinaenda hapa
         return { success: true, userId: "12" };
     } catch (e) {
         return { success: false, error: e.message };
@@ -31,13 +35,88 @@ async function createPterodactylUser(email, username, chatId) {
 
 async function createPterodactylServer(userId, username, specs, email) {
     try {
-        // Kodi zako za kuunda server hapa
+        // API zako za kuunda server zinaenda hapa
         return { success: true, link: PANEL_URL, serverId: "MICK-90" };
     } catch (e) {
         return { success: false, error: e.message };
     }
 }
 
+// ========== 📱 MAIN HALOTEL COMMAND FUNCTION ==========
+// Hii ndio function iliyokuwa inakosekana na kusababisha error!
+async function halotelCommand(sock, chatId, m, body = '') {
+    try {
+        const userName = m?.pushName || 'Mteja';
+        const safeM = m || {};
+
+        // 1. Kutengeneza list ya bando za Halotel kwa ajili ya Native Flow Drawer
+        const textBody = `📱 *${settings.botName || 'MICKEY'} - HALOTEL DATA BUNDLES*\n\nHabari *${userName}*! 👋\nKaribu kwenye mfumo wa kununua bando za Halotel chapchap.\n\n📌 *JINSI YA KUNUNUA:*\n1. Bonyeza *"📱 FUNGUA MENU YA BANDO"* hapo chini.\n2. Chagua bando unalotaka kwenye list drawer.\n3. Fuata maelekezo ya malipo yatakayofuata.`;
+
+        const sections = [
+            {
+                title: "🔥 BANDO ZA HALOTEL ZINAZOKIMBIZA",
+                rows: [
+                    { id: "halo_10gb", title: "📱 Halotel 10GB", description: "💰 TSh 10,000 | Inadumu Siku 30" },
+                    { id: "halo_20gb", title: "📱 Halotel 20GB", description: "💰 TSh 15,000 | Inadumu Siku 30" },
+                    { id: "halo_30gb", title: "📱 Halotel 30GB", description: "💰 TSh 20,000 | Inadumu Siku 30" }
+                ]
+            }
+        ];
+
+        // 2. Kutuma ujumbe kwa muundo wa Native Flow
+        await sendHalotelFlowMessage(sock, chatId, safeM, textBody, FOOTER, "📱 FUNGUA MENU YA BANDO", sections);
+
+    } catch (err) {
+        console.error('❌ Halotel Command Error:', err);
+    }
+}
+
+// Helper function ya kutuma Native Flow salama upande wa Halotel
+async function sendHalotelFlowMessage(sock, chatId, message, textBody, footerText, buttonTitle, sectionsList) {
+    try {
+        let thumbnailBuffer = null;
+        if (BANNER && BANNER.startsWith('http')) {
+            try {
+                const res = await axios.get(BANNER, { responseType: 'arraybuffer', timeout: 4000 });
+                thumbnailBuffer = Buffer.from(res.data);
+            } catch (e) {}
+        }
+
+        const msg = generateWAMessageFromContent(chatId, {
+            viewOnceMessage: {
+                message: {
+                    interactiveMessage: {
+                        header: {
+                            title: `📱 HALOTEL DATA SERVICES 📱`,
+                            hasMediaAttachment: thumbnailBuffer ? true : false,
+                            jpegThumbnail: thumbnailBuffer || undefined
+                        },
+                        body: { text: textBody },
+                        footer: { text: footerText },
+                        nativeFlowMessage: {
+                            buttons: [
+                                {
+                                    name: "single_select",
+                                    buttonParamsJson: JSON.stringify({
+                                        title: buttonTitle,
+                                        sections: sectionsList
+                                    })
+                                }
+                            ],
+                            messageVersion: 1
+                        }
+                    }
+                }
+            }
+        }, { quoted: message });
+
+        await sock.relayMessage(chatId, msg.message, { messageId: msg.key?.id || sock.generateMessageID() });
+    } catch (err) {
+        await sock.sendMessage(chatId, { text: textBody }, { quoted: message });
+    }
+}
+
+// ========== EXPORTS (Hakikisha halotelCommand ipo hapa chini) ==========
 module.exports = {
     PANEL_PACKAGES,
     createPterodactylUser,
@@ -45,5 +124,6 @@ module.exports = {
     BANNER,
     FOOTER,
     OWNER_NUMBER,
-    PANEL_URL
+    PANEL_URL,
+    halotelCommand // <--- Hii ndio itafuta ile error kabisa kwenye main.js!
 };
