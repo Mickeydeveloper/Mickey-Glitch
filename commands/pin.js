@@ -1,10 +1,17 @@
 const fs = require('fs/promises');
+const fsExists = require('fs');
 const path = require('path');
+const axios = require('axios');
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 
-// PIN Configuration
-const CONFIG_FILE = path.join(__dirname, '../data/pinConfig.json');
-const DEFAULT_PIN = '0000';
-const VERIFICATION_DURATION = 60 * 60 * 1000; // 1 hour
+// CONFIGURATION
+const CONFIG = {
+    FOOTER: '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲',
+    BANNER: 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png?raw=true',
+    FILE_PATH: path.join(__dirname, '../data/pinConfig.json'),
+    DEFAULT_PIN: '0000',
+    DURATION: 60 * 60 * 1000 // 1 hour
+};
 
 let verifiedSessions = new Map(); // Store verified users with expiry time
 
@@ -12,10 +19,10 @@ let verifiedSessions = new Map(); // Store verified users with expiry time
 // Load/Save PIN Configuration
 async function loadPinConfig() {
     try {
-        const data = await fs.readFile(CONFIG_FILE, 'utf8');
+        const data = await fs.readFile(CONFIG.FILE_PATH, 'utf8');
         return JSON.parse(data);
     } catch {
-        const defaultConfig = { pin: DEFAULT_PIN, enabled: false };
+        const defaultConfig = { pin: CONFIG.DEFAULT_PIN, enabled: false };
         await savePinConfig(defaultConfig);
         return defaultConfig;
     }
@@ -23,26 +30,16 @@ async function loadPinConfig() {
 
 async function savePinConfig(config) {
     try {
-        await fs.mkdir(path.dirname(CONFIG_FILE), { recursive: true });
-        await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
+        await fs.mkdir(path.dirname(CONFIG.FILE_PATH), { recursive: true });
+        await fs.writeFile(CONFIG.FILE_PATH, JSON.stringify(config, null, 2));
     } catch (err) {
         console.error('[PIN] Save failed:', err.message);
     }
 }
 
-// ────────────────────────────────────────────
-// Verify PIN - Check if PIN matches
-async function verifyPin(inputPin) {
-    const config = await loadPinConfig();
-    if (!config.enabled) return true; // No PIN required if disabled
-    return inputPin === config.pin;
-}
-
-// ────────────────────────────────────────────
 // Check if user is currently verified
 function isUserVerified(userId) {
     if (!verifiedSessions.has(userId)) return false;
-    
     const expiryTime = verifiedSessions.get(userId);
     if (Date.now() > expiryTime) {
         verifiedSessions.delete(userId);
@@ -51,10 +48,9 @@ function isUserVerified(userId) {
     return true;
 }
 
-// ────────────────────────────────────────────
-// Set user as verified (valid for 1 hour)
+// Set user as verified
 function setUserVerified(userId) {
-    const expiryTime = Date.now() + VERIFICATION_DURATION;
+    const expiryTime = Date.now() + CONFIG.DURATION;
     verifiedSessions.set(userId, expiryTime);
 }
 
@@ -77,7 +73,7 @@ async function pinCommand(sock, chatId, message, args = []) {
     if (cmd === 'on') {
         await savePinConfig({ ...config, enabled: true });
         await sock.sendMessage(chatId, { 
-            text: `🔒 *PIN Protection: ENABLED*\n\nAll commands now require PIN verification.\n\n📌 Default PIN: 0000\n\nUse: .pin 0000` 
+            text: `🔒 *PIN Protection: ENABLED*\n\nAll commands now require PIN verification.\n\n📌 Default PIN: ${config.pin}\n\nUse: .pin ${config.pin}` 
         }, { quoted: message });
         return;
     }
@@ -117,17 +113,27 @@ async function pinCommand(sock, chatId, message, args = []) {
         return;
     }
 
-    // Show help if no args
+    // Show main button menu if no args are passed
     if (!cmd) {
-        await sock.sendMessage(chatId, {
-            text: `🔐 *PIN Security System*\n\n` +
-                  `Status: ${config.enabled ? '🔒 ENABLED' : '🔓 DISABLED'}\n\n` +
-                  `Commands:\n` +
-                  `  .pin on      - Enable PIN protection\n` +
-                  `  .pin off     - Disable PIN protection\n` +
-                  `  .pin set <new>  - Set custom PIN\n` +
-                  `  .pin status  - Show PIN status`
-        }, { quoted: message });
+        const statusText = config.enabled ? '🔒 ENABLED' : '🔓 DISABLED';
+        const statusMessage = `🔐 *PIN SECURITY SYSTEM*
+
+*— CURRENT STATUS —*
+🛡️ *Protection:* ${statusText}
+🔑 *Current PIN:* \`${config.pin}\`
+
+*— MANUAL USAGE —*
+➡️ \`.pin set <new>\` - Set new pin
+
+_Use buttons below to easily switch status._`;
+
+        const nativeButtons = [
+            { buttonId: '.pin on', buttonText: { displayText: '🔒 PIN ON' }, type: 1 },
+            { buttonId: '.pin off', buttonText: { displayText: '🔓 PIN OFF' }, type: 1 },
+            { buttonId: '.pin status', buttonText: { displayText: '📊 STATUS' }, type: 1 }
+        ];
+
+        await sendNativeButtonV2(sock, chatId, message, statusMessage, CONFIG.FOOTER, "🔐 PIN CONTROL PANEL", nativeButtons);
         return;
     }
 
@@ -140,20 +146,16 @@ async function verifyPinCommand(sock, chatId, message, pinInput) {
     const senderId = message.key.participant || message.key.remoteJid;
     const config = await loadPinConfig();
 
-    // If PIN disabled, allow access
     if (!config.enabled) {
         setUserVerified(senderId);
-        await sock.sendMessage(chatId, { 
-            text: '✅ Access granted (PIN disabled)' 
-        }, { quoted: message });
+        await sock.sendMessage(chatId, { text: '✅ Access granted (PIN disabled)' }, { quoted: message });
         return true;
     }
 
-    // Verify PIN
     const isValid = pinInput === config.pin;
     if (isValid) {
         setUserVerified(senderId);
-        const expiryTime = new Date(Date.now() + VERIFICATION_DURATION).toLocaleTimeString();
+        const expiryTime = new Date(Date.now() + CONFIG.DURATION).toLocaleTimeString();
         await sock.sendMessage(chatId, { 
             text: `✅ *PIN Verified!*\n\n🟢 Access Granted\n⏰ Valid until: ${expiryTime}` 
         }, { quoted: message });
@@ -166,12 +168,90 @@ async function verifyPinCommand(sock, chatId, message, pinInput) {
     }
 }
 
-// ────────────────────────────────────────────
-// Check if user needs PIN verification for commands
+// Check if user needs PIN verification
 async function checkPinVerification(userId) {
     const config = await loadPinConfig();
-    if (!config.enabled) return true; // No verification needed
+    if (!config.enabled) return true;
     return isUserVerified(userId);
+}
+
+// Muundo ule ule kamili wa kutuma picha na button kama kwenye alive
+async function sendNativeButtonV2(sock, chatId, message, textBody, footerText, headerName, buttonsList) {
+    try {
+        const fetchBuffer = async (url) => {
+            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
+            return Buffer.from(res.data);
+        };
+
+        async function resizeImg(buffer, width = 300, height = 300) {
+            try {
+                const sharp = require('sharp');
+                return await sharp(buffer).resize(width, height, { fit: 'cover' }).toBuffer();
+            } catch {
+                return buffer;
+            }
+        }
+
+        let thumbnailBuffer = null;
+        if (CONFIG.BANNER) {
+            try {
+                const buf = await fetchBuffer(CONFIG.BANNER);
+                thumbnailBuffer = await resizeImg(buf, 300, 300);
+            } catch (e) {
+                console.error('[pin-ui] thumbnail fetch failed', e && e.message ? e.message : e);
+            }
+        }
+
+        const contextInfo = {
+            forwardingScore: 999,
+            isForwarded: true,
+        };
+        const mentionJid = message?.key?.participant || message?.key?.remoteJid;
+        if (mentionJid) contextInfo.mentionedJid = [mentionJid];
+
+        const msg = generateWAMessageFromContent(chatId, {
+            buttonsMessage: {
+                contentText: textBody,
+                footerText: footerText,
+                headerType: 6,
+                locationMessage: {
+                    degreesLatitude: 0,
+                    degreesLongitude: 0,
+                    name: headerName,
+                    address: 'Security Settings',
+                    jpegThumbnail: thumbnailBuffer
+                },
+                viewOnce: true,
+                contextInfo,
+                buttons: buttonsList
+            }
+        }, { userJid: (sock && sock.user && sock.user.id) || '', quoted: message || undefined });
+
+        await sock.relayMessage(chatId, msg.message, {
+            messageId: msg.key?.id || sock.generateMessageID(),
+            additionalNodes: [
+                {
+                    tag: 'biz',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: 'interactive',
+                            attrs: { type: 'native_flow', v: '1' },
+                            content: [
+                                {
+                                    tag: 'native_flow',
+                                    attrs: { v: '9', name: 'mixed' }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+    } catch (err) {
+        console.error('sendNativeButtonV2 error inside pin panel:', err);
+        await sock.sendMessage(chatId, { text: textBody }, { quoted: message });
+    }
 }
 
 module.exports = {
@@ -180,5 +260,5 @@ module.exports = {
     checkPinVerification,
     isUserVerified,
     loadPinConfig,
-    DEFAULT_PIN
+    DEFAULT_PIN: CONFIG.DEFAULT_PIN
 };
