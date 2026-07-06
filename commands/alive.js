@@ -162,7 +162,6 @@ _Mickey Glitch Technology™_`;
 
         const footer = '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲';
 
-        // helper: fetch and resize thumbnail
         const fetchBuffer = async (url) => {
             const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
             return Buffer.from(res.data);
@@ -177,97 +176,80 @@ _Mickey Glitch Technology™_`;
             }
         }
 
-        class ButtonV2 {
-            constructor(socket) {
-                this.socket = socket;
-                this.buttons = [];
-                this.title = '';
-                this.subtitle = '';
-                this.body = '';
-                this.footer = '';
-                this.thumbnail = '';
-                this.contextInfo = {};
-                this.mentions = [];
-            }
-
-            setTitle(title) { this.title = title; return this; }
-            setSubtitle(sub) { this.subtitle = sub; return this; }
-            setBody(b) { this.body = b; return this; }
-            setFooter(f) { this.footer = f; return this; }
-            setThumbnail(url) { this.thumbnail = url; return this; }
-            setContextInfo(info) { this.contextInfo = info; return this; }
-            setMentions(list) { this.mentions = list || []; return this; }
-
-            addButton(text, id) {
-                this.buttons.push({ buttonId: id, buttonText: { displayText: text }, type: 1 });
-                return this;
-            }
-
-            addUrlButton(text, url) {
-                this.buttons.push({ buttonId: url, buttonText: { displayText: text }, type: 2 });
-                return this;
-            }
-
-            async send(chatId, quoted = {}) {
-                try {
-                    let thumbnailBuffer = null;
-                    if (this.thumbnail) {
-                        try {
-                            const buf = await fetchBuffer(this.thumbnail);
-                            thumbnailBuffer = await resizeImg(buf, 300, 300);
-                        } catch {}
-                    }
-
-                    const contextInfo = {
-                        ...this.contextInfo,
-                        forwardingScore: 999,
-                        isForwarded: true
-                    };
-                    if (this.mentions && this.mentions.length > 0) contextInfo.mentionedJid = this.mentions;
-
-                    const msg = generateWAMessageFromContent(chatId, {
-                        buttonsMessage: {
-                            contentText: this.body,
-                            footerText: this.footer || `Runtime: ${formatUptime(process.uptime())}`,
-                            headerType: 6,
-                            locationMessage: {
-                                degreesLatitude: 0,
-                                degreesLongitude: 0,
-                                name: this.title || '',
-                                address: this.subtitle || '',
-                                jpegThumbnail: thumbnailBuffer
-                            },
-                            viewOnce: true,
-                            contextInfo: contextInfo,
-                            buttons: this.buttons.length > 0 ? this.buttons : [
-                                { buttonId: '.menu', buttonText: { displayText: '⦂ Menu' }, type: 1 }
-                            ]
-                        }
-                    }, { userJid: (this.socket && this.socket.user && this.socket.user.id) || '' });
-
-                    const messageId = msg?.key?.id || (msg?.message && Date.now().toString());
-                    await this.socket.relayMessage(chatId, msg.message, { messageId });
-                } catch (err) {
-                    console.error('ButtonV2 Error:', err);
-                    try { await this.socket.sendMessage(chatId, { text: this.body }, { quoted }); } catch(e){}
-                }
-            }
-        }
-
-        // Use existing helper which handles different client jid forms and fallbacks
-        const { sendButtons } = require('../lib/myfunc');
-        const buttons = [
-            { id: '.menu', text: '⦂ Menu' },
-            { id: '.ping', text: '📡 Ping' },
-            { id: '.owner', text: '👑 Owner' }
+        const nativeButtons = [
+            { buttonId: '.menu', buttonText: { displayText: '⦂ Menu' }, type: 1 },
+            { buttonId: '.ping', buttonText: { displayText: '📡 Ping' }, type: 1 },
+            { buttonId: '.owner', buttonText: { displayText: '👑 Owner' }, type: 1 }
         ];
 
+        const sendNativeButtonV2 = async () => {
+            let thumbnailBuffer = null;
+            if (imageUrl) {
+                try {
+                    const buf = await fetchBuffer(imageUrl);
+                    thumbnailBuffer = await resizeImg(buf, 300, 300);
+                } catch (e) {
+                    console.error('[alive] thumbnail fetch failed', e && e.message ? e.message : e);
+                }
+            }
+
+            const contextInfo = {
+                forwardingScore: 999,
+                isForwarded: true,
+            };
+            const mentionJid = message.key?.participant || message.key?.remoteJid;
+            if (mentionJid) contextInfo.mentionedJid = [mentionJid];
+
+            const msg = generateWAMessageFromContent(chatId, {
+                buttonsMessage: {
+                    contentText: statusMessage,
+                    footerText: footer,
+                    headerType: 6,
+                    locationMessage: {
+                        degreesLatitude: 0,
+                        degreesLongitude: 0,
+                        name: botName,
+                        address: 'Status',
+                        jpegThumbnail: thumbnailBuffer
+                    },
+                    viewOnce: true,
+                    contextInfo,
+                    buttons: nativeButtons
+                }
+            }, { userJid: (sock && sock.user && sock.user.id) || '' });
+
+            await sock.relayMessage(chatId, msg.message, {
+                messageId: msg.key.id,
+                additionalNodes: [
+                    {
+                        tag: 'biz',
+                        attrs: {},
+                        content: [
+                            {
+                                tag: 'interactive',
+                                attrs: { type: 'native_flow', v: '1' },
+                                content: [
+                                    {
+                                        tag: 'native_flow',
+                                        attrs: { v: '9', name: 'mixed' }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            });
+        };
+
         try {
-            await sendButtons(sock, chatId, statusMessage, footer, buttons, message, { title: botName, image: { url: imageUrl } });
+            await sendNativeButtonV2();
         } catch (e) {
-            console.error('[alive] sendButtons failed:', e && e.message ? e.message : e);
-            // fallback to plain text
-            try { await sock.sendMessage(chatId, { text: statusMessage }, { quoted: message }); } catch (ee) { console.error('[alive] fallback send failed', ee); }
+            console.error('[alive] sendNativeButtonV2 failed:', e && e.message ? e.message : e);
+            try {
+                await sock.sendMessage(chatId, { text: statusMessage }, { quoted: message });
+            } catch (ee) {
+                console.error('[alive] fallback send failed', ee && ee.message ? ee.message : ee);
+            }
         }
 
     } catch (error) {
