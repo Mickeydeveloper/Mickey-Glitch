@@ -1,12 +1,19 @@
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
-const { sendButtons } = require('../lib/myfunc');
 const acrcloud = require('acrcloud');
 const fs = require('fs-extra');
 const path = require('path');
 const settings = require('../settings');
 const { exec } = require('child_process');
 const util = require('util');
+const axios = require('axios');
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 const execAsync = util.promisify(exec);
+
+// CONFIGURATION
+const CONFIG = {
+    FOOTER: '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲',
+    BANNER: 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png?raw=true'
+};
 
 async function shazamCommand(sock, chatId, message) {
     try {
@@ -74,25 +81,26 @@ async function shazamCommand(sock, chatId, message) {
             const title = song.title || 'Unknown';
             const artist = song.artists?.[0]?.name || 'Unknown';
 
-            // 🛠️ Kusafisha majina ili yasilete mgogoro kwenye Command na ID
+            // Kusafisha majina
             const cleanArtist = artist.replace(/[^\w\s]/gi, '');
             const cleanTitle = title.replace(/[^\w\s]/gi, '');
 
-            // ID itatuma: .play Msanii - Wimbo
             const playCmd = ".play " + cleanArtist + " - " + cleanTitle;
-            
-            // Text itakayoonekana kwenye button: 📥 Msanii - Wimbo
-            const buttonText = "📥 " + artist + " - " + title;
+            const buttonText = "📥 Download Track";
 
             const caption = `🎵 *SHAZAM IDENTIFIED!*\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `📌 *Title:* ${title}\n` +
                 `👤 *Artist:* ${artist}\n` +
                 `💿 *Album:* ${song.album?.name || 'N/A'}\n` +
-                `━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
                 `_Bonyeza button kupata wimbo huu._`;
 
-            await sendButtons(sock, chatId, caption, 'MICKEY GLITCH V3.0', [ { id: playCmd, text: buttonText } ], message);
+            const nativeButtons = [
+                { buttonId: playCmd, buttonText: { displayText: buttonText }, type: 1 }
+            ];
+
+            await sendNativeButtonV2(sock, chatId, message, caption, CONFIG.FOOTER, "🎵 SHAZAM DETECTOR", nativeButtons);
 
         } else {
             await sock.sendMessage(chatId, { text: '❌ *Wimbo haukutambulika.*' });
@@ -102,6 +110,85 @@ async function shazamCommand(sock, chatId, message) {
 
     } catch (err) {
         console.error("SHAZAM ERROR:", err);
+    }
+}
+
+// Muundo ule ule kamili wa kutuma picha na button kama kwenye alive
+async function sendNativeButtonV2(sock, chatId, message, textBody, footerText, headerName, buttonsList) {
+    try {
+        const fetchBuffer = async (url) => {
+            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
+            return Buffer.from(res.data);
+        };
+
+        async function resizeImg(buffer, width = 300, height = 300) {
+            try {
+                const sharp = require('sharp');
+                return await sharp(buffer).resize(width, height, { fit: 'cover' }).toBuffer();
+            } catch {
+                return buffer;
+            }
+        }
+
+        let thumbnailBuffer = null;
+        if (CONFIG.BANNER) {
+            try {
+                const buf = await fetchBuffer(CONFIG.BANNER);
+                thumbnailBuffer = await resizeImg(buf, 300, 300);
+            } catch (e) {
+                console.error('[shazam] thumbnail fetch failed', e && e.message ? e.message : e);
+            }
+        }
+
+        const contextInfo = {
+            forwardingScore: 999,
+            isForwarded: true,
+        };
+        const mentionJid = message.key?.participant || message.key?.remoteJid;
+        if (mentionJid) contextInfo.mentionedJid = [mentionJid];
+
+        const msg = generateWAMessageFromContent(chatId, {
+            buttonsMessage: {
+                contentText: textBody,
+                footerText: footerText,
+                headerType: 6,
+                locationMessage: {
+                    degreesLatitude: 0,
+                    degreesLongitude: 0,
+                    name: headerName,
+                    address: 'Track Finder',
+                    jpegThumbnail: thumbnailBuffer
+                },
+                viewOnce: true,
+                contextInfo,
+                buttons: buttonsList
+            }
+        }, { userJid: (sock && sock.user && sock.user.id) || '', quoted: message || undefined });
+
+        await sock.relayMessage(chatId, msg.message, {
+            messageId: msg.key.id,
+            additionalNodes: [
+                {
+                    tag: 'biz',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: 'interactive',
+                            attrs: { type: 'native_flow', v: '1' },
+                            content: [
+                                {
+                                    tag: 'native_flow',
+                                    attrs: { v: '9', name: 'mixed' }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+    } catch (err) {
+        console.error('sendNativeButtonV2 error inside shazam:', err);
+        await sock.sendMessage(chatId, { text: textBody }, { quoted: message });
     }
 }
 
