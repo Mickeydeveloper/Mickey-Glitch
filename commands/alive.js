@@ -2,7 +2,8 @@ const os = require('os');
 const { performance } = require('perf_hooks');
 const fs = require('fs');
 const path = require('path');
-const { sendButtons } = require('../lib/myfunc');
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+const axios = require('axios');
 
 /**
  * Formats seconds into a human-readable string (d h m s)
@@ -158,14 +159,112 @@ ${ramPercent < 70 ? '🟢 Status: Perfect' : ramPercent < 85 ? '🟡 Status: Sta
 
 _Mickey Glitch Technology™_`;
 
-        const buttons = [
-            { id: '.menu', text: '⦂ Menu' },
-            { id: '.ping', text: '📡 Ping' },
-            { id: '.owner', text: '👑 Owner' }
-        ];
         const footer = '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲';
 
-        await sendButtons(sock, chatId, statusMessage, footer, buttons, message);
+        // helper: fetch and resize thumbnail
+        const fetchBuffer = async (url) => {
+            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
+            return Buffer.from(res.data);
+        };
+
+        async function resizeImg(buffer, width = 300, height = 300) {
+            try {
+                const sharp = require('sharp');
+                return await sharp(buffer).resize(width, height, { fit: 'cover' }).toBuffer();
+            } catch {
+                return buffer;
+            }
+        }
+
+        class ButtonV2 {
+            constructor(socket) {
+                this.socket = socket;
+                this.buttons = [];
+                this.title = '';
+                this.subtitle = '';
+                this.body = '';
+                this.footer = '';
+                this.thumbnail = '';
+                this.contextInfo = {};
+                this.mentions = [];
+            }
+
+            setTitle(title) { this.title = title; return this; }
+            setSubtitle(sub) { this.subtitle = sub; return this; }
+            setBody(b) { this.body = b; return this; }
+            setFooter(f) { this.footer = f; return this; }
+            setThumbnail(url) { this.thumbnail = url; return this; }
+            setContextInfo(info) { this.contextInfo = info; return this; }
+            setMentions(list) { this.mentions = list || []; return this; }
+
+            addButton(text, id) {
+                this.buttons.push({ buttonId: id, buttonText: { displayText: text }, type: 1 });
+                return this;
+            }
+
+            addUrlButton(text, url) {
+                this.buttons.push({ buttonId: url, buttonText: { displayText: text }, type: 2 });
+                return this;
+            }
+
+            async send(chatId, quoted = {}) {
+                try {
+                    let thumbnailBuffer = null;
+                    if (this.thumbnail) {
+                        try {
+                            const buf = await fetchBuffer(this.thumbnail);
+                            thumbnailBuffer = await resizeImg(buf, 300, 300);
+                        } catch {}
+                    }
+
+                    const contextInfo = {
+                        ...this.contextInfo,
+                        forwardingScore: 999,
+                        isForwarded: true
+                    };
+                    if (this.mentions && this.mentions.length > 0) contextInfo.mentionedJid = this.mentions;
+
+                    const msg = generateWAMessageFromContent(chatId, {
+                        buttonsMessage: {
+                            contentText: this.body,
+                            footerText: this.footer || `Runtime: ${formatUptime(process.uptime())}`,
+                            headerType: 6,
+                            locationMessage: {
+                                degreesLatitude: 0,
+                                degreesLongitude: 0,
+                                name: this.title || '',
+                                address: this.subtitle || '',
+                                jpegThumbnail: thumbnailBuffer
+                            },
+                            viewOnce: true,
+                            contextInfo: contextInfo,
+                            buttons: this.buttons.length > 0 ? this.buttons : [
+                                { buttonId: '.menu', buttonText: { displayText: '⦂ Menu' }, type: 1 }
+                            ]
+                        }
+                    }, { userJid: this.socket.user && this.socket.user.id });
+
+                    await this.socket.relayMessage(chatId, msg.message, { messageId: msg.key.id });
+                } catch (err) {
+                    console.error('ButtonV2 Error:', err);
+                    try { await this.socket.sendMessage(chatId, { text: this.body }, { quoted }); } catch(e){}
+                }
+            }
+        }
+
+        // send using new ButtonV2
+        await new ButtonV2(sock)
+            .setTitle(botName)
+            .setSubtitle('Status')
+            .setBody(statusMessage)
+            .setFooter(footer)
+            .setThumbnail(imageUrl)
+            .setContextInfo({ mentionedJid: [message.key?.participant || message.key?.remoteJid] })
+            .setMentions([message.key?.participant || message.key?.remoteJid])
+            .addButton('⦂ Menu', '.menu')
+            .addButton('📡 Ping', '.ping')
+            .addButton('👑 Owner', '.owner')
+            .send(chatId, message);
 
     } catch (error) {
         console.error('Critical Error in Alive Command:', error);
