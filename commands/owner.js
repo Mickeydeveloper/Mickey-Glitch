@@ -1,4 +1,6 @@
-const { generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
+const os = require('os');
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+const axios = require('axios');
 
 // ==============================================
 // 👑 OWNER INFO CONFIG
@@ -7,10 +9,12 @@ const CONFIG = {
     FOOTER: '👑 MICKDADY • PROFILE 👑',
     OWNER: {
         NAME: 'Mickdady',
-        PHONE: '255615944741',
-        COUNTRY: 'Tanzania',
-        TITLE: 'Quantum Base Dev'
+        TITLE: 'Base Developer',
+        LOCATION: 'Tanzania 🇹🇿',
+        PHONE_1: '0615944741',
+        PHONE_2: '0612130873'
     },
+    // Picha zinabadilika badilika zenyewe (Randomized)
     IMAGES: [
         'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg',
         'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg',
@@ -19,120 +23,127 @@ const CONFIG = {
     ]
 };
 
-async function ownerCommand(sock, chatId, message) {
+/**
+ * Main owner command handler (Zamani / Legacy Button style with V2 relay)
+ */
+const ownerCommand = async (sock, chatId, message) => {
+    // Linda isisababishe crash kama message iko undefined
+    const safeMessage = message || {};
+    const messageKey = safeMessage.key || {};
+    
+    console.log('[owner] invoked for', chatId, 'from', messageKey.participant || messageKey.remoteJid || 'Unknown');
+
     try {
-        // ============================================
-        // 📋 PERSONAL INFO CARDS (Taarifa za Mtu)
-        // ============================================
-        const cards = [
-            { 
-                title: "👤 ABOUT ME", 
-                text: "✨ *MICKDADY*\n\n" +
-                      "▪️ *Role:* Quantum Dev\n" +
-                      "▪️ *Loc:* Tanzania 🇹🇿\n" +
-                      "▪️ *Status:* Available",
-                image: CONFIG.IMAGES[0] 
-            },
-            { 
-                title: "💻 SKILLS & STACK", 
-                text: "🚀 *EXPERTISE*\n\n" +
-                      "▪️ *Tech:* Node.js & Bot Dev\n" +
-                      "▪️ *Focus:* Automation\n" +
-                      "▪️ *Level:* Advanced",
-                image: CONFIG.IMAGES[1] 
-            },
-            { 
-                title: "📞 MY CONTACTS", 
-                text: "📱 *GET IN TOUCH*\n\n" +
-                      "▪️ *WhatsApp:* Active\n" +
-                      "▪️ *Call:* Direct Line\n" +
-                      "▪️ *Response:* Fast",
-                image: CONFIG.IMAGES[2] 
-            },
-            { 
-                title: "🌐 SOCIAL & PROJECTS", 
-                text: "📂 *WORK & LIFE*\n\n" +
-                      "▪️ *GitHub:* Mickeymozy\n" +
-                      "▪️ *Hobby:* Coding\n" +
-                      "▪️ *Aim:* Innovation",
-                image: CONFIG.IMAGES[3] 
-            }
+        // 1. Chagua picha moja bila mpangilio (Random Image Selection)
+        const randomImage = CONFIG.IMAGES[Math.floor(Math.random() * CONFIG.IMAGES.length)];
+
+        // 2. Muonekano mfupi na msafi wa maandishi (Minimalist Appearance)
+        const statusMessage = `🤖 * — OWNER INFO*\n\n` +
+            `👤 *Jina:* ${CONFIG.OWNER.NAME}\n` +
+            `💼 *Cheo:* ${CONFIG.OWNER.TITLE}\n` +
+            `📍 *Mahali nilipo:* ${CONFIG.OWNER.LOCATION}\n\n` +
+            `_Mickey Glitch Technology™_`;
+
+        // 3. Weka maelezo ya kazi za kupiga simu kwenye mfumo wa button zako za sasa
+        const nativeButtons = [
+            { buttonId: `phone:${CONFIG.OWNER.PHONE_1}`, buttonText: { displayText: `📞 Call Line 1 (${CONFIG.OWNER.PHONE_1})` }, type: 1 },
+            { buttonId: `phone:${CONFIG.OWNER.PHONE_2}`, buttonText: { displayText: `📞 Call Line 2 (${CONFIG.OWNER.PHONE_2})` }, type: 1 }
         ];
 
-        // ============================================
-        // 🎨 BUILD CARDS
-        // ============================================
-        let cardsPayload = [];
-
-        for (const card of cards) {
-            const media = await prepareWAMessageMedia(
-                { image: { url: card.image } }, 
-                { upload: sock.waUploadToServer }
-            );
-
-            cardsPayload.push({
-                header: {
-                    title: card.title,
-                    hasMediaAttachment: true,
-                    imageMessage: media.imageMessage
-                },
-                body: { text: card.text },
-                footer: { text: CONFIG.FOOTER },
-                nativeFlowMessage: {
-                    buttons: [
-                        {
-                            name: "cta_call",
-                            buttonParamsJson: JSON.stringify({
-                                display_text: "📞 CALL OWNER",
-                                phone_number: `+${CONFIG.OWNER.PHONE}`
-                            })
-                        },
-                        {
-                            name: "cta_url",
-                            buttonParamsJson: JSON.stringify({
-                                display_text: "💬 WHATSAPP",
-                                url: `https://wa.me/${CONFIG.OWNER.PHONE}`
-                            })
-                        }
-                    ]
-                }
-            });
-        }
-
-        // ============================================
-        // 📤 SEND CAROUSEL
-        // ============================================
-        let carouselMessage = {
-            viewOnceMessage: {
-                message: {
-                    interactiveMessage: {
-                        body: { 
-                            text: "*MICKDADY OFFICIAL PROFILE*\n_👉 Teleza kushoto (swipe) kuona taarifa zangu_" 
-                        },
-                        carouselMessage: {
-                            cards: cardsPayload
-                        }
-                    }
-                }
-            }
+        const fetchBuffer = async (url) => {
+            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
+            return Buffer.from(res.data);
         };
 
-        const msg = generateWAMessageFromContent(
-            chatId, 
-            carouselMessage, 
-            { quoted: message }
-        );
+        async function resizeImg(buffer, width = 300, height = 300) {
+            try {
+                const sharp = require('sharp');
+                return await sharp(buffer).resize(width, height, { fit: 'cover' }).toBuffer();
+            } catch {
+                return buffer;
+            }
+        }
 
-        return await sock.relayMessage(chatId, msg.message, { 
-            messageId: msg.key.id 
-        });
+        const sendNativeButtonV2 = async () => {
+            let thumbnailBuffer = null;
+            if (randomImage) {
+                try {
+                    const buf = await fetchBuffer(randomImage);
+                    thumbnailBuffer = await resizeImg(buf, 300, 300);
+                } catch (e) {
+                    console.error('[owner] thumbnail fetch failed', e && e.message ? e.message : e);
+                }
+            }
+
+            const contextInfo = {
+                forwardingScore: 999,
+                isForwarded: true,
+            };
+            const mentionJid = messageKey.participant || messageKey.remoteJid;
+            if (mentionJid) contextInfo.mentionedJid = [mentionJid];
+
+            // Muundo wako ule ule wa buttonsMessage na locationMessage kama kwenye alive
+            const msg = generateWAMessageFromContent(chatId, {
+                buttonsMessage: {
+                    contentText: statusMessage,
+                    footerText: CONFIG.FOOTER,
+                    headerType: 6,
+                    locationMessage: {
+                        degreesLatitude: 0,
+                        degreesLongitude: 0,
+                        name: CONFIG.OWNER.NAME,
+                        address: CONFIG.OWNER.TITLE,
+                        jpegThumbnail: thumbnailBuffer
+                    },
+                    viewOnce: true,
+                    contextInfo,
+                    buttons: nativeButtons
+                }
+            }, { userJid: (sock && sock.user && sock.user.id) || '', quoted: message || undefined });
+
+            // Kutuma kwa kutumia relayMessage yako ile ile na biz nodes
+            await sock.relayMessage(chatId, msg.message, {
+                messageId: msg.key?.id || sock.generateMessageID(),
+                additionalNodes: [
+                    {
+                        tag: 'biz',
+                        attrs: {},
+                        content: [
+                            {
+                                tag: 'interactive',
+                                attrs: { type: 'native_flow', v: '1' },
+                                content: [
+                                    {
+                                        tag: 'native_flow',
+                                        attrs: { v: '9', name: 'mixed' }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            });
+        };
+
+        try {
+            await sendNativeButtonV2();
+        } catch (e) {
+            console.error('[owner] sendNativeButtonV2 failed:', e && e.message ? e.message : e);
+            try {
+                await sock.sendMessage(chatId, { text: statusMessage }, { quoted: message });
+            } catch (ee) {
+                console.error('[owner] fallback send failed', ee && ee.message ? ee.message : ee);
+            }
+        }
 
     } catch (error) {
-        console.error("❌ Error:", error);
-        await sock.sendMessage(chatId, { 
-            text: `❌ *Error!*\n\nJaribu tena baadae.` 
-        });
+        console.error('Critical Error in Owner Command:', error);
+        try {
+            await sock.sendMessage(chatId, { 
+                text: '❌ *System Error:* Kushindwa kupakia wasifu.\n```' + error.message + '```' 
+            }, { quoted: message });
+        } catch (e) { }
     }
-}
+};
 
 module.exports = ownerCommand;
