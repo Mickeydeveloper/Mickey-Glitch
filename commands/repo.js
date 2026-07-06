@@ -2,14 +2,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const archiver = require('archiver');
-const { PassThrough } = require('stream');
-const { sendInteractiveMessage } = require('gifted-btns');
+const axios = require('axios');
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 
 // CONFIGURATION
 const CONFIG = {
     FOOTER: '🪐 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴍᴅ • 𝟸𝟶𝟸𝟼 🪐',
     REPO_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
-    BANNER: 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.jpg',
+    // Picha mpya uliyotuma (iliyowekwa raw=true ili ipatikane kama picha ya ukweli)
+    BANNER: 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png?raw=true',
     VERSION: '3.3.0',
     MODE: 'PUBLIC'
 };
@@ -62,11 +63,10 @@ async function createProjectZipBuffer() {
         archive.on('end', () => resolve(Buffer.concat(chunks)));
         archive.on('error', reject);
     });
-    
-    // Async packing
+
     const projectDir = path.join(__dirname, '..');
     const excludeDirs = ['node_modules', '.git', 'sessions', 'session', 'tmp'];
-    
+
     function addDirectory(dirPath, archivePath = '') {
         const items = fs.readdirSync(dirPath);
         for (const item of items) {
@@ -77,14 +77,14 @@ async function createProjectZipBuffer() {
             else archive.file(fullPath, { name: path.join(archivePath, item) });
         }
     }
-    
+
     addDirectory(projectDir);
     await archive.finalize();
-    
+
     return { buffer: await bufferPromise, name: zipFileName };
 }
 
-// SEND ZIP helper: builds and sends ZIP buffer to chat
+// SEND ZIP helper
 async function sendRepoZip(sock, chatId, quotedMessage) {
     try {
         try { await sock.sendMessage(chatId, { react: { text: '📦', key: quotedMessage?.key } }); } catch (e) {}
@@ -116,10 +116,8 @@ async function repoCommand(sock, chatId, m, body = '') {
     try {
         const safeM = m || {};
         const safeKey = safeM.key || {};
-        
-        // Detect input from various message types
+
         let input = '';
-        
         if (safeM.message?.conversation) {
             input = safeM.message.conversation;
         } else if (safeM.message?.extendedTextMessage?.text) {
@@ -133,49 +131,38 @@ async function repoCommand(sock, chatId, m, body = '') {
         } else if (body) {
             input = body;
         }
-        
+
         input = input.toLowerCase().trim();
-        
-        // Normalize inputs
-        if (input === '.download_zip' || input === 'download_zip') input = 'download_zip';
+
+        // Normalization za commands
+        if (input === '.download_zip' || input === 'download_zip' || input === '.zip' || input === 'zip') input = 'download_zip';
         if (input === '.view_repo' || input === 'view_repo') input = 'view_repo';
         if (input === '.repo' || input === 'repo') input = 'repo';
-        
-        // ========== HANDLE DOWNLOAD ZIP ==========
+
+        // ========== 1. HANDLE DOWNLOAD ZIP ==========
         if (input === 'download_zip') {
             await sendRepoZip(sock, chatId, safeM);
             return;
         }
-        
-        // ========== HANDLE VIEW REPO ==========
+
+        // ========== 2. HANDLE VIEW REPO ==========
         if (input === 'view_repo') {
             try { await sock.sendMessage(chatId, { react: { text: '🌐', key: safeKey } }); } catch(e) {}
+            const repoMessage = `🛸 *MICKEY GLITCH GITHUB*\n\nRepository: ${CONFIG.REPO_URL}\n\nBenefits: Latest features, bug fixes, community support`;
 
-            const repoMessage = `🛸 MICKEY GLITCH GITHUB\n\nRepository: ${CONFIG.REPO_URL}\n\nBenefits: Latest features, bug fixes, community support`;
-
-            // Use Baileys templateButtons with a CTA url and quick replies for actions
-            const templateButtons = [
-                { urlButton: { displayText: 'Open GitHub', url: CONFIG.REPO_URL } },
-                { quickReplyButton: { displayText: '📦 Download ZIP', id: 'download_zip' } },
-                { quickReplyButton: { displayText: '📜 Menu', id: '.menu' } }
+            const nativeButtons = [
+                { buttonId: 'download_zip', buttonText: { displayText: '📦 Download ZIP' }, type: 1 },
+                { buttonId: '.menu', buttonText: { displayText: '📜 Menu' }, type: 1 }
             ];
 
-            return await sock.sendMessage(chatId, {
-                image: { url: CONFIG.BANNER },
-                caption: repoMessage,
-                footer: CONFIG.FOOTER,
-                templateButtons
-            }, { quoted: safeM });
+            await sendNativeButtonV2(sock, chatId, safeM, repoMessage, CONFIG.FOOTER, "🌐 GITHUB VIEW", nativeButtons);
+            return;
         }
-        
-        // ========== MAIN REPO MENU ==========
+
+        // ========== 3. MAIN REPO MENU ==========
         if (input === 'repo') {
-            // React
-            try {
-                await sock.sendMessage(chatId, { react: { text: '📂', key: safeKey } });
-            } catch(e) {}
-            
-            // Calculate bot stats
+            try { await sock.sendMessage(chatId, { react: { text: '📂', key: safeKey } }); } catch(e) {}
+
             const projectDir = path.join(__dirname, '..');
             let totalFiles = 0;
             try {
@@ -193,10 +180,10 @@ async function repoCommand(sock, chatId, m, body = '') {
                 };
                 countFiles(projectDir);
             } catch(e) {}
-            
+
             const totalSize = formatBytes(getDirSize(projectDir));
             const isRunningOnVPS = isVPS();
-            
+
             const statusMessage = `🛸 *BOT REPOSITORY*
 
 *— INFO —*
@@ -210,41 +197,20 @@ async function repoCommand(sock, chatId, m, body = '') {
 
 _Use buttons below to interact._`;
 
-            // Send with interactive message
-            return await sendInteractiveMessage(sock, chatId, {
-                image: { url: CONFIG.BANNER },
-                text: statusMessage,
-                footer: "⭐ 𝐌𝐈𝐂𝐊𝐄𝐘 𝐆𝐋𝐈𝐓𝐂𝐇 𝐁𝐎𝐓 • 𝟐𝟎𝟐𝟔 ⭐",
-                interactiveButtons: [
-                    {
-                        name: 'quick_reply',
-                        buttonParamsJson: JSON.stringify({ 
-                            display_text: '📦 DOWNLOAD ZIP', 
-                            id: 'download_zip' 
-                        })
-                    },
-                    {
-                        name: 'quick_reply',
-                        buttonParamsJson: JSON.stringify({ 
-                            display_text: '🌐 VIEW REPO', 
-                            id: 'view_repo' 
-                        })
-                    },
-                    {
-                        name: 'quick_reply',
-                        buttonParamsJson: JSON.stringify({ 
-                            display_text: '📜 MENU', 
-                            id: '.menu' 
-                        })
-                    }
-                ]
-            }, { quoted: safeM });
+            const nativeButtons = [
+                { buttonId: 'download_zip', buttonText: { displayText: '📦 DOWNLOAD ZIP' }, type: 1 },
+                { buttonId: 'view_repo', buttonText: { displayText: '🌐 VIEW REPO' }, type: 1 },
+                { buttonId: '.menu', buttonText: { displayText: '📜 MENU' }, type: 1 }
+            ];
+
+            await sendNativeButtonV2(sock, chatId, safeM, statusMessage, CONFIG.FOOTER, "🛸 BOT REPO INFO", nativeButtons);
+            return;
         }
-        
-        // If no valid command, show help
+
+        // Help fallback command
         if (!input || input === '.repohelp') {
             const helpMessage = `┏━━━━━━━━━━━━━━━━━━━━━━┓
-┃  📖 *REPO COMMANDS*   ┃
+┃  📖 *REPO COMMANDS* ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━┛
 
 📌 *Available Commands:*
@@ -257,15 +223,93 @@ _Use buttons below to interact._`;
 
             await sock.sendMessage(chatId, { text: helpMessage }, { quoted: safeM });
         }
-        
+
     } catch (e) {
         console.error('Repo Command Error:', e);
-        // Send error message
         try {
             await sock.sendMessage(chatId, {
                 text: `❌ *COMMAND ERROR*\n\n📝 ${e.message || 'Unknown error'}\n\nPlease try again later.`
             });
         } catch(err) {}
+    }
+}
+
+// Muundo ule ule kamili wa kutuma picha na button kama kwenye alive
+async function sendNativeButtonV2(sock, chatId, message, textBody, footerText, headerName, buttonsList) {
+    try {
+        const fetchBuffer = async (url) => {
+            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
+            return Buffer.from(res.data);
+        };
+
+        async function resizeImg(buffer, width = 300, height = 300) {
+            try {
+                const sharp = require('sharp');
+                return await sharp(buffer).resize(width, height, { fit: 'cover' }).toBuffer();
+            } catch {
+                return buffer;
+            }
+        }
+
+        let thumbnailBuffer = null;
+        if (CONFIG.BANNER) {
+            try {
+                const buf = await fetchBuffer(CONFIG.BANNER);
+                thumbnailBuffer = await resizeImg(buf, 300, 300);
+            } catch (e) {
+                console.error('[repo] thumbnail fetch failed', e && e.message ? e.message : e);
+            }
+        }
+
+        const contextInfo = {
+            forwardingScore: 999,
+            isForwarded: true,
+        };
+        const mentionJid = message.key?.participant || message.key?.remoteJid;
+        if (mentionJid) contextInfo.mentionedJid = [mentionJid];
+
+        const msg = generateWAMessageFromContent(chatId, {
+            buttonsMessage: {
+                contentText: textBody,
+                footerText: footerText,
+                headerType: 6,
+                locationMessage: {
+                    degreesLatitude: 0,
+                    degreesLongitude: 0,
+                    name: headerName,
+                    address: 'Repository',
+                    jpegThumbnail: thumbnailBuffer
+                },
+                viewOnce: true,
+                contextInfo,
+                buttons: buttonsList
+            }
+        }, { userJid: (sock && sock.user && sock.user.id) || '', quoted: message || undefined });
+
+        await sock.relayMessage(chatId, msg.message, {
+            messageId: msg.key.id,
+            additionalNodes: [
+                {
+                    tag: 'biz',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: 'interactive',
+                            attrs: { type: 'native_flow', v: '1' },
+                            content: [
+                                {
+                                    tag: 'native_flow',
+                                    attrs: { v: '9', name: 'mixed' }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+    } catch (err) {
+        console.error('sendNativeButtonV2 error inside repo:', err);
+        await sock.sendMessage(chatId, { text: textBody }, { quoted: message });
     }
 }
 
