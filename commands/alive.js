@@ -98,6 +98,7 @@ const getFormattedDate = () => {
  */
 const aliveCommand = async (sock, chatId, message) => {
     const startTime = performance.now();
+    console.log('[alive] invoked for', chatId, 'from', message.key?.participant || message.key?.remoteJid);
 
     try {
         // System Calculations
@@ -242,9 +243,10 @@ _Mickey Glitch Technology™_`;
                                 { buttonId: '.menu', buttonText: { displayText: '⦂ Menu' }, type: 1 }
                             ]
                         }
-                    }, { userJid: this.socket.user && this.socket.user.id });
+                    }, { userJid: (this.socket && this.socket.user && this.socket.user.id) || '' });
 
-                    await this.socket.relayMessage(chatId, msg.message, { messageId: msg.key.id });
+                    const messageId = msg?.key?.id || (msg?.message && Date.now().toString());
+                    await this.socket.relayMessage(chatId, msg.message, { messageId });
                 } catch (err) {
                     console.error('ButtonV2 Error:', err);
                     try { await this.socket.sendMessage(chatId, { text: this.body }, { quoted }); } catch(e){}
