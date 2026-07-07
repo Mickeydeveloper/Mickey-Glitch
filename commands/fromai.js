@@ -1,10 +1,10 @@
 /**
- * fromai.js - From AI Command
+ * fromai.js - From AI Command using MessageBuilder v4.6
  * Creator: Ghost King
- * Description: Sends message with AI badge/label
+ * Description: Sends message with AI badge using MessageBuilder
  */
 
-const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+const { MessageBuilder } = require('baileys-mbuilder');
 
 /**
  * Main command handler for fromai
@@ -13,10 +13,10 @@ const fromaiCommand = async (sock, chatId, message) => {
     console.log('[fromai] invoked for', chatId, 'from', message.key?.participant || message.key?.remoteJid);
 
     try {
-        // Jaribu njia ya kwanza: sendMessage yenye contextInfo kamili
-        await sock.sendMessage(chatId, {
-            text: 'Zero Tr4sh by Ghost King',
-            contextInfo: {
+        // Kuunda AI Rich Response kwa MessageBuilder
+        const aiMessage = new MessageBuilder()
+            .text('Zero Tr4sh by Ghost King')
+            .contextInfo({
                 isAuthedChatBot: true,
                 chatBotType: 1,
                 isFromAI: true,
@@ -32,80 +32,34 @@ const fromaiCommand = async (sock, chatId, message) => {
                 quotedMessage: {
                     conversation: message?.body || 'Hello'
                 }
-            }
+            })
+            .build();
+
+        // Kutuma ujumbe kwa AI Rich Response
+        await sock.sendMessage(chatId, {
+            text: aiMessage.text,
+            contextInfo: aiMessage.contextInfo
         }, { 
             quoted: message,
             ephemeralExpiration: 0 
         });
 
-        console.log('[fromai] Message sent with AI badge (Method 1)');
+        console.log('[fromai] AI Rich Response sent successfully with MessageBuilder v4.6');
 
     } catch (error) {
-        console.error('[fromai] Error (Method 1):', error && error.message ? error.message : error);
+        console.error('[fromai] Error with MessageBuilder:', error && error.message ? error.message : error);
         
-        // Jaribu njia ya pili: relayMessage
+        // Fallback: Tuma ujumbe wa kawaida
         try {
-            await sock.relayMessage(chatId, {
-                ephemeralMessage: {
-                    message: {
-                        extendedTextMessage: {
-                            text: 'Zero Tr4sh by Ghost King',
-                            contextInfo: {
-                                isAuthedChatBot: true,
-                                chatBotType: 1,
-                                isFromAI: true,
-                                isForwarded: false,
-                                isStarred: false,
-                                isFromTemplate: true,
-                                forwardedNewsletterMessageInfo: {
-                                    newsletterJid: '120363291068176093@newsletter',
-                                    newsletterName: 'AI Assistant',
-                                    serverMessageId: Date.now()
-                                }
-                            }
-                        }
-                    }
-                }
-            }, {
-                messageId: sock.generateMessageID?.() || (Math.random().toString(36).substr(2, 9))
-            });
-
-            console.log('[fromai] Message sent with AI badge (Method 2)');
-
-        } catch (error2) {
-            console.error('[fromai] Error (Method 2):', error2 && error2.message ? error2.message : error2);
+            await sock.sendMessage(chatId, { 
+                text: 'Zero Tr4sh by Ghost King' 
+            }, { quoted: message });
             
-            // Jaribu njia ya tatu: sendMessage rahisi
-            try {
-                await sock.sendMessage(chatId, {
-                    text: 'Zero Tr4sh by Ghost King',
-                    contextInfo: {
-                        isFromAI: true,
-                        isAuthedChatBot: true,
-                        chatBotType: 1
-                    }
-                }, { 
-                    quoted: message 
-                });
-
-                console.log('[fromai] Message sent with AI badge (Method 3)');
-
-            } catch (error3) {
-                console.error('[fromai] Error (Method 3):', error3 && error3.message ? error3.message : error3);
-                
-                // Njia ya mwisho: sendMessage ya kawaida
-                try {
-                    await sock.sendMessage(chatId, { 
-                        text: 'Zero Tr4sh by Ghost King' 
-                    }, { quoted: message });
-                    
-                    console.log('[fromai] Message sent as normal text (Fallback)');
-                    
-                } catch (finalError) {
-                    console.error('[fromai] All methods failed:', finalError && finalError.message ? finalError.message : finalError);
-                    throw finalError;
-                }
-            }
+            console.log('[fromai] Fallback message sent');
+            
+        } catch (finalError) {
+            console.error('[fromai] All methods failed:', finalError && finalError.message ? finalError.message : finalError);
+            throw finalError;
         }
     }
 };
