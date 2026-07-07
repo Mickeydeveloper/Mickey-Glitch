@@ -8,10 +8,10 @@ module.exports = {
         try {
             const input = Array.isArray(ctx.args) ? ctx.args.join(' ').trim() : (ctx.args || '').toString().trim();
             const [
-                title = 'Zero-Tr4sh',
+                title = 'ᗰ𝒾匚кⓔ𝕐',
                 subtitle = 'View details',
                 profileUrl = 'https://telegra.ph/file/6f714e30054a1dbd65fb4.png',
-                caption = 'Hi! This is button8 test.'
+                caption = 'Hi! This is Mickey Glitch.'
             ] = input.split('|').map((part) => part.trim()).filter(Boolean);
 
             const config = ctx.config || {};
@@ -27,24 +27,7 @@ module.exports = {
                 })
                 .send(ctx._msg?.key?.remoteJid || ctx.chatId, { quoted: ctx._msg });
 
-            const richBuilder = new AIRich(ctx.core)
-                .setTitle(title)
-                .setFooter(botName);
-
-            richBuilder.addPost({
-                title,
-                subtitle,
-                username: title,
-                profile_picture_url: profileUrl,
-                thumbnail_url: profileUrl,
-                post_caption: caption,
-                post_url: 'https://mickeyglitch.tech',
-                source_app: 'WHATSAPP',
-                is_verified: true,
-                orientation: 'LANDSCAPE',
-                post_type: 'IMAGE',
-            });
-
+           
             const fallbackText = [
                 `📱 ${title}`,
                 subtitle,
