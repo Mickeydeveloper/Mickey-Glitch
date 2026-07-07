@@ -1,5 +1,6 @@
 const os = require('os');
 const { performance } = require('perf_hooks');
+const { ButtonV2, AIRich } = require('../lib/messageBuilder');
 
 // ============================================================
 // 🖥️ PING COMMAND
@@ -55,6 +56,32 @@ const pingCommand = async (sock, chatId, msg, args) => {
 
 _Mickey Glitch Technology™_`;
 
+        try {
+            const buttonBuilder = new ButtonV2(sock)
+                .setTitle('🏓 Ping Report')
+                .setSubtitle('Mickey Glitch live status')
+                .setBody(`⚡ Ping: ${latency}ms ${pingEmoji}\n⏱️ Uptime: ${botUptime}\n🖥️ CPU: ${cpuCores} Cores\n💾 RAM: ${formatBytes(usedMem)} / ${formatBytes(totalMem)} (${memPercent}%)`)
+                .setFooter('Tap a quick action');
+
+            buttonBuilder.addButton('📦 Menu', '.menu');
+            buttonBuilder.addButton('📊 Stats', '.stats');
+            buttonBuilder.addButton('🧠 AI', '.ai');
+
+            await buttonBuilder.send(chatId, { quoted: msg });
+
+            const richBuilder = new AIRich(sock)
+                .setTitle('🏓 Ping Details')
+                .setFooter('Mickey Glitch Technology™')
+                .addText(`Ping response received in ${latency}ms.\n\nRuntime uptime: ${botUptime}\nCPU cores: ${cpuCores}\nRAM usage: ${formatBytes(usedMem)} / ${formatBytes(totalMem)} (${memPercent}%)`)
+                .addSuggest(['Open menu', 'View stats', 'Try AI'])
+                .addTip('Buttons below let you jump straight into the bot features');
+
+            await richBuilder.send(chatId, { quoted: msg, forwarded: true });
+            return;
+        } catch (builderError) {
+            console.error('Ping builder error:', builderError);
+        }
+
         await sock.sendMessage(chatId, { text }, { quoted: msg });
     } catch (error) {
         console.error('Ping Error:', error);
@@ -62,16 +89,6 @@ _Mickey Glitch Technology™_`;
     }
 };
 
-// ============================================================
-// 🤖 FROMAI COMMAND
-// ============================================================
-const fromaiCommand = async (sock, chatId, msg, args) => {
-    try {
-        await sock.sendMessage(chatId, { text: '🤖 *MICKEY AI*\nZero Tr4sh by Ghost King' }, { quoted: msg });
-    } catch (error) {
-        console.error('FromAI Error:', error);
-        await sock.sendMessage(chatId, { text: '❌ *Error:* Tafadhali jaribu tena.' }, { quoted: msg });
-    }
-};
+
 
 module.exports = pingCommand;
