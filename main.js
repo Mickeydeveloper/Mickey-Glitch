@@ -122,6 +122,7 @@ const { lyricsCommand } = require('./commands/lyrics');
 // truth command removed
 const { clearCommand } = require('./commands/clear');
 const pingCommand = require('./commands/ping');
+const fromaiCommand = require('./commands/fromai');
 const aliveCommand = require('./commands/alive');
 const blurCommand = require('./commands/img-blur');
 // Welcome command removed. Previously: ./commands/welcome
@@ -627,6 +628,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ping':
                 await pingCommand(sock, chatId, message);
+                break;
+            case userMessage === '.fromai':
+                await fromaiCommand(sock, chatId, message);
                 break;
             case userMessage.startsWith('.pin'):
                 {
