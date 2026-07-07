@@ -188,7 +188,7 @@ const repoCommand = require('./commands/repo');
 const statsCommand = require('./commands/stats');
 const stickerAltCommand = require('./commands/sticker-alt');
 const textCommand = require('./commands/text');
-
+const sourceCommand = require('./commands/source');
 
 
 // Global settings
@@ -1051,6 +1051,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.text'):
                 await textCommand(sock, chatId, message, userMessage);
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.source'):
+                await sourceCommand(sock, chatId, message, userMessage.replace(/^\.source\s*/i, '').split(/\s+/));
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.antidelete'):
