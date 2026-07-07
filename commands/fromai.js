@@ -1,67 +1,45 @@
 /**
- * fromai.js - From AI Command using MessageBuilder v4.6
+ * fromai.js - From AI Command using MessageBuilder
  * Creator: Ghost King
  * Description: Sends message with AI badge using MessageBuilder
  */
 
-const { MessageBuilder } = require('baileys-mbuilder');
+const { Button, AIRich } = require('../lib/messageBuilder');
 
-/**
- * Main command handler for fromai
- */
-const fromaiCommand = async (sock, chatId, message) => {
-    console.log('[fromai] invoked for', chatId, 'from', message.key?.participant || message.key?.remoteJid);
-
-    try {
-        // Kuunda AI Rich Response kwa MessageBuilder
-        const aiMessage = new MessageBuilder()
-            .text('Zero Tr4sh by Ghost King')
-            .contextInfo({
-                isAuthedChatBot: true,
-                chatBotType: 1,
-                isFromAI: true,
-                isForwarded: false,
-                isStarred: false,
-                isFromTemplate: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363291068176093@newsletter',
-                    newsletterName: 'AI Assistant',
-                    serverMessageId: Date.now()
-                },
-                participant: '0@s.whatsapp.net',
-                quotedMessage: {
-                    conversation: message?.body || 'Hello'
-                }
-            })
-            .build();
-
-        // Kutuma ujumbe kwa AI Rich Response
-        await sock.sendMessage(chatId, {
-            text: aiMessage.text,
-            contextInfo: aiMessage.contextInfo
-        }, { 
-            quoted: message,
-            ephemeralExpiration: 0 
-        });
-
-        console.log('[fromai] AI Rich Response sent successfully with MessageBuilder v4.6');
-
-    } catch (error) {
-        console.error('[fromai] Error with MessageBuilder:', error && error.message ? error.message : error);
-        
-        // Fallback: Tuma ujumbe wa kawaida
+module.exports = {
+    name: "fromai",
+    aliases: [],
+    category: "example",
+    permissions: {
+        coin: 0
+    },
+    code: async (ctx) => {
         try {
-            await sock.sendMessage(chatId, { 
-                text: 'Zero Tr4sh by Ghost King' 
-            }, { quoted: message });
+            const aiMessage = new AIRich(ctx.core)
+                .setTitle('AI Assistant')
+                .setBody('Zero Tr4sh by Ghost King')
+                .setFooter(ctx.config?.bot?.name || 'MICKEY BOT');
+
+            await aiMessage.send(ctx._msg?.key?.remoteJid || ctx.chatId, {
+                quoted: ctx._msg,
+                forwarded: false,
+                isFromAI: true
+            });
+
+            console.log('[fromai] AI Rich Response sent successfully');
+
+        } catch (error) {
+            console.error('[fromai] Error:', error && error.message ? error.message : error);
             
-            console.log('[fromai] Fallback message sent');
-            
-        } catch (finalError) {
-            console.error('[fromai] All methods failed:', finalError && finalError.message ? finalError.message : finalError);
-            throw finalError;
+            // Fallback to simple reply
+            try {
+                await ctx.reply('Zero Tr4sh by Ghost King');
+            } catch (fallbackError) {
+                console.error('[fromai] Fallback failed:', fallbackError);
+                if (ctx.tools?.cmd?.handleError) {
+                    await ctx.tools.cmd.handleError(ctx, error, true);
+                }
+            }
         }
     }
 };
-
-module.exports = fromaiCommand;
