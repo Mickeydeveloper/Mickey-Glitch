@@ -768,7 +768,52 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await profileCardCommand(sock, chatId, message, userMessage.split(' ').slice(1), { senderId, config: settings });
                 break;
             case userMessage === '.fromai':
-                await fromaiCommand(sock, chatId, message);
+                {
+                    const settings = require('./settings');
+                    const { Button, AIRich } = require('./lib/messageBuilder');
+                    const customConfig = {
+                        ...settings,
+                        bot: {
+                            name: settings.botName || settings.botname || settings.botOwner || 'MICKEY BOT',
+                        },
+                    };
+
+                    const ctx = {
+                        sock,
+                        chatId,
+                        senderId,
+                        msg: message,
+                        _msg: message,
+                        args: userMessage.split(/\s+/).slice(1),
+                        core: sock,
+                        config: customConfig,
+                        Button,
+                        AIRich,
+                        tools: {
+                            cmd: {
+                                handleError: async (_ctx, error) => {
+                                    console.error('fromai error:', error);
+                                    await sock.sendMessage(chatId, { text: `❌ Command error: ${error?.message || error}` }, { quoted: message });
+                                },
+                            },
+                        },
+                        reply: async (content, extra = {}) => {
+                            try {
+                                const options = { quoted: message, ...(extra || {}) };
+                                if (typeof content === 'string') {
+                                    return await sock.sendMessage(chatId, { text: content }, options);
+                                }
+                                return await sock.sendMessage(chatId, content, options);
+                            } catch (error) {
+                                console.error('ctx.reply failed:', error);
+                                return null;
+                            }
+                        },
+                    };
+
+                    await fromaiCommand.code(ctx);
+                    commandExecuted = true;
+                }
                 break;
             case userMessage.startsWith('.pin'):
                 {
