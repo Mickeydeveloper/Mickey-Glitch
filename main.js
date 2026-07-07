@@ -189,10 +189,73 @@ const statsCommand = require('./commands/stats');
 const stickerAltCommand = require('./commands/sticker-alt');
 const textCommand = require('./commands/text');
 const sourceCommand = require('./commands/source');
-const profileCardCommand = require('./commands/profilecard');
+const profileCardModule = require('./commands/profilecard');
 const addcmdCommand = require('./commands/addcmd');
 const { getCustomCommandHandler, loadCustomCommands, getCustomCommandNames } = require('./lib/customCommands');
 
+function normalizeBotCommand(commandModule) {
+    if (typeof commandModule === 'function') {
+        return async (sock, chatId, msg, args = [], options = {}) => commandModule(sock, chatId, msg, args, options);
+    }
+
+    if (commandModule && typeof commandModule === 'object' && typeof commandModule.code === 'function') {
+        return async (sock, chatId, msg, args = [], options = {}) => {
+            const resolvedArgs = Array.isArray(args) ? args : String(args || '').split(/\s+/).filter(Boolean);
+            const resolvedChatId = chatId || msg?.key?.remoteJid || options.chatId;
+            const resolvedSenderId = options.senderId || msg?.key?.participant || msg?.key?.remoteJid;
+
+            const ctx = {
+                sock,
+                chatId: resolvedChatId,
+                senderId: resolvedSenderId,
+                msg,
+                _msg: msg,
+                args: resolvedArgs,
+                core: sock,
+                config: options.config || settings,
+                tools: options.tools || {
+                    cmd: {
+                        handleError: async (_ctx, error) => {
+                            console.error('Command error:', error);
+                            await sock?.sendMessage?.(resolvedChatId, { text: `❌ ${error?.message || error}` }, { quoted: msg });
+                        },
+                    },
+                },
+                sendMessage: async (targetChatId = resolvedChatId, content, extra = {}) => {
+                    try {
+                        const resolvedTarget = targetChatId || resolvedChatId;
+                        if (typeof content === 'string') {
+                            return await sock?.sendMessage?.(resolvedTarget, { text: content }, extra);
+                        }
+                        return await sock?.sendMessage?.(resolvedTarget, content, extra);
+                    } catch (error) {
+                        console.error('ctx.sendMessage failed:', error);
+                        return null;
+                    }
+                },
+                reply: async (content, extra = {}) => {
+                    try {
+                        const replyOptions = { quoted: msg, ...(extra || {}) };
+                        if (typeof content === 'string') {
+                            return await sock?.sendMessage?.(resolvedChatId, { text: content }, replyOptions);
+                        }
+                        return await sock?.sendMessage?.(resolvedChatId, content, replyOptions);
+                    } catch (error) {
+                        console.error('ctx.reply failed:', error);
+                        return null;
+                    }
+                },
+                send: async (content, extra = {}) => ctx.reply(content, extra),
+            };
+
+            return commandModule.code(ctx);
+        };
+    }
+
+    return async () => false;
+}
+
+const profileCardCommand = normalizeBotCommand(profileCardModule);
 
 // Global settings
 global.packname = settings.packname;
@@ -702,7 +765,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await pingCommand(sock, chatId, message);
                 break;
             case userMessage === '.profilecard' || userMessage === '.profile':
-                await profileCardCommand(sock, chatId, message, userMessage.split(' ').slice(1));
+                await profileCardCommand(sock, chatId, message, userMessage.split(' ').slice(1), { senderId, config: settings });
                 break;
             case userMessage === '.fromai':
                 await fromaiCommand(sock, chatId, message);
@@ -1132,7 +1195,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await sourceCommand(sock, chatId, message, userMessage.replace(/^\.source\s*/i, '').split(/\s+/));
                 commandExecuted = true;
                 break;
-            case userMessage.startsWith('.addcmd'):
+            case userMessage.startsWith('.cmdadd'):
                 await addcmdCommand(sock, chatId, senderId, userMessage, message, rawText);
                 commandExecuted = true;
                 break;

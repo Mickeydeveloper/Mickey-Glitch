@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { saveCustomCommand } = require('../lib/customCommands');
 
-async function addcmdCommand(sock, chatId, senderId, rawText, message, fullText = '') {
+async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText = '') {
     try {
         const isOwner = message?.key?.fromMe || senderId?.toString()?.endsWith('@s.whatsapp.net') || false;
         if (!isOwner) {
@@ -11,10 +11,10 @@ async function addcmdCommand(sock, chatId, senderId, rawText, message, fullText 
         }
 
         const input = (rawText || fullText || '').toString();
-        const match = input.match(/^\.addcmd\s+([a-z0-9_\-]+)\s*(.*)$/is);
+        const match = input.match(/^\.cmdadd\s+([a-z0-9_\-]+)\s*(.*)$/is);
         if (!match) {
             await sock.sendMessage(chatId, {
-                text: '🛠️ Usage:\n.addcmd <command_name> <module_code>\n\nExample:\n.addcmd button8 module.exports = { ... }'
+                text: '🛠️ Usage:\n.cmdadd <command_name> <module_code>\n\nExample:\n.cmdadd button8 module.exports = { ... }'
             }, { quoted: message });
             return;
         }
@@ -50,4 +50,4 @@ async function addcmdCommand(sock, chatId, senderId, rawText, message, fullText 
     }
 }
 
-module.exports = addcmdCommand;
+module.exports = cmdaddCommand;
