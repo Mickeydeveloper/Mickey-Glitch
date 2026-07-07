@@ -1,47 +1,57 @@
 /**
- * fromai.js - From AI Command (Alternative)
+ * fromai.js - From AI Module
  * Creator: Ghost King
  */
-const fromaiCommand = async (sock, chatId, message) => {
+const fromaiCommand = async (ctx) => {
     try {
-        // Kujenga ujumbe kama vile unavyotumwa na Meta AI
-        const aiMessage = {
+        // Njia ya kwanza: Kutumia sendMessage yenye contextInfo
+        await ctx.sock.sendMessage(ctx.chatId, {
             text: 'Zero Tr4sh by Ghost King',
             contextInfo: {
-                participant: '0@s.whatsapp.net', // Fake participant
-                quotedMessage: {
-                    conversation: message.body || 'Hello'
-                },
-                isFromAI: true,
                 isAuthedChatBot: true,
                 chatBotType: 1,
-                // Hii inafanya ionekane kama AI
-                stanzaId: '3EB038CCB37F01BAA0C3',
-                participant: '0@s.whatsapp.net'
+                isFromAI: true,
+                isForwarded: false,
+                isStarred: false,
+                isFromTemplate: true,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: '120363291068176093@newsletter',
+                    newsletterName: 'AI Assistant',
+                    serverMessageId: Date.now()
+                }
             }
-        };
-
-        await sock.sendMessage(chatId, aiMessage, {
-            quoted: message,
-            // Kuweka kama message ya kawaida si ephemeral
-            ephemeralExpiration: 0
+        }, { 
+            quoted: ctx.message,
+            ephemeralExpiration: 0 
         });
 
     } catch (error) {
         console.error('FromAI Error:', error);
         
-        // Jaribu njia rahisi zaidi
+        // Njia ya pili: Jaribu relayMessage
         try {
-            await sock.sendMessage(chatId, {
-                text: 'Zero Tr4sh by Ghost King',
-                contextInfo: {
-                    isFromAI: true
+            await ctx.sock.relayMessage(ctx.chatId, {
+                ephemeralMessage: {
+                    message: {
+                        extendedTextMessage: {
+                            text: 'Zero Tr4sh by Ghost King',
+                            contextInfo: {
+                                isAuthedChatBot: true,
+                                chatBotType: 1,
+                                isFromAI: true
+                            },
+                            isFromTemplate: true
+                        }
+                    }
                 }
-            }, { quoted: message });
+            }, {
+                messageId: ctx.sock.generateMessageID?.() || (Math.random().toString(36).substr(2, 9))
+            });
         } catch (e) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ *Error:* Tafadhali jaribu tena.' 
-            }, { quoted: message });
+            // Njia ya tatu: Reply rahisi
+            await ctx.sock.sendMessage(ctx.chatId, { 
+                text: 'Zero Tr4sh by Ghost King' 
+            }, { quoted: ctx.message });
         }
     }
 };
