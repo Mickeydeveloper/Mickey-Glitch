@@ -29,7 +29,16 @@ async function profileCardCommand(sock, chatId, msg, args = []) {
             post_type: 'IMAGE',
         });
 
-        await richBuilder.send(chatId, { quoted: msg, forwarded: false });
+        const fallbackText = [
+            `📱 ${title}`,
+            subtitle,
+            '',
+            caption,
+            '',
+            `🖼️ ${profileUrl}`,
+        ].filter(Boolean).join('\n');
+
+        await richBuilder.send(chatId, { quoted: msg, forwarded: false, fallbackText });
         return;
     } catch (error) {
         console.error('Profile card AIRich error:', error);
