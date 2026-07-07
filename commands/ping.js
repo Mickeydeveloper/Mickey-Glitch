@@ -66,14 +66,6 @@ _Mickey Glitch Technology™_`;
 
             await buttonBuilder.send(chatId, { quoted: msg });
 
-            const richBuilder = new AIRich(sock)
-                .setTitle('🤖 AI')
-                .setFooter('Mickey Glitch Technology™')
-                .addText(`⚡ Ping: ${latency}ms ${pingEmoji}\n⏱️ Uptime: ${botUptime}\n🖥️ CPU: ${cpuCores} Cores\n💾 RAM: ${formatBytes(usedMem)} / ${formatBytes(totalMem)} (${memPercent}%)`)
-                .addSuggest(['Open menu', 'View stats', 'Talk to AI'])
-                .addTip('This message uses the same AI-style builder format');
-
-            await richBuilder.send(chatId, { quoted: msg, forwarded: true });
             return;
         } catch (builderError) {
             console.error('Ping builder error:', builderError);
