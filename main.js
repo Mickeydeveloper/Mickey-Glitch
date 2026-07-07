@@ -189,6 +189,7 @@ const statsCommand = require('./commands/stats');
 const stickerAltCommand = require('./commands/sticker-alt');
 const textCommand = require('./commands/text');
 const sourceCommand = require('./commands/source');
+const profileCardCommand = require('./commands/profilecard');
 
 
 // Global settings
@@ -628,6 +629,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ping':
                 await pingCommand(sock, chatId, message);
+                break;
+            case userMessage === '.profilecard' || userMessage === '.profile':
+                await profileCardCommand(sock, chatId, message, userMessage.split(' ').slice(1));
                 break;
             case userMessage === '.fromai':
                 await fromaiCommand(sock, chatId, message);
