@@ -1,4 +1,4 @@
-const { WAProto } = require('@whiskeysockets/baileys');
+const { AIRich } = require('../lib/messageBuilder');
 
 async function profileCardCommand(sock, chatId, msg, args = []) {
     try {
@@ -11,27 +11,33 @@ async function profileCardCommand(sock, chatId, msg, args = []) {
             caption = 'Hi! This is button8 test.'
         ] = input.split('|').map((part) => part.trim()).filter(Boolean);
 
-        // Create interactive message using V1 format (buttons)
-        const buttonMessage = {
-            text: `*📱 QUANTUM FAMILY*\n_6 online_\n\n*${title}*\n${subtitle}\n\n${caption}\n\n🟢 ${profileUrl}\n\n📊 *Watchers:* 3.2k\n📁 *Size:* 2.46 MB\n🕐 *Last Updated:* 23/08/25 - 13:21:11\n🔗 *URL:* https://bot-connect.emmyhenztech.site\n📌 *Forks:* 2.7k\n⭐ *Stars:* 2.4k\n\n👤 *~ GHOST KING*\n📞 +255 719 632 816\n💬 "I'M SICK ABOUT YOUR SHIT\`_-\`"\n\n⏰ 6:52 PM`,
-            footer: 'MICKEY BOT',
-            buttons: [
-                { buttonId: 'view_details', buttonText: { displayText: 'View details' }, type: 1 },
-                { buttonId: 'contact_ghost', buttonText: { displayText: 'Contact Ghost King' }, type: 1 }
-            ],
-            headerType: 1,
-            viewOnce: false
-        };
+        const richBuilder = new AIRich(sock)
+            .setTitle(title)
+            .setFooter('MICKEY BOT');
 
-        await sock.sendMessage(chatId, buttonMessage, { quoted: msg });
+        richBuilder.addPost({
+            title,
+            subtitle,
+            username: title,
+            profile_picture_url: profileUrl,
+            thumbnail_url: profileUrl,
+            post_caption: caption,
+            post_url: 'https://mickeyglitch.tech',
+            source_app: 'WHATSAPP',
+            is_verified: true,
+            orientation: 'LANDSCAPE',
+            post_type: 'IMAGE',
+        });
+
+        await richBuilder.send(chatId, { quoted: msg, forwarded: false });
         return;
     } catch (error) {
-        console.error('Profile card error:', error);
-        await sock.sendMessage(chatId, { text: '❌ Failed to send profile card.' }, { quoted: msg });
+        console.error('Profile card AIRich error:', error);
+        await sock.sendMessage(chatId, { text: '❌ WhatsApp could not render this AIRich profile card. Please try again with a different image URL.' }, { quoted: msg });
     }
 }
 
 profileCardCommand.category = 'UTILITY';
-profileCardCommand.description = 'Send a profile-style card using buttons';
+profileCardCommand.description = 'Send an AIRich profile card using addPost';
 
 module.exports = profileCardCommand;
