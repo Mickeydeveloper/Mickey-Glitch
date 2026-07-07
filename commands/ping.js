@@ -58,21 +58,16 @@ _Mickey Glitch Technology™_`;
 
         try {
             const buttonBuilder = new ButtonV2(sock)
-                .setTitle('🏓 Ping Report')
-                .setSubtitle('Mickey Glitch live status')
-                .setBody(`⚡ Ping: ${latency}ms ${pingEmoji}\n⏱️ Uptime: ${botUptime}\n🖥️ CPU: ${cpuCores} Cores\n💾 RAM: ${formatBytes(usedMem)} / ${formatBytes(totalMem)} (${memPercent}%)`)
+                .text(`⚡ Ping: ${latency}ms ${pingEmoji}\n⏱️ Uptime: ${botUptime}\n🖥️ CPU: ${cpuCores} Cores\n💾 RAM: ${formatBytes(usedMem)} / ${formatBytes(totalMem)} (${memPercent}%)`)
+                .button('📦 Menu', '.menu')
+                .button('📊 Stats', '.stats')
+                .button('🧠 AI', '.ai')
                 .setFooter('Tap a quick action');
-
-            buttonBuilder.addButton('📦 Menu', '.menu');
-            buttonBuilder.addButton('📊 Stats', '.stats');
-            buttonBuilder.addButton('🧠 AI', '.ai');
 
             await buttonBuilder.send(chatId, { quoted: msg });
 
             const richBuilder = new AIRich(sock)
-                .setTitle('🏓 Ping Details')
-                .setFooter('Mickey Glitch Technology™')
-                .addText(`Ping response received in ${latency}ms.\n\nRuntime uptime: ${botUptime}\nCPU cores: ${cpuCores}\nRAM usage: ${formatBytes(usedMem)} / ${formatBytes(totalMem)} (${memPercent}%)`)
+                .text(`Ping response received in ${latency}ms.\n\nRuntime uptime: ${botUptime}\nCPU cores: ${cpuCores}\nRAM usage: ${formatBytes(usedMem)} / ${formatBytes(totalMem)} (${memPercent}%)`)
                 .addSuggest(['Open menu', 'View stats', 'Try AI'])
                 .addTip('Buttons below let you jump straight into the bot features');
 
