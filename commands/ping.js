@@ -1,11 +1,12 @@
 const os = require('os');
 const { performance } = require('perf_hooks');
-const { ButtonV2, AIRich } = require('../lib/messageBuilder');
+const { ButtonV2, AIRich, createCtx } = require('../lib/messageBuilder');
 
 // ============================================================
 // 🖥️ PING COMMAND
 // ============================================================
 const pingCommand = async (sock, chatId, msg, args) => {
+    const ctx = createCtx(sock, chatId, msg, { args });
     try {
         const start = performance.now();
         
@@ -64,17 +65,17 @@ _Mickey Glitch Technology™_`;
                 .button('🧠 AI', '.ai')
                 .setFooter('Tap a quick action');
 
-            await buttonBuilder.send(chatId, { quoted: msg });
+            await buttonBuilder.send(ctx.chatId, { quoted: ctx._msg, fallbackText: text });
 
             return;
         } catch (builderError) {
             console.error('Ping builder error:', builderError);
         }
 
-        await sock.sendMessage(chatId, { text }, { quoted: msg });
+        await ctx.reply(text);
     } catch (error) {
         console.error('Ping Error:', error);
-        await sock.sendMessage(chatId, { text: '❌ *Error:* Tafadhali jaribu tena.' }, { quoted: msg });
+        await ctx.reply('❌ *Error:* Tafadhali jaribu tena.');
     }
 };
 

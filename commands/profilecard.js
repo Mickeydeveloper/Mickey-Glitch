@@ -1,6 +1,7 @@
-const { AIRich } = require('../lib/messageBuilder');
+const { AIRich, createCtx } = require('../lib/messageBuilder');
 
 async function profileCardCommand(sock, chatId, msg, args = []) {
+    const ctx = createCtx(sock, chatId, msg, { args });
     try {
         const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
         
@@ -38,11 +39,11 @@ async function profileCardCommand(sock, chatId, msg, args = []) {
             `🖼️ ${profileUrl}`,
         ].filter(Boolean).join('\n');
 
-        await richBuilder.send(chatId, { quoted: msg, forwarded: false, fallbackText });
+        await richBuilder.send(ctx.chatId, { quoted: ctx._msg, forwarded: false, fallbackText });
         return;
     } catch (error) {
         console.error('Profile card AIRich error:', error);
-        await sock.sendMessage(chatId, { text: '❌ WhatsApp could not render this AIRich profile card. Please try again with a different image URL.' }, { quoted: msg });
+        await ctx.reply('❌ WhatsApp could not render this AIRich profile card. Please try again with a different image URL.');
     }
 }
 

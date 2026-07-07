@@ -1,4 +1,4 @@
-const { generateMessageSourceCode, ButtonV2, AIRich } = require('../lib/messageBuilder');
+const { generateMessageSourceCode, ButtonV2, AIRich, createCtx } = require('../lib/messageBuilder');
 
 const defaultActions = [
     { label: '📦 Menu', id: '.menu' },
@@ -10,6 +10,7 @@ const defaultActions = [
 ];
 
 const sourceCommand = async (sock, chatId, msg, args) => {
+    const ctx = createCtx(sock, chatId, msg, { args });
     const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
 
     const parts = input ? input.split('|').map((part) => part.trim()).filter(Boolean) : [];
@@ -36,7 +37,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
         buttons.forEach((button) => buttonBuilder.addButton(button.label, button.id));
 
-        await buttonBuilder.send(chatId, { quoted: msg });
+        await buttonBuilder.send(ctx.chatId, { quoted: ctx._msg, fallbackText: `${buttonTitle}\n${buttonSubtitle}\n\n${buttonBody}` });
 
         const richBuilder = new AIRich(sock)
             .setTitle('🧠 AIRich Demo')
@@ -45,7 +46,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             .addSuggest(buttons.map((button) => `${button.label} → ${button.id}`))
             .addTip('Kijiselele cha button kitafanya command halisi ukiichagua');
 
-        await richBuilder.send(chatId, { quoted: msg, forwarded: true });
+        await richBuilder.send(ctx.chatId, { quoted: ctx._msg, forwarded: true, fallbackText: `${buttonTitle}\n${buttonSubtitle}\n\n${buttonBody}` });
         return;
     } catch (error) {
         console.error('MessageBuilder send error:', error);
@@ -56,7 +57,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             footer: buttonFooter,
             buttons,
         });
-        return sock.sendMessage(chatId, { text: snippet }, { quoted: msg });
+        return ctx.reply(snippet);
     }
 };
 

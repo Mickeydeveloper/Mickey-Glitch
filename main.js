@@ -576,7 +576,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     },
                 };
 
-                await customCommandHandler({
+                const ctx = {
                     sock,
                     chatId,
                     senderId,
@@ -594,7 +594,36 @@ async function handleMessages(sock, messageUpdate, printLog) {
                             },
                         },
                     },
-                });
+                    sendMessage: async (targetChatId = chatId, content, extra = {}) => {
+                        try {
+                            const resolvedTarget = targetChatId || chatId;
+                            if (typeof content === 'string') {
+                                return await sock.sendMessage(resolvedTarget, { text: content }, extra);
+                            }
+                            return await sock.sendMessage(resolvedTarget, content, extra);
+                        } catch (error) {
+                            console.error('ctx.sendMessage failed:', error);
+                            return null;
+                        }
+                    },
+                    reply: async (content, extra = {}) => {
+                        try {
+                            const options = { quoted: message, ...(extra || {}) };
+                            if (typeof content === 'string') {
+                                return await sock.sendMessage(chatId, { text: content }, options);
+                            }
+                            return await sock.sendMessage(chatId, content, options);
+                        } catch (error) {
+                            console.error('ctx.reply failed:', error);
+                            return null;
+                        }
+                    },
+                    send: async (content, extra = {}) => {
+                        return ctx.reply(content, extra);
+                    },
+                };
+
+                await customCommandHandler(ctx);
                 commandExecuted = true;
                 return;
             } catch (error) {
