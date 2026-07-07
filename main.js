@@ -190,6 +190,8 @@ const stickerAltCommand = require('./commands/sticker-alt');
 const textCommand = require('./commands/text');
 const sourceCommand = require('./commands/source');
 const profileCardCommand = require('./commands/profilecard');
+const addcmdCommand = require('./commands/addcmd');
+const { getCustomCommandHandler, loadCustomCommands, getCustomCommandNames } = require('./lib/customCommands');
 
 
 // Global settings
@@ -558,6 +560,46 @@ async function handleMessages(sock, messageUpdate, printLog) {
         if (isOwnerCommand) {
             if (!message.key.fromMe && !senderIsOwnerOrSudo) {
                 await sock.sendMessage(chatId, { text: '❌ This command is only available for the owner or sudo!' }, { quoted: message });
+                return;
+            }
+        }
+
+        const customCommandHandler = getCustomCommandHandler(userMessage);
+        if (customCommandHandler && typeof customCommandHandler === 'function') {
+            try {
+                const settings = require('./settings');
+                const { Button } = require('./lib/messageBuilder');
+                const customConfig = {
+                    ...settings,
+                    bot: {
+                        name: settings.botName || settings.botname || settings.botOwner || 'MICKEY BOT',
+                    },
+                };
+
+                await customCommandHandler({
+                    sock,
+                    chatId,
+                    senderId,
+                    msg: message,
+                    _msg: message,
+                    args: userMessage.split(/\s+/).slice(1),
+                    core: sock,
+                    config: customConfig,
+                    Button,
+                    tools: {
+                        cmd: {
+                            handleError: async (_ctx, error) => {
+                                console.error('Custom command error:', error);
+                                await sock.sendMessage(chatId, { text: `❌ Custom command error: ${error?.message || error}` }, { quoted: message });
+                            },
+                        },
+                    },
+                });
+                commandExecuted = true;
+                return;
+            } catch (error) {
+                console.error('Custom command execution failed:', error);
+                await sock.sendMessage(chatId, { text: `❌ Custom command failed: ${error?.message || error}` }, { quoted: message });
                 return;
             }
         }
@@ -1059,6 +1101,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.source'):
                 await sourceCommand(sock, chatId, message, userMessage.replace(/^\.source\s*/i, '').split(/\s+/));
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.addcmd'):
+                await addcmdCommand(sock, chatId, senderId, userMessage, message, rawText);
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.antidelete'):
