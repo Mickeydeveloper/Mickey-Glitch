@@ -10,8 +10,10 @@ const fromaiCommand = async (sock, chatId, message) => {
                 text: 'Zero Tr4sh by Ghost King',
                 contextInfo: {
                     isAuthedChatBot: true,
-                    chatBotType: 1
-                }
+                    chatBotType: 1,
+                    isFromAI: true // Hii inaweka alama ya AI
+                },
+                isFromTemplate: true // Hii inasaidia kuonyesha alama ya AI
             }
         };
 
