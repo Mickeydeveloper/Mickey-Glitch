@@ -4,36 +4,34 @@
  * Description: Sends message with AI badge using MessageBuilder
  */
 
-const { Button, AIRich } = require('../lib/messageBuilder');
+const { Button } = require('../lib/messageBuilder');
 
 module.exports = {
-    name: "fromai",
+    name: 'fromai',
     aliases: [],
-    category: "example",
+    category: 'example',
     permissions: {
-        coin: 0
+        coin: 0,
     },
     code: async (ctx) => {
+        const botName = ctx.config?.bot?.name || ctx.config?.botName || ctx.config?.botname || 'MICKEY BOT';
+        const text = 'Zero Tr4sh by Ghost King';
+
         try {
-            const aiMessage = new AIRich(ctx.core)
-                .setTitle('AI Assistant')
-                .setBody('Zero Tr4sh by Ghost King')
-                .setFooter(ctx.config?.bot?.name || 'MICKEY BOT');
+            await new Button(ctx.core)
+                .setTitle(botName)
+                .setBody(text)
+                .send(ctx._msg?.key?.remoteJid || ctx.chatId, {
+                    quoted: ctx._msg,
+                    forwarded: false,
+                });
 
-            await aiMessage.send(ctx._msg?.key?.remoteJid || ctx.chatId, {
-                quoted: ctx._msg,
-                forwarded: false,
-                isFromAI: true
-            });
-
-            console.log('[fromai] AI Rich Response sent successfully');
-
+            console.log('[fromai] message sent safely via Button builder');
         } catch (error) {
             console.error('[fromai] Error:', error && error.message ? error.message : error);
-            
-            // Fallback to simple reply
+
             try {
-                await ctx.reply('Zero Tr4sh by Ghost King');
+                await ctx.reply(text);
             } catch (fallbackError) {
                 console.error('[fromai] Fallback failed:', fallbackError);
                 if (ctx.tools?.cmd?.handleError) {
@@ -41,5 +39,5 @@ module.exports = {
                 }
             }
         }
-    }
+    },
 };
