@@ -4,7 +4,7 @@
  * Description: Sends message with AI badge using MessageBuilder
  */
 
-const { Button } = require('../lib/messageBuilder');
+const { AIRich } = require('../lib/messageBuilder');
 
 module.exports = {
     name: 'fromai',
@@ -18,15 +18,18 @@ module.exports = {
         const text = 'Zero Tr4sh by Ghost King';
 
         try {
-            await new Button(ctx.core)
-                .setTitle(botName)
-                .setBody(text)
-                .send(ctx._msg?.key?.remoteJid || ctx.chatId, {
-                    quoted: ctx._msg,
-                    forwarded: false,
-                });
+            const builder = new AIRich(ctx.core)
+                .setTitle('AI Assistant')
+                .setFooter(botName)
+                .addText(text);
 
-            console.log('[fromai] message sent safely via Button builder');
+            await builder.send(ctx._msg?.key?.remoteJid || ctx.chatId, {
+                quoted: ctx._msg,
+                forwarded: false,
+                fallbackText: text,
+            });
+
+            console.log('[fromai] message sent via AIRich');
         } catch (error) {
             console.error('[fromai] Error:', error && error.message ? error.message : error);
 
