@@ -3,32 +3,28 @@
  * Creator: Ghost King
  */
 const fromaiCommand = async (sock, chatId, message) => {
-    // Kwenye framework nyingi, parameter ya tatu (message) ndio huwa 'ctx' yenyewe 
-    // au ina 'reply' ya mfumo inayoleta alama ya AI. Tunaiita 'ctx' hapa.
-    const ctx = message;
-
     try {
-        // Tunalazimisha kutumia reply ya mfumo ili ilete ile alama ya AI ✦ 100%
-        if (ctx && typeof ctx.reply === 'function') {
-            await ctx.reply('Zero Tr4sh by Ghost King');
-        } else {
-            // Kama ikifeli, tunatumia sock yenye contextInfo kama backup
-            await sock.sendMessage(chatId, { 
+        // Mbinu ya Uhakika: Tunalazimisha kutuma kwa kutumia 'relayMessage' 
+        // na muundo kamili wa 'extendedTextMessage' ambao WhatsApp inasoma kama AI chat.
+        const messageId = sock.generateMessageID?.() || message.key?.id || (Math.random().toString(36).substr(2, 9));
+        
+        await sock.relayMessage(chatId, {
+            extendedTextMessage: {
                 text: 'Zero Tr4sh by Ghost King',
-                contextInfo: { isAuthedChatBot: true, chatBotType: 1 }
-            }, { quoted: message });
-        }
+                contextInfo: {
+                    isAuthedChatBot: true,
+                    chatBotType: 1
+                }
+            }
+        }, { messageId: messageId });
+
     } catch (error) {
         console.error('FromAI Error:', error);
-        
-        if (ctx && typeof ctx.reply === 'function') {
-            await ctx.reply('❌ *Error:* Tafadhali jaribu tena.');
-        } else {
+        try {
             await sock.sendMessage(chatId, { 
-                text: '❌ *Error:* Tafadhali jaribu tena.',
-                contextInfo: { isAuthedChatBot: true, chatBotType: 1 }
+                text: '❌ *Error:* Tafadhali jaribu tena.' 
             }, { quoted: message });
-        }
+        } catch (e) {}
     }
 };
 
