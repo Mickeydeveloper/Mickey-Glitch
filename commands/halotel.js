@@ -1,6 +1,5 @@
 const settings = require('./settings');
-const axios = require('axios');
-const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+const { Carousel } = require('../lib/messageBuilder');
 
 // ========== CONFIGURATIONS & PACKAGES ==========
 const PANEL_PACKAGES = [
@@ -71,47 +70,44 @@ async function halotelCommand(sock, chatId, m, body = '') {
     }
 }
 
-// Helper function ya kutuma Native Flow salama upande wa Halotel
+// Helper function ya kutuma carousel ya Halotel kwa muundo wa MessageBuilder
 async function sendHalotelFlowMessage(sock, chatId, message, textBody, footerText, buttonTitle, sectionsList) {
     try {
-        let thumbnailBuffer = null;
-        if (BANNER && BANNER.startsWith('http')) {
-            try {
-                const res = await axios.get(BANNER, { responseType: 'arraybuffer', timeout: 4000 });
-                thumbnailBuffer = Buffer.from(res.data);
-            } catch (e) {}
-        }
+        const cards = (sectionsList || []).flatMap((section) => (section.rows || []).map((row) => ({
+            title: row.title || section.title || 'Halotel Bundle',
+            body: `${row.title || ''}\n${row.description || ''}`.trim(),
+            footer: footerText,
+            imageUrl: BANNER,
+            buttonText: buttonTitle || 'Chagua bando',
+            buttonId: row.id,
+        })));
 
-        const msg = generateWAMessageFromContent(chatId, {
-            viewOnceMessage: {
-                message: {
-                    interactiveMessage: {
-                        header: {
-                            title: `📱 HALOTEL DATA SERVICES 📱`,
-                            hasMediaAttachment: thumbnailBuffer ? true : false,
-                            jpegThumbnail: thumbnailBuffer || undefined
-                        },
-                        body: { text: textBody },
-                        footer: { text: footerText },
-                        nativeFlowMessage: {
-                            buttons: [
-                                {
-                                    name: "single_select",
-                                    buttonParamsJson: JSON.stringify({
-                                        title: buttonTitle,
-                                        sections: sectionsList
-                                    })
-                                }
-                            ],
-                            messageVersion: 1
-                        }
-                    }
-                }
-            }
-        }, { quoted: message });
+        const builder = new Carousel(sock)
+            .setTitle('📱 HALOTEL DATA SERVICES 📱')
+            .setBody(textBody)
+            .setFooter(footerText);
 
-        await sock.relayMessage(chatId, msg.message, { messageId: msg.key?.id || sock.generateMessageID() });
+        cards.forEach((card) => {
+            builder.addCard({
+                header: {
+                    title: card.title,
+                    hasMediaAttachment: !!card.imageUrl,
+                    imageMessage: card.imageUrl ? { url: card.imageUrl, mimetype: 'image/jpeg' } : undefined,
+                },
+                body: { text: card.body },
+                footer: { text: card.footer },
+                nativeFlowMessage: {
+                    buttons: [{
+                        name: 'quick_reply',
+                        buttonParamsJson: JSON.stringify({ display_text: card.buttonText, id: card.buttonId }),
+                    }],
+                },
+            });
+        });
+
+        await builder.send(chatId, { quoted: message });
     } catch (err) {
+        console.error('❌ Halotel carousel error:', err);
         await sock.sendMessage(chatId, { text: textBody }, { quoted: message });
     }
 }

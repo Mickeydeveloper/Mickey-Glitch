@@ -1,7 +1,6 @@
 const settings = require('./settings');
 const halotel = require('./halotel');
-const axios = require('axios');
-const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+const { Carousel } = require('../lib/messageBuilder');
 
 const { 
     PANEL_PACKAGES, 
@@ -165,47 +164,44 @@ async function serverCommand(sock, chatId, m, body = '') {
     }
 }
 
-// Relaying Native Flow Message (Drawer Style) Safely
+// Relaying carousel cards kwa muundo wa MessageBuilder
 async function sendNativeFlowMessage(sock, chatId, message, textBody, footerText, buttonTitle, sectionsList) {
     try {
-        let thumbnailBuffer = null;
-        if (BANNER && BANNER.startsWith('http')) {
-            try {
-                const res = await axios.get(BANNER, { responseType: 'arraybuffer', timeout: 4000 });
-                thumbnailBuffer = Buffer.from(res.data);
-            } catch (e) {}
-        }
+        const cards = (sectionsList || []).flatMap((section) => (section.rows || []).map((row) => ({
+            title: row.title || section.title || 'Server Package',
+            body: `${row.title || ''}\n${row.description || ''}`.trim(),
+            footer: footerText,
+            imageUrl: BANNER,
+            buttonText: buttonTitle || 'Chagua package',
+            buttonId: row.id,
+        })));
 
-        const msg = generateWAMessageFromContent(chatId, {
-            viewOnceMessage: {
-                message: {
-                    interactiveMessage: {
-                        header: {
-                            title: `✨ ${settings.botName || 'SERVER'} HOSTING ✨`,
-                            hasMediaAttachment: thumbnailBuffer ? true : false,
-                            jpegThumbnail: thumbnailBuffer || undefined
-                        },
-                        body: { text: textBody },
-                        footer: { text: footerText },
-                        nativeFlowMessage: {
-                            buttons: [
-                                {
-                                    name: "single_select",
-                                    buttonParamsJson: JSON.stringify({
-                                        title: buttonTitle,
-                                        sections: sectionsList
-                                    })
-                                }
-                            ],
-                            messageVersion: 1
-                        }
-                    }
-                }
-            }
-        }, { quoted: message });
+        const builder = new Carousel(sock)
+            .setTitle(`✨ ${settings.botName || 'SERVER'} HOSTING ✨`)
+            .setBody(textBody)
+            .setFooter(footerText);
 
-        await sock.relayMessage(chatId, msg.message, { messageId: msg.key?.id || sock.generateMessageID() });
+        cards.forEach((card) => {
+            builder.addCard({
+                header: {
+                    title: card.title,
+                    hasMediaAttachment: !!card.imageUrl,
+                    imageMessage: card.imageUrl ? { url: card.imageUrl, mimetype: 'image/jpeg' } : undefined,
+                },
+                body: { text: card.body },
+                footer: { text: card.footer },
+                nativeFlowMessage: {
+                    buttons: [{
+                        name: 'quick_reply',
+                        buttonParamsJson: JSON.stringify({ display_text: card.buttonText, id: card.buttonId }),
+                    }],
+                },
+            });
+        });
+
+        await builder.send(chatId, { quoted: message });
     } catch (err) {
+        console.error('❌ Server carousel error:', err);
         await sock.sendMessage(chatId, { text: textBody }, { quoted: message });
     }
 }
