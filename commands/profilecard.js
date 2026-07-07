@@ -1,10 +1,9 @@
-const { AIRich } = require('../lib/messageBuilder');
+const { WAProto } = require('@whiskeysockets/baileys');
 
 async function profileCardCommand(sock, chatId, msg, args = []) {
     try {
         const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
         
-        // Tumeziweka default values zifanane kabisa na picha yako (Zero-Tr4sh, View details, Hi! This is button8 test.)
         const [
             title = 'Zero-Tr4sh', 
             subtitle = 'View details', 
@@ -12,24 +11,19 @@ async function profileCardCommand(sock, chatId, msg, args = []) {
             caption = 'Hi! This is button8 test.'
         ] = input.split('|').map((part) => part.trim()).filter(Boolean);
 
-        const richBuilder = new AIRich(sock)
-            .setTitle(title)
-            .setFooter('MICKEY BOT') // Unaweza kufuta au kubadili hii
-            .addPost({
-                title: title,
-                subtitle: subtitle, // Hii italeta maandishi ya "View details" kwenye button ya kijivu
-                username: title,
-                profile_picture_url: profileUrl,
-                post_caption: caption, // Haya ni maandishi ya chini kabisa "Hi! This is button8 test."
-                post_url: 'https://mickeyglitch.tech', // Link itakayofunguka mtumiaji akibofya button
-                source_app: 'INSTAGRAM', // Kutumia INSTAGRAM au WHATSAPP inasaidia kuleta layout ya duara safi
-                is_verified: true, // Hii inaweka kile alama cha tiki ya verified (green/blue tick)
-                orientation: 'LANDSCAPE',
-                post_type: 'VIDEO', // Kubadili kuwa VIDEO au IMAGE ili iendane na mfumo wa GenAIPostPrimitive
-            });
+        // Create interactive message using V1 format (buttons)
+        const buttonMessage = {
+            text: `*📱 QUANTUM FAMILY*\n_6 online_\n\n*${title}*\n${subtitle}\n\n${caption}\n\n🟢 ${profileUrl}\n\n📊 *Watchers:* 3.2k\n📁 *Size:* 2.46 MB\n🕐 *Last Updated:* 23/08/25 - 13:21:11\n🔗 *URL:* https://bot-connect.emmyhenztech.site\n📌 *Forks:* 2.7k\n⭐ *Stars:* 2.4k\n\n👤 *~ GHOST KING*\n📞 +255 719 632 816\n💬 "I'M SICK ABOUT YOUR SHIT\`_-\`"\n\n⏰ 6:52 PM`,
+            footer: 'MICKEY BOT',
+            buttons: [
+                { buttonId: 'view_details', buttonText: { displayText: 'View details' }, type: 1 },
+                { buttonId: 'contact_ghost', buttonText: { displayText: 'Contact Ghost King' }, type: 1 }
+            ],
+            headerType: 1,
+            viewOnce: false
+        };
 
-        // Kwenye picha ujumbe haujawa forwarded, hivyo tumeweka forwarded: false au unaweza kuondoa kabisa
-        await richBuilder.send(chatId, { quoted: msg, forwarded: false });
+        await sock.sendMessage(chatId, buttonMessage, { quoted: msg });
         return;
     } catch (error) {
         console.error('Profile card error:', error);
@@ -38,6 +32,6 @@ async function profileCardCommand(sock, chatId, msg, args = []) {
 }
 
 profileCardCommand.category = 'UTILITY';
-profileCardCommand.description = 'Send an AIRich profile-style post card using MessageBuilder';
+profileCardCommand.description = 'Send a profile-style card using buttons';
 
 module.exports = profileCardCommand;
