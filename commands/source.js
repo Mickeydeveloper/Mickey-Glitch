@@ -1,18 +1,29 @@
 const { generateMessageSourceCode, ButtonV2, AIRich } = require('../lib/messageBuilder');
 
+const defaultActions = [
+    { label: '📦 Menu', id: '.menu' },
+    { label: '🏓 Ping', id: '.ping' },
+    { label: '🧠 AI', id: '.ai' },
+    { label: '📊 Stats', id: '.stats' },
+    { label: '📂 Repo', id: '.repo' },
+    { label: '👑 Owner', id: '.owner' },
+];
+
 const sourceCommand = async (sock, chatId, msg, args) => {
     const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
 
     const parts = input ? input.split('|').map((part) => part.trim()).filter(Boolean) : [];
     const [title, subtitle, body, footer, ...buttonEntries] = parts;
 
-    const buttons = buttonEntries.map((entry) => {
-        const [label, id] = entry.split(',').map((item) => item.trim()).filter(Boolean);
-        return { label: label || 'Button', id: id || '.menu' };
-    });
+    const buttons = buttonEntries.length
+        ? buttonEntries.map((entry) => {
+            const [label, id] = entry.split(',').map((item) => item.trim()).filter(Boolean);
+            return { label: label || 'Button', id: id ? (id.startsWith('.') ? id : `.${id}`) : '.menu' };
+        })
+        : defaultActions;
 
     const buttonTitle = title || '🧩 MessageBuilder';
-    const buttonSubtitle = subtitle || 'Button + AIRich demo';
+    const buttonSubtitle = subtitle || 'Tap a button to run a bot function';
     const buttonBody = body || 'Hii ni mfano wa interactive message kutoka MessageBuilder';
     const buttonFooter = footer || 'MICKEY BOT';
 
@@ -25,18 +36,14 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
         buttons.forEach((button) => buttonBuilder.addButton(button.label, button.id));
 
-        if (buttons.length === 0) {
-            buttonBuilder.addButton('📦 Menu', '.menu').addButton('🧠 AI', '.ai');
-        }
-
         await buttonBuilder.send(chatId, { quoted: msg });
 
         const richBuilder = new AIRich(sock)
             .setTitle('🧠 AIRich Demo')
             .setFooter(buttonFooter)
             .addText(`Hii ni mfano wa AIRich kutoka MessageBuilder.\n\n${buttonBody}`)
-            .addSuggest(buttons.length ? buttons.map((button) => button.label) : ['Menu', 'AI'])
-            .addTip('Tumia MessageBuilder kwa interactive messages zenye buttons na rich content');
+            .addSuggest(buttons.map((button) => `${button.label} → ${button.id}`))
+            .addTip('Kijiselele cha button kitafanya command halisi ukiichagua');
 
         await richBuilder.send(chatId, { quoted: msg, forwarded: true });
         return;
@@ -54,6 +61,6 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 };
 
 sourceCommand.category = 'UTILITY';
-sourceCommand.description = 'Send interactive ButtonV2 and AIRich messages from MessageBuilder';
+sourceCommand.description = 'Send interactive ButtonV2 and AIRich messages that trigger real bot functions';
 
 module.exports = sourceCommand;
