@@ -4,35 +4,26 @@
  */
 const fromaiCommand = async (sock, chatId, message) => {
     try {
-        // Tunatengeneza muundo wa Button (Interactive Message) ambao Baileys inaukubali na kuweka alama ya AI
-        const buttons = [
-            { 
-                buttonId: 'id_ping', 
-                buttonText: { displayText: '📡 Ping' }, 
-                type: 1 
-            }
-        ];
-
-        const buttonMessage = {
+        // Tunatuma ujumbe kwa kutumia Baileys pekee kwa muundo ambao hauchujwi
+        await sock.sendMessage(chatId, {
             text: 'Zero Tr4sh by Ghost King',
-            footer: 'Mickey Glitch AI',
-            buttons: buttons,
-            headerType: 1,
             contextInfo: {
                 isAuthedChatBot: true,
-                chatBotType: 1
+                chatBotType: 1,
+                // Hizi parameter mbili zinalazimisha WhatsApp kuamsha mfumo wa AI UI
+                forwardingScore: 1,
+                isForwarded: false
             }
-        };
-
-        // Tunatuma kwa kutumia sock.sendMessage ya kawaida
-        await sock.sendMessage(chatId, buttonMessage, { quoted: message });
+        }, { quoted: message });
 
     } catch (error) {
         console.error('FromAI Error:', error);
-        // Kama iki-fail kwa namna yoyote, inarudi kwenye text ya kawaida
-        await sock.sendMessage(chatId, { 
-            text: '❌ *Error:* Tafadhali jaribu tena.' 
-        }, { quoted: message });
+        // Sehemu ya Error ikifeli
+        try {
+            await sock.sendMessage(chatId, { 
+                text: '❌ *Error:* Tafadhali jaribu tena.' 
+            }, { quoted: message });
+        } catch (e) {}
     }
 };
 
