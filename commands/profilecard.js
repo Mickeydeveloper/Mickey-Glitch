@@ -26,22 +26,6 @@ module.exports = {
                     promo_code: 'PROMO123'
                 })
                 .send(ctx._msg?.key?.remoteJid || ctx.chatId, { quoted: ctx._msg });
-
-           
-            const fallbackText = [
-                `📱 ${title}`,
-                subtitle,
-                '',
-                caption,
-                '',
-                `🖼️ ${profileUrl}`,
-            ].filter(Boolean).join('\n');
-
-            await richBuilder.send(ctx._msg?.key?.remoteJid || ctx.chatId, {
-                quoted: ctx._msg,
-                forwarded: false,
-                fallbackText,
-            });
         } catch (error) {
             console.error('Profile card error:', error);
             await ctx.reply('❌ WhatsApp could not render this profile card. Please try again with a different image URL.');
