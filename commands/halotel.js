@@ -1,147 +1,127 @@
-const settings = require('../settings');
-const { Carousel, createCtx } = require('../lib/messageBuilder');
+const { AIRich } = require('../lib/messageBuilder');
 
-// ========== CONFIGURATIONS & PACKAGES ==========
-const PANEL_PACKAGES = [
-    {
-        id: "pkg_small",
-        name: "Seva Ndogo (Small Pack)",
-        price: 5000,
-        specs: { ram: 1, cpu: 100, disk: 10, databases: 1, backups: 1 }
-    },
-    {
-        id: "pkg_medium",
-        name: "Seva ya Kati (Medium Pack)",
-        price: 10000,
-        specs: { ram: 4, cpu: 200, disk: 30, databases: 3, backups: 2 }
-    }
-];
-
-const BANNER = "https://github.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/connection.jpg?raw=true";
-const FOOTER = "𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲";
-const OWNER_NUMBER = "255615944741";
-const PANEL_URL = "https://panel.mickeypannel.dpdns.org";
-
-// ========== PTERODACTYL FUNCTIONS ==========
-async function createPterodactylUser(email, username, chatId) {
-    try {
-        // API zako za Pterodactyl zinaenda hapa
-        return { success: true, userId: "12" };
-    } catch (e) {
-        return { success: false, error: e.message };
-    }
-}
-
-async function createPterodactylServer(userId, username, specs, email) {
-    try {
-        // API zako za kuunda server zinaenda hapa
-        return { success: true, link: PANEL_URL, serverId: "MICK-90" };
-    } catch (e) {
-        return { success: false, error: e.message };
-    }
-}
-
-async function halotelCommand(sock, chatId, message, body = '') {
-    const ctx = createCtx(sock, chatId, message, {
-        config: settings,
-        tools: {
-            cmd: {
-                handleError: async (_ctx, error) => {
-                    console.error('Halotel command error:', error);
-                    await sock?.sendMessage?.(chatId, { text: `❌ ${error?.message || error}` }, { quoted: message });
-                },
-            },
-        },
-    });
-    ctx.args = typeof body === 'string' ? body.split(/\s+/).filter(Boolean) : [];
-    return commandModule.code(ctx);
-}
-
-const commandModule = {
-    name: 'halotel',
-    aliases: ['haloteldata', 'data'],
-    category: 'utility',
-    permissions: { coin: 0 },
+module.exports = {
+    name: "halotel",
+    aliases: ["halochat", "bando_halotel", "halo"],
+    category: "information",
     code: async (ctx) => {
         try {
-            const userName = ctx._msg?.pushName || ctx.msg?.pushName || 'Mteja';
-            const textBody = `📱 *${ctx.config?.bot?.name || ctx.config?.botName || ctx.config?.botname || 'MICKEY'} - HALOTEL DATA BUNDLES*\n\nHabari *${userName}*! 👋\nKaribu kwenye mfumo wa kununua bando za Halotel chapchap.\n\n📌 *JINSI YA KUNUNUA:*\n1. Bonyeza *"📱 FUNGUA MENU YA BANDO"* hapo chini.\n2. Chagua bando unalotaka kwenye list drawer.\n3. Fuata maelekezo ya malipo yatakayofuata.`;
+            const ownerNumber = "255719632816";
+            const waLink = `https://wa.me/${ownerNumber}`;
 
-            const sections = [
+            // Orodha ya Vifurushi vya Halotel (Products)
+            const productList = [
                 {
-                    title: '🔥 BANDO ZA HALOTEL ZINAZOKIMBIZA',
-                    rows: [
-                        { id: 'halo_10gb', title: '📱 Halotel 10GB', description: '💰 TSh 10,000 | Inadumu Siku 30' },
-                        { id: 'halo_20gb', title: '📱 Halotel 20GB', description: '💰 TSh 15,000 | Inadumu Siku 30' },
-                        { id: 'halo_30gb', title: '📱 Halotel 30GB', description: '💰 TSh 20,000 | Inadumu Siku 30' },
-                    ],
+                    title:      "Halotel Internet Bundles 🌐",
+                    brand:      "Mickey Glitch Engine",
+                    price:      "TSH 10,000.00",
+                    sale_price: "TSH 50,000.00",
+                    image:      "https://x.xcute.workers.dev/f/images/399f8732721b.jpg" // Unaweza kubadili picha hizi baadae
                 },
+                {
+                    title:      "Halo Kasi 1GB (Siku 1)",
+                    brand:      "Halotel Internet",
+                    price:      "TSH 1,500",
+                    sale_price: "TSH 1,000",
+                    image:      "https://x.xcute.workers.dev/f/images/b8066826a651.jpg"
+                },
+                {
+                    title:      "Halo Kasi 2.5GB (Siku 3)",
+                    brand:      "Halotel Internet",
+                    price:      "TSH 3,000",
+                    sale_price: "TSH 2,500",
+                    image:      "https://x.xcute.workers.dev/f/images/569c736b8940.jpg"
+                },
+                {
+                    title:      "Halo Kasi 5GB (Wiki 1)",
+                    brand:      "Halotel Internet",
+                    price:      "TSH 6,000",
+                    sale_price: "TSH 5,000",
+                    image:      "https://x.xcute.workers.dev/f/images/569c736b8940.jpg"
+                },
+                {
+                    title:      "Halo Kasi 12GB (Mwezi 1)",
+                    brand:      "Halotel Internet",
+                    price:      "TSH 15,000",
+                    sale_price: "TSH 13,000",
+                    image:      "https://x.xcute.workers.dev/f/images/738d07bc5e5b.jpg"
+                },
+                {
+                    title:      "Halo Kasi Unlimited (Mwezi 1)",
+                    brand:      "Halotel Internet",
+                    price:      "TSH 55,000",
+                    sale_price: "TSH 50,000",
+                    image:      "https://x.xcute.workers.dev/f/images/7d90efab1187.jpg"
+                }
             ];
 
-            await sendHalotelFlowMessage(ctx, textBody, FOOTER, '📱 FUNGUA MENU YA BANDO', sections);
-        } catch (err) {
-            console.error('❌ Halotel Command Error:', err);
-            if (ctx?.tools?.cmd?.handleError) {
-                await ctx.tools.cmd.handleError(ctx, err, true);
+            // Card ya kwanza inakuwa kama Header, zinazobaki zinaingia kwenye HScroll (Carousel)
+            const top  = productList[0];
+            const rest = productList.slice(1);
+
+            const listText = productList
+                .map((p, i) => {
+                    const harga = p.sale_price
+                        ? `~${p.price}~ ➜ *${p.sale_price}*`
+                        : `*${p.price}*`;
+                    return `${i + 1}. *${p.title}* (${p.brand})\n   ${harga}`;
+                })
+                .join("\n\n");
+
+            // Kuanza kujenga Ujumbe wa AI Rich Product Catalog
+            await new AIRich(ctx.core)
+                .setTitle("📶 Halotel Data Menu")
+                .setFooter("MICKEY BOT")
+                .addText("`Halotel Bundle Catalog` 🛍️")
+
+                // Main Header Product Card
+                .addProduct({
+                    title:      top.title,
+                    brand:      top.brand,
+                    price:      top.price,
+                    sale_price: top.sale_price,
+                    url:        waLink,
+                    image:      top.image,
+                    icon:       top.image
+                })
+
+                // Kadi za kutelezesha (HScroll) za vifurushi vilivyobaki
+                .addProduct(rest.map(p => ({
+                    title:      p.title,
+                    brand:      p.brand,
+                    price:      p.price,
+                    sale_price: p.sale_price,
+                    url:        waLink,
+                    image:      p.image,
+                    icon:       p.image
+                })))
+
+                // Orodha nzima ya maandishi chini ya kadi
+                .addText(
+                    `\`Available Bundles\` 📦\n\n` +
+                    `${listText}\n\n` +
+                    `Je, unahitaji kujiunga na kifurushi chochote hapo juu? Bofya\n` +
+                    `button ya bidhaa husika au wasiliana nasi moja kwa moja.`
+                )
+
+                .addTip("_Regards: © Mickey // Glitch Engine_")
+
+                // Mapendekezo ya haraka chini (Pills/Suggestions)
+                .addSuggest([
+                    `Chagua Kifurushi`,
+                    `${ctx.used?.prefix || '.'}menu`,
+                    `${ctx.used?.prefix || '.'}owner`
+                ])
+
+                .send(ctx._msg.key.remoteJid, { quoted: ctx._msg });
+
+        } catch (error) {
+            console.error("Halotel Command Error:", error);
+            if (global.tools?.cmd?.handleError) {
+                await global.tools.cmd.handleError(ctx, error);
             } else {
-                await ctx.reply('❌ Halotel service is temporarily unavailable.');
+                await ctx.reply(`❌ Error: ${error.message}`);
             }
         }
-    },
-};
-
-async function sendHalotelFlowMessage(ctx, textBody, footerText, buttonTitle, sectionsList) {
-    try {
-        const cards = (sectionsList || []).flatMap((section) => (section.rows || []).map((row) => ({
-            title: row.title || section.title || 'Halotel Bundle',
-            body: `${row.title || ''}\n${row.description || ''}`.trim(),
-            footer: footerText,
-            imageUrl: BANNER,
-            buttonText: buttonTitle || 'Chagua bando',
-            buttonId: row.id,
-        })));
-
-        const builder = new Carousel(ctx.core)
-            .setTitle('📱 HALOTEL DATA SERVICES 📱')
-            .setBody(textBody)
-            .setFooter(footerText);
-
-        cards.forEach((card) => {
-            builder.addCard({
-                header: {
-                    title: card.title,
-                    hasMediaAttachment: !!card.imageUrl,
-                    imageMessage: card.imageUrl ? { url: card.imageUrl, mimetype: 'image/jpeg' } : undefined,
-                },
-                body: { text: card.body },
-                footer: { text: card.footer },
-                nativeFlowMessage: {
-                    buttons: [{
-                        name: 'quick_reply',
-                        buttonParamsJson: JSON.stringify({ display_text: card.buttonText, id: card.buttonId }),
-                    }],
-                },
-            });
-        });
-
-        await builder.send(ctx._msg?.key?.remoteJid || ctx.chatId, {
-            quoted: ctx._msg,
-            fallbackText: textBody,
-        });
-    } catch (err) {
-        console.error('❌ Halotel carousel error:', err);
-        await ctx.reply(textBody);
     }
-}
-
-// ========== EXPORTS =========
-module.exports = commandModule;
-module.exports.halotelCommand = halotelCommand;
-module.exports.getPendingRequest = () => null;
-module.exports.PANEL_PACKAGES = PANEL_PACKAGES;
-module.exports.createPterodactylUser = createPterodactylUser;
-module.exports.createPterodactylServer = createPterodactylServer;
-module.exports.BANNER = BANNER;
-module.exports.FOOTER = FOOTER;
-module.exports.OWNER_NUMBER = OWNER_NUMBER;
-module.exports.PANEL_URL = PANEL_URL;
+};
