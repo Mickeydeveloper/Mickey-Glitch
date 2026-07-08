@@ -79,7 +79,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
             const cards = [
                 {
-                    header: { title: "Panel 1GB", hasMediaAttachment: true, imageMessage: { url: "https://x.xcute.workers.dev/f/images/b8066826a651.jpg" } },
+                    header: { title: "Panel 1GB", hasMediaAttachment: true, imageMessage: { url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe" } },
                     body: { text: "Price: TSH 15,000" },
                     footer: { text: "Mickey Bot" },
                     nativeFlowMessage: { buttons: [{ name: "cta_url", buttonParamsJson: JSON.stringify({ display_text: "Nunua 🛍️", url: waLink }) }] }
@@ -112,13 +112,15 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         return ctx.reply("```javascript\n" + code + "\n```");
     }
 
-    // --- NEW!! ADVANCED: PAIRED MEDIA (SAMPLE + CODE) ---
+    // --- ADVANCED: PAIRED MEDIA ---
     if (input === 'test_paired') {
-        try {
-            await ctx.reply('⏳ _Inatengeneza Sample ya Paired Media..._');
+        const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: 'IMG_URL' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: 'VID_URL' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
 
-            const image = await prepareWAMessageMedia({ image: { url: 'https://cdn.ornzora.eu.cc/a6a1e8f4-b83d-4694-9bba-0f22a58bfd4f-FIORA.jpg' } }, { upload: sock.waUploadToServer });
-            const video = await prepareWAMessageMedia({ video: { url: 'https://cdn.ornzora.eu.cc/ed7ebb66-9bf4-44b6-858a-b6b7405e53c5-FIORA.mp4' } }, { upload: sock.waUploadToServer });
+        try {
+            await ctx.reply('⏳ _Inajaribu kutuma Sample ya Paired Media..._');
+            // Zimetumika link za uhakika (Wikipedia/Direct open-source assets)
+            const image = await prepareWAMessageMedia({ image: { url: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg' } }, { upload: sock.waUploadToServer });
+            const video = await prepareWAMessageMedia({ video: { url: 'https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/automated-facial-recognition.mp4' } }, { upload: sock.waUploadToServer });
 
             const msgMedia = generateWAMessageFromContent(ctx.chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});
             await sock.relayMessage(ctx.chatId, msgMedia.message, { messageId: msgMedia.key.id });
@@ -127,21 +129,23 @@ const sourceCommand = async (sock, chatId, msg, args) => {
                 videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },
                 messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msgMedia.key } }
             }, {});
+        } catch (e) {
+            await ctx.reply("⚠️ _Sample imeshindwa ku-load kwenye WhatsApp (Nipe link zako). Ila kodi ni hii chini:_");
+        }
 
-            // Baada ya kuonyesha Sample, inamwaga kodi chini yake
-            const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: 'IMG_URL' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: 'VID_URL' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
-            return ctx.reply("💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```");
-        } catch (e) { return ctx.reply("❌ Paired Sample Error: " + e.message); }
+        return ctx.reply("💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```");
     }
 
-    // --- NEW!! ADVANCED: ANIMATED LINK LOOP (SAMPLE + CODE) ---
+    // --- ADVANCED: ANIMATED LINK LOOP ---
     if (input === 'test_linkloop') {
+        const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 5; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://link.com\\nText",\n      linkPreview: { 'matched-text': "https://link.com", jpegThumbnail: image.jpegThumbnail, highQualityThumbnail: image }\n    });\n    await delay(2000);\n  }\n}`;
+
         try {
-            const { key } = await sock.sendMessage(ctx.chatId, { text: '⏳ _Inatengeneza Sample ya Animation Loop..._' });
+            const { key } = await sock.sendMessage(ctx.chatId, { text: '⏳ _Inajaribu kucheza Sample ya Animation Loop..._' });
 
             const demoUrls = [
-                'https://cdn.ornzora.eu.cc/aed35b3f-baf5-4c2e-9839-1a1188c5c44a-FIORA.jpg',
-                'https://cdn.ornzora.eu.cc/4930f428-6661-4c17-a52c-2d48eff2f86d-FIORA.jpg'
+                'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200',
+                'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=200'
             ];
 
             const medias = await Promise.all(demoUrls.map(async url => {
@@ -149,8 +153,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
                 return imageMessage;
             }));
 
-            // Loop ya majaribio (itabadilisha mara 3 kuonyesha uhondo)
-            for(let i = 0; i < 3; i++) {
+            for(let i = 0; i < 2; i++) {
                 for (const image of medias) {
                     await sock.sendMessage(ctx.chatId, {
                         edit: key,
@@ -165,11 +168,11 @@ const sourceCommand = async (sock, chatId, msg, args) => {
                     await delay(1500);
                 }
             }
+        } catch (e) {
+            await ctx.reply("⚠️ _Sample imeshindwa kucheza (WhatsApp block au bad link). Kodi ni hii chini:_");
+        }
 
-            // Baada ya kuonyesha Sample, inatuma kodi
-            const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 5; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://link.com\\nText",\n      linkPreview: { 'matched-text': "https://link.com", jpegThumbnail: image.jpegThumbnail, highQualityThumbnail: image }\n    });\n    await delay(2000);\n  }\n}`;
-            return ctx.reply("💡 *Animated Link Loop Source Code*:\n```javascript\n" + code + "\n```");
-        } catch (e) { return ctx.reply("❌ Animation Sample Error: " + e.message); }
+        return ctx.reply("💡 *Animated Link Loop Source Code*:\n```javascript\n" + code + "\n```");
     }
 };
 
