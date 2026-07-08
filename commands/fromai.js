@@ -115,3 +115,5 @@ module.exports.name = 'fromai';
 module.exports.aliases = ['aimedia', 'pairedmedia'];
 module.exports.category = 'ai';
 module.exports.default = fromaiCommand;
+module.exports.code = fromaiCommand;
+module.exports.handler = fromaiCommand;
