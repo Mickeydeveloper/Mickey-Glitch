@@ -752,6 +752,92 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 await banCommand(sock, chatId, message);
                 break;
+            case userMessage.startsWith('.move') || userMessage.startsWith('.movegroup') || userMessage.startsWith('.inviteall'):
+                if (!isGroup) {
+                    await sock.sendMessage(chatId, { text: '⚠️ This command can only be used in a group.' }, { quoted: message });
+                    break;
+                }
+
+                const adminStatusForMove = await isAdmin(sock, chatId, senderId);
+                const canUseMove = message.key.fromMe || senderIsOwnerOrSudo || adminStatusForMove.isSenderAdmin;
+                if (!canUseMove) {
+                    await sock.sendMessage(chatId, { text: '❌ Only admins can use this!' }, { quoted: message });
+                    break;
+                }
+
+                const moveInput = userMessage.replace(/^\.(move|movegroup|inviteall)\s*/i, '').trim();
+                if (!moveInput) {
+                    await sock.sendMessage(chatId, {
+                        text: '❌ Usage:\n.move <group_link_or_id> [message]\n\nExample:\n.move https://chat.whatsapp.com/xxxxx Welcome to our new group!'
+                    }, { quoted: message });
+                    break;
+                }
+
+                try {
+                    const moveArgs = moveInput.split(/\s+/);
+                    let targetGroup = moveArgs[0];
+                    const moveMessage = moveArgs.slice(1).join(' ') || '📢 Welcome to our new group!';
+
+                    if (targetGroup.includes('chat.whatsapp.com')) {
+                        const inviteCode = targetGroup.split('/').pop().replace(/[^a-zA-Z0-9_-]/g, '');
+                        targetGroup = inviteCode;
+                    }
+
+                    const currentGroupMetadata = await sock.groupMetadata(chatId);
+                    const currentMembers = (currentGroupMetadata?.participants || []).map(p => p.id).filter(Boolean);
+                    const botJid = sock.user?.id || '';
+                    const membersToMove = currentMembers.filter(jid => jid && jid !== botJid);
+
+                    if (!membersToMove.length) {
+                        await sock.sendMessage(chatId, { text: '❌ No members to move!' }, { quoted: message });
+                        break;
+                    }
+
+                    await sock.sendMessage(chatId, {
+                        text: `🔄 Moving ${membersToMove.length} members to target group...\n\n⏳ Please wait...`
+                    }, { quoted: message });
+
+                    let success = 0;
+                    let failed = 0;
+                    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+                    let targetGroupJid = targetGroup;
+                    if (/^[a-zA-Z0-9_-]+$/i.test(targetGroup) && targetGroup.length > 10 && !targetGroup.includes('@')) {
+                        try {
+                            targetGroupJid = await sock.groupAcceptInvite(targetGroup);
+                        } catch (e) {
+                            targetGroupJid = targetGroup;
+                        }
+                    }
+
+                    if (targetGroupJid) {
+                        await sock.sendMessage(targetGroupJid, {
+                            text: `${moveMessage}\n\n👥 *Members joining from ${currentGroupMetadata?.subject || 'this group'}*\n\n${membersToMove.map(j => `@${j.split('@')[0]}`).join(' ')}\n\n_Powered by Mickey Glitch_`,
+                            mentions: membersToMove,
+                        });
+                    }
+
+                    for (const member of membersToMove) {
+                        try {
+                            await sock.groupParticipantsUpdate(targetGroupJid, [member], 'add');
+                            success++;
+                            await delay(1500);
+                        } catch (e) {
+                            failed++;
+                            console.log(`❌ Failed to add ${member}: ${e?.message || e}`);
+                        }
+                    }
+
+                    await sock.sendMessage(chatId, {
+                        text: `✅ *Move Complete!*\n\n👥 Added: ${success} members\n❌ Failed: ${failed} members\n\n📌 Check target group for new members!`
+                    }, { quoted: message });
+                } catch (e) {
+                    console.error('Move error:', e);
+                    await sock.sendMessage(chatId, {
+                        text: `❌ Error: ${e?.message || e}\n\nMake sure the bot is admin in both groups!`
+                    }, { quoted: message });
+                }
+                break;
             case userMessage.startsWith('.unban'):
                 if (!isGroup) {
                     if (!message.key.fromMe && !senderIsSudo) {
