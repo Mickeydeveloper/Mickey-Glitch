@@ -1,45 +1,83 @@
-const { AIRich, createCtx } = require('../lib/messageBuilder');
+const { prepareWAMessageMedia, generateWAMessageFromContent } = require('baileys');
+const { createCtx } = require('../lib/messageBuilder');
 
-/**
- * 🤖 FROMAI COMMAND (AIRich Layout Matching the Sample)
- */
-const fromaiCommand = async (sock, chatId, msg, args) => {
-    // 1. Kutengeneza context (ctx) na kusafisha input text
-    const ctx = createCtx(sock, chatId, msg, { args });
-    const text = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
-    
-    if (!text) {
-        return ctx.reply("Tafadhali weka swali lako mfano: .ai mambo");
-    }
+async function fromaiCommand(sock, chatId, message, args) {
+    const ctx = createCtx(sock, chatId, message, { args });
 
     try {
-        // Jibu kutoka kwa AI (Hapa ndipo unapo-link AI yako)
-        const aiResponse = "Hi! This is button8 test."; 
+        // Tuma ujumbe wa kusubiri (Kupakia files huchukua sekunde chache)
+        await ctx.reply('⏳ _Processing AI media engine, please wait..._');
 
-        // 2. Kutumia AIRich yenye function zote zilizopo kwenye picha yako
-        const richMessage = new AIRich(sock)
-            .setTitle('🧠 Zero-Tr4sh') // Jina la juu lenye nembo
-            .setFooter('MICKEY BOT')   // Footer ya chini kabisa
-            .addText(aiResponse)       // Jibu la AI katikati
-            .addSuggest([
-                `Swali lako: ${text.substring(0, 15)}...`, // Inaonyesha kifupi cha ulichouliza
-                'Msaada → .menu'
-            ])
-            .addTip('Majibu haya yanatolewa papo hapo na Mfumo wa AI.'); // Tip ya chini
+        // 1. Kupakia Picha kwenye seva za WhatsApp
+        const image = await prepareWAMessageMedia(
+            {
+                image: {
+                    url: 'https://cdn.ornzora.eu.cc/a6a1e8f4-b83d-4694-9bba-0f22a58bfd4f-FIORA.jpg'
+                }
+            },
+            {
+                upload: sock.waUploadToServer
+            }
+        );
 
-        // 3. Tuma ujumbe
-        return await richMessage.send(ctx.chatId, { 
-            quoted: ctx._msg, 
-            forwarded: true 
+        // 2. Kupakia Video kwenye seva za WhatsApp
+        const video = await prepareWAMessageMedia(
+            {
+                video: {
+                    url: 'https://cdn.ornzora.eu.cc/ed7ebb66-9bf4-44b6-858a-b6b7405e53c5-FIORA.mp4'
+                }
+            },
+            {
+                upload: sock.waUploadToServer
+            }
+        );
+
+        // 3. Kutengeneza Ujumbe Mama (Picha)
+        const msg = generateWAMessageFromContent(
+            ctx.chatId,
+            {
+                imageMessage: {
+                    ...image.imageMessage,
+                    contextInfo: {
+                        pairedMediaType: 5,
+                        statusSourceType: 0
+                    }
+                }
+            },
+            {}
+        );
+
+        // 4. Kurusha Ujumbe Mama (Picha)
+        await sock.relayMessage(ctx.chatId, msg.message, {
+            messageId: msg.key.id
         });
 
-    } catch (err) {
-        console.error("Error kwenye kuchakata AIRich AI:", err);
-        return ctx.reply("Kuna tatizo limetokea kwenye kuchakata AI, jaribu tena.");
+        // 5. Kurusha Ujumbe wa Pacha (Video) na kuunganisha na ule wa Picha
+        await sock.relayMessage(
+            ctx.chatId,
+            {
+                videoMessage: {
+                    ...video.videoMessage,
+                    contextInfo: {
+                        pairedMediaType: 6,
+                        statusSourceType: 0
+                    }, 
+                },
+                messageContextInfo: {
+                    messageAssociation: {
+                        associationType: 12,
+                        parentMessageKey: msg.key
+                    }
+                }
+            },
+            {}
+        );
+
+    } catch (error) {
+        console.error("FromAI Media Error:", error);
+        ctx.reply(`❌ FromAI Engine failed: ${error.message}`);
     }
-};
+}
 
-fromaiCommand.category = 'AI';
-fromaiCommand.description = 'Pata majibu ya AI kwa kutumia mfumo kamili wa AIRich Layout';
-
+// Inatumia mfumo wako wa exporter ya chini wenye jina jipya la command
 module.exports = fromaiCommand;
