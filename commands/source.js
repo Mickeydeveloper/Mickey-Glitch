@@ -13,22 +13,22 @@ const sourceCommand = async (sock, chatId, msg, args) => {
     const ctx = createCtx(sock, chatId, msg, { args });
     const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
 
-    // ─── 1. MFUMO WA KUTEST MA-FUNCTION (IF NO INPUT) ───
+    // ─── 1. MENU KUU YA KUTEST FUNCTION ZOTE ───
     if (!input) {
         try {
             const testMenu = new ButtonV2(sock)
                 .setTitle('🧪 MessageBuilder Tester')
-                .setSubtitle('Chagua function ya kutest hapo chini')
-                .setBody('Bofya button kuona sample (mfano) wa jinsi function husika inavyofanya kazi kwenye mfumo wako.')
+                .setSubtitle('Orodha ya Function Zote')
+                .setBody('Chagua function hapo chini ili kuona mfano (sample) wa jinsi inavyofanya kazi kwenye mfumo wako.')
                 .setFooter('MICKEY BOT');
 
             testMenu.addButton('📱 Test ButtonV2', '.source test_buttonv2');
-            testMenu.addButton('🧠 Test AIRich', '.source test_airich');
-            testMenu.addButton('💻 Test SourceCode', '.source test_sourcecode');
+            testMenu.addButton('🧠 Test AIRich (All Functions)', '.source test_airich');
+            testMenu.addButton('💻 Test SourceCode Snippet', '.source test_sourcecode');
 
             await testMenu.send(ctx.chatId, { 
                 quoted: ctx._msg,
-                fallbackText: "🧪 *MessageBuilder Tester*\n\nChagua amri ya kutest:\n1. .source test_buttonv2\n2. .source test_airich\n3. .source test_sourcecode"
+                fallbackText: "🧪 *MessageBuilder Tester*\n\nAmri za kutest:\n1. .source test_buttonv2\n2. .source test_airich\n3. .source test_sourcecode"
             });
             return;
         } catch (e) {
@@ -37,36 +37,38 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         }
     }
 
-    // ─── 2. SHULUGULIKIA SAMPLES (UKIBONYEZA BUTTONS ZA TEST) ───
+    // ─── 2. SAMPLE YA BUTTONV2 ───
     if (input === 'test_buttonv2') {
         const sampleBtn = new ButtonV2(sock)
             .setTitle('📱 ButtonV2 Sample')
-            .setSubtitle('Huu ni mfano wa muundo wa ButtonV2')
-            .setBody('Kazi ya ButtonV2 ni kutengeneza layout hii ya ma-buttons ya haraka (Native Flow Buttons).')
+            .setSubtitle('Muundo wa Native Flow Buttons')
+            .setBody('Huu ni mfano wa ButtonV2 ikitumia `.setTitle()`, `.setSubtitle()`, `.setBody()`, `.setFooter()`, na `.addButton()`.')
             .setFooter('MICKEY BOT');
         
         defaultActions.forEach(btn => sampleBtn.addButton(btn.label, btn.id));
         return await sampleBtn.send(ctx.chatId, { 
             quoted: ctx._msg,
-            fallbackText: "📱 *ButtonV2 Sample*\n\nHuu ni mfano wa muundo wa ButtonV2 wenye amri za haraka."
+            fallbackText: "📱 *ButtonV2 Sample* imetumwa kikamilifu."
         });
     }
 
+    // ─── 3. SAMPLE YA AIRICH (INAZENGA FUNCTION ZOTE NNE ZILIZOPO) ───
     if (input === 'test_airich') {
         const sampleRich = new AIRich(sock)
-            .setTitle('🧠 AIRich Sample')
-            .setFooter('MICKEY BOT')
-            .addText('Huu ni mfano wa kadi ya kijani ya AIRich.\n\nInatumika kuonesha majibu ya AI kwa muundo nadhifu yenye Verified Badge.')
-            .addSuggest(['Mambo vipi → .ai mambo', 'Msaada → .menu'])
-            .addTip('Inaleta muundo safi wa muonekano kwenye WhatsApp ya simu.');
+            .setTitle('🧠 AIRich Sample') // Function ya 1
+            .setFooter('MICKEY BOT') // Function ya ziada (Kufunga kadi)
+            .addText('Huu ni mfano kamili wa kadi ya kijani ya AIRich.\n\nInatumika kuonesha majibu ya AI kwa muundo nadhifu yenye Verified Badge kwenye jina la juu.') // Function ya 2
+            .addSuggest(['Mambo vipi → .ai mambo', 'Msaada → .menu', 'Ping Bot → .ping']) // Function ya 3
+            .addTip('Inaleta muundo safi wa muonekano kwenye WhatsApp ya simu yako.'); // Function ya 4
 
         return await sampleRich.send(ctx.chatId, { 
             quoted: ctx._msg, 
             forwarded: true,
-            fallbackText: "🧠 *AIRich Sample*\n\nHuu ni mfano wa kadi ya kijani ya AIRich yenye mwonekano nadhifu."
+            fallbackText: "🧠 *AIRich Sample* (Inajumuisha setTitle, addText, addSuggest, na addTip)."
         });
     }
 
+    // ─── 4. SAMPLE YA GENERATE SOURCE CODE ───
     if (input === 'test_sourcecode') {
         const snippet = generateMessageSourceCode({
             title: 'Sample Title',
@@ -75,11 +77,10 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             footer: 'MICKEY BOT',
             buttons: defaultActions,
         });
-        // FIX: Mabackticks yaliyorekebishwa hapa kuzuia SyntaxError
         return ctx.reply("```javascript\n" + snippet + "\n```");
     }
 
-    // ─── 3. MFUMO WA KAWAIDA WA CUSTOM BUTTONS (IF INPUT EXISTS) ───
+    // ─── 5. MFUMO WA KAWAIDA WA CUSTOM BUTTONS (IF CUSTOM INPUT EXISTS) ───
     const parts = input.split('|').map((part) => part.trim()).filter(Boolean);
     const [title, subtitle, body, footer, ...buttonEntries] = parts;
 
