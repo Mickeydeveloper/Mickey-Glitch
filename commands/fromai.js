@@ -16,35 +16,36 @@ module.exports = {
     code: async (ctx) => {
         const botName = ctx.config?.bot?.name || ctx.config?.botName || ctx.config?.botname || 'MICKEY BOT';
         const text = 'Zero Tr4sh by Ghost King';
-        
-        // Kupata ID ya chat na kuangalia kama ni Group au DM
-        const chatId = ctx._msg?.key?.remoteJid || ctx.chatId || '';
-        const isGroup = chatId.endsWith('@g.us');
+        const chatId = ctx._msg?.key?.remoteJid || ctx.chatId;
 
         try {
-            // Kama ni Group au unachat na bot yako mwenyewe (Message yourself)
-            if (isGroup || chatId === ctx.core?.user?.id?.split(':')[0] + '@s.whatsapp.net') {
-                const builder = new AIRich(ctx.core)
-                    .setTitle('AI Assistant')
-                    .setFooter(botName)
-                    .addText(text);
+            // Tunatumia AIRich lakini kwa mfumo wa .addPost uliorahisishwa
+            // Mfumo huu hauli error kwenye WhatsApp mpya
+            const builder = new AIRich(ctx.core)
+                .setTitle('AI Assistant')
+                .setFooter(botName);
 
-                await builder.send(chatId, {
-                    quoted: ctx._msg,
-                    forwarded: false,
-                });
-                console.log('[fromai] message sent via AIRich (Safe Chat)');
-            } else {
-                // Kama ni DM ya mtu mwingine, tumia reply ya kawaida ili KUZUIA error ya "Update WhatsApp"
-                await ctx.reply(`✨ *[AI Assistant]*\n\n${text}\n\n_${botName}_`);
-                console.log('[fromai] message sent via Text Fallback (To prevent DM error)');
-            }
+            builder.addPost({
+                title: 'AI Assistant',
+                subtitle: botName,
+                username: 'Meta AI',
+                post_caption: text,
+                source_app: 'WHATSAPP',
+                post_type: 'TEXT', // Kutumia TEXT badala ya IMAGE inasaidia kupita kwenye ulinzi
+            });
+
+            await builder.send(chatId, {
+                quoted: ctx._msg,
+                forwarded: false,
+            });
+            
+            console.log('[fromai] message sent via AIRich Post Layout');
         } catch (error) {
-            console.error('[fromai] Error:', error && error.message ? error.message : error);
+            console.error('[fromai] Error:', error);
+            // Ikitokea dharura yoyote, bot inajibu kwa maandishi ya kawaida
             try {
-                await ctx.reply(text);
+                await ctx.reply(`✨ *[AI Assistant]*\n\n${text}\n\n_${botName}_`);
             } catch (fallbackError) {
-                console.error('[fromai] Fallback failed:', fallbackError);
                 if (ctx.tools?.cmd?.handleError) {
                     await ctx.tools.cmd.handleError(ctx, error, true);
                 }
