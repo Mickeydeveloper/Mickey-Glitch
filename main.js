@@ -193,6 +193,66 @@ const profileCardModule = require('./commands/profilecard');
 const addcmdCommand = require('./commands/addcmd');
 const { getCustomCommandHandler, loadCustomCommands, getCustomCommandNames } = require('./lib/customCommands');
 
+function loadAutoRegisteredCommands() {
+    const commandMap = new Map();
+    const commandsDir = path.join(__dirname, 'commands');
+
+    if (!fs.existsSync(commandsDir)) return commandMap;
+
+    const files = fs.readdirSync(commandsDir)
+        .filter((file) => file.endsWith('.js') && !file.startsWith('.'))
+        .sort();
+
+    for (const file of files) {
+        const fullPath = path.join(commandsDir, file);
+        try {
+            if (!fs.statSync(fullPath).isFile()) continue;
+
+            const mod = require(fullPath);
+            if (!mod) continue;
+
+            const names = [];
+            const fallbackName = path.basename(file, '.js').toLowerCase();
+
+            if (typeof mod === 'function') {
+                const fnName = (mod.name || '').trim().toLowerCase();
+                if (fnName && !['command', 'handler', 'module'].includes(fnName)) {
+                    names.push(fnName);
+                }
+            } else if (mod && typeof mod === 'object') {
+                if (typeof mod.name === 'string' && mod.name.trim()) {
+                    names.push(mod.name.trim().toLowerCase());
+                }
+                if (Array.isArray(mod.aliases)) {
+                    mod.aliases.filter(Boolean).forEach((alias) => {
+                        const normalized = String(alias).trim().toLowerCase();
+                        if (normalized) names.push(normalized);
+                    });
+                }
+            }
+
+            if (fallbackName && !names.includes(fallbackName)) {
+                names.push(fallbackName);
+            }
+
+            if (!names.length) continue;
+
+            const handler = normalizeBotCommand(mod);
+            names.filter((name, index) => names.indexOf(name) === index).forEach((name) => {
+                if (!commandMap.has(name)) {
+                    commandMap.set(name, handler);
+                }
+            });
+        } catch (error) {
+            console.error(`Auto-register failed for ${file}:`, error?.message || error);
+        }
+    }
+
+    return commandMap;
+}
+
+const autoRegisteredCommands = loadAutoRegisteredCommands();
+
 function normalizeBotCommand(commandModule) {
     if (typeof commandModule === 'function') {
         return async (sock, chatId, msg, args = [], options = {}) => commandModule(sock, chatId, msg, args, options);
@@ -1498,6 +1558,32 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 commandExecuted = false;
                 break;
+        }
+
+        if (!commandExecuted) {
+            const autoCommandName = userMessage.startsWith('.') ? userMessage.split(/\s+/)[0].slice(1).toLowerCase() : '';
+            const autoHandler = autoCommandName ? autoRegisteredCommands.get(autoCommandName) : null;
+
+            if (autoHandler) {
+                try {
+                    await autoHandler(sock, chatId, message, userMessage.split(/\s+/).slice(1), {
+                        senderId,
+                        config: settings,
+                        tools: {
+                            cmd: {
+                                handleError: async (_ctx, error) => {
+                                    console.error('Auto command error:', error);
+                                    await sock.sendMessage(chatId, { text: `❌ ${error?.message || error}` }, { quoted: message });
+                                },
+                            },
+                        },
+                    });
+                    commandExecuted = true;
+                } catch (error) {
+                    console.error('Auto command execution failed:', error);
+                    await sock.sendMessage(chatId, { text: `❌ ${error?.message || error}` }, { quoted: message });
+                }
+            }
         }
 
         // If a command was executed, show typing status after command execution
