@@ -157,29 +157,25 @@ async function mentionStatus(sock, jids, content) {
 
 async function postToWhatsAppStatus(sock, mediaBuffer, caption, mediaType, options = {}) {
     try {
-        let statusPayload = {};
-        
-        if (mediaType === 'image') {
-            statusPayload = {
-                image: mediaBuffer,
-                caption: caption || '📸 Status update',
-                viewOnce: options.viewOnce || false
-            };
-        } else if (mediaType === 'video') {
-            statusPayload = {
-                video: mediaBuffer,
-                caption: caption || '🎥 Status update',
-                gifPlayback: false,
-                seconds: options.seconds || 30
-            };
-        }
-
         const targetJids = options.targetJids || ['status@broadcast'];
+
         if (targetJids.length === 1 && targetJids[0] === 'status@broadcast') {
-            return sock.sendMessage('status@broadcast', statusPayload);
+            const statusPayload = mediaType === 'image'
+                ? { image: mediaBuffer, caption: caption || '📸 Status update', viewOnce: options.viewOnce || false }
+                : { video: mediaBuffer, caption: caption || '🎥 Status update', gifPlayback: false, seconds: options.seconds || 30 };
+
+            try {
+                return await sock.sendMessage('status@broadcast', statusPayload);
+            } catch (sendError) {
+                console.error('Direct status send failed, trying mention flow:', sendError);
+                return mentionStatus(sock, ['status@broadcast'], statusPayload);
+            }
         }
 
-        return mentionStatus(sock, targetJids, statusPayload);
+        return mentionStatus(sock, targetJids, mediaType === 'image'
+            ? { image: mediaBuffer, caption: caption || '📸 Status update', viewOnce: options.viewOnce || false }
+            : { video: mediaBuffer, caption: caption || '🎥 Status update', gifPlayback: false, seconds: options.seconds || 30 }
+        );
     } catch (err) {
         console.error('Error posting to status:', err);
         throw err;

@@ -133,7 +133,7 @@ const aliveCommand = async (sock, chatId, message) => {
         const botStartTime = global.botStartTime || Date.now();
         const botUptime = formatUptime(Math.floor((Date.now() - botStartTime) / 1000));
 
-        const imageUrl = 'https://raw.githubusercontent.com/Mickey-Vip/blob/main/chatbot.png';
+        const imageUrl = 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png';
 
         const statusMessage = `🚀 *${botName} Status*
 
