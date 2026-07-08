@@ -1,58 +1,75 @@
-/**
- * fromai.js - From AI Command using MessageBuilder
- * Creator: Ghost King
- * Description: Sends message with AI badge and a V2 suggest button safely
- */
+case 'fromai':
+case 'ai': {
+    // 1. Hakikisha mtumiaji ameweka swali
+    if (!text) return reply("Tafadhali weka swali lako mfano: .ai mambo");
 
-const { AIRich } = require('../lib/messageBuilder');
+    try {
+        // Hapa weka logic yako ya AI (mfano: Gemini au ChatGPT API)
+        // Kwa sasa tunatumia "test text" kama ilivyo kwenye picha yako
+        const aiResponse = "Hi! This is button8 test."; 
 
-module.exports = {
-    name: 'fromai',
-    aliases: [],
-    category: 'example',
-    permissions: {
-        coin: 0,
-    },
-    code: async (ctx) => {
-        const botName = ctx.config?.bot?.name || ctx.config?.botName || ctx.config?.botname || 'MICKEY BOT';
-        const text = 'Zero Tr4sh by Ghost King';
-        const chatId = ctx._msg?.key?.remoteJid || ctx.chatId;
-
-        try {
-            const builder = new AIRich(ctx.core)
-                .setTitle('AI Assistant')
-                .setFooter(botName);
-
-            // 1. Kadi kuu ya ujumbe (Salama kwa Group na Private)
-            builder.addPost({
-                title: 'AI Assistant',
-                subtitle: botName,
-                username: 'Meta AI',
-                post_caption: text,
-                source_app: 'WHATSAPP',
-                post_type: 'TEXT', 
-            });
-
-            // 2. Kuongeza button ya haraka (Suggested Pill) chini ya kadi
-            // Mtumiaji akibofya hii, itatuma amri ya ".menu" au maandishi uliyoweka
-            builder.addSuggest(['📜 Angalia Menu'], { scroll: true });
-
-            // 3. Kutuma ujumbe
-            await builder.send(chatId, {
-                quoted: ctx._msg,
-                forwarded: false,
-            });
-            
-            console.log('[fromai] message sent via AIRich with Suggest Button');
-        } catch (error) {
-            console.error('[fromai] Error:', error);
-            try {
-                await ctx.reply(`✨ *[AI Assistant]*\n\n${text}\n\n_${botName}_`);
-            } catch (fallbackError) {
-                if (ctx.tools?.cmd?.handleError) {
-                    await ctx.tools.cmd.handleError(ctx, error, true);
+        // 2. Tuma ujumbe wenye Buttons + Interactive Card (Kama picha yako)
+        await sock.sendMessage(chatId, {
+            viewOnceMessage: {
+                message: {
+                    interactiveMessage: {
+                        header: {
+                            title: "Zero-Tr4sh", // Jina lililopo juu ya kadi
+                            hasMediaAttachment: false
+                        },
+                        body: {
+                            text: aiResponse // Maandishi ya AI (Hi! This is button8 test.)
+                        },
+                        footer: {
+                            text: "MICKEY BOT" // Footer ya chini kabisa
+                        },
+                        nativeFlowMessage: {
+                            // Hapa ndipo tunatengeneza zile buttons za juu (MENU, ALIVE, PING)
+                            buttons: [
+                                {
+                                    name: "quick_reply",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "📜 MENU",
+                                        id: ".menu"
+                                    })
+                                },
+                                {
+                                    name: "quick_reply",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "🟢 ALIVE",
+                                        id: ".alive"
+                                    })
+                                },
+                                {
+                                    name: "quick_reply",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "📡 PING",
+                                        id: ".ping"
+                                    })
+                                }
+                            ],
+                            messageVersion: 1
+                        },
+                        // Hii contextInfo inasaidia kuweka ile Verified Badge na Instagram Icon ya kijani
+                        contextInfo: {
+                            mentionedJid: [sender],
+                            externalAdReply: {
+                                title: "Zero-Tr4sh ✅", 
+                                body: "Official AI Assistant",
+                                mediaType: 1,
+                                sourceUrl: "https://instagram.com/", // Link ya Insta
+                                thumbnail: Buffer.alloc(0), // Inalazimisha icon ya app ionekane
+                                renderLargerThumbnail: false
+                            }
+                        }
+                    }
                 }
             }
-        }
-    },
-};
+        }, { quoted: msg });
+
+    } catch (err) {
+        console.error("Error kwenye kutoka AI:", err);
+        reply("Kuna tatizo limetokea, jaribu tena baadaye.");
+    }
+}
+break;
