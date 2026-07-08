@@ -1,14 +1,12 @@
 /**
- * .stats command - Show system statistics
+ * .stats command - Show system statistics using a single AIRich Table
  * Usage: .stats
  */
 
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
-
-// Hakikisha ume-import AIRich hapa kama haipo kwenye global scope
-// Mfano: const AIRich = require('../lib/AIRich'); (rekebisha path kulingana na muundo wako)
+const { AIRich } = require('../lib/messageBuilder');
 
 // Function to get bot stats without external dependency
 function getBotStats() {
@@ -41,13 +39,7 @@ function getBotStats() {
         };
     } catch (err) {
         console.error('Error getting stats:', err);
-        return {
-            commands: 0,
-            libraries: 0,
-            dataFiles: 0,
-            specialHandlers: 0,
-            timestamp: Date.now()
-        };
+        return { commands: 0, libraries: 0, dataFiles: 0, specialHandlers: 0, timestamp: Date.now() };
     }
 }
 
@@ -79,13 +71,13 @@ function getSystemStats() {
 
 module.exports = async (sock, chatId, senderId, args, m) => {
     try {
-        // Pata data zote za takwimu
         const stats = getBotStats();
         const sysStats = getSystemStats();
 
         const memUsage = process.memoryUsage();
         const ramMB = (memUsage.rss / 1024 / 1024).toFixed(2);
         const heapMB = (memUsage.heapUsed / 1024 / 1024).toFixed(2);
+        const heapTotalMB = (memUsage.heapTotal / 1024 / 1024).toFixed(2);
 
         const uptime = process.uptime();
         const days = Math.floor(uptime / 86400);
@@ -94,54 +86,42 @@ module.exports = async (sock, chatId, senderId, args, m) => {
         const seconds = Math.floor(uptime % 60);
         const uptimeStr = `${days}d ${hours}h ${minutes}m ${seconds}s`;
 
-        // --- MATUMIZI YA FORMULA YA AIRich (TABLES) ---
-        // Tunaunda meza nne tofauti kwa ajili ya Registry, Memory, CPU na System Info
-        const richMessage = new AIRich(sock)
-            .text("🤖 *MICKEY GLITCH SYSTEM STATS*\n")
-            
-            .text("\n📊 *REGISTRY STATUS*")
+        // Muundo wa AIRich kwa kutumia addTable moja tu kubwa
+        const rich = new AIRich(sock)
+            .setTitle('🤖 MICKEY GLITCH ENGINE')
             .addTable([
-                ["Kipengele", "Idadi / Hali"],
-                ["Commands", `${stats.commands} loaded`],
-                ["Libraries", `${stats.libraries} loaded`],
-                ["Data Files", `${stats.dataFiles} reg`],
-                ["Handlers", `${stats.specialHandlers} active`]
-            ])
-
-            .text("\n💾 *MEMORY USAGE*")
-            .addTable([
-                ["Aina", "Kipimo"],
-                ["Total RAM", `${ramMB} MB`],
+                ["METRIC / COMPONENT", "VALUE / STATUS"],
+                // --- REGISTRY STATUS ---
+                ["📁 [ REGISTRY ]", "---"],
+                ["Commands Loaded", `${stats.commands} js`],
+                ["Libraries Loaded", `${stats.libraries} js`],
+                ["Data Files Registered", `${stats.dataFiles} files`],
+                ["Active Handlers", `${stats.specialHandlers} active`],
+                // --- MEMORY USAGE ---
+                ["💾 [ MEMORY ]", "---"],
+                ["Total RAM RSS", `${ramMB} MB`],
                 ["Heap Used", `${heapMB} MB`],
-                ["Sys Free", `${sysStats.freeMem} / ${sysStats.totalMem} GB`]
-            ])
-
-            .text("\n⚡ *CPU & UPTIME STATUS*")
-            .addTable([
-                ["Kipengele", "Thamani"],
+                ["Heap Total", `${heapTotalMB} MB`],
+                ["System Free/Total", `${sysStats.freeMem}G / ${sysStats.totalMem}G`],
+                // --- CPU & UPTIME ---
+                ["⚡ [ PERFORMANCE ]", "---"],
                 ["CPU Usage", `${sysStats.cpuUsage}%`],
-                ["Load Avg", `${sysStats.loadAvg1} | ${sysStats.loadAvg5}`],
-                ["Uptime", uptimeStr],
-                ["Cores", `${os.cpus().length}`]
-            ])
+                ["Load Avg (1m)", sysStats.loadAvg1],
+                ["System Uptime", uptimeStr],
+                ["Last Updated", new Date(stats.timestamp).toLocaleTimeString()],
+                // --- ENVIRONMENT INFO ---
+                ["🔧 [ SYSTEM ENV ]", "---"],
+                ["Node Version", process.version],
+                ["Platform OS", os.platform()],
+                ["CPU Cores", `${os.cpus().length} Cores`],
+                ["Engine Status", "Operational ✅"]
+            ]);
 
-            .text("\n🔧 *SYSTEM ENGINE*")
-            .addTable([
-                ["Engine", "Toleo / Aina"],
-                ["Node Ver", process.version],
-                ["Platform", os.platform()]
-            ])
-            
-            .text("\n✅ *Status:* All Systems Operational")
-            .build(); // Jenga ujumbe wa mwisho
-
-        // Tunatuma ujumbe uliosindikwa na AIRich
-        await sock.sendMessage(chatId, richMessage, { quoted: m });
+        // Inatuma jedwali zima kwenda kwenye chat
+        await rich.send(chatId, { quoted: m, forwarded: true });
 
     } catch (e) {
         console.error('Stats error:', e);
-        try {
-            await sock.sendMessage(chatId, { text: `❌ Error: ${e.message}` }, { quoted: m });
-        } catch (err) {}
+        await sock.sendMessage(chatId, { text: `❌ Error: ${e.message}` }, { quoted: m });
     }
 };
