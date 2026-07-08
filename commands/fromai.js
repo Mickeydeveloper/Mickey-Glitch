@@ -1,18 +1,20 @@
+const { randomBytes } = require('crypto');
 const { prepareWAMessageMedia, generateWAMessageFromContent } = require('baileys');
-const { createCtx } = require('../lib/messageBuilder');
 
-async function fromaiCommand(ctx) {
+async function fromaiCommand(sock, chatId, message, args = []) {
     try {
-        // Kuhakikisha sock na chatId zinapatikana kutoka kwenye context ya bot yako
-        const sock = ctx.core || ctx.sock; 
-        const chatId = ctx.chatId || ctx._msg?.key?.remoteJid;
+        if (!sock) throw new Error('Socket connection not found');
+        if (!chatId) throw new Error('Chat ID not found');
 
-        if (!sock) throw new Error("Socket connection (sock/core) not found in ctx");
+        const reply = async (text) => {
+            if (typeof sock.sendMessage === 'function') {
+                return sock.sendMessage(chatId, { text }, { quoted: message });
+            }
+            return null;
+        };
 
-        // Tuma ujumbe wa kusubiri
-        await ctx.reply('⏳ _Processing AI media engine, please wait..._');
+        await reply('⏳ _Processing AI media engine, please wait..._');
 
-        // 1. Kupakia Picha kwenye seva za WhatsApp
         const image = await prepareWAMessageMedia(
             {
                 image: {
@@ -24,7 +26,6 @@ async function fromaiCommand(ctx) {
             }
         );
 
-        // 2. Kupakia Video kwenye seva za WhatsApp
         const video = await prepareWAMessageMedia(
             {
                 video: {
@@ -36,7 +37,6 @@ async function fromaiCommand(ctx) {
             }
         );
 
-        // 3. Kutengeneza Ujumbe Mama (Picha)
         const msg = generateWAMessageFromContent(
             chatId,
             {
@@ -51,12 +51,38 @@ async function fromaiCommand(ctx) {
             {}
         );
 
-        // 4. Kurusha Ujumbe Mama (Picha)
         await sock.relayMessage(chatId, msg.message, {
             messageId: msg.key.id
         });
 
-        // 5. Kurusha Ujumbe wa Pacha (Video) na kuunganisha na ule wa Picha
+        const aiMsg = {
+            conversation: 'Fiora Sylvie',
+            messageContextInfo: {
+                messageSecret: randomBytes(32),
+                supportPayload: JSON.stringify({
+                    version: 1,
+                    is_ai_message: true,
+                    should_show_system_message: true,
+                    ticket_id: '1669945700536053'
+                })
+            }
+        };
+
+        await sock.relayMessage(chatId, aiMsg, {
+            additionalNodes: [
+                {
+                    attrs: {
+                        biz_bot: '1'
+                    },
+                    tag: 'bot'
+                },
+                {
+                    attrs: {},
+                    tag: 'biz'
+                }
+            ]
+        });
+
         await sock.relayMessage(
             chatId,
             {
@@ -65,7 +91,7 @@ async function fromaiCommand(ctx) {
                     contextInfo: {
                         pairedMediaType: 6,
                         statusSourceType: 0
-                    }, 
+                    }
                 },
                 messageContextInfo: {
                     messageAssociation: {
@@ -76,19 +102,16 @@ async function fromaiCommand(ctx) {
             },
             {}
         );
-
     } catch (error) {
-        console.error("FromAI Media Error:", error);
-        if (ctx && typeof ctx.reply === 'function') {
-            await ctx.reply(`❌ FromAI Engine failed: ${error.message}`);
+        console.error('FromAI Media Error:', error);
+        if (typeof sock?.sendMessage === 'function') {
+            await sock.sendMessage(chatId, { text: `❌ FromAI Engine failed: ${error.message}` }, { quoted: message });
         }
     }
 }
 
-// Mseto: Inarudisha Object yenye function ndani yake kulinda mifumo yote miwili ya handler
-module.exports = {
-    name: "fromai",
-    aliases: ["aimedia", "pairedmedia"],
-    category: "ai",
-    code: fromaiCommand // Hapa tunaiunganisha function moja kwa moja
-};
+module.exports = fromaiCommand;
+module.exports.name = 'fromai';
+module.exports.aliases = ['aimedia', 'pairedmedia'];
+module.exports.category = 'ai';
+module.exports.default = fromaiCommand;
