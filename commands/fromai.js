@@ -1,75 +1,45 @@
-case 'fromai':
-case 'ai': {
-    // 1. Hakikisha mtumiaji ameweka swali
-    if (!text) return reply("Tafadhali weka swali lako mfano: .ai mambo");
+const { Buffer } = require('buffer');
+
+/**
+ * 🤖 FROMAI COMMAND
+ * Inatuma majibu ya AI kwa kutumia muundo nadhifu wa kadi (AIRich layout)
+ */
+const fromaiCommand = async (sock, chatId, msg, args, sender, reply) => {
+    // 1. Kagua kama `args` (text) imewekwa na mtumiaji
+    const text = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
+    
+    if (!text) {
+        return reply("Tafadhali weka swali lako mfano: .ai mambo");
+    }
 
     try {
-        // Hapa weka logic yako ya AI (mfano: Gemini au ChatGPT API)
-        // Kwa sasa tunatumia "test text" kama ilivyo kwenye picha yako
+        // Hapa ndipo text ya jibu la AI inapokaa (unaweza kuunganisha na Gemini au ChatGPT API yako)
         const aiResponse = "Hi! This is button8 test."; 
 
-        // 2. Tuma ujumbe wenye Buttons + Interactive Card (Kama picha yako)
+        // 2. Tuma ujumbe kwa muundo wa kadi ya kijani (Bila interactive buttons za juu)
         await sock.sendMessage(chatId, {
-            viewOnceMessage: {
-                message: {
-                    interactiveMessage: {
-                        header: {
-                            title: "Zero-Tr4sh", // Jina lililopo juu ya kadi
-                            hasMediaAttachment: false
-                        },
-                        body: {
-                            text: aiResponse // Maandishi ya AI (Hi! This is button8 test.)
-                        },
-                        footer: {
-                            text: "MICKEY BOT" // Footer ya chini kabisa
-                        },
-                        nativeFlowMessage: {
-                            // Hapa ndipo tunatengeneza zile buttons za juu (MENU, ALIVE, PING)
-                            buttons: [
-                                {
-                                    name: "quick_reply",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "📜 MENU",
-                                        id: ".menu"
-                                    })
-                                },
-                                {
-                                    name: "quick_reply",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "🟢 ALIVE",
-                                        id: ".alive"
-                                    })
-                                },
-                                {
-                                    name: "quick_reply",
-                                    buttonParamsJson: JSON.stringify({
-                                        display_text: "📡 PING",
-                                        id: ".ping"
-                                    })
-                                }
-                            ],
-                            messageVersion: 1
-                        },
-                        // Hii contextInfo inasaidia kuweka ile Verified Badge na Instagram Icon ya kijani
-                        contextInfo: {
-                            mentionedJid: [sender],
-                            externalAdReply: {
-                                title: "Zero-Tr4sh ✅", 
-                                body: "Official AI Assistant",
-                                mediaType: 1,
-                                sourceUrl: "https://instagram.com/", // Link ya Insta
-                                thumbnail: Buffer.alloc(0), // Inalazimisha icon ya app ionekane
-                                renderLargerThumbnail: false
-                            }
-                        }
-                    }
+            text: `ℹ️ *Zero-Tr4sh*\n\n${aiResponse}\n\nMICKEY BOT`,
+            contextInfo: {
+                mentionedJid: [sender],
+                externalAdReply: {
+                    title: "Zero-Tr4sh ✅", 
+                    body: aiResponse,
+                    mediaType: 1,
+                    sourceUrl: "https://instagram.com/", // Link ya Instagram kushoto chini
+                    thumbnail: Buffer.alloc(0), // Inalazimisha muonekano wa kijani wa WhatsApp
+                    renderLargerThumbnail: false
                 }
             }
         }, { quoted: msg });
 
     } catch (err) {
         console.error("Error kwenye kutoka AI:", err);
-        reply("Kuna tatizo limetokea, jaribu tena baadaye.");
+        reply("Kuna tatizo limetokea kwenye kuchakata AI, jaribu tena baadaye.");
     }
-}
-break;
+};
+
+// Vigezo vya ziada vya Command (Metadata)
+fromaiCommand.category = 'AI';
+fromaiCommand.description = 'Pata majibu kutoka kwa AI kwa muundo wa kadi nadhifu';
+
+module.exports = fromaiCommand;
