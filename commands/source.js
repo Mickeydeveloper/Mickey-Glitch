@@ -4,22 +4,23 @@ const sourceCommand = async (sock, chatId, msg, args) => {
     const ctx = createCtx(sock, chatId, msg, { args });
     const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
 
-    // ─── 1. MENU KUU YA BUTTONS (KILA FUNCTION INA BUTTON YAKE) ───
+    // ─── 1. MENU KUU YA BUTTONS (IMEGAWANYWA KWA MAKUNDI) ───
     if (!input) {
         try {
             const mainMenus = new Button(sock)
-                .setTitle('🧩 MessageBuilder Lab')
-                .setSubtitle('Core Engine v4.6')
-                .setBody('Chagua function hapo chini kuona mfano halisi (Sample) pamoja na kodi (Source Code) yake ya kuiandika:')
+                .setTitle('🧩 Mickey Glitch Lab v4.8')
+                .setSubtitle('Core & Advanced Engine')
+                .setBody(
+                    'Chagua sehemu unayotaka kuona mifano (Samples) na kodi (Source Codes) zake:\n\n' +
+                    '📁 *CORE ENGINE* ➜ Maumbo ya kawaida ya messageBuilder.\n' +
+                    '🚀 *ADVANCED HACKS* ➜ Mifumo mipya ya Paired Media na Link Animations.'
+                )
                 .setFooter('MICKEY BOT');
 
-            // Kila function na button yake maalum kama ulivyoomba
-            mainMenus.addReply('📱 Button V1 (Native Flow)', '.source test_v1');
-            mainMenus.addReply('📟 Button V2 (Quick Reply)', '.source test_v2');
-            mainMenus.addReply('🔄 Carousel (Slide Cards)', '.source test_carousel');
-            mainMenus.addReply('🧠 AIRich (AI Text/Badge)', '.source test_airich');
-            mainMenus.addReply('💻 AIRich (Code Blocks)', '.source test_code');
-            mainMenus.addReply('📊 AIRich (Tables/Meza)', '.source test_table');
+            // Kundi la 1: Core Engine
+            mainMenus.addReply('📱 Core: Buttons & Flow', '.source kundi_core');
+            // Kundi la 2: Advanced Hacks (Zile feature mpya ulizoziongeza)
+            mainMenus.addReply('🚀 Advanced: Media Hacks', '.source kundi_advanced');
 
             await mainMenus.send(ctx.chatId, { quoted: ctx._msg });
             return;
@@ -29,112 +30,130 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         }
     }
 
-    // ─── 2. SAMPLE NA SOURCE CODES KWA KILA FUNCTION ───
+    // ─── SUB-MENU 1: CORE ENGINE ───
+    if (input === 'kundi_core') {
+        const coreMenu = new Button(sock)
+            .setTitle('📁 Core Engine Features')
+            .setBody('Hapa kuna maumbo ya msingi ya messageBuilder yako:')
+            .setFooter('MICKEY BOT');
 
-    // --- A. BUTTON V1 ---
-    if (input === 'test_v1') {
-        const btnV1 = new Button(sock)
-            .setTitle("Mickey Native Flow")
-            .setBody("Huu ni mfano wa Class ya Button ya kisasa.");
-        btnV1.addReply("Sawa 🟢", ".menu");
-        btnV1.addUrl("Fungua Google 🌐", "https://google.com");
-        await btnV1.send(ctx.chatId, { quoted: ctx._msg });
+        coreMenu.addReply('📟 Button V2 (Quick Reply)', '.source test_v2');
+        coreMenu.addReply('🔄 Carousel (Slide Cards)', '.source test_carousel');
+        coreMenu.addReply('🧠 AIRich (AI Text & Badges)', '.source test_airich');
+        coreMenu.addReply('📊 AIRich (Tables/Meza)', '.source test_table');
+        coreMenu.addReply('⬅️ Rudi Nyuma', '.source');
 
-        const code = `// Muundo wa Button (V1)\nconst { Button } = require('./lib/messageBuilder');\nconst btn = new Button(sock)\n  .setTitle("Mickey Native Flow")\n  .setBody("Huu ni mfano wa Class ya Button.")\n  .addReply("Sawa 🟢", ".menu")\n  .addUrl("Google 🌐", "https://google.com");\nawait btn.send(chatId, { quoted: msg });`;
-        return ctx.reply("```javascript\n" + code + "\n```");
+        await coreMenu.send(ctx.chatId, { quoted: ctx._msg });
+        return;
     }
 
-    // --- B. BUTTON V2 ---
+    // ─── SUB-MENU 2: ADVANCED HACKS (OTHER) ───
+    if (input === 'kundi_advanced') {
+        const advMenu = new Button(sock)
+            .setTitle('🚀 Advanced & Other Hacks')
+            .setBody('Hizi ni mbinu mpya kabisa zilizoongezwa nje ya muundo wa zamani:')
+            .setFooter('MICKEY BOT');
+
+        advMenu.addReply('🎞️ Paired Media (Split Message)', '.source test_paired');
+        advMenu.addReply('🔄 Animated Link Loop (Edit Key)', '.source test_linkloop');
+        advMenu.addReply('⬅️ Rudi Nyuma', '.source');
+
+        await advMenu.send(ctx.chatId, { quoted: ctx._msg });
+        return;
+    }
+
+    // ─── 2. SAMPLE NA SOURCE CODES KWA KILA FUNCTION ───
+
+    // --- A. BUTTON V2 ---
     if (input === 'test_v2') {
         const btnV2 = new ButtonV2(sock)
             .setTitle("Mickey ButtonV2")
             .setBody("Huu ni mfano wa muundo wa ButtonV2 wenye amri za haraka.");
         btnV2.addButton("Menu 📦", ".menu");
-        btnV2.addButton("Ping 📡", ".ping");
         await btnV2.send(ctx.chatId, { quoted: ctx._msg });
 
-        const code = `// Muundo wa ButtonV2\nconst { ButtonV2 } = require('./lib/messageBuilder');\nconst btnV2 = new ButtonV2(sock)\n  .setTitle("Mickey ButtonV2")\n  .setBody("Huu ni mfano wa ButtonV2.")\n  .addButton("Menu 📦", ".menu");\nawait btnV2.send(chatId, { quoted: msg });`;
+        const code = `// Muundo wa ButtonV2\nconst { ButtonV2 } = require('./lib/messageBuilder');\nconst btnV2 = new ButtonV2(sock)\n  .setTitle("Mickey ButtonV2")\n  .setBody("Body")\n  .addButton("Menu 📦", ".menu");\nawait btnV2.send(chatId, { quoted: msg });`;
         return ctx.reply("```javascript\n" + code + "\n```");
     }
 
-    // --- C. CAROUSEL ---
+    // --- B. CAROUSEL (MUUNDO WA STORE.JS ULIOTAKA) ---
     if (input === 'test_carousel') {
         try {
+            const waLink = "https://wa.me/255719632816";
+            
+            // Muundo safi wa Carousel ukitumia mtindo sawa na store.js uliopita
             const sampleCarousel = new Carousel(sock)
-                .setBody("Huu ni mfano wa Carousel (Kadi za kutelezesha)");
+                .setBody("🛒 *Mickey Store Preview* (Muundo wa Carousel Cards)");
 
-            const card1 = {
-                header: {
-                    title: "Kadi ya Kwanza",
-                    hasMediaAttachment: true,
-                    imageMessage: { url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe" }
+            const cards = [
+                {
+                    header: { title: "Panel 1GB", hasMediaAttachment: true, imageMessage: { url: "https://x.xcute.workers.dev/f/images/b8066826a651.jpg" } },
+                    body: { text: "Brand: Hosting Bot\nPrice: TSH 15,000" },
+                    footer: { text: "Mickey Bot" },
+                    nativeFlowMessage: { buttons: [{ name: "cta_url", buttonParamsJson: JSON.stringify({ display_text: "Nunua 🛍️", url: waLink }) }] }
                 },
-                body: { text: "Maelezo madogo ya kadi ya kwanza." },
-                footer: { text: "Mickey Bot" },
-                nativeFlowMessage: {
-                    buttons: [{ name: "quick_reply", buttonParamsJson: JSON.stringify({ display_text: "Chagua 1", id: ".menu" }) }]
+                {
+                    header: { title: "Panel 2GB", hasMediaAttachment: true, imageMessage: { url: "https://x.xcute.workers.dev/f/images/569c736b8940.jpg" } },
+                    body: { text: "Brand: Hosting Bot\nPrice: TSH 25,000" },
+                    footer: { text: "Mickey Bot" },
+                    nativeFlowMessage: { buttons: [{ name: "cta_url", buttonParamsJson: JSON.stringify({ display_text: "Nunua 🛍️", url: waLink }) }] }
                 }
-            };
+            ];
 
-            sampleCarousel.addCard(card1);
+            cards.forEach(card => sampleCarousel.addCard(card));
             await sampleCarousel.send(ctx.chatId, { quoted: ctx._msg });
 
-            const code = `// Muundo wa Carousel\nconst { Carousel } = require('./lib/messageBuilder');\nconst crsl = new Carousel(sock).setBody("Carousel");\nconst card1 = {\n  header: { title: "Title", hasMediaAttachment: true, imageMessage: { url: "IMG_URL" } },\n  body: { text: "Text" },\n  nativeFlowMessage: { buttons: [{ name: "quick_reply", buttonParamsJson: '{"display_text":"Btn","id":".id"}' }] }\n};\ncrsl.addCard(card1);\nawait crsl.send(chatId);`;
+            const code = `// Muundo wa Carousel (Kadi za Kutelezesha)\nconst crsl = new Carousel(sock).setBody("Store");\nconst card = {\n  header: { title: "Title", hasMediaAttachment: true, imageMessage: { url: "URL" } },\n  body: { text: "Price: X" },\n  nativeFlowMessage: { buttons: [{ name: "cta_url", buttonParamsJson: '{"display_text":"Buy","url":"LINK"}' }] }\n};\ncrsl.addCard(card);\nawait crsl.send(chatId);`;
             return ctx.reply("```javascript\n" + code + "\n```");
         } catch (e) {
-            return ctx.reply("❌ Kushindwa kutuma Carousel. Hakikisha mtandao wako uko sawa.");
+            return ctx.reply("❌ Kushindwa kutuma Carousel. " + e.message);
         }
     }
 
-    // --- D. AIRICH TEXT ---
+    // --- C. AIRICH TEXT ---
     if (input === 'test_airich') {
         const rich = new AIRich(sock)
             .setTitle('🧠 AI Engine')
             .setFooter('MICKEY BOT')
-            .addText('Huu ni mfano wa AIRich Markdown Text wenye muonekano nadhifu.')
-            .addSuggest(['Msaada → .menu'])
-            .addTip('Inaleta muundo safi wa muonekano.');
+            .addText('Huu ni mfano wa AIRich Markdown Text.')
+            .addSuggest(['Msaada → .menu']);
 
         await rich.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
 
-        const code = `// Muundo wa AIRich Text\nconst { AIRich } = require('./lib/messageBuilder');\nconst rich = new AIRich(sock)\n  .setTitle('🧠 AI Engine')\n  .addText('Huu ni mfano.')\n  .addSuggest(['Msaada → .menu'])\n  .addTip('Inaleta muundo safi.')\n  .setFooter('MICKEY BOT');\nawait rich.send(chatId, { forwarded: true });`;
+        const code = `const rich = new AIRich(sock)\n  .setTitle('🧠 AI Engine')\n  .addText('Text Here')\n  .addSuggest(['.menu'])\n  .setFooter('MICKEY BOT');\nawait rich.send(chatId, { forwarded: true });`;
         return ctx.reply("```javascript\n" + code + "\n```");
     }
 
-    // --- E. AIRICH CODE BLOCKS ---
-    if (input === 'test_code') {
-        const richCode = new AIRich(sock)
-            .setTitle('💻 Code Highlighting')
-            .setFooter('MICKEY BOT')
-            .addCode('javascript', `const test = "Mickey Bot V4.6";\nconsole.log(test);`);
-
-        await richCode.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
-
-        const code = `// Muundo wa AIRich Code Blocks\nconst rich = new AIRich(sock)\n  .setTitle('💻 Code Highlighting')\n  .addCode('javascript', 'const a = 10;')\n  .setFooter('MICKEY BOT');\nawait rich.send(chatId, { forwarded: true });`;
-        return ctx.reply("```javascript\n" + code + "\n```");
-    }
-
-    // --- F. AIRICH TABLES ---
+    // --- D. AIRICH TABLES ---
     if (input === 'test_table') {
-        const tableData = [
-            ["Command", "Category", "Status"],
-            [".ai", "AI", "Working ✅"],
-            [".menu", "Main", "Online 🔋"]
-        ];
-
         const richTable = new AIRich(sock)
             .setTitle('📊 Bot Stats Table')
-            .setFooter('MICKEY BOT')
-            .addTable(tableData);
+            .addTable([
+                ["Command", "Status"],
+                [".fromai", "Online ✅"],
+                [".tmte", "Online ✅"]
+            ]);
 
         await richTable.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
 
-        const code = `// Muundo wa AIRich Tables\nconst rich = new AIRich(sock)\n  .setTitle('📊 Table')\n  .addTable([\n    ["Header1", "Header2"],\n    ["Data1", "Data2"]\n  ]);\nawait rich.send(chatId, { forwarded: true });`;
+        const code = `const rich = new AIRich(sock)\n  .addTable([\n    ["Header1", "Header2"],\n    ["Data1", "Data2"]\n  ]);\nawait rich.send(chatId);`;
         return ctx.reply("```javascript\n" + code + "\n```");
+    }
+
+    // --- E. ADVANCED: PAIRED MEDIA (NEW) ---
+    if (input === 'test_paired') {
+        const code = `// 🎞️ PAIRED MEDIA (Picha na Video Zilizounganishwa Pamoja)\nconst { prepareWAMessageMedia, generateWAMessageFromContent } = require('baileys');\n\nconst image = await prepareWAMessageMedia({ image: { url: 'IMG_URL' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: 'VID_URL' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
+        return ctx.reply("💡 *Paired Media Hack Code* (Inatuma picha na video kama ujumbe pacha mmoja):\n\n```javascript\n" + code + "\n```");
+    }
+
+    // --- F. ADVANCED: ANIMATED LINK LOOP (NEW) ---
+    if (input === 'test_linkloop') {
+        const code = `// 🔄 ANIMATED LINK LOOP (Kubadilisha picha za ujumbe mmoja mfululizo)\nconst { delay, prepareWAMessageMedia } = require('baileys');\n\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 5; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key, // Inahariri ujumbe uleule uliopita\n      text: "https://nixel.dev\\nNIXCODE",\n      linkPreview: {\n        'matched-text': "https://nixel.dev",\n        title: "Nixel",\n        jpegThumbnail: image.jpegThumbnail,\n        highQualityThumbnail: image\n      }\n    });\n    await delay(2000); // Inasubiri sekunde 2 kubadili\n  }\n}`;
+        return ctx.reply("💡 *Animated Link Loop Code* (Inahariri ujumbe uleule mmoja ili kutengeneza Link Animation ya picha):\n\n```javascript\n" + code + "\n```");
     }
 };
 
 sourceCommand.category = 'UTILITY';
-sourceCommand.description = 'Test kila function iliyopo kwenye messageBuilder na upate kodi zake';
+sourceCommand.description = 'Test kila function na advanced hacks za bot';
 
 module.exports = sourceCommand;
