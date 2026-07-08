@@ -1,5 +1,4 @@
-const { randomBytes } = require('crypto');
-const { prepareWAMessageMedia, generateWAMessageFromContent } = require('baileys');
+const { ButtonV2 } = require('../lib/messageBuilder');
 
 async function fromaiCommand(sock, chatId, message, args = []) {
     try {
@@ -20,104 +19,20 @@ async function fromaiCommand(sock, chatId, message, args = []) {
             text: '🤖 FromAI request received. Sending AI-style message payload...'
         }, { quoted: message });
 
-        const image = await prepareWAMessageMedia(
-            {
-                image: {
-                    url: 'https://cdn.ornzora.eu.cc/a6a1e8f4-b83d-4694-9bba-0f22a58bfd4f-FIORA.jpg'
+        await new ButtonV2(sock)
+            .setBody('Halo dunia')
+            .setFooter('Footer Message')
+            .setThumbnail('https://cdn.ornzora.eu.cc/4d2905ce-3707-4ec0-998a-68a3d851629f-FIORA.jpg')
+            .addRawButton({
+                buttonText: { displayText: '📡 Menu' },
+                buttonId: 'Nixel',
+                type: 1,
+                nativeFlowInfo: {
+                    name: 'single_select',
+                    paramsJson: '{"title":"Click Here!","sections":[{"title":"Fiora Sylvie","highlight_label":"","rows":[{"header":"","title":"Nixel","description":"","id":""}]}]}'
                 }
-            },
-            {
-                upload: sock.waUploadToServer
-            }
-        );
-
-        const video = await prepareWAMessageMedia(
-            {
-                video: {
-                    url: 'https://cdn.ornzora.eu.cc/ed7ebb66-9bf4-44b6-858a-b6b7405e53c5-FIORA.mp4'
-                }
-            },
-            {
-                upload: sock.waUploadToServer
-            }
-        );
-
-        const msg = generateWAMessageFromContent(
-            chatId,
-            {
-                imageMessage: {
-                    ...image.imageMessage,
-                    contextInfo: {
-                        pairedMediaType: 5,
-                        statusSourceType: 0
-                    }
-                }
-            },
-            {}
-        );
-
-        await sock.relayMessage(chatId, msg.message, {
-            messageId: msg.key.id
-        });
-
-        const aiMsg = {
-            conversation: 'Fiora Sylvie',
-            messageContextInfo: {
-                messageSecret: randomBytes(32),
-                supportPayload: '{"version": 1, "is_ai_message": true, "should_show_system_message": true, "ticket_id": "1669945700536053"}'
-            }
-        };
-
-        try {
-            await sock.relayMessage(chatId, aiMsg, {
-                additionalNodes: [
-                    {
-                        attrs: {
-                            biz_bot: '1'
-                        },
-                        tag: 'bot'
-                    },
-                    {
-                        attrs: {},
-                        tag: 'biz'
-                    }
-                ]
-            });
-        } catch (relayError) {
-            console.error('FromAI relayMessage failed:', relayError);
-            await sock.sendMessage(chatId, {
-                text: `⚠️ The relay payload did not send. ${relayError?.message || relayError}`
-            }, { quoted: message });
-            return;
-        }
-
-        try {
-            await sock.sendMessage(chatId, {
-                text: '🧪 AI-style relay payload was attempted. If nothing appears, the current Baileys session may not render this payload.'
-            }, { quoted: message });
-        } catch (fallbackError) {
-            console.error('FromAI fallback send failed:', fallbackError);
-        }
-
-        await sock.relayMessage(
-            chatId,
-            {
-                videoMessage: {
-                    ...video.videoMessage,
-                    contextInfo: {
-                        pairedMediaType: 6,
-                        statusSourceType: 0
-                    }
-                },
-                messageContextInfo: {
-                    messageAssociation: {
-                        associationType: 12,
-                        parentMessageKey: msg.key
-                    }
-                }
-            },
-            {}
-        );
+            })
+            .send(chatId);
     } catch (error) {
         console.error('FromAI Media Error:', error);
         if (typeof sock?.sendMessage === 'function') {
