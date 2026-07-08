@@ -275,11 +275,8 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 │  📅 *Date:* ${date}
 │  ⏰ *Time:* ${time}
 └───────────────────────┘
-📂 *Menu:* ${menuData.length} Categories
-📋 *Commands:* ${totalCommands}
-
-┌  📌 *Chagua kundi la amri*
-│  👇 Bonyeza "Fungua Menu 📂"
+┌  
+│  👇 Bonyeza " Menu 📂"
 └───────────────────────┘
 
 _❤️ i love mom: _`;
