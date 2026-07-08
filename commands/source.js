@@ -5,6 +5,15 @@ const sourceCommand = async (sock, chatId, msg, args) => {
     const ctx = createCtx(sock, chatId, msg, { args });
     const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
 
+    // Raw links za picha kutoka kwenye GitHub repository yako (Mickey-Vip/Privacy)
+    const img1 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg";
+    const img2 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg";
+    const img3 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg";
+    const img4 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy3.jpg";
+
+    // Direct link ya video uliyonipa
+    const sampleVideo = "https://n.uguu.se/VfoPbJXx.mp4";
+
     // ─── 1. MENU KUU YA BUTTONS ───
     if (!input) {
         try {
@@ -79,10 +88,10 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
             const cards = [
                 {
-                    header: { title: "Panel 1GB", hasMediaAttachment: true, imageMessage: { url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe" } },
-                    body: { text: "Price: TSH 15,000" },
+                    header: { title: "Mickey Privacy", hasMediaAttachment: true, imageMessage: { url: img1 } },
+                    body: { text: "Brand: Mickey Bot\nFeature: Connection Secure" },
                     footer: { text: "Mickey Bot" },
-                    nativeFlowMessage: { buttons: [{ name: "cta_url", buttonParamsJson: JSON.stringify({ display_text: "Nunua 🛍️", url: waLink }) }] }
+                    nativeFlowMessage: { buttons: [{ name: "cta_url", buttonParamsJson: JSON.stringify({ display_text: "Support 🛍️", url: waLink }) }] }
                 }
             ];
 
@@ -114,13 +123,12 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
     // --- ADVANCED: PAIRED MEDIA ---
     if (input === 'test_paired') {
-        const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: 'IMG_URL' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: 'VID_URL' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
+        const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: '${img1}' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: '${sampleVideo}' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
 
         try {
-            await ctx.reply('⏳ _Inajaribu kutuma Sample ya Paired Media..._');
-            // Zimetumika link za uhakika (Wikipedia/Direct open-source assets)
-            const image = await prepareWAMessageMedia({ image: { url: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg' } }, { upload: sock.waUploadToServer });
-            const video = await prepareWAMessageMedia({ video: { url: 'https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/automated-facial-recognition.mp4' } }, { upload: sock.waUploadToServer });
+            await ctx.reply('⏳ _Inatuma Live Sample ya Paired Media..._');
+            const image = await prepareWAMessageMedia({ image: { url: img1 } }, { upload: sock.waUploadToServer });
+            const video = await prepareWAMessageMedia({ video: { url: sampleVideo } }, { upload: sock.waUploadToServer });
 
             const msgMedia = generateWAMessageFromContent(ctx.chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});
             await sock.relayMessage(ctx.chatId, msgMedia.message, { messageId: msgMedia.key.id });
@@ -130,7 +138,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
                 messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msgMedia.key } }
             }, {});
         } catch (e) {
-            await ctx.reply("⚠️ _Sample imeshindwa ku-load kwenye WhatsApp (Nipe link zako). Ila kodi ni hii chini:_");
+            await ctx.reply("⚠️ _Sample imeshindwa ku-load kwenye WhatsApp (Upload fail). Kodi ni hii chini:_");
         }
 
         return ctx.reply("💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```");
@@ -138,16 +146,12 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
     // --- ADVANCED: ANIMATED LINK LOOP ---
     if (input === 'test_linkloop') {
-        const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 5; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://link.com\\nText",\n      linkPreview: { 'matched-text': "https://link.com", jpegThumbnail: image.jpegThumbnail, highQualityThumbnail: image }\n    });\n    await delay(2000);\n  }\n}`;
+        const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://nixel.dev\\n🎬 SLIDESHOW RUNNING",\n      linkPreview: { \n        'matched-text': "https://nixel.dev", \n        title: "Mickey Privacy Loop", \n        jpegThumbnail: image.jpegThumbnail, \n        highQualityThumbnail: image \n      }\n    });\n    await delay(1500);\n  }\n}`;
 
         try {
-            const { key } = await sock.sendMessage(ctx.chatId, { text: '⏳ _Inajaribu kucheza Sample ya Animation Loop..._' });
+            const { key } = await sock.sendMessage(ctx.chatId, { text: '⏳ _Inacheza Live Sample ya Animation Loop (GitHub Repo Files)..._' });
 
-            const demoUrls = [
-                'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200',
-                'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=200'
-            ];
-
+            const demoUrls = [img2, img3, img4];
             const medias = await Promise.all(demoUrls.map(async url => {
                 const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });
                 return imageMessage;
@@ -157,10 +161,10 @@ const sourceCommand = async (sock, chatId, msg, args) => {
                 for (const image of medias) {
                     await sock.sendMessage(ctx.chatId, {
                         edit: key,
-                        text: "https://nixel.dev\n🎬 LINK ANIMATION PLAYING...",
+                        text: "https://nixel.dev\n🎬 PRIVACY SLIDESHOW PLAYING...",
                         linkPreview: {
                             'matched-text': "https://nixel.dev",
-                            title: "Mickey Animation",
+                            title: "Mickey Privacy Loop",
                             jpegThumbnail: image.jpegThumbnail,
                             highQualityThumbnail: image
                         }
@@ -169,7 +173,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
                 }
             }
         } catch (e) {
-            await ctx.reply("⚠️ _Sample imeshindwa kucheza (WhatsApp block au bad link). Kodi ni hii chini:_");
+            await ctx.reply("⚠️ _Sample imeshindwa kucheza (WhatsApp block au delay limit). Kodi ni hii chini:_");
         }
 
         return ctx.reply("💡 *Animated Link Loop Source Code*:\n```javascript\n" + code + "\n```");
