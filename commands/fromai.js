@@ -91,6 +91,14 @@ async function fromaiCommand(sock, chatId, message, args = []) {
             return;
         }
 
+        try {
+            await sock.sendMessage(chatId, {
+                text: '🧪 AI-style relay payload was attempted. If nothing appears, the current Baileys session may not render this payload.'
+            }, { quoted: message });
+        } catch (fallbackError) {
+            console.error('FromAI fallback send failed:', fallbackError);
+        }
+
         await sock.relayMessage(
             chatId,
             {
