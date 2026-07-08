@@ -1,45 +1,45 @@
-const { Buffer } = require('buffer');
+const { AIRich, createCtx } = require('../lib/messageBuilder');
 
 /**
- * 🤖 FROMAI COMMAND
- * Inatuma majibu ya AI kwa kutumia muundo nadhifu wa kadi (AIRich layout)
+ * 🤖 FROMAI COMMAND (AIRich Layout Matching the Sample)
  */
-const fromaiCommand = async (sock, chatId, msg, args, sender, reply) => {
-    // 1. Kagua kama `args` (text) imewekwa na mtumiaji
+const fromaiCommand = async (sock, chatId, msg, args) => {
+    // 1. Kutengeneza context (ctx) na kusafisha input text
+    const ctx = createCtx(sock, chatId, msg, { args });
     const text = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
     
     if (!text) {
-        return reply("Tafadhali weka swali lako mfano: .ai mambo");
+        return ctx.reply("Tafadhali weka swali lako mfano: .ai mambo");
     }
 
     try {
-        // Hapa ndipo text ya jibu la AI inapokaa (unaweza kuunganisha na Gemini au ChatGPT API yako)
+        // Jibu kutoka kwa AI (Hapa ndipo unapo-link AI yako)
         const aiResponse = "Hi! This is button8 test."; 
 
-        // 2. Tuma ujumbe kwa muundo wa kadi ya kijani (Bila interactive buttons za juu)
-        await sock.sendMessage(chatId, {
-            text: `ℹ️ *Zero-Tr4sh*\n\n${aiResponse}\n\nMICKEY BOT`,
-            contextInfo: {
-                mentionedJid: [sender],
-                externalAdReply: {
-                    title: "Zero-Tr4sh ✅", 
-                    body: aiResponse,
-                    mediaType: 1,
-                    sourceUrl: "https://instagram.com/", // Link ya Instagram kushoto chini
-                    thumbnail: Buffer.alloc(0), // Inalazimisha muonekano wa kijani wa WhatsApp
-                    renderLargerThumbnail: false
-                }
-            }
-        }, { quoted: msg });
+        // 2. Kutumia AIRich yenye function zote zilizopo kwenye picha yako
+        const richMessage = new AIRich(sock)
+            .setTitle('🧠 Zero-Tr4sh') // Jina la juu lenye nembo
+            .setFooter('MICKEY BOT')   // Footer ya chini kabisa
+            .addText(aiResponse)       // Jibu la AI katikati
+            .addSuggest([
+                `Swali lako: ${text.substring(0, 15)}...`, // Inaonyesha kifupi cha ulichouliza
+                'Msaada → .menu'
+            ])
+            .addTip('Majibu haya yanatolewa papo hapo na Mfumo wa AI.'); // Tip ya chini
+
+        // 3. Tuma ujumbe
+        return await richMessage.send(ctx.chatId, { 
+            quoted: ctx._msg, 
+            forwarded: true 
+        });
 
     } catch (err) {
-        console.error("Error kwenye kutoka AI:", err);
-        reply("Kuna tatizo limetokea kwenye kuchakata AI, jaribu tena baadaye.");
+        console.error("Error kwenye kuchakata AIRich AI:", err);
+        return ctx.reply("Kuna tatizo limetokea kwenye kuchakata AI, jaribu tena.");
     }
 };
 
-// Vigezo vya ziada vya Command (Metadata)
 fromaiCommand.category = 'AI';
-fromaiCommand.description = 'Pata majibu kutoka kwa AI kwa muundo wa kadi nadhifu';
+fromaiCommand.description = 'Pata majibu ya AI kwa kutumia mfumo kamili wa AIRich Layout';
 
 module.exports = fromaiCommand;
