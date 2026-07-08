@@ -13,7 +13,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
     const ctx = createCtx(sock, chatId, msg, { args });
     const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
 
-    // ─── MFUMO WA KUTEST MA-FUNCTION (IF NO INPUT) ───
+    // ─── 1. MFUMO WA KUTEST MA-FUNCTION (IF NO INPUT) ───
     if (!input) {
         try {
             const testMenu = new ButtonV2(sock)
@@ -22,12 +22,14 @@ const sourceCommand = async (sock, chatId, msg, args) => {
                 .setBody('Bofya button kuona sample (mfano) wa jinsi function husika inavyofanya kazi kwenye mfumo wako.')
                 .setFooter('MICKEY BOT');
 
-            // Weka buttons za ma-function yote yaliyopo kwenye messageBuilder
             testMenu.addButton('📱 Test ButtonV2', '.source test_buttonv2');
             testMenu.addButton('🧠 Test AIRich', '.source test_airich');
             testMenu.addButton('💻 Test SourceCode', '.source test_sourcecode');
 
-            await testMenu.send(ctx.chatId, { quoted: ctx._msg });
+            await testMenu.send(ctx.chatId, { 
+                quoted: ctx._msg,
+                fallbackText: "🧪 *MessageBuilder Tester*\n\nChagua amri ya kutest:\n1. .source test_buttonv2\n2. .source test_airich\n3. .source test_sourcecode"
+            });
             return;
         } catch (e) {
             console.error('Test menu error:', e);
@@ -35,7 +37,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         }
     }
 
-    // ─── SHULUGULIKIA SAMPLES (UKIBONYEZA BUTTONS ZA TEST) ───
+    // ─── 2. SHULUGULIKIA SAMPLES (UKIBONYEZA BUTTONS ZA TEST) ───
     if (input === 'test_buttonv2') {
         const sampleBtn = new ButtonV2(sock)
             .setTitle('📱 ButtonV2 Sample')
@@ -44,7 +46,10 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             .setFooter('MICKEY BOT');
         
         defaultActions.forEach(btn => sampleBtn.addButton(btn.label, btn.id));
-        return await sampleBtn.send(ctx.chatId, { quoted: ctx._msg });
+        return await sampleBtn.send(ctx.chatId, { 
+            quoted: ctx._msg,
+            fallbackText: "📱 *ButtonV2 Sample*\n\nHuu ni mfano wa muundo wa ButtonV2 wenye amri za haraka."
+        });
     }
 
     if (input === 'test_airich') {
@@ -55,7 +60,11 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             .addSuggest(['Mambo vipi → .ai mambo', 'Msaada → .menu'])
             .addTip('Inaleta muundo safi wa muonekano kwenye WhatsApp ya simu.');
 
-        return await sampleRich.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
+        return await sampleRich.send(ctx.chatId, { 
+            quoted: ctx._msg, 
+            forwarded: true,
+            fallbackText: "🧠 *AIRich Sample*\n\nHuu ni mfano wa kadi ya kijani ya AIRich yenye mwonekano nadhifu."
+        });
     }
 
     if (input === 'test_sourcecode') {
@@ -66,10 +75,11 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             footer: 'MICKEY BOT',
             buttons: defaultActions,
         });
-        return ctx.reply(````javascript\n${snippet}\n````);
+        // FIX: Mabackticks yaliyorekebishwa hapa kuzuia SyntaxError
+        return ctx.reply("```javascript\n" + snippet + "\n```");
     }
 
-    // ─── MFUMO WA KAWAIDA WA CUSTOM BUTTONS (IF INPUT EXISTS) ───
+    // ─── 3. MFUMO WA KAWAIDA WA CUSTOM BUTTONS (IF INPUT EXISTS) ───
     const parts = input.split('|').map((part) => part.trim()).filter(Boolean);
     const [title, subtitle, body, footer, ...buttonEntries] = parts;
 
