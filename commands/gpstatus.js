@@ -4,6 +4,7 @@
  * Enhanced with group status feature and better error handling
  */
 
+const baileys = require('baileys');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const fs = require('fs');
 const path = require('path');
@@ -66,7 +67,94 @@ async function postGroupStatusToMembers(sock, groupId, mediaBuffer, caption, sen
     }
 }
 
-// Function to post to WhatsApp Status (stories)
+async function fetchParticipants(sock, ...jids) {
+    const results = [];
+    for (const jid of jids) {
+        if (!jid) continue;
+        try {
+            const { participants = [] } = await sock.groupMetadata(jid);
+            results.push(...participants.map(({ id }) => id));
+        } catch (err) {
+            console.error('Group metadata fetch failed for', jid, err);
+        }
+    }
+    return [...new Set(results)];
+}
+
+async function mentionStatus(sock, jids, content) {
+    if (!sock?.relayMessage) throw new Error('Socket relayMessage is unavailable');
+
+    const baileysModule = await import('baileys');
+    const baileysLib = baileysModule.default || baileysModule;
+
+    if (!baileysLib?.proto?.Message?.ProtocolMessage?.Type?.STATUS_MENTION_MESSAGE) {
+        throw new Error('No STATUS_MENTION_MESSAGE found in ProtocolMessage (is your WAProto up-to-date?)');
+    }
+
+    const msg = await baileysLib.generateWAMessage(baileysLib.STORIES_JID, content, {
+        upload: sock.waUploadToServer,
+    });
+
+    let statusJidList = [];
+    for (const jid of jids || []) {
+        if (!jid) continue;
+        if (jid.endsWith('@g.us')) {
+            statusJidList.push(...await fetchParticipants(sock, jid));
+        } else {
+            statusJidList.push(jid);
+        }
+    }
+
+    statusJidList = [...new Set(statusJidList.filter(Boolean))];
+
+    await sock.relayMessage(msg.key.remoteJid, msg.message, {
+        messageId: msg.key.id,
+        statusJidList,
+        additionalNodes: [
+            {
+                tag: 'meta',
+                attrs: {},
+                content: [
+                    {
+                        tag: 'mentioned_users',
+                        attrs: {},
+                        content: jids.map((jid) => ({
+                            tag: 'to',
+                            attrs: { jid },
+                            content: undefined,
+                        }))
+                    }
+                ]
+            }
+        ]
+    });
+
+    for (const jid of jids || []) {
+        if (!jid) continue;
+        const type = jid.endsWith('@g.us') ? 'groupStatusMentionMessage' : 'statusMentionMessage';
+        await sock.relayMessage(jid, {
+            [type]: {
+                message: {
+                    protocolMessage: {
+                        key: msg.key,
+                        type: 25,
+                    }
+                }
+            }
+        }, {
+            additionalNodes: [
+                {
+                    tag: 'meta',
+                    attrs: { is_status_mention: 'true' },
+                    content: undefined,
+                }
+            ]
+        });
+    }
+
+    return msg;
+}
+
 async function postToWhatsAppStatus(sock, mediaBuffer, caption, mediaType, options = {}) {
     try {
         let statusPayload = {};
@@ -85,10 +173,13 @@ async function postToWhatsAppStatus(sock, mediaBuffer, caption, mediaType, optio
                 seconds: options.seconds || 30
             };
         }
-        
-        // Send to WhatsApp status broadcast
-        const result = await sock.sendMessage('status@broadcast', statusPayload);
-        return result;
+
+        const targetJids = options.targetJids || ['status@broadcast'];
+        if (targetJids.length === 1 && targetJids[0] === 'status@broadcast') {
+            return sock.sendMessage('status@broadcast', statusPayload);
+        }
+
+        return mentionStatus(sock, targetJids, statusPayload);
     } catch (err) {
         console.error('Error posting to status:', err);
         throw err;
