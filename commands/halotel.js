@@ -1,4 +1,4 @@
-const settings = require('./settings');
+const settings = require('../settings');
 const { Carousel } = require('../lib/messageBuilder');
 
 // ========== CONFIGURATIONS & PACKAGES ==========
@@ -42,36 +42,40 @@ async function createPterodactylServer(userId, username, specs, email) {
 }
 
 // ========== 📱 MAIN HALOTEL COMMAND FUNCTION ==========
-// Hii ndio function iliyokuwa inakosekana na kusababisha error!
-async function halotelCommand(sock, chatId, m, body = '') {
-    try {
-        const userName = m?.pushName || 'Mteja';
-        const safeM = m || {};
+module.exports = {
+    name: 'halotel',
+    aliases: ['haloteldata', 'data'],
+    category: 'utility',
+    permissions: { coin: 0 },
+    code: async (ctx) => {
+        try {
+            const userName = ctx._msg?.pushName || ctx.msg?.pushName || 'Mteja';
+            const textBody = `📱 *${ctx.config?.bot?.name || ctx.config?.botName || ctx.config?.botname || 'MICKEY'} - HALOTEL DATA BUNDLES*\n\nHabari *${userName}*! 👋\nKaribu kwenye mfumo wa kununua bando za Halotel chapchap.\n\n📌 *JINSI YA KUNUNUA:*\n1. Bonyeza *"📱 FUNGUA MENU YA BANDO"* hapo chini.\n2. Chagua bando unalotaka kwenye list drawer.\n3. Fuata maelekezo ya malipo yatakayofuata.`;
 
-        // 1. Kutengeneza list ya bando za Halotel kwa ajili ya Native Flow Drawer
-        const textBody = `📱 *${settings.botName || 'MICKEY'} - HALOTEL DATA BUNDLES*\n\nHabari *${userName}*! 👋\nKaribu kwenye mfumo wa kununua bando za Halotel chapchap.\n\n📌 *JINSI YA KUNUNUA:*\n1. Bonyeza *"📱 FUNGUA MENU YA BANDO"* hapo chini.\n2. Chagua bando unalotaka kwenye list drawer.\n3. Fuata maelekezo ya malipo yatakayofuata.`;
+            const sections = [
+                {
+                    title: '🔥 BANDO ZA HALOTEL ZINAZOKIMBIZA',
+                    rows: [
+                        { id: 'halo_10gb', title: '📱 Halotel 10GB', description: '💰 TSh 10,000 | Inadumu Siku 30' },
+                        { id: 'halo_20gb', title: '📱 Halotel 20GB', description: '💰 TSh 15,000 | Inadumu Siku 30' },
+                        { id: 'halo_30gb', title: '📱 Halotel 30GB', description: '💰 TSh 20,000 | Inadumu Siku 30' },
+                    ],
+                },
+            ];
 
-        const sections = [
-            {
-                title: "🔥 BANDO ZA HALOTEL ZINAZOKIMBIZA",
-                rows: [
-                    { id: "halo_10gb", title: "📱 Halotel 10GB", description: "💰 TSh 10,000 | Inadumu Siku 30" },
-                    { id: "halo_20gb", title: "📱 Halotel 20GB", description: "💰 TSh 15,000 | Inadumu Siku 30" },
-                    { id: "halo_30gb", title: "📱 Halotel 30GB", description: "💰 TSh 20,000 | Inadumu Siku 30" }
-                ]
+            await sendHalotelFlowMessage(ctx, textBody, FOOTER, '📱 FUNGUA MENU YA BANDO', sections);
+        } catch (err) {
+            console.error('❌ Halotel Command Error:', err);
+            if (ctx?.tools?.cmd?.handleError) {
+                await ctx.tools.cmd.handleError(ctx, err, true);
+            } else {
+                await ctx.reply('❌ Halotel service is temporarily unavailable.');
             }
-        ];
+        }
+    },
+};
 
-        // 2. Kutuma ujumbe kwa muundo wa Native Flow
-        await sendHalotelFlowMessage(sock, chatId, safeM, textBody, FOOTER, "📱 FUNGUA MENU YA BANDO", sections);
-
-    } catch (err) {
-        console.error('❌ Halotel Command Error:', err);
-    }
-}
-
-// Helper function ya kutuma carousel ya Halotel kwa muundo wa MessageBuilder
-async function sendHalotelFlowMessage(sock, chatId, message, textBody, footerText, buttonTitle, sectionsList) {
+async function sendHalotelFlowMessage(ctx, textBody, footerText, buttonTitle, sectionsList) {
     try {
         const cards = (sectionsList || []).flatMap((section) => (section.rows || []).map((row) => ({
             title: row.title || section.title || 'Halotel Bundle',
@@ -82,7 +86,7 @@ async function sendHalotelFlowMessage(sock, chatId, message, textBody, footerTex
             buttonId: row.id,
         })));
 
-        const builder = new Carousel(sock)
+        const builder = new Carousel(ctx.core)
             .setTitle('📱 HALOTEL DATA SERVICES 📱')
             .setBody(textBody)
             .setFooter(footerText);
@@ -105,14 +109,17 @@ async function sendHalotelFlowMessage(sock, chatId, message, textBody, footerTex
             });
         });
 
-        await builder.send(chatId, { quoted: message });
+        await builder.send(ctx._msg?.key?.remoteJid || ctx.chatId, {
+            quoted: ctx._msg,
+            fallbackText: textBody,
+        });
     } catch (err) {
         console.error('❌ Halotel carousel error:', err);
-        await sock.sendMessage(chatId, { text: textBody }, { quoted: message });
+        await ctx.reply(textBody);
     }
 }
 
-// ========== EXPORTS (Hakikisha halotelCommand ipo hapa chini) ==========
+// ========== EXPORTS =========
 module.exports = {
     PANEL_PACKAGES,
     createPterodactylUser,
@@ -121,5 +128,4 @@ module.exports = {
     FOOTER,
     OWNER_NUMBER,
     PANEL_URL,
-    halotelCommand // <--- Hii ndio itafuta ile error kabisa kwenye main.js!
 };
