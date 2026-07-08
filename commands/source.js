@@ -1,16 +1,20 @@
 const { Button, ButtonV2, Carousel, AIRich, createCtx } = require('../lib/messageBuilder');
+const baileys = require('@whiskeysockets/baileys'); // Inavuta injini kuu ya WhatsApp moja kwa moja
+
+// Function ya kutengeneza delay (muda wa kusubiri)
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const sourceCommand = async (sock, chatId, msg, args) => {
     const ctx = createCtx(sock, chatId, msg, { args });
     const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
 
-    // Raw links za picha kutoka kwenye GitHub repository yako (Mickey-Vip/Privacy)
+    // Raw links za picha kutoka kwenye GitHub repository yako
     const img1 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg";
     const img2 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg";
     const img3 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg";
     const img4 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy3.jpg";
 
-    // Direct link ya video uliyonipa
+    // Direct link ya video
     const sampleVideo = "https://n.uguu.se/VfoPbJXx.mp4";
 
     // ─── 1. MENU KUU YA BUTTONS ───
@@ -50,7 +54,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         return;
     }
 
-    // ─── SUB-MENU 2: ADVANCED HACKS (OTHER) ───
+    // ─── SUB-MENU 2: ADVANCED HACKS ───
     if (input === 'kundi_advanced') {
         const advMenu = new Button(sock)
             .setTitle('🚀 Advanced & Other Hacks')
@@ -122,38 +126,65 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
 
-    // --- ADVANCED: PAIRED MEDIA ---
+    // --- ADVANCED: PAIRED MEDIA (LIVE SHOW) ---
     if (input === 'test_paired') {
         try {
-            // Inatuma picha na video moja kwa moja kuonyesha Live Sample ya uwezo wa media
-            await sock.sendMessage(ctx.chatId, { image: { url: img1 }, caption: "🎬 *Mickey Live Sample (Image part)*" }, { quoted: ctx._msg });
-            await sock.sendMessage(ctx.chatId, { video: { url: sampleVideo }, caption: "🎞️ *Mickey Live Sample (Video part)*" }, { quoted: ctx._msg });
+            await sock.sendMessage(ctx.chatId, { text: '⏳ _Inatengeneza muundo wa Paired Media Live..._' }, { quoted: ctx._msg });
+            
+            // Inatayarisha picha na video kwa ajili ya mfumo wa split message (Glitch)
+            const image = await baileys.prepareWAMessageMedia({ image: { url: img1 } }, { upload: sock.waUploadToServer });
+            const video = await baileys.prepareWAMessageMedia({ video: { url: sampleVideo } }, { upload: sock.waUploadToServer });
+
+            // Inatuma picha kwanza (Sehemu ya juu)
+            const msgMedia = baileys.generateWAMessageFromContent(ctx.chatId, { 
+                imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } 
+            }, {});
+            await sock.relayMessage(ctx.chatId, msgMedia.message, { messageId: msgMedia.key.id });
+
+            // Inatuma video ikiwa imeunganishwa na ile picha (Sehemu ya chini)
+            await sock.relayMessage(ctx.chatId, {
+                videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },
+                messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msgMedia.key } }
+            }, {});
         } catch (e) {
-            console.error(e);
+            console.error("Error kwenye Paired Media Sample:", e);
         }
 
         const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: '${img1}' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: '${sampleVideo}' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
         return sock.sendMessage(ctx.chatId, { text: "💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
 
-    // --- ADVANCED: ANIMATED LINK LOOP ---
+    // --- ADVANCED: ANIMATED LINK LOOP (LIVE SHOW) ---
     if (input === 'test_linkloop') {
         try {
-            // Inatuma link ikiwa na preview ya picha zako kutoka GitHub
-            await sock.sendMessage(ctx.chatId, { 
-                text: `🎞️ *Mickey Preview Link Loop*\nLink: ${sampleVideo}`,
-                contextInfo: {
-                    externalAdReply: {
-                        title: "Mickey Privacy Engine",
-                        body: "Live Slideshow & Link Preview",
-                        previewType: "PHOTO",
-                        thumbnailUrl: img2,
-                        sourceUrl: sampleVideo
-                    }
+            // Inatuma meseji ya kwanza ambayo itabadilika baadae
+            const { key } = await sock.sendMessage(ctx.chatId, { text: '🎬 PRIVACY SLIDESHOW LOADING...' }, { quoted: ctx._msg });
+
+            const demoUrls = [img2, img3, img4];
+            // Inatayarisha picha zote tatu kutoka GitHub kuwa muundo wa link thumbnail
+            const medias = await Promise.all(demoUrls.map(async url => {
+                const { imageMessage } = await baileys.prepareWAMessageMedia({ image: { url } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });
+                return imageMessage;
+            }));
+
+            // Inaanza kubadilisha picha moja baada ya nyingine live kwenye chat (Slideshow effect)
+            for(let i = 0; i < 2; i++) {
+                for (const image of medias) {
+                    await sock.sendMessage(ctx.chatId, {
+                        edit: key,
+                        text: "https://nixel.dev\n🎬 PRIVACY SLIDESHOW PLAYING...",
+                        linkPreview: {
+                            'matched-text': "https://nixel.dev",
+                            title: "Mickey Privacy Loop",
+                            jpegThumbnail: image.jpegThumbnail,
+                            highQualityThumbnail: image
+                        }
+                    });
+                    await delay(1500); // Inasubiri sekunde 1.5 kabla ya kubadilisha picha inayofuata
                 }
-            }, { quoted: ctx._msg });
+            }
         } catch (e) {
-            console.error(e);
+            console.error("Error kwenye Link Loop Sample:", e);
         }
 
         const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://nixel.dev\\n🎬 SLIDESHOW RUNNING",\n      linkPreview: { \n        'matched-text': "https://nixel.dev", \n        title: "Mickey Privacy Loop", \n        jpegThumbnail: image.jpegThumbnail, \n        highQualityThumbnail: image \n      }\n    });\n    await delay(1500);\n  }\n}`;
