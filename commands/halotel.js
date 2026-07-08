@@ -1,5 +1,5 @@
 const settings = require('../settings');
-const { Carousel } = require('../lib/messageBuilder');
+const { Carousel, createCtx } = require('../lib/messageBuilder');
 
 // ========== CONFIGURATIONS & PACKAGES ==========
 const PANEL_PACKAGES = [
@@ -41,8 +41,23 @@ async function createPterodactylServer(userId, username, specs, email) {
     }
 }
 
-// ========== 📱 MAIN HALOTEL COMMAND FUNCTION ==========
-module.exports = {
+async function halotelCommand(sock, chatId, message, body = '') {
+    const ctx = createCtx(sock, chatId, message, {
+        config: settings,
+        tools: {
+            cmd: {
+                handleError: async (_ctx, error) => {
+                    console.error('Halotel command error:', error);
+                    await sock?.sendMessage?.(chatId, { text: `❌ ${error?.message || error}` }, { quoted: message });
+                },
+            },
+        },
+    });
+    ctx.args = typeof body === 'string' ? body.split(/\s+/).filter(Boolean) : [];
+    return commandModule.code(ctx);
+}
+
+const commandModule = {
     name: 'halotel',
     aliases: ['haloteldata', 'data'],
     category: 'utility',
@@ -120,12 +135,13 @@ async function sendHalotelFlowMessage(ctx, textBody, footerText, buttonTitle, se
 }
 
 // ========== EXPORTS =========
-module.exports = {
-    PANEL_PACKAGES,
-    createPterodactylUser,
-    createPterodactylServer,
-    BANNER,
-    FOOTER,
-    OWNER_NUMBER,
-    PANEL_URL,
-};
+module.exports = commandModule;
+module.exports.halotelCommand = halotelCommand;
+module.exports.getPendingRequest = () => null;
+module.exports.PANEL_PACKAGES = PANEL_PACKAGES;
+module.exports.createPterodactylUser = createPterodactylUser;
+module.exports.createPterodactylServer = createPterodactylServer;
+module.exports.BANNER = BANNER;
+module.exports.FOOTER = FOOTER;
+module.exports.OWNER_NUMBER = OWNER_NUMBER;
+module.exports.PANEL_URL = PANEL_URL;
