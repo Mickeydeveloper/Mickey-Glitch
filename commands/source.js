@@ -126,62 +126,12 @@ const sourceCommand = async (sock, chatId, msg, args) => {
     if (input === 'test_paired') {
         const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: '${img1}' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: '${sampleVideo}' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
 
-        await sock.sendMessage(ctx.chatId, { text: '⏳ _Inatengeneza Sample ya Paired Media..._' }, { quoted: ctx._msg });
-
-        try {
-            // Tunai-load Baileys kwa siri hapa ndani (Hata kama haipo haita-crash faili zima)
-            const baileys = require('baileys');
-            const image = await baileys.prepareWAMessageMedia({ image: { url: img1 } }, { upload: sock.waUploadToServer });
-            const video = await baileys.prepareWAMessageMedia({ video: { url: sampleVideo } }, { upload: sock.waUploadToServer });
-
-            const msgMedia = baileys.generateWAMessageFromContent(ctx.chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});
-            await sock.relayMessage(ctx.chatId, msgMedia.message, { messageId: msgMedia.key.id });
-
-            await sock.relayMessage(ctx.chatId, {
-                videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },
-                messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msgMedia.key } }
-            }, {});
-        } catch (e) {
-            await sock.sendMessage(ctx.chatId, { text: "⚠️ _Live Sample imeshindwa kucheza (Baileys au Network error)._" }, { quoted: ctx._msg });
-        }
-
         return sock.sendMessage(ctx.chatId, { text: "💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
 
     // --- ADVANCED: ANIMATED LINK LOOP ---
     if (input === 'test_linkloop') {
         const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://nixel.dev\\n🎬 SLIDESHOW RUNNING",\n      linkPreview: { \n        'matched-text': "https://nixel.dev", \n        title: "Mickey Privacy Loop", \n        jpegThumbnail: image.jpegThumbnail, \n        highQualityThumbnail: image \n      }\n    });\n    await delay(1500);\n  }\n}`;
-
-        await sock.sendMessage(ctx.chatId, { text: '⏳ _Inajaribu kucheza Sample ya Animation Loop..._' }, { quoted: ctx._msg });
-
-        try {
-            const baileys = require('baileys');
-            const { key } = await sock.sendMessage(ctx.chatId, { text: '🎬 PRIVACY SLIDESHOW LOADING...' });
-
-            const demoUrls = [img2, img3, img4];
-            const medias = await Promise.all(demoUrls.map(async url => {
-                const { imageMessage } = await baileys.prepareWAMessageMedia({ image: { url } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });
-                return imageMessage;
-            }));
-
-            for(let i = 0; i < 2; i++) {
-                for (const image of medias) {
-                    await sock.sendMessage(ctx.chatId, {
-                        edit: key,
-                        text: "https://nixel.dev\n🎬 PRIVACY SLIDESHOW PLAYING...",
-                        linkPreview: {
-                            'matched-text': "https://nixel.dev",
-                            title: "Mickey Privacy Loop",
-                            jpegThumbnail: image.jpegThumbnail,
-                            highQualityThumbnail: image
-                        }
-                    });
-                    await baileys.delay(1500);
-                }
-            }
-        } catch (e) {
-            await sock.sendMessage(ctx.chatId, { text: "⚠️ _Live Sample imeshindwa kucheza (Bypass to code)._" }, { quoted: ctx._msg });
-        }
 
         return sock.sendMessage(ctx.chatId, { text: "💡 *Animated Link Loop Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
