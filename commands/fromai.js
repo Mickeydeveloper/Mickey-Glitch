@@ -1,7 +1,7 @@
 /**
  * fromai.js - From AI Command using MessageBuilder
  * Creator: Ghost King
- * Description: Sends message with AI badge using MessageBuilder safely
+ * Description: Sends message with AI badge and a V2 suggest button safely
  */
 
 const { AIRich } = require('../lib/messageBuilder');
@@ -19,30 +19,33 @@ module.exports = {
         const chatId = ctx._msg?.key?.remoteJid || ctx.chatId;
 
         try {
-            // Tunatumia AIRich lakini kwa mfumo wa .addPost uliorahisishwa
-            // Mfumo huu hauli error kwenye WhatsApp mpya
             const builder = new AIRich(ctx.core)
                 .setTitle('AI Assistant')
                 .setFooter(botName);
 
+            // 1. Kadi kuu ya ujumbe (Salama kwa Group na Private)
             builder.addPost({
                 title: 'AI Assistant',
                 subtitle: botName,
                 username: 'Meta AI',
                 post_caption: text,
                 source_app: 'WHATSAPP',
-                post_type: 'TEXT', // Kutumia TEXT badala ya IMAGE inasaidia kupita kwenye ulinzi
+                post_type: 'TEXT', 
             });
 
+            // 2. Kuongeza button ya haraka (Suggested Pill) chini ya kadi
+            // Mtumiaji akibofya hii, itatuma amri ya ".menu" au maandishi uliyoweka
+            builder.addSuggest(['📜 Angalia Menu'], { scroll: true });
+
+            // 3. Kutuma ujumbe
             await builder.send(chatId, {
                 quoted: ctx._msg,
                 forwarded: false,
             });
             
-            console.log('[fromai] message sent via AIRich Post Layout');
+            console.log('[fromai] message sent via AIRich with Suggest Button');
         } catch (error) {
             console.error('[fromai] Error:', error);
-            // Ikitokea dharura yoyote, bot inajibu kwa maandishi ya kawaida
             try {
                 await ctx.reply(`✨ *[AI Assistant]*\n\n${text}\n\n_${botName}_`);
             } catch (fallbackError) {
