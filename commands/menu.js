@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { sendInteractiveMessage } = require('gifted-btns');
+const { ButtonV2 } = require('../lib/messageBuilder');
 const os = require('os');
 const chalk = require('chalk');
 
@@ -287,22 +287,23 @@ _❤️ i love mom: _`;
         // ==============================================
         // 📤 SEND INTERACTIVE MENU
         // ==============================================
-        await sendInteractiveMessage(sock, chatId, {
-            image: { 
-                url: "https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png" 
-            },
-            text: menuText,
-            footer: `⚡ ${stats.platform}`,
-            interactiveButtons: [
-                {
+        await new ButtonV2(sock)
+            .setBody(menuText)
+            .setFooter(`⚡ ${stats.platform}`)
+            .setThumbnail('https://cdn.ornzora.eu.cc/4d2905ce-3707-4ec0-998a-68a3d851629f-FIORA.jpg')
+            .addRawButton({
+                buttonText: { displayText: '📡 Menu' },
+                buttonId: 'Nixel',
+                type: 1,
+                nativeFlowInfo: {
                     name: 'single_select',
-                    buttonParamsJson: JSON.stringify({
+                    paramsJson: JSON.stringify({
                         title: '📂 Fungua Menu',
                         sections: buildSections(menuData)
                     })
                 }
-            ]
-        }, { quoted: m });
+            })
+            .send(chatId, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
