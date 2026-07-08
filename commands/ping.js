@@ -60,7 +60,7 @@ _Mickey Glitch Technology™_`;
         try {
             const buttonBuilder = new ButtonV2(sock)
                 .text(`⚡ Ping: ${latency}ms ${pingEmoji}\n⏱️ Uptime: ${botUptime}\n🖥️ CPU: ${cpuCores} Cores\n💾 RAM: ${formatBytes(usedMem)} / ${formatBytes(totalMem)} (${memPercent}%)`)
-                .setThumbnail('https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png')
+                .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png')
                 .button('📦 Menu', '.menu')
                 .button('📊 Stats', '.stats')
                 .button('🧠 AI', '.ai')
