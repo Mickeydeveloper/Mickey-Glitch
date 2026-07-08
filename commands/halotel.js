@@ -15,42 +15,42 @@ async function halotelCommand(sock, chatId, message, args) {
                 brand:      "Mickey Glitch Engine",
                 price:      "TSH 10,000.00",
                 sale_price: "TSH 50,000.00",
-                image:      "https://x.xcute.workers.dev/f/images/399f8732721b.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi 1GB (Siku 1)",
                 brand:      "Halotel Internet",
                 price:      "TSH 1,500",
                 sale_price: "TSH 1,000",
-                image:      "https://x.xcute.workers.dev/f/images/b8066826a651.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi 2.5GB (Siku 3)",
                 brand:      "Halotel Internet",
                 price:      "TSH 3,000",
                 sale_price: "TSH 2,500",
-                image:      "https://x.xcute.workers.dev/f/images/569c736b8940.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi 5GB (Wiki 1)",
                 brand:      "Halotel Internet",
                 price:      "TSH 6,000",
                 sale_price: "TSH 5,000",
-                image:      "https://x.xcute.workers.dev/f/images/569c736b8940.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi 12GB (Mwezi 1)",
                 brand:      "Halotel Internet",
                 price:      "TSH 15,000",
                 sale_price: "TSH 13,000",
-                image:      "https://x.xcute.workers.dev/f/images/738d07bc5e5b.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi Unlimited (Mwezi 1)",
                 brand:      "Halotel Internet",
                 price:      "TSH 55,000",
                 sale_price: "TSH 50,000",
-                image:      "https://x.xcute.workers.dev/f/images/7d90efab1187.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
             }
         ];
 
