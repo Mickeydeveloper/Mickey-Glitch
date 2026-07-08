@@ -115,5 +115,10 @@ async function halotelCommand(sock, chatId, message, args) {
     }
 }
 
-// Hapa tunai-export kama function ya kawaida ili handler yako isiipige chini
+// Keep compatibility with both direct imports and destructured imports
+const getPendingRequest = () => null;
+
 module.exports = halotelCommand;
+module.exports.halotelCommand = halotelCommand;
+module.exports.getPendingRequest = getPendingRequest;
+module.exports.default = halotelCommand;
