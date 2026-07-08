@@ -59,12 +59,7 @@ async function fromaiCommand(sock, chatId, message, args = []) {
             conversation: 'Fiora Sylvie',
             messageContextInfo: {
                 messageSecret: randomBytes(32),
-                supportPayload: JSON.stringify({
-                    version: 1,
-                    is_ai_message: true,
-                    should_show_system_message: true,
-                    ticket_id: '1669945700536053'
-                })
+                supportPayload: '{"version": 1, "is_ai_message": true, "should_show_system_message": true, "ticket_id": "1669945700536053"}'
             }
         };
 
