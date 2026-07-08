@@ -935,7 +935,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                         },
                     };
 
-                    await fromaiCommand.code(ctx);
+                    await fromaiCommand(ctx);
                     commandExecuted = true;
                 }
                 break;
