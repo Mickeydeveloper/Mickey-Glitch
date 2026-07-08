@@ -15,6 +15,11 @@ async function fromaiCommand(sock, chatId, message, args = []) {
 
         await reply('⏳ _Processing AI media engine, please wait..._');
 
+        // Send an immediate confirmation so the user knows the command triggered.
+        await sock.sendMessage(chatId, {
+            text: '🤖 FromAI request received. Sending AI-style message payload...'
+        }, { quoted: message });
+
         const image = await prepareWAMessageMedia(
             {
                 image: {
@@ -63,20 +68,28 @@ async function fromaiCommand(sock, chatId, message, args = []) {
             }
         };
 
-        await sock.relayMessage(chatId, aiMsg, {
-            additionalNodes: [
-                {
-                    attrs: {
-                        biz_bot: '1'
+        try {
+            await sock.relayMessage(chatId, aiMsg, {
+                additionalNodes: [
+                    {
+                        attrs: {
+                            biz_bot: '1'
+                        },
+                        tag: 'bot'
                     },
-                    tag: 'bot'
-                },
-                {
-                    attrs: {},
-                    tag: 'biz'
-                }
-            ]
-        });
+                    {
+                        attrs: {},
+                        tag: 'biz'
+                    }
+                ]
+            });
+        } catch (relayError) {
+            console.error('FromAI relayMessage failed:', relayError);
+            await sock.sendMessage(chatId, {
+                text: `⚠️ The relay payload did not send. ${relayError?.message || relayError}`
+            }, { quoted: message });
+            return;
+        }
 
         await sock.relayMessage(
             chatId,
