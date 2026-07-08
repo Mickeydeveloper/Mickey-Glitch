@@ -1,5 +1,4 @@
 const { Button, ButtonV2, Carousel, AIRich, createCtx } = require('../lib/messageBuilder');
-const { prepareWAMessageMedia, generateWAMessageFromContent, delay } = require('baileys');
 
 const sourceCommand = async (sock, chatId, msg, args) => {
     const ctx = createCtx(sock, chatId, msg, { args });
@@ -30,7 +29,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             return;
         } catch (e) {
             console.error('Error kwenye menu kuu:', e);
-            return ctx.reply('❌ Imeshindwa kufungua Tester Menu.');
+            return sock.sendMessage(ctx.chatId, { text: '❌ Imeshindwa kufungua Tester Menu.' }, { quoted: ctx._msg });
         }
     }
 
@@ -77,7 +76,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         await btnV2.send(ctx.chatId, { quoted: ctx._msg });
 
         const code = `// Muundo wa ButtonV2\nconst { ButtonV2 } = require('./lib/messageBuilder');\nconst btnV2 = new ButtonV2(sock)\n  .setTitle("Mickey ButtonV2")\n  .addButton("Menu 📦", ".menu");\nawait btnV2.send(chatId, { quoted: msg });`;
-        return ctx.reply("```javascript\n" + code + "\n```");
+        return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
 
     // --- CAROUSEL ---
@@ -99,8 +98,10 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             await sampleCarousel.send(ctx.chatId, { quoted: ctx._msg });
 
             const code = `// Muundo wa Carousel\nconst crsl = new Carousel(sock);\n// ...addCard(card);\nawait crsl.send(chatId);`;
-            return ctx.reply("```javascript\n" + code + "\n```");
-        } catch (e) { return ctx.reply("❌ Error: " + e.message); }
+            return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        } catch (e) { 
+            return sock.sendMessage(ctx.chatId, { text: "❌ Error: " + e.message }, { quoted: ctx._msg }); 
+        }
     }
 
     // --- AIRICH TEXT ---
@@ -109,7 +110,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         await rich.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
 
         const code = `const rich = new AIRich(sock).setTitle('🧠 AI Engine').addText('Text').send(chatId);`;
-        return ctx.reply("```javascript\n" + code + "\n```");
+        return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
 
     // --- AIRICH TABLES ---
@@ -118,19 +119,22 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         await richTable.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
 
         const code = `const rich = new AIRich(sock).addTable([["H1", "H2"], ["D1", "D2"]]);`;
-        return ctx.reply("```javascript\n" + code + "\n```");
+        return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
 
     // --- ADVANCED: PAIRED MEDIA ---
     if (input === 'test_paired') {
         const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: '${img1}' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: '${sampleVideo}' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
 
-        try {
-            await ctx.reply('⏳ _Inatuma Live Sample ya Paired Media..._');
-            const image = await prepareWAMessageMedia({ image: { url: img1 } }, { upload: sock.waUploadToServer });
-            const video = await prepareWAMessageMedia({ video: { url: sampleVideo } }, { upload: sock.waUploadToServer });
+        await sock.sendMessage(ctx.chatId, { text: '⏳ _Inatengeneza Sample ya Paired Media..._' }, { quoted: ctx._msg });
 
-            const msgMedia = generateWAMessageFromContent(ctx.chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});
+        try {
+            // Tunai-load Baileys kwa siri hapa ndani (Hata kama haipo haita-crash faili zima)
+            const baileys = require('baileys');
+            const image = await baileys.prepareWAMessageMedia({ image: { url: img1 } }, { upload: sock.waUploadToServer });
+            const video = await baileys.prepareWAMessageMedia({ video: { url: sampleVideo } }, { upload: sock.waUploadToServer });
+
+            const msgMedia = baileys.generateWAMessageFromContent(ctx.chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});
             await sock.relayMessage(ctx.chatId, msgMedia.message, { messageId: msgMedia.key.id });
 
             await sock.relayMessage(ctx.chatId, {
@@ -138,22 +142,25 @@ const sourceCommand = async (sock, chatId, msg, args) => {
                 messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msgMedia.key } }
             }, {});
         } catch (e) {
-            await ctx.reply("⚠️ _Sample imeshindwa ku-load kwenye WhatsApp (Upload fail). Kodi ni hii chini:_");
+            await sock.sendMessage(ctx.chatId, { text: "⚠️ _Live Sample imeshindwa kucheza (Baileys au Network error)._" }, { quoted: ctx._msg });
         }
 
-        return ctx.reply("💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```");
+        return sock.sendMessage(ctx.chatId, { text: "💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
 
     // --- ADVANCED: ANIMATED LINK LOOP ---
     if (input === 'test_linkloop') {
         const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://nixel.dev\\n🎬 SLIDESHOW RUNNING",\n      linkPreview: { \n        'matched-text': "https://nixel.dev", \n        title: "Mickey Privacy Loop", \n        jpegThumbnail: image.jpegThumbnail, \n        highQualityThumbnail: image \n      }\n    });\n    await delay(1500);\n  }\n}`;
 
+        await sock.sendMessage(ctx.chatId, { text: '⏳ _Inajaribu kucheza Sample ya Animation Loop..._' }, { quoted: ctx._msg });
+
         try {
-            const { key } = await sock.sendMessage(ctx.chatId, { text: '⏳ _Inacheza Live Sample ya Animation Loop (GitHub Repo Files)..._' });
+            const baileys = require('baileys');
+            const { key } = await sock.sendMessage(ctx.chatId, { text: '🎬 PRIVACY SLIDESHOW LOADING...' });
 
             const demoUrls = [img2, img3, img4];
             const medias = await Promise.all(demoUrls.map(async url => {
-                const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });
+                const { imageMessage } = await baileys.prepareWAMessageMedia({ image: { url } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });
                 return imageMessage;
             }));
 
@@ -169,14 +176,14 @@ const sourceCommand = async (sock, chatId, msg, args) => {
                             highQualityThumbnail: image
                         }
                     });
-                    await delay(1500);
+                    await baileys.delay(1500);
                 }
             }
         } catch (e) {
-            await ctx.reply("⚠️ _Sample imeshindwa kucheza (WhatsApp block au delay limit). Kodi ni hii chini:_");
+            await sock.sendMessage(ctx.chatId, { text: "⚠️ _Live Sample imeshindwa kucheza (Bypass to code)._" }, { quoted: ctx._msg });
         }
 
-        return ctx.reply("💡 *Animated Link Loop Source Code*:\n```javascript\n" + code + "\n```");
+        return sock.sendMessage(ctx.chatId, { text: "💡 *Animated Link Loop Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
 };
 
