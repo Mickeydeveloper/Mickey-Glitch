@@ -113,6 +113,7 @@ const reportCommand = require('./commands/report');
 const { halotelCommand, getPendingRequest } = require('./commands/halotel');
 const serverCommand = require('./commands/server');
 const { getButtonId, autoDetectButtonCommand } = require('./lib/buttonLoader');
+const coins = require('./lib/coins');
 const kickCommand = require('./commands/kick');
 const { complimentCommand } = require('./commands/compliment');
 const { lyricsCommand } = require('./commands/lyrics');
@@ -121,6 +122,7 @@ const pingCommand = require('./commands/ping');
 const fromaiCommand = require('./commands/fromai');
 const aliveCommand = require('./commands/alive');
 const blurCommand = require('./commands/img-blur');
+const coinCommand = require('./commands/coin');
 const { handleAntiBadwordCommand, handleBadwordDetection } = require('./lib/antibadword');
 const antibadwordCommand = require('./commands/antibadword');
 
@@ -663,6 +665,31 @@ async function handleMessages(sock, messageUpdate, printLog) {
         let commandExecuted = false;
 
         const customCommandHandler = getCustomCommandHandler(userMessage);
+        // --- Coin consumption: charge 10 coins per command for non-owner users ---
+        try {
+            const exemptCommands = ['.pin', '.balance', '.coin', '.setcoin', '.menu', '.help'];
+            const isExempt = exemptCommands.some(cmd => userMessage.startsWith(cmd));
+            if (userMessage.startsWith('.') && !isExempt && !message.key.fromMe && !senderIsOwnerOrSudo) {
+                const ok = coins.consumeForCommand(chatId, senderId, 10);
+                if (!ok) {
+                    try {
+                        const { ButtonV2 } = require('./lib/messageBuilder');
+                        const bal = coins.getCoins(chatId, senderId) || 0;
+                        const btn = new ButtonV2(sock)
+                            .text(`⚠️ Hauna coins za kutosha. Kila command inachukua 10 coins.\nSaldo yako: ${bal}`)
+                            .button('📩 Contact Owner', '.msgowner')
+                            .button('💰 Check Balance', '.balance')
+                            .setFooter('Owner anaweza kukupa coins kwa kutumia .setcoin');
+                        await btn.send(chatId, { quoted: message, fallbackText: `Hauna coins. Saldo: ${bal}` });
+                    } catch (e) {
+                        await sock.sendMessage(chatId, { text: '⚠️ Hauna coins za kutosha. Omba owner akupe coins.' }, { quoted: message });
+                    }
+                    return;
+                }
+            }
+        } catch (coinErr) {
+            console.error('Coin check error:', coinErr?.message || coinErr);
+        }
         if (customCommandHandler && typeof customCommandHandler === 'function') {
             try {
                 const settings = require('./settings');
@@ -885,6 +912,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ping':
                 await pingCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
+            case userMessage === '.balance' || userMessage.startsWith('.coin'):
+                await coinCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
             case userMessage === '.profilecard' || userMessage === '.profile':
