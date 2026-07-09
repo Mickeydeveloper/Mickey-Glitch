@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
 const moment = require('moment-timezone');
+const { randomBytes } = require('crypto'); // Inahitajika kwa ajili ya kutengeneza messageSecret ya AI
 
 // Paths za kuhifadhi data
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
@@ -105,7 +106,28 @@ async function handleChatbotMessage(sock, chatId, m) {
         memory[chatId].chats.push({ role: "assistant", content: reply });
         saveMemory(memory);
 
-        await sock.sendMessage(chatId, { text: reply }, { quoted: m });
+        // ─── MUUNDO MPYA WA AI RICH UTAMU (AI ICON INJECTOR) ───
+        const aiMessage = {
+            conversation: reply, // Hapa inabeba lile jibu lililotoka kwenye API ya AI
+            messageContextInfo: {
+                messageSecret: randomBytes(32),
+                supportPayload: JSON.stringify({
+                    version: 1,
+                    is_ai_message: true,
+                    should_show_system_message: true,
+                    ticket_id: Date.now().toString()
+                })
+            }
+        };
+
+        // Inatuma jibu ikiwa imegongwa baji la AI chini kwa kutumia relayMessage
+        await sock.relayMessage(chatId, aiMessage, {
+            additionalNodes: [
+                { "attrs": { "biz_bot": "1" }, "tag": "bot" },
+                { "attrs": {}, "tag": "biz" }
+            ],
+            quoted: m
+        });
 
     } catch (e) { 
         console.error('❌ Chatbot Error:', e); 
