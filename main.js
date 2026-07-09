@@ -669,7 +669,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         try {
             const exemptCommands = ['.pin', '.balance', '.coin', '.setcoin', '.menu', '.help'];
             const isExempt = exemptCommands.some(cmd => userMessage.startsWith(cmd));
-            if (userMessage.startsWith('.') && !isExempt && !message.key.fromMe && !senderIsOwnerOrSudo) {
+            if (coins.isEnabled() && userMessage.startsWith('.') && !isExempt && !message.key.fromMe && !senderIsOwnerOrSudo) {
                 const ok = coins.consumeForCommand(chatId, senderId, 10);
                 if (!ok) {
                     try {

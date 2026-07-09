@@ -14,6 +14,27 @@ module.exports = async function coinCommand(sock, chatId, msg, args) {
         const parts = text.split(/\s+/).filter(Boolean);
         const senderId = msg.key.participant || msg.key.remoteJid;
 
+        // Handle enable/disable/status for coin requirement
+        const modeArg = (parts[1] || '').toLowerCase();
+        if (['on', 'off', 'enable', 'disable', 'status'].includes(modeArg)) {
+            const authorized = await isOwnerOrSudo(senderId, sock, chatId);
+            if (!authorized && !msg.key.fromMe) {
+                await sock.sendMessage(chatId, { text: '❌ Hii command ni kwa owner pekee.' }, { quoted: msg });
+                return;
+            }
+
+            if (modeArg === 'status') {
+                const enabled = coins.isEnabled();
+                await sock.sendMessage(chatId, { text: `Coins requirement is *${enabled ? 'ON' : 'OFF'}*` }, { quoted: msg });
+                return;
+            }
+
+            const enable = modeArg === 'on' || modeArg === 'enable';
+            coins.setEnabled(enable);
+            await sock.sendMessage(chatId, { text: `✅ Coins requirement is now *${enable ? 'ON' : 'OFF'}*` }, { quoted: msg });
+            return;
+        }
+
         const first = (parts[0] || '').toLowerCase();
         // .balance or .coin
         if (first === '.balance' || first === '.coin') {
