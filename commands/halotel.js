@@ -5,7 +5,7 @@ async function halotelCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
     
     try {
-        const ownerNumber = "255719632816";
+        const ownerNumber = "255615944741";
         const waLink = `https://wa.me/${ownerNumber}`;
 
         // Orodha ya Vifurushi vya Halotel (Products)
@@ -15,42 +15,42 @@ async function halotelCommand(sock, chatId, message, args) {
                 brand:      "Mickey Glitch Engine",
                 price:      "TSH 10,000.00",
                 sale_price: "TSH 50,000.00",
-                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi 1GB (Siku 1)",
                 brand:      "Halotel Internet",
                 price:      "TSH 1,500",
                 sale_price: "TSH 1,000",
-                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi 2.5GB (Siku 3)",
                 brand:      "Halotel Internet",
                 price:      "TSH 3,000",
                 sale_price: "TSH 2,500",
-                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi 5GB (Wiki 1)",
                 brand:      "Halotel Internet",
                 price:      "TSH 6,000",
                 sale_price: "TSH 5,000",
-                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi 12GB (Mwezi 1)",
                 brand:      "Halotel Internet",
                 price:      "TSH 15,000",
                 sale_price: "TSH 13,000",
-                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg"
             },
             {
                 title:      "Halo Kasi Unlimited (Mwezi 1)",
                 brand:      "Halotel Internet",
                 price:      "TSH 55,000",
                 sale_price: "TSH 50,000",
-                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/halotel.jpg"
+                image:      "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg"
             }
         ];
 
@@ -69,7 +69,7 @@ async function halotelCommand(sock, chatId, message, args) {
         // Kuunda na kutuma Ujumbe wa AIRich
         await new AIRich(sock)
             .setTitle("📶 Halotel Data Menu")
-            .setFooter("MICKEY BOT")
+            .setFooter("Mickey Glitch")
             .addText("`Halotel Bundle Catalog` 🛍️")
 
             .addProduct({
