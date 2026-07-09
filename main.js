@@ -914,7 +914,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await pingCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
-            case userMessage === '.balance' || userMessage.startsWith('.coin'):
+            case userMessage === '.balance' || userMessage.startsWith('.coin') || userMessage.startsWith('.setcoin') || userMessage.startsWith('.addcoin') || userMessage.startsWith('.removecoin'):
                 await coinCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;

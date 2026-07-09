@@ -36,10 +36,9 @@ module.exports = async function coinCommand(sock, chatId, msg, args) {
         }
 
         const first = (parts[0] || '').toLowerCase();
-        // .balance or .coin
-        if (first === '.balance' || first === '.coin') {
-            // If .coin only, we may have subcommands
-            if (parts.length === 1 || first === '.balance') {
+        if (first === '.balance' || first === '.coin' || first === '.setcoin' || first === '.addcoin' || first === '.removecoin') {
+            // .balance or .coin status/balance
+            if (first === '.balance' || parts.length === 1) {
                 const bal = coins.getCoins(chatId, senderId) || 0;
                 const btn = new ButtonV2(sock)
                     .text(`💰 Saldo yako: ${bal} coins`)
@@ -50,28 +49,35 @@ module.exports = async function coinCommand(sock, chatId, msg, args) {
                 return;
             }
 
-            // handle .coin <action>
-            const action = (parts[1] || '').toLowerCase();
+            let action = (parts[1] || '').toLowerCase();
+            let target = null;
+            let amountArg = null;
+
+            if (first === '.setcoin' || first === '.addcoin' || first === '.removecoin') {
+                action = first.slice(1).replace('coin', '');
+                target = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || parts[1];
+                amountArg = parts[2];
+            } else {
+                target = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || parts[2];
+                amountArg = parts[3] || parts[2];
+            }
+
             if (['set', 'add', 'remove'].includes(action)) {
-                // owner only
                 const authorized = await isOwnerOrSudo(senderId, sock, chatId);
                 if (!authorized && !msg.key.fromMe) {
                     await sock.sendMessage(chatId, { text: '❌ Hii command ni kwa owner pekee.' }, { quoted: msg });
                     return;
                 }
 
-                const mention = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                let target = mention[0] || parts[2];
                 if (!target) {
                     await sock.sendMessage(chatId, { text: 'Tafadhali taja user (reply or @) na kiasi.' }, { quoted: msg });
                     return;
                 }
-                // normalize target to jid
                 if (typeof target === 'string' && !target.includes('@')) {
                     if (/^\d+$/.test(target)) target = `${target}@s.whatsapp.net`;
                 }
 
-                const amount = Number(parts[3] || parts[2] || 0);
+                const amount = Number(amountArg || 0);
                 if (isNaN(amount)) {
                     await sock.sendMessage(chatId, { text: 'Kiasi si nambari sahihi.' }, { quoted: msg });
                     return;
