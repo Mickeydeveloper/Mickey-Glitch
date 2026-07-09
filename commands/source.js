@@ -1,4 +1,4 @@
-// source.js - Msimbo uliounganishwa na mifano ya Nixellv2
+// source.js - Toleo lililoboreshwa lenye live samples zote
 const { Button, ButtonV2, Carousel, AIRich, createCtx } = require('../lib/messageBuilder');
 const baileys = require('@whiskeysockets/baileys');
 const axios = require('axios');
@@ -20,9 +20,8 @@ async function fetchNixellExamples() {
         const $ = cheerio.load(response.data);
         const examples = [];
         
-        // Inachukua mifano kutoka kwenye table
         $('table.maintable tr').each((i, row) => {
-            if (i === 0) return; // Skip header
+            if (i === 0) return;
             const columns = $(row).find('td');
             if (columns.length >= 4) {
                 const title = $(columns[0]).text().trim();
@@ -65,7 +64,96 @@ async function fetchPasteContent(pasteId) {
     }
 }
 
-// Function kuu ya source command
+// --- LIVE SAMPLES ZA NIXELLV2 ---
+async function showNixellLiveSample(sock, chatId, msg, example, ctx) {
+    try {
+        // Inaonyesha live sample kulingana na aina ya mfano
+        const title = example.title.toLowerCase();
+        
+        // 1. Thumbnail Edit Sample
+        if (title.includes('thumbnail edit') || title.includes('tmte')) {
+            const imgUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg";
+            await sock.sendMessage(chatId, {
+                text: '🖼️ *Thumbnail Edit Live Sample*\n\nInaonyesha jinsi ya kubadilisha thumbnail ya link...',
+                linkPreview: {
+                    'matched-text': 'https://example.com',
+                    title: 'Thumbnail Edit Demo',
+                    jpegThumbnail: await baileys.prepareWAMessageMedia({ image: { url: imgUrl } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' })
+                }
+            }, { quoted: msg });
+        }
+        
+        // 2. Sticker Pack Sample
+        else if (title.includes('stickerpack') || title.includes('tspk')) {
+            const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg";
+            const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { upload: sock.waUploadToServer });
+            await sock.sendMessage(chatId, {
+                sticker: media,
+                contextInfo: { isStickerPack: true }
+            }, { quoted: msg });
+        }
+        
+        // 3. Meta AI Group Sample
+        else if (title.includes('group') && title.includes('meta ai')) {
+            await sock.sendMessage(chatId, {
+                text: '👥 *Meta AI Group Sample*\n\nInaonyesha jinsi ya ku-add Meta AI kwenye group...\n\n' +
+                      '```javascript\n' +
+                      '// Muundo wa ku-add Meta AI\n' +
+                      'await sock.groupParticipantsUpdate(chatId, ["255712345678@s.whatsapp.net"], "add");\n' +
+                      '```'
+            }, { quoted: msg });
+        }
+        
+        // 4. Sticker Samples
+        else if (title.includes('sticker')) {
+            const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg";
+            const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { upload: sock.waUploadToServer });
+            await sock.sendMessage(chatId, { sticker: media }, { quoted: msg });
+        }
+        
+        // 5. LaTeX Sample
+        else if (title.includes('latex')) {
+            await sock.sendMessage(chatId, {
+                text: '📐 *LaTeX Live Sample*\n\n`E = mc²`\n`∫₀¹ x² dx = ⅓`\n`\\frac{-b ± √(b²-4ac)}{2a}`'
+            }, { quoted: msg });
+        }
+        
+        // 6. Single Select Sample
+        else if (title.includes('single select')) {
+            const btn = new Button(sock)
+                .setTitle('🔘 Single Select Sample')
+                .setBody('Chagua moja:')
+                .addReply('✅ Option 1', '.source nixell_selected')
+                .addReply('✅ Option 2', '.source nixell_selected');
+            await btn.send(chatId, { quoted: msg });
+        }
+        
+        // 7. Payment/Review Samples
+        else if (title.includes('payment') || title.includes('review') || title.includes('signup')) {
+            const btn = new Button(sock)
+                .setTitle('💳 Interactive Sample')
+                .setBody('Huu ni mfano wa interactive message kwa payments/reviews')
+                .setFooter('Nixellv2 Sample');
+            btn.addReply('✅ Confirm', '.source nixell_confirm');
+            btn.addReply('❌ Cancel', '.source nixell_cancel');
+            await btn.send(chatId, { quoted: msg });
+        }
+        
+        // 8. Default: Show code only
+        else {
+            await sock.sendMessage(chatId, {
+                text: `📌 *${example.title}*\n\n📝 *Source Code:*\n\`\`\`javascript\n${await fetchPasteContent(example.id)}\n\`\`\``
+            }, { quoted: msg });
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Live sample error:', error);
+        return false;
+    }
+}
+
+// --- MAIN SOURCE COMMAND ---
 const sourceCommand = async (sock, chatId, msg, args) => {
     const ctx = createCtx(sock, chatId, msg, { args });
     const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
@@ -80,7 +168,6 @@ const sourceCommand = async (sock, chatId, msg, args) => {
     // ─── 1. MENU KUU ───
     if (!input) {
         try {
-            // Inapata mifano ya Nixellv2
             const nixellExamples = await fetchNixellExamples();
             
             const mainMenus = new Button(sock)
@@ -92,9 +179,8 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             mainMenus.addReply('📁 Core: Buttons & Flow', '.source kundi_core');
             mainMenus.addReply('🚀 Advanced: Media Hacks', '.source kundi_advanced');
             
-            // Inaongeza menu ya Nixellv2 examples
             if (nixellExamples.length > 0) {
-                mainMenus.addReply('📚 Nixellv2 Examples', '.source nixell_menu');
+                mainMenus.addReply('📚 Nixellv2 Examples (Live)', '.source nixell_menu');
             }
             
             mainMenus.addReply('🔄 Refresh Examples', '.source refresh');
@@ -131,15 +217,14 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         }
 
         const nixellMenu = new Button(sock)
-            .setTitle('📚 Nixellv2 Code Examples')
+            .setTitle('📚 Nixellv2 Live Samples')
             .setBody(`Mifano ${examples.length} zilizopatikana kutoka Nixellv2's Pastebin:\n\n` +
                 examples.slice(0, 10).map((ex, i) => 
                     `${i+1}. ${ex.title} (${ex.syntax})`
                 ).join('\n') +
-                `\n\n📌 Tuma .source nixell_[namba] kuona code`)
+                `\n\n📌 Tuma .source nixell_[namba] kuona live sample + code`)
             .setFooter('MICKEY BOT');
 
-        // Inaongeza vitufe vya kuchagua mifano
         examples.slice(0, 5).forEach((ex, i) => {
             nixellMenu.addReply(`${i+1}. ${ex.title.substring(0, 20)}...`, `.source nixell_${i}`);
         });
@@ -150,7 +235,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         return;
     }
 
-    // ─── SHOW SPECIFIC NIXELL EXAMPLE ───
+    // ─── SHOW SPECIFIC NIXELL EXAMPLE (LIVE SAMPLE + CODE) ───
     if (input.startsWith('nixell_')) {
         const index = parseInt(input.split('_')[1]);
         const examples = await fetchNixellExamples();
@@ -163,15 +248,18 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
         const example = examples[index];
         await sock.sendMessage(ctx.chatId, { 
-            text: `📥 Inapakua mfano: ${example.title}...` 
+            text: `🎬 Inaonyesha live sample: ${example.title}...` 
         }, { quoted: ctx._msg });
 
+        // 1. ONYESHA LIVE SAMPLE
+        const liveSuccess = await showNixellLiveSample(sock, chatId, msg, example, ctx);
+        
+        // 2. ONYESHA SOURCE CODE
+        await delay(1000);
         const content = await fetchPasteContent(example.id);
         if (content) {
-            // Inatuma code kama ujumbe
             const codeMessage = `📌 *${example.title}*\n📅 Added: ${example.added}\n🔧 Syntax: ${example.syntax}\n\n📝 *Source Code:*\n\`\`\`javascript\n${content.substring(0, 4000)}\n\`\`\``;
             
-            // Ikibidi, inatuma kwa sehemu
             if (content.length > 4000) {
                 await sock.sendMessage(ctx.chatId, { text: codeMessage }, { quoted: ctx._msg });
                 await sock.sendMessage(ctx.chatId, { 
@@ -221,7 +309,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         return;
     }
 
-    // ─── 2. SAMPLES & SOURCE CODES ───
+    // ─── 2. SAMPLES & SOURCE CODES (ZILE ZA MWANZO) ───
 
     // --- BUTTON V2 ---
     if (input === 'test_v2') {
@@ -335,6 +423,38 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
         const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://nixel.dev\\n🎬 SLIDESHOW RUNNING",\n      linkPreview: { \n        'matched-text': "https://nixel.dev", \n        title: "Mickey Privacy Loop", \n        jpegThumbnail: image.jpegThumbnail, \n        highQualityThumbnail: image \n      }\n    });\n    await delay(1500);\n  }\n}`;
         return sock.sendMessage(ctx.chatId, { text: "💡 *Animated Link Loop Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+    }
+
+    // --- AI MESSAGE WITH ICON ---
+    if (input === 'test_ai_message') {
+        try {
+            const { randomBytes } = require('crypto');
+            const aiMessage = {
+                conversation: '🤖 *Mickey AI Assistant*\n\nHujambo! Mimi ni Mickey AI. Niko hapa kukusaidia na maswali yako yote.',
+                messageContextInfo: {
+                    messageSecret: randomBytes(32),
+                    supportPayload: JSON.stringify({
+                        version: 1,
+                        is_ai_message: true,
+                        should_show_system_message: true,
+                        ticket_id: Date.now().toString()
+                    })
+                }
+            };
+            
+            await sock.relayMessage(ctx.chatId, aiMessage, {
+                additionalNodes: [
+                    { "attrs": { "biz_bot": "1" }, "tag": "bot" },
+                    { "attrs": {}, "tag": "biz" }
+                ],
+                quoted: ctx._msg
+            });
+        } catch (e) {
+            console.error('AI Message Error:', e);
+        }
+
+        const code = `// 💬 AI MESSAGE WITH ICON\nconst { randomBytes } = require('crypto');\nconst aiMessage = {\n  conversation: 'Mickey AI Assistant',\n  messageContextInfo: {\n    messageSecret: randomBytes(32),\n    supportPayload: JSON.stringify({\n      version: 1,\n      is_ai_message: true,\n      should_show_system_message: true,\n      ticket_id: Date.now().toString()\n    })\n  }\n};\n\nawait sock.relayMessage(chatId, aiMessage, {\n  additionalNodes: [\n    { "attrs": { "biz_bot": "1" }, "tag": "bot" },\n    { "attrs": {}, "tag": "biz" }\n  ],\n  quoted: msg\n});`;
+        return sock.sendMessage(ctx.chatId, { text: "💡 *AI Message Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
     }
 
     // --- CLOSE MENU ---
