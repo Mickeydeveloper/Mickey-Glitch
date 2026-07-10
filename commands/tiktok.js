@@ -66,30 +66,21 @@ async function tiktokCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
         // ==============================================
-        // 📤 EXTERNAL AD REPLY FORMAT (UFAHAMU WA UHAKIKA)
+        // 📤 MUUNDO WA NAMBA 2: VIDEO NA CAPTION PEKEE
         // ==============================================
         try {
             const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
 
-            // Njia hii inatuma video ya kawaida lakini ikiwa na kadi nzuri chini yake
+            // Inatuma video safi ya moja kwa moja bila errors za toleo la WhatsApp
             await sock.sendMessage(chatId, {
                 video: { url: tikData.url },
                 mimetype: 'video/mp4',
-                caption: captionText,
-                contextInfo: {
-                    externalAdReply: {
-                        title: "✨ MICKEY GLITCH V3.0.5",
-                        body: "Click hapa kutembelea chaneli yetu 📺",
-                        mediaType: 2, // Inatambua kama video ad
-                        thumbnailUrl: tikData.thumbnail || "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg",
-                        sourceUrl: "https://youtube.com" // Weka link yako hapa
-                    }
-                }
+                caption: captionText
             }, { quoted: message });
 
         } catch (err) {
             console.error("Standard Send Error:", err.message);
-            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana.' });
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana au link imeharibika.' });
             return;
         }
 
