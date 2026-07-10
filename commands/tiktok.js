@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { getBuffer } = require('../lib/myfunc');
+const { ButtonV2 } = require('../lib/messageBuilder'); // Nimeongeza hii import
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -24,19 +25,15 @@ async function tryRequest(getter, attempts = 3) {
 
 // Function ya kupata data kutoka kwenye API mpya
 async function getTiktokDownload(url) {
-    // API URL mpya uliyotoa
     const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/tiktok?url=${encodeURIComponent(url)}`;
-    
+
     const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-    
-    // Kukagua kama data imerudi (muundo: res.data.status na res.data.data)
+
     if (!res || !res.data || !res.data.status || !res.data.data) {
         throw new Error('No response from TikTok API');
     }
 
     const d = res.data.data;
-
-    // Video URL ipo kwenye d.video kulingana na JSON yako
     const videoUrl = d.video;
     if (!videoUrl) throw new Error('Could not find video URL in API response');
 
@@ -71,16 +68,34 @@ async function tiktokCommand(sock, chatId, message) {
 
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // Kutuma video kwenda WhatsApp
+        // ==============================================
+        // 📤 SEND INTERACTIVE VIDEO WITH CTA BUTTON
+        // ==============================================
         try {
-            await sock.sendMessage(chatId, {
-                video: { url: tikData.url },
-                mimetype: 'video/mp4',
-                caption: `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`
-            }, { quoted: message });
+            const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
+
+            await new ButtonV2(sock)
+                .setBody(captionText)
+                .setFooter('MICKEY BOT')
+                // Kutumia video ya mtandaoni moja kwa moja kama media ya button
+                .setVideo(tikData.url) 
+                // Kuongeza Kitufe cha Interactive (CTA Link Button) chini ya video
+                .addRawButton({
+                    buttonText: { displayText: 'Nenda YouTube 📺' },
+                    type: 1,
+                    nativeFlowInfo: {
+                        name: 'cta_url',
+                        paramsJson: JSON.stringify({
+                            display_text: 'Fungua YouTube',
+                            url: 'https://youtube.com' // Weka link yako ya YouTube hapa
+                        })
+                    }
+                })
+                .send(chatId, { quoted: message });
+
         } catch (err) {
             console.error("Send Error:", err.message);
-            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana au link imekufa.' });
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana au muundo haukubaliki.' });
             return;
         }
 
