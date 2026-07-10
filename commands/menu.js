@@ -55,12 +55,6 @@ const getRank = (total, userLevel = 0) => {
 const getSystemStats = () => {
     const uptime = process.uptime();
     const memUsage = process.memoryUsage();
-    const cpuCount = os.cpus().length;
-    const cpuSpeed = os.cpus()[0]?.speed || 0;
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
-    const platform = os.platform();
-    const release = os.release();
     const cmdCount = global.commands ? Object.keys(global.commands).length : 0;
     const plugins = fs.existsSync(path.join(process.cwd(), 'plugins')) ? 
         fs.readdirSync(path.join(process.cwd(), 'plugins')).length : 0;
@@ -68,7 +62,6 @@ const getSystemStats = () => {
     return {
         uptime: `${Math.floor(uptime / 86400)}d ${Math.floor((uptime % 86400) / 3600)}h`,
         memoryUsed: (memUsage.heapUsed / 1024 / 1024).toFixed(2),
-        platform: `${platform} ${release}`,
         cmdCount,
         plugins,
         users: botStats.users || 0,
@@ -190,7 +183,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const time = now.format('HH:mm:ss');
 
         // ==============================================
-        // 📝 COMPACT & SLIM MENU TEXT 
+        // 📝 COMPACT & SLIM MENU TEXT (LINUX AWS REMOVED)
         // ==============================================
         const menuText = `✨ *MICKEY GLITCH V3.0.5*
 👋 *Habari za ${greeting.text}* ${greeting.emoji}
@@ -198,15 +191,14 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 📅 *Date:* ${date} | ⏰ *Time:* ${time}
 
 👇 _Bonyeza "Menu 📂" kuona command zote_
-❤️ _i love mom_
-⚡ _linux 6.17.0-aws_`;
+❤️ _i love mom_`;
 
         // ==============================================
         // 📤 SEND INTERACTIVE MENU (ROW OF 2 BUTTONS)
         // ==============================================
         await new ButtonV2(sock)
             .setBody(menuText)
-            .setFooter(`⚡ OS: ${stats.platform}`)
+            .setFooter(`MICKEY BOT`)
             .setThumbnail('https://cdn.ornzora.eu.cc/4d2905ce-3707-4ec0-998a-68a3d851629f-FIORA.jpg')
             // Row Button 1: Dynamic List Menu
             .addRawButton({
