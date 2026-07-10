@@ -81,7 +81,7 @@ async function tiktokCommand(sock, chatId, message) {
                         title: "✨ MICKEY GLITCH V3.0.5",
                         body: "Click hapa kutembelea chaneli yetu 📺",
                         mediaType: 2, // Inatambua kama video ad
-                        thumbnailUrl: tikData.thumbnail || "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg",
+                        thumbnailUrl: tikData.thumbnail || "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg",
                         sourceUrl: "https://youtube.com" // Weka link yako hapa
                     }
                 }
