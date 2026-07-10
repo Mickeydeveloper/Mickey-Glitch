@@ -1,6 +1,5 @@
 const axios = require('axios');
-const { getBuffer } = require('../lib/myfunc'); // Inatumika sasa hapa chini
-const { ButtonV2 } = require('../lib/messageBuilder'); 
+const { prepareWAMessageMedia, generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -23,10 +22,9 @@ async function tryRequest(getter, attempts = 3) {
     throw lastError;
 }
 
-// Function ya kupata data kutoka kwenye API mpya
+// Function ya kupata data kutoka kwenye API
 async function getTiktokDownload(url) {
     const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/tiktok?url=${encodeURIComponent(url)}`;
-
     const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
 
     if (!res || !res.data || !res.data.status || !res.data.data) {
@@ -69,34 +67,48 @@ async function tiktokCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
         // ==============================================
-        // 📤 SEND INTERACTIVE VIDEO WITH CTA BUTTON (FIXED)
+        // 🎞️ PAIRED MEDIA HACK INTEGRATION (FIXED)
         // ==============================================
         try {
             const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
-            
-            // FIXED: Tunageuza video kuwa Buffer kwanza ili isikwame WhatsApp
-            const videoBuffer = await getBuffer(tikData.url);
+            const coverImageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg';
 
-            await new ButtonV2(sock)
-                .setBody(captionText)
-                .setFooter('MICKEY BOT')
-                .setVideo(videoBuffer) // Sasa inatuma kama Buffer (Salama 100%)
-                .addRawButton({
-                    buttonText: { displayText: 'Nenda YouTube 📺' },
-                    type: 1,
-                    nativeFlowInfo: {
-                        name: 'cta_url',
-                        paramsJson: JSON.stringify({
-                            display_text: 'Fungua YouTube',
-                            url: 'https://youtube.com'
-                        })
-                    }
-                })
-                .send(chatId, { quoted: message });
+            // 1. Kuandaa media (Picha na Video) kwenda kwenye server za WA
+            const image = await prepareWAMessageMedia(
+                { image: { url: coverImageUrl } }, 
+                { upload: sock.waUploadToServer }
+            );
+            
+            const video = await prepareWAMessageMedia(
+                { video: { url: tikData.url } }, 
+                { upload: sock.waUploadToServer }
+            );
+
+            // 2. Kutengeneza na kutuma ujumbe mkuu wa Picha (Parent Message) yenye caption
+            const msg = generateWAMessageFromContent(chatId, { 
+                imageMessage: { 
+                    ...image.imageMessage, 
+                    caption: captionText, // Maelezo ya TikTok yanawekwa hapa
+                    contextInfo: { pairedMediaType: 5, statusSourceType: 0 } 
+                } 
+            }, { quoted: message });
+            
+            await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
+
+            // 3. Kutuma na kuunganisha ujumbe wa Video (Child Message) kwa siri chini ya picha
+            await sock.relayMessage(chatId, {
+                videoMessage: { 
+                    ...video.videoMessage, 
+                    contextInfo: { pairedMediaType: 6, statusSourceType: 0 } 
+                },
+                messageContextInfo: { 
+                    messageAssociation: { associationType: 12, parentMessageKey: msg.key } 
+                }
+            }, {});
 
         } catch (err) {
-            console.error("Send Error:", err.message);
-            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana au muundo haukubaliki.' });
+            console.error("Paired Media Send Error:", err.message);
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Mfumo wa Paired Media umefeli kwenye video hii.' });
             return;
         }
 
