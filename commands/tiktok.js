@@ -1,5 +1,4 @@
 const axios = require('axios');
-const { prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -67,61 +66,30 @@ async function tiktokCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
         // ==============================================
-        // 🤖 META AI VIDEO LAYOUT INTEGRATION (FIXED)
+        // 📤 EXTERNAL AD REPLY FORMAT (UFAHAMU WA UHAKIKA)
         // ==============================================
         try {
             const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
 
-            // Kuandaa video message structure kupitia Baileys ili ipate token ya server
-            const mediaUploaded = await prepareWAMessageMedia(
-                { video: { url: tikData.url } }, 
-                { upload: sock.waUploadToServer }
-            );
-
-            const metaAiVideoMessage = {
-                viewOnceMessage: {
-                    message: {
-                        interactiveMessage: {
-                            header: {
-                                title: "✨ MICKEY VIDEO ENGINE",
-                                hasMediaAttachment: true,
-                                videoMessage: mediaUploaded.videoMessage
-                            },
-                            body: {
-                                text: captionText
-                            },
-                            footer: {
-                                text: "⚡ Mickey Glitch v3.0.5"
-                            },
-                            nativeFlowMessage: {
-                                buttons: [
-                                    {
-                                        name: "cta_url",
-                                        buttonParamsJson: JSON.stringify({
-                                            display_text: "Fungua Source Link 🌐",
-                                            url: url
-                                        })
-                                    },
-                                    {
-                                        name: "quick_reply",
-                                        buttonParamsJson: JSON.stringify({
-                                            display_text: "Owner 👑",
-                                            id: ".owner"
-                                        })
-                                    }
-                                ]
-                            }
-                        }
+            // Njia hii inatuma video ya kawaida lakini ikiwa na kadi nzuri chini yake
+            await sock.sendMessage(chatId, {
+                video: { url: tikData.url },
+                mimetype: 'video/mp4',
+                caption: captionText,
+                contextInfo: {
+                    externalAdReply: {
+                        title: "✨ MICKEY GLITCH V3.0.5",
+                        body: "Click hapa kutembelea chaneli yetu 📺",
+                        mediaType: 2, // Inatambua kama video ad
+                        thumbnailUrl: tikData.thumbnail || "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg",
+                        sourceUrl: "https://youtube.com" // Weka link yako hapa
                     }
                 }
-            };
-
-            // Kutuma ujumbe kwa kutumia njia salama kabisa ya relayMessage
-            await sock.relayMessage(chatId, metaAiVideoMessage, { quoted: message });
+            }, { quoted: message });
 
         } catch (err) {
-            console.error("Meta AI Layout Send Error:", err.message);
-            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Muundo wa kadi umefeli kwenye video hii.' });
+            console.error("Standard Send Error:", err.message);
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana.' });
             return;
         }
 
