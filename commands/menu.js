@@ -33,37 +33,17 @@ try {
 } catch (e) {}
 
 // ==============================================
-// 🏆 RANK SYSTEM
-// ==============================================
-const getRank = (total, userLevel = 0) => {
-    const ranks = [
-        { min: 0, max: 9, title: '🌱 Newbie' },
-        { min: 10, max: 49, title: '⭐ Regular' },
-        { min: 50, max: 199, title: '⚡ Pro' },
-        { min: 200, max: 499, title: '👑 Elite' },
-        { min: 500, max: 999, title: '💎 Legend' },
-        { min: 1000, max: Infinity, title: '🌟 Mythical' }
-    ];
-    const rank = ranks.find(r => total >= r.min && total <= r.max) || ranks[0];
-    if (userLevel > 0) rank.title += ` (Lv.${userLevel})`;
-    return rank;
-};
-
-// ==============================================
 // 📊 SYSTEM STATS
 // ==============================================
 const getSystemStats = () => {
     const uptime = process.uptime();
     const memUsage = process.memoryUsage();
     const cmdCount = global.commands ? Object.keys(global.commands).length : 0;
-    const plugins = fs.existsSync(path.join(process.cwd(), 'plugins')) ? 
-        fs.readdirSync(path.join(process.cwd(), 'plugins')).length : 0;
 
     return {
         uptime: `${Math.floor(uptime / 86400)}d ${Math.floor((uptime % 86400) / 3600)}h`,
         memoryUsed: (memUsage.heapUsed / 1024 / 1024).toFixed(2),
         cmdCount,
-        plugins,
         users: botStats.users || 0,
         groups: botStats.groups || 0
     };
@@ -155,6 +135,7 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
+// FIXED: `id` sasa inabaki kuwa amri kamili yenye nukta (mfano: .general) ili ikibonyezwa itume command husika moja kwa moja!
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
         title: `${cat.icon} ${cat.title}`,
@@ -162,7 +143,7 @@ const buildSections = (menuData) => {
         rows: cat.items.slice(0, 15).map(item => ({
             title: item.cmd,
             description: item.desc ? item.desc.substring(0, 20) : '',
-            id: item.cmd.toLowerCase().replace('.', '')
+            id: item.cmd // Inatuma kodi halisi kama ilivyo (e.g. .ping au .sticker)
         }))
     }));
 };
@@ -175,16 +156,12 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const now = moment().tz('Africa/Dar_es_Salaam');
         const hour = now.hour();
         const userName = m.pushName || 'User';
-        const stats = getSystemStats();
         const greeting = getGreeting(hour);
         const menuData = loadDynamicMenu();
         
         const date = now.format('DD July 2026'); 
         const time = now.format('HH:mm:ss');
 
-        // ==============================================
-        // 📝 COMPACT & SLIM MENU TEXT (LINUX AWS REMOVED)
-        // ==============================================
         const menuText = `✨ *MICKEY GLITCH V3.0.5*
 👋 *Habari za ${greeting.text}* ${greeting.emoji}
 👤 *User:* ${userName}
@@ -194,13 +171,13 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 ❤️ _i love mom_`;
 
         // ==============================================
-        // 📤 SEND INTERACTIVE MENU (ROW OF 2 BUTTONS)
+        // 📤 SEND INTERACTIVE MENU (ROW OF 2 BUTTONS FIXED)
         // ==============================================
         await new ButtonV2(sock)
             .setBody(menuText)
             .setFooter(`MICKEY BOT`)
             .setThumbnail('https://cdn.ornzora.eu.cc/4d2905ce-3707-4ec0-998a-68a3d851629f-FIORA.jpg')
-            // Row Button 1: Dynamic List Menu
+            // Row Button 1: Dynamic Single Select List Menu
             .addRawButton({
                 buttonText: { displayText: 'Menu 📂' },
                 buttonId: 'mickey_list_menu',
@@ -213,10 +190,10 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                     })
                 }
             })
-            // Row Button 2: Quick Reply (Inakaa Row Moja na ya Kwanza)
+            // FIXED BUTTON 2: Muundo sahihi wa Quick Reply unaoondoa error ya WhatsApp toleo jipya
             .addRawButton({
                 buttonText: { displayText: 'Owner 👑' },
-                buttonId: 'mickey_owner_cmd',
+                buttonId: '.owner', // Unajaza command hapa moja kwa moja kama ID yake
                 type: 1,
                 nativeFlowInfo: {
                     name: 'quick_reply',
