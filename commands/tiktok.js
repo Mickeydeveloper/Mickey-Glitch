@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { prepareWAMessageMedia, generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+const { prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -67,48 +67,61 @@ async function tiktokCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
         // ==============================================
-        // 🎞️ PAIRED MEDIA HACK INTEGRATION (FIXED)
+        // 🤖 META AI VIDEO LAYOUT INTEGRATION (FIXED)
         // ==============================================
         try {
             const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
-            const coverImageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg';
 
-            // 1. Kuandaa media (Picha na Video) kwenda kwenye server za WA
-            const image = await prepareWAMessageMedia(
-                { image: { url: coverImageUrl } }, 
-                { upload: sock.waUploadToServer }
-            );
-            
-            const video = await prepareWAMessageMedia(
+            // Kuandaa video message structure kupitia Baileys ili ipate token ya server
+            const mediaUploaded = await prepareWAMessageMedia(
                 { video: { url: tikData.url } }, 
                 { upload: sock.waUploadToServer }
             );
 
-            // 2. Kutengeneza na kutuma ujumbe mkuu wa Picha (Parent Message) yenye caption
-            const msg = generateWAMessageFromContent(chatId, { 
-                imageMessage: { 
-                    ...image.imageMessage, 
-                    caption: captionText, // Maelezo ya TikTok yanawekwa hapa
-                    contextInfo: { pairedMediaType: 5, statusSourceType: 0 } 
-                } 
-            }, { quoted: message });
-            
-            await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
-
-            // 3. Kutuma na kuunganisha ujumbe wa Video (Child Message) kwa siri chini ya picha
-            await sock.relayMessage(chatId, {
-                videoMessage: { 
-                    ...video.videoMessage, 
-                    contextInfo: { pairedMediaType: 6, statusSourceType: 0 } 
-                },
-                messageContextInfo: { 
-                    messageAssociation: { associationType: 12, parentMessageKey: msg.key } 
+            const metaAiVideoMessage = {
+                viewOnceMessage: {
+                    message: {
+                        interactiveMessage: {
+                            header: {
+                                title: "✨ MICKEY VIDEO ENGINE",
+                                hasMediaAttachment: true,
+                                videoMessage: mediaUploaded.videoMessage
+                            },
+                            body: {
+                                text: captionText
+                            },
+                            footer: {
+                                text: "⚡ Mickey Glitch v3.0.5"
+                            },
+                            nativeFlowMessage: {
+                                buttons: [
+                                    {
+                                        name: "cta_url",
+                                        buttonParamsJson: JSON.stringify({
+                                            display_text: "Fungua Source Link 🌐",
+                                            url: url
+                                        })
+                                    },
+                                    {
+                                        name: "quick_reply",
+                                        buttonParamsJson: JSON.stringify({
+                                            display_text: "Owner 👑",
+                                            id: ".owner"
+                                        })
+                                    }
+                                ]
+                            }
+                        }
+                    }
                 }
-            }, {});
+            };
+
+            // Kutuma ujumbe kwa kutumia njia salama kabisa ya relayMessage
+            await sock.relayMessage(chatId, metaAiVideoMessage, { quoted: message });
 
         } catch (err) {
-            console.error("Paired Media Send Error:", err.message);
-            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Mfumo wa Paired Media umefeli kwenye video hii.' });
+            console.error("Meta AI Layout Send Error:", err.message);
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Muundo wa kadi umefeli kwenye video hii.' });
             return;
         }
 
