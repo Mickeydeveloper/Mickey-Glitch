@@ -1,6 +1,6 @@
 const axios = require('axios');
-const { getBuffer } = require('../lib/myfunc');
-const { ButtonV2 } = require('../lib/messageBuilder'); // Nimeongeza hii import
+const { getBuffer } = require('../lib/myfunc'); // Inatumika sasa hapa chini
+const { ButtonV2 } = require('../lib/messageBuilder'); 
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -69,17 +69,18 @@ async function tiktokCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
         // ==============================================
-        // 📤 SEND INTERACTIVE VIDEO WITH CTA BUTTON
+        // 📤 SEND INTERACTIVE VIDEO WITH CTA BUTTON (FIXED)
         // ==============================================
         try {
             const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
+            
+            // FIXED: Tunageuza video kuwa Buffer kwanza ili isikwame WhatsApp
+            const videoBuffer = await getBuffer(tikData.url);
 
             await new ButtonV2(sock)
                 .setBody(captionText)
                 .setFooter('MICKEY BOT')
-                // Kutumia video ya mtandaoni moja kwa moja kama media ya button
-                .setVideo(tikData.url) 
-                // Kuongeza Kitufe cha Interactive (CTA Link Button) chini ya video
+                .setVideo(videoBuffer) // Sasa inatuma kama Buffer (Salama 100%)
                 .addRawButton({
                     buttonText: { displayText: 'Nenda YouTube 📺' },
                     type: 1,
@@ -87,7 +88,7 @@ async function tiktokCommand(sock, chatId, message) {
                         name: 'cta_url',
                         paramsJson: JSON.stringify({
                             display_text: 'Fungua YouTube',
-                            url: 'https://youtube.com' // Weka link yako ya YouTube hapa
+                            url: 'https://youtube.com'
                         })
                     }
                 })
