@@ -4,6 +4,7 @@ const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
 const { pipeline } = require('stream');
 const { promisify } = require('util');
+const { ButtonV2 } = require('../lib/messageBuilder');
 
 const streamPipeline = promisify(pipeline);
 const TEMP_DIR = path.join(process.cwd(), 'tmp');
@@ -157,9 +158,6 @@ async function tiktokCommand(sock, chatId, message) {
         try {
             const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
             const audioButtonId = `.tiktok_audio ${encodeURIComponent(url)}`;
-            const buttons = [
-                { buttonId: audioButtonId, buttonText: { displayText: 'Audio' }, type: 1 }
-            ];
 
             await sock.sendMessage(chatId, {
                 video: { url: tikData.url },
@@ -167,11 +165,14 @@ async function tiktokCommand(sock, chatId, message) {
                 caption: captionText
             }, { quoted: message });
 
-            await sock.sendMessage(chatId, {
-                text: '🎧 Bonyeza kitufe hapa kupata sauti ya TikTok.',
-                footer: 'Audio inatoka kwa video uliyoiweka',
-                buttons
-            }, { quoted: message });
+            const buttonCard = new ButtonV2(sock)
+                .setTitle('TikTok Downloader')
+                .setSubtitle(tikData.nickname || 'TikTok Author')
+                .setBody('Bonyeza kitufe hapa kupata sauti ya TikTok')
+                .footer('Audio inatoka kwa video uliyoiweka')
+                .addButton('Audio', audioButtonId);
+
+            await buttonCard.send(chatId, { quoted: message, fallbackText: 'Bonyeza Audio ili kupakua sauti ya TikTok' });
         } catch (err) {
             console.error('Button send error:', err.message);
             await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana au link imeharibika.' });
