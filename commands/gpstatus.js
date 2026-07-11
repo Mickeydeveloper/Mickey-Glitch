@@ -258,11 +258,12 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
         // Check if message is quoted
         if (!contextInfo || !contextInfo.quotedMessage) {
             await sock.sendMessage(chatId, {
-                text: '📸 *Usage:* Reply to a media with `.gpstatus` to post it on your Status/Stories.\n\n' +
+                text: '📸 *Usage:* Reply to a media with `.gpstatus` to post it to WhatsApp Stories.\n\n' +
                       '📌 *Options:*\n' +
-                      '• `.gpstatus group` - Post to group members only\n' +
-                      '• `.gpstatus viewonce` - Post as view once status\n' +
-                      '• `.gpstatus both` - Post to both status and group\n\n' +
+                      '• `.gpstatus stories` - Post to Stories (default)\n' +
+                      '• `.gpstatus group` - Share only with group members\n' +
+                      '• `.gpstatus both` - Post to Stories and group members\n' +
+                      '• `.gpstatus viewonce` - Post as a view once Story\n\n' +
                       '• `.gpstatus help` - Show detailed help'
             }, { quoted: message });
             return;
@@ -293,11 +294,9 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
         
         // Parse arguments safely
         const firstArg = args && args.length > 0 ? args[0].toLowerCase() : '';
-        const secondArg = args && args.length > 1 ? args[1].toLowerCase() : '';
-        
-        const isGroupMode = firstArg === 'group' || firstArg === 'both';
-        const isStatusMode = firstArg === 'status' || firstArg === 'both' || firstArg === '';
-        const isViewOnce = firstArg === 'viewonce' || secondArg === 'viewonce';
+        const isGroupMode = ['group', 'both'].includes(firstArg);
+        const isStatusMode = ['status', 'stories', 'both', ''].includes(firstArg);
+        const isViewOnce = args.some(arg => arg.toLowerCase() === 'viewonce');
         
         // Send processing message
         await sock.sendMessage(chatId, { 
@@ -315,7 +314,7 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
         if (isStatusMode) {
             try {
                 await postToWhatsAppStatus(sock, mediaBuffer, caption, mediaType, { viewOnce: isViewOnce });
-                results.push('✅ *WhatsApp Status:* Posted successfully!');
+                results.push('✅ *WhatsApp Stories:* Posted successfully!');
                 success = true;
             } catch (err) {
                 results.push(`❌ *WhatsApp Status:* Failed - ${err.message}`);
@@ -354,7 +353,7 @@ async function gpstatusCommand(sock, chatId, message, args = []) {
         const emoji = success ? '✅' : '❌';
         
         await sock.sendMessage(chatId, { 
-            text: `${emoji} *Status Post Complete*\n\n${finalMessage}\n\n💡 Tip: Use .gpstatus help for more options`
+            text: `${emoji} *Story Update Complete*\n\n${finalMessage}\n\n💡 Tip: Use .gpstatus help for more options` 
         }, { quoted: message });
         
     } catch (err) {
