@@ -60,6 +60,17 @@ function extractText(m) {
     } catch (e) { return ''; }
 }
 
+function getSenderName(m) {
+    const pushName = m?.pushName || m?.message?.pushName;
+    if (pushName && pushName.trim()) return pushName.trim();
+    const participant = m?.key?.participant || m?.key?.remoteJid;
+    if (participant) {
+        const namePart = participant.split('@')[0];
+        if (namePart && namePart !== 'status' && namePart !== '0') return namePart;
+    }
+    return 'Mteja';
+}
+
 // --- MAIN CHATBOT HANDLER ---
 async function handleChatbotMessage(sock, chatId, m) {
     try {
@@ -74,7 +85,9 @@ async function handleChatbotMessage(sock, chatId, m) {
 
         if (!enabled) return;
 
-        console.log(`\x1b[36m🤖 [MICKEY AI]:\x1b[0m ${userText.substring(0, 40)}...`);
+        const botName = sock?.user?.name || 'MICKEY';
+        const senderName = getSenderName(m);
+        console.log(`\x1b[36m🤖 [${botName} AI]:\x1b[0m ${senderName}: ${userText.substring(0, 40)}...`);
 
         let memory = loadMemory();
         if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
@@ -85,15 +98,16 @@ async function handleChatbotMessage(sock, chatId, m) {
         if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
 
         const history = memory[chatId].chats
-            .map(msg => `${msg.role === 'user' ? 'Mteja' : 'Mickey'}: ${msg.content}`)
+            .map(msg => `${msg.role === 'user' ? senderName : botName}: ${msg.content}`)
             .join("\n");
 
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (e) {}
 
-        const systemPrompt = `Wewe unaitwa MICKEY, ni developer na C.E.O wa Mickey Glitch . 
-        PERSONA: Ongea kishkaji (Tanzanian Slang kiasi kama 'fresh', 'niaje', 'mambo vipi'). USISAHAU: Wewe siyo AI, wewe ni Mickey. Jibu kifupi na kishkaji.
-        KNOWLEDGE: Bot ni Mickey Glitch V3, imeundwa na Mickdadi Hamza (Mickey Developer). Inadownload kila kitu na ina AI na una website ya kuuza server kwa ajili ya kuhost bot link yake hii https://mickey-pterodacty.vercel.app ikiwa mtu atataka kujua kuhusu server au akitaka bot.
-        RULES: Usitumie 'bro' au 'sister'. Ukikwama, au kukiwa na utata unawajuza ngoja tungu unganishe na mtoa huduma akija atauona ujumbe wako a andike tatizo lake na namba ya simu pi kujiunga na group la support. Be chill.`;
+        const systemPrompt = `Wewe ni ${botName}, chatbot wa Mickey Glitch. Unajua jina la mtu anayezungumza na wewe na unamjibu kwa mtindo wa kawaida wa binadamu.
+PERSONA: Jibu kwa kifupi, kwa ucheshi, na kwa nguvu za sasa. Tumia maneno ya kawaida ya mazungumzo, iwe friendly lakini iwe mtaalam.
+KNOWLEDGE: Bot ni Mickey Glitch V3, ina AI, inasaidia downloads, server hosting, bot setup, na maswali ya huduma. Ikiwa mteja anauliza server au hosting, toa link ya website: https://mickey-pterodacty.vercel.app. Elezea kwa muundo wa kirahisi na uwe na hatua kwa hatua kama mtu anaomba msaada.
+PERSONALIZATION: Mtumiaji anaitwa ${senderName}. Mwandike majibu kwa mtindo unaomfanya ajisikie umeelewa, tumia jina lake pale inafaa, na usionekane kama bot wa kawaida.
+RULES: Usitumie 'bro' au 'sister'. Kama hujui jibu, sema wazi 'Niaje, ngoja nikupeleke kwa mtoa huduma.' Au 'Niko hapa kusaidia, twende hatua kwa hatua.' Usipe taarifa zisizo sahihi. Endelea kuwa mnene kidogo, friendly, na direct.`;
 
         const fullPrompt = `SYSTEM: ${systemPrompt}\n\nSTORY:\n${history}\n\nUSER: ${userText}\nMICKEY:`;
         const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
