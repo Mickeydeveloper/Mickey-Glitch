@@ -1,5 +1,7 @@
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
+const util = require('util');
 const { saveCustomCommand } = require('../lib/customCommands');
 
 function resolveCommandPath(commandName) {
@@ -34,43 +36,147 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         }
 
         const input = (rawText || fullText || '').toString();
-        const match = input.match(/^\.run\s+([a-z0-9_\-]+)\s*(.*)$/is);
-        if (!match) {
+        const body = input.replace(/^\.run\b/i, '').trim();
+        const quotedMessage = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+        const quotedCode = quotedMessage?.conversation || quotedMessage?.extendedTextMessage?.text || quotedMessage?.imageMessage?.caption || quotedMessage?.videoMessage?.caption || '';
+
+        if (!body && !quotedCode) {
             await sock.sendMessage(chatId, {
-                text: '🛠️ Usage:\n.run <command_name> [args]\n\nExample:\n.run mycommand arg1 arg2'
+                text: '🛠️ Usage:\n• Reply to a code message and send .run\n• Or send .run <javascript code>\n• Or send .run <command_name> [args] to run a command file.'
             }, { quoted: message });
             return;
         }
 
-        const commandName = match[1].trim();
-        const argsText = (match[2] || '').trim();
-        const args = argsText ? argsText.split(/\s+/) : [];
+        // If the user replied to code, execute the quoted message content.
+        if (quotedCode) {
+            const codeText = quotedCode.toString().trim();
+            const args = body ? body.split(/\s+/) : [];
+            const runSandbox = {
+                sock,
+                chatId,
+                message,
+                args,
+                console: {
+                    log: (...values) => runSandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
+                    error: (...values) => runSandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
+                },
+                util,
+                require,
+                process,
+                Buffer,
+                __dirname: process.cwd(),
+                __filename: path.join(process.cwd(), 'runCommand.js'),
+                module: { exports: {} },
+                exports: {},
+                setTimeout,
+                setInterval,
+                clearTimeout,
+                clearInterval,
+                Promise,
+                Date,
+                Math,
+                String,
+                Number,
+                Boolean,
+                Array,
+            };
+            runSandbox.__logs = [];
+
+            try {
+                const script = new vm.Script(codeText, { filename: 'runCommand.js' });
+                const context = vm.createContext(runSandbox);
+                let result = script.runInContext(context, { timeout: 5000 });
+                if (result && typeof result.then === 'function') result = await result;
+                if (result === undefined && typeof runSandbox.module?.exports === 'function') {
+                    result = await runSandbox.module.exports(sock, chatId, message, args, { senderId });
+                }
+
+                const output = result === undefined ? '✅ Code executed successfully.' : `✅ Code executed successfully.\nResult:\n${util.inspect(result, { depth: 2 })}`;
+                const logs = runSandbox.__logs.length ? `\n\nLogs:\n${runSandbox.__logs.join('\n')}` : '';
+                await sock.sendMessage(chatId, { text: `${output}${logs}` }, { quoted: message });
+            } catch (execError) {
+                await sock.sendMessage(chatId, { text: `❌ Code execution error:\n${execError?.stack || execError?.message || execError}` }, { quoted: message });
+            }
+            return;
+        }
+
+        // If body starts with an existing command file name, run that command file.
+        const parts = body.split(/\s+/);
+        const commandName = parts[0];
         const commandPath = resolveCommandPath(commandName);
+        if (commandPath) {
+            const args = parts.slice(1);
+            let commandModule;
+            try {
+                commandModule = loadCommandModule(commandPath);
+            } catch (loadError) {
+                await sock.sendMessage(chatId, { text: `❌ Failed to load command file:\n${loadError?.message || loadError}` }, { quoted: message });
+                return;
+            }
 
-        if (!commandPath) {
-            await sock.sendMessage(chatId, { text: `❌ Command file not found: ${commandName}` }, { quoted: message });
+            const handler = findHandler(commandModule);
+            if (!handler) {
+                await sock.sendMessage(chatId, { text: `❌ No runnable handler found in ${commandName}.js` }, { quoted: message });
+                return;
+            }
+
+            try {
+                await handler(sock, chatId, message, args, { senderId, commandName });
+                await sock.sendMessage(chatId, { text: `✅ Command .${commandName} ran successfully.` }, { quoted: message });
+            } catch (execError) {
+                await sock.sendMessage(chatId, { text: `❌ Command .${commandName} failed:\n${execError?.stack || execError?.message || execError}` }, { quoted: message });
+            }
             return;
         }
 
-        let commandModule;
+        // Otherwise execute body as inline JavaScript code.
+        const codeText = body;
+        const args = [];
+        const runSandbox = {
+            sock,
+            chatId,
+            message,
+            args,
+            console: {
+                log: (...values) => runSandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
+                error: (...values) => runSandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
+            },
+            util,
+            require,
+            process,
+            Buffer,
+            __dirname: process.cwd(),
+            __filename: path.join(process.cwd(), 'runCommand.js'),
+            module: { exports: {} },
+            exports: {},
+            setTimeout,
+            setInterval,
+            clearTimeout,
+            clearInterval,
+            Promise,
+            Date,
+            Math,
+            String,
+            Number,
+            Boolean,
+            Array,
+        };
+        runSandbox.__logs = [];
+
         try {
-            commandModule = loadCommandModule(commandPath);
-        } catch (loadError) {
-            await sock.sendMessage(chatId, { text: `❌ Failed to load command file:\n${loadError?.message || loadError}` }, { quoted: message });
-            return;
-        }
+            const script = new vm.Script(codeText, { filename: 'runCommand.js' });
+            const context = vm.createContext(runSandbox);
+            let result = script.runInContext(context, { timeout: 5000 });
+            if (result && typeof result.then === 'function') result = await result;
+            if (result === undefined && typeof runSandbox.module?.exports === 'function') {
+                result = await runSandbox.module.exports(sock, chatId, message, args, { senderId });
+            }
 
-        const handler = findHandler(commandModule);
-        if (!handler) {
-            await sock.sendMessage(chatId, { text: `❌ No runnable handler found in ${commandName}.js` }, { quoted: message });
-            return;
-        }
-
-        try {
-            await handler(sock, chatId, message, args, { senderId, commandName, argsText });
-            await sock.sendMessage(chatId, { text: `✅ Command .${commandName} ran successfully.` }, { quoted: message });
+            const output = result === undefined ? '✅ Code executed successfully.' : `✅ Code executed successfully.\nResult:\n${util.inspect(result, { depth: 2 })}`;
+            const logs = runSandbox.__logs.length ? `\n\nLogs:\n${runSandbox.__logs.join('\n')}` : '';
+            await sock.sendMessage(chatId, { text: `${output}${logs}` }, { quoted: message });
         } catch (execError) {
-            await sock.sendMessage(chatId, { text: `❌ Command .${commandName} failed:\n${execError?.message || execError}` }, { quoted: message });
+            await sock.sendMessage(chatId, { text: `❌ Code execution error:\n${execError?.stack || execError?.message || execError}` }, { quoted: message });
         }
     } catch (error) {
         console.error('runCommand error:', error);
