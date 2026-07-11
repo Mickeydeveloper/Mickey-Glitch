@@ -4,10 +4,19 @@
  */
 
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys'); // au `@adiwajshing/baileys` kulingana na lib yako
+const { Button } = require('../lib/messageBuilder');
 const moment = require('moment-timezone');
+
+const normalizeIncomingMessage = (m) => {
+    if (!m) return { messages: [] };
+    if (Array.isArray(m.messages)) return m;
+    if (m.message) return { messages: [m] };
+    return { messages: [] };
+};
 
 module.exports = async (sock, m, chatUpdate) => {
     try {
+        m = normalizeIncomingMessage(m);
         if (!m.messages || m.messages.length === 0) return;
         const msg = m.messages[0];
         if (!msg.message) return;
@@ -98,7 +107,28 @@ module.exports = async (sock, m, chatUpdate) => {
             else if (command === 'owner') {
                 await sock.sendMessage(chatId, { text: `👑 *Mickey Glitch Owner:* t.me/QuantumBase` }, { quoted: msg });
             }
-
+            // Booking confirmation pattern using new Button() builder
+            else if (command === 'booking') {
+                await new Button(sock)
+                    .setTitle('Booking Confirmation')
+                    .setSubtitle('Confirm your booking')
+                    .setBody('Please confirm your booking details below.')
+                    .setFooter('Thank you for choosing our service')
+                    .addButton('booking_confirmation', {
+                        display_text: 'Confirm Booking',
+                        id: '.booking_confirmation',
+                        booking_id: 'abc123',
+                        price: '5000',
+                        currency: 'TZS',
+                        service: 'Audio Delivery',
+                        date: '2026-07-15',
+                        time: '14:00',
+                        user_name: 'John Doe',
+                        user_phone: '+255712345678',
+                        comment: 'Please deliver in high quality audio.'
+                    })
+                    .send(chatId, { quoted: msg });
+            }
             // Hapa ndipo codes zako nyingine za commands (kama .ping, .sticker) zinapoendelea...
             // console.log(`Executing Command: ${command}`);
         }

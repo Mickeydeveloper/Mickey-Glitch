@@ -1170,6 +1170,16 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await serverCommand(sock, chatId, message, userMessage);
                 commandExecuted = true;
                 break;
+            case userMessage === '.booking_confirmation':
+                await sock.sendMessage(chatId, {
+                    text: `✅ *Booking Confirmed!*
+
+Your booking has been received and confirmed.
+
+We will process it and send you an update shortly.`
+                }, { quoted: message });
+                commandExecuted = true;
+                break;
             case userMessage === '.topmembers':
                 topMembers(sock, chatId, isGroup);
                 commandExecuted = true;
