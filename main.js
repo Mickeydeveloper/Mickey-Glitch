@@ -1314,6 +1314,10 @@ We will process it and send you an update shortly.`
                 await staffCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
+            case userMessage === '.booking':
+                await serverCommand(sock, chatId, message, '.server booking');
+                commandExecuted = true;
+                break;
             case userMessage.startsWith('.tourl') || userMessage.startsWith('.url'):
                 await urlCommand(sock, chatId, message);
                 commandExecuted = true;
