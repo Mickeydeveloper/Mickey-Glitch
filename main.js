@@ -414,7 +414,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     return;
                 } else if (selectedId && selectedId.startsWith('.')) {
                     console.log(`🔄 Button command intercepted: ${selectedId}`);
-                    userMessage = selectedId.toLowerCase();
+                    userMessage = selectedId;
                 } else {
                     // Try auto-detection of command IDs from other formats
                     const autoCmd = autoDetectButtonCommand(message);
@@ -1474,6 +1474,14 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.video') || userMessage.startsWith('.ytmp4'):
                 await videoCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.tiktok_audio'):
+                {
+                    const rawArg = userMessage.replace(/\.tiktok_audio\s*/i, '').trim();
+                    const decoded = decodeURIComponent(rawArg || '');
+                    await tiktokCommand.audio(sock, chatId, message, decoded);
+                }
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.tiktok') || userMessage.startsWith('.tt'):

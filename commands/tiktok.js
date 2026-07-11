@@ -1,4 +1,13 @@
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
+const ffmpeg = require('fluent-ffmpeg');
+const { pipeline } = require('stream');
+const { promisify } = require('util');
+const { ButtonV2 } = require('../lib/messageBuilder');
+
+const streamPipeline = promisify(pipeline);
+const TEMP_DIR = path.join(process.cwd(), 'tmp');
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -22,6 +31,36 @@ async function tryRequest(getter, attempts = 3) {
 }
 
 // Function ya kupata data kutoka kwenye API
+async function ensureTempDir() {
+    if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
+
+async function downloadToFile(url, destPath) {
+    const response = await axios.get(url, { ...AXIOS_DEFAULTS, responseType: 'stream' });
+    await streamPipeline(response.data, fs.createWriteStream(destPath));
+}
+
+async function extractAudioFromVideo(videoUrl, audioPath) {
+    await ensureTempDir();
+    const tempVideoPath = path.join(TEMP_DIR, `tiktok_video_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
+
+    try {
+        await downloadToFile(videoUrl, tempVideoPath);
+        await new Promise((resolve, reject) => {
+            ffmpeg(tempVideoPath)
+                .noVideo()
+                .audioCodec('libmp3lame')
+                .audioBitrate('128k')
+                .format('mp3')
+                .save(audioPath)
+                .on('end', resolve)
+                .on('error', reject);
+        });
+    } finally {
+        try { fs.unlinkSync(tempVideoPath); } catch (e) {}
+    }
+}
+
 async function getTiktokDownload(url) {
     const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/tiktok?url=${encodeURIComponent(url)}`;
     const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
@@ -40,6 +79,54 @@ async function getTiktokDownload(url) {
         nickname: d.author?.nickname,
         thumbnail: d.thumbnail 
     };
+}
+
+async function tiktokAudioCommand(sock, chatId, message, url) {
+    try {
+        const tiktokUrl = (url || '').trim();
+        if (!tiktokUrl || !tiktokUrl.includes('tiktok.com')) {
+            return await sock.sendMessage(chatId, {
+                text: '❌ Weka link ya TikTok au tumia kitufe cha Audio. Mfano: .tiktok_audio https://www.tiktok.com/@user/video/123'
+            }, { quoted: message });
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
+
+        let tikData;
+        try {
+            tikData = await getTiktokDownload(tiktokUrl);
+        } catch (err) {
+            console.error('Audio API Error:', err.message);
+            return await sock.sendMessage(chatId, { text: '❌ API imeshindwa kupata TikTok. Jaribu tena baadaye.' }, { quoted: message });
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+
+        const audioPath = path.join(TEMP_DIR, `tiktok_audio_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`);
+        try {
+            await extractAudioFromVideo(tikData.url, audioPath);
+            await sock.sendMessage(chatId, {
+                audio: { url: audioPath },
+                mimetype: 'audio/mpeg',
+                fileName: 'tiktok-audio.mp3'
+            }, { quoted: message });
+        } catch (err) {
+            console.error('Audio conversion error:', err.message);
+            await sock.sendMessage(chatId, {
+                text: '❌ Hitilafu wakati wa kuunda audio. Jaribu tena baadaye.'
+            }, { quoted: message });
+            return;
+        } finally {
+            setTimeout(() => {
+                try { fs.unlinkSync(audioPath); } catch (e) {}
+            }, 30 * 1000);
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+    } catch (err) {
+        console.error('TikTok audio command error:', err.message);
+        await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Jaribu tena baadaye.' });
+    }
 }
 
 async function tiktokCommand(sock, chatId, message) {
@@ -66,20 +153,21 @@ async function tiktokCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
         // ==============================================
-        // 📤 MUUNDO WA NAMBA 2: VIDEO NA CAPTION PEKEE
+        // 📤 MUUNDO WA NAMBA 2: VIDEO NA BUTTON AUDIO
         // ==============================================
         try {
             const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
+            const audioButtonId = `.tiktok_audio ${encodeURIComponent(url)}`;
 
-            // Inatuma video safi ya moja kwa moja bila errors za toleo la WhatsApp
-            await sock.sendMessage(chatId, {
-                video: { url: tikData.url },
-                mimetype: 'video/mp4',
-                caption: captionText
-            }, { quoted: message });
+            const buttonCard = new ButtonV2(sock)
+                .text(captionText)
+                .footer('Bonyeza Audio ili kupakua sauti ya TikTok')
+                .setMedia({ video: { url: tikData.url }, mimetype: 'video/mp4' })
+                .addButton('Audio', audioButtonId);
 
+            await buttonCard.send(chatId, { quoted: message, fallbackText: captionText });
         } catch (err) {
-            console.error("Standard Send Error:", err.message);
+            console.error('Button send error:', err.message);
             await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana au link imeharibika.' });
             return;
         }
@@ -93,3 +181,4 @@ async function tiktokCommand(sock, chatId, message) {
 }
 
 module.exports = tiktokCommand;
+module.exports.audio = tiktokAudioCommand;
