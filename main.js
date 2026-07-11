@@ -179,7 +179,7 @@ const stickerAltCommand = require('./commands/sticker-alt');
 const textCommand = require('./commands/text');
 const sourceCommand = require('./commands/source');
 const profileCardModule = require('./commands/profilecard');
-const addcmdCommand = require('./commands/addcmd');
+const { cmdaddCommand, runCommand } = require('./commands/addcmd');
 const { getCustomCommandHandler, loadCustomCommands, getCustomCommandNames } = require('./lib/customCommands');
 
 function loadAutoRegisteredCommands() {
@@ -1424,7 +1424,11 @@ We will process it and send you an update shortly.`
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.cmdadd'):
-                await addcmdCommand(sock, chatId, senderId, userMessage, message, rawText);
+                await cmdaddCommand(sock, chatId, senderId, userMessage, message, rawText);
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.run'):
+                await runCommand(sock, chatId, senderId, userMessage, message, rawText);
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.antidelete'):
