@@ -213,9 +213,25 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
     }
 };
 
+const getAllCommands = () => {
+    const menuData = loadDynamicMenu();
+    return menuData.flatMap(cat => cat.items.map(item => item.cmd.replace(/^[.]/, '').trim()));
+};
+
+const getCategories = () => {
+    const menuData = loadDynamicMenu();
+    return menuData.map(cat => ({
+        title: cat.title,
+        icon: cat.icon,
+        commands: cat.items.map(item => item.cmd.replace(/^[.]/, '').trim())
+    }));
+};
+
 module.exports = menuCommand;
 module.exports.loadDynamicMenu = loadDynamicMenu;
 module.exports.getSystemStats = getSystemStats;
+module.exports.getAllCommands = getAllCommands;
+module.exports.getCategories = getCategories;
 
 if (typeof global !== 'undefined') {
     setInterval(() => {

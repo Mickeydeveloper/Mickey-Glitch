@@ -184,9 +184,10 @@ const { getCustomCommandHandler, loadCustomCommands, getCustomCommandNames } = r
 
 function loadAutoRegisteredCommands() {
     const commandMap = new Map();
+    const commandMeta = new Map();
     const commandsDir = path.join(__dirname, 'commands');
 
-    if (!fs.existsSync(commandsDir)) return commandMap;
+    if (!fs.existsSync(commandsDir)) return { commandMap, commandMeta };
 
     const files = fs.readdirSync(commandsDir)
         .filter((file) => file.endsWith('.js') && !file.startsWith('.'))
@@ -202,6 +203,8 @@ function loadAutoRegisteredCommands() {
 
             const names = [];
             const fallbackName = path.basename(file, '.js').toLowerCase();
+            const description = typeof mod.description === 'string' ? mod.description : '';
+            const category = typeof mod.category === 'string' ? mod.category : '';
 
             if (typeof mod === 'function') {
                 const fnName = (mod.name || '').trim().toLowerCase();
@@ -227,9 +230,22 @@ function loadAutoRegisteredCommands() {
             if (!names.length) continue;
 
             const handler = normalizeBotCommand(mod);
-            names.filter((name, index) => names.indexOf(name) === index).forEach((name) => {
+            if (!handler) continue;
+
+            const uniqueNames = names.filter((name, index) => names.indexOf(name) === index);
+            uniqueNames.forEach((name) => {
                 if (!commandMap.has(name)) {
                     commandMap.set(name, handler);
+                }
+                if (!commandMeta.has(name)) {
+                    commandMeta.set(name, {
+                        name,
+                        primary: fallbackName,
+                        aliases: uniqueNames.filter((n) => n !== name),
+                        description,
+                        category,
+                        file,
+                    });
                 }
             });
         } catch (error) {
@@ -237,10 +253,15 @@ function loadAutoRegisteredCommands() {
         }
     }
 
-    return commandMap;
+    return { commandMap, commandMeta };
 }
 
-const autoRegisteredCommands = loadAutoRegisteredCommands();
+const { commandMap: autoRegisteredCommands, commandMeta: autoRegisteredCommandMeta } = loadAutoRegisteredCommands();
+
+global.commands = global.commands || {};
+for (const [name, meta] of autoRegisteredCommandMeta.entries()) {
+    global.commands[name] = { ...(global.commands[name] || {}), ...meta };
+}
 
 function normalizeBotCommand(commandModule) {
     if (typeof commandModule === 'function') {
@@ -415,15 +436,23 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 } else if (selectedId && selectedId.startsWith('.')) {
                     console.log(`🔄 Button command intercepted: ${selectedId}`);
                     userMessage = selectedId;
-                } else {
-                    // Try auto-detection of command IDs from other formats
-                    const autoCmd = autoDetectButtonCommand(message);
-                    if (autoCmd) {
-                        console.log(`🔍 Auto-detected command from interactive payload: ${autoCmd}`);
-                        userMessage = autoCmd;
+                } else if (selectedId) {
+                    const normalizedSelected = selectedId.toString().trim().toLowerCase();
+                    const isKnownCommand = (global.commands && global.commands[normalizedSelected]) || autoRegisteredCommands.has(normalizedSelected);
+
+                    if (isKnownCommand) {
+                        console.log(`🔄 Button command resolved without dot: .${normalizedSelected}`);
+                        userMessage = `.${normalizedSelected}`;
                     } else {
-                        console.log(`⚠️ Unhandled interactive ID: ${selectedId}`);
-                        return;
+                        // Try auto-detection of command IDs from other formats
+                        const autoCmd = autoDetectButtonCommand(message);
+                        if (autoCmd) {
+                            console.log(`🔍 Auto-detected command from interactive payload: ${autoCmd}`);
+                            userMessage = autoCmd;
+                        } else {
+                            console.log(`⚠️ Unhandled interactive ID: ${selectedId}`);
+                            return;
+                        }
                     }
                 }
             }
