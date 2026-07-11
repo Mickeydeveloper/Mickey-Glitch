@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 const moment = require('moment-timezone');
 const { ButtonV2 } = require('../lib/messageBuilder');
 const os = require('os');
@@ -127,6 +128,48 @@ const loadDynamicMenu = (showAll = true) => {
         }));
 };
 
+const Catalog = {
+    key: {
+        remoteJid: '0@s.whatsapp.net',
+        fromMe: false,
+        id: 'Mickeycatalog',
+        participant: '0@s.whatsapp.net'
+    },
+    message: {
+        productMessage: {
+            product: {
+                title: 'MICKEY GLITCH V3.0.5',
+                description: 'MICKEY GLITCH V3.0.5 - The Ultimate WhatsApp Bot',
+                currencyCode: 'BTC',
+                priceAmount1000: 100000000,
+                retailerId: 'BTC100000000',
+                productImageCount: 1
+            },
+            businessOwnerJid: '0@s.whatsapp.net'
+        }
+    }
+};
+
+const sendAudio = async (sock, chatId, m) => {
+    try {
+        const audioUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3';
+        const response = await axios.get(audioUrl, {
+            responseType: 'arraybuffer',
+            timeout: 15000
+        });
+
+        await sock.sendMessage(chatId, {
+            audio: Buffer.from(response.data),
+            mimetype: 'audio/mp3',
+            ptt: false
+        }, {
+            quoted: m
+        });
+    } catch (err) {
+        console.error('[Menu Audio] Failed to send audio:', err?.message || err);
+    }
+};
+
 const getGreeting = (hour) => {
     if (hour >= 0 && hour <= 4) return { text: 'Usiku sana', emoji: '🌙' };
     if (hour >= 5 && hour <= 11) return { text: 'Asubuhi', emoji: '☀️' };
@@ -204,6 +247,8 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                 }
             })
             .send(chatId, { quoted: m });
+
+            await sendAudio(sock, chatId, m);
 
     } catch (e) {
         console.error('Menu Error:', e);
