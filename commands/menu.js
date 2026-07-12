@@ -135,7 +135,6 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
-// FIXED: `id` sasa inabaki kuwa amri kamili yenye nukta (mfano: .general) ili ikibonyezwa itume command husika moja kwa moja!
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
         title: `${cat.icon} ${cat.title}`,
@@ -143,7 +142,7 @@ const buildSections = (menuData) => {
         rows: cat.items.slice(0, 15).map(item => ({
             title: item.cmd,
             description: item.desc ? item.desc.substring(0, 20) : '',
-            id: item.cmd // Inatuma kodi halisi kama ilivyo (e.g. .ping au .sticker)
+            id: item.cmd 
         }))
     }));
 };
@@ -158,8 +157,8 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const userName = m.pushName || 'User';
         const greeting = getGreeting(hour);
         const menuData = loadDynamicMenu();
-        
-        const date = now.format('DD July 2026'); 
+
+        const date = now.format('DD MMMM YYYY'); 
         const time = now.format('HH:mm:ss');
 
         const menuText = `✨ *MICKEY GLITCH V3.0.5*
@@ -171,14 +170,14 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 ❤️ _i love mom_`;
 
         // ==============================================
-        // 📤 SEND INTERACTIVE MENU (ROW OF 2 BUTTONS FIXED)
+        // 📤 SEND INTERACTIVE MENU (STRUCTURE KEPT AS ORIGINAL)
         // ==============================================
         await new ButtonV2(sock)
             .setBody(menuText)
             .setFooter(`MICKEY BOT`)
-            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png
-')
-            // Row Button 1: Dynamic Single Select List Menu
+            // FIXED: URL ya picha sasa imenyooka kwenye mstari mmoja bila kukatika
+            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png')
+            // Row Button 1: List Menu (Original format)
             .addRawButton({
                 buttonText: { displayText: 'Menu 📂' },
                 buttonId: 'mickey_list_menu',
@@ -191,10 +190,10 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                     })
                 }
             })
-            // FIXED BUTTON 2: Muundo sahihi wa Quick Reply unaoondoa error ya WhatsApp toleo jipya
+            // FIXED BUTTON 2: Muundo wa RawButton ulioboreshwa ili ubonyezeke bila kugonga error WhatsApp
             .addRawButton({
                 buttonText: { displayText: 'Owner 👑' },
-                buttonId: '.owner', // Unajaza command hapa moja kwa moja kama ID yake
+                buttonId: '.owner', 
                 type: 1,
                 nativeFlowInfo: {
                     name: 'quick_reply',
