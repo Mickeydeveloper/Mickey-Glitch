@@ -5,6 +5,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const { pipeline } = require('stream');
 const { promisify } = require('util');
 const { generateWAMessageFromContent } = require('@whiskeysockets/baileys'); // Hakikisha ume-import hii kabla ya kuanza
+const { Button } = require('../lib/messageBuilder');
 
 const streamPipeline = promisify(pipeline);
 const TEMP_DIR = path.join(process.cwd(), 'tmp');
@@ -156,25 +157,13 @@ async function tiktokCommand(sock, chatId, message) {
                 caption: captionText
             }, { quoted: message });
 
-            // 2. Tuma Button tupu kwa kutumia Template Message (Haina Location!)
-            const templateMsg = generateWAMessageFromContent(chatId, {
-                templateMessage: {
-                    hydratedTemplate: {
-                        hydratedContentText: "Bonyeza kitufe hapa chini kupata sauti (Audio) ya video hii.",
-                        hydratedFooterText: `TikTok Author: ${tikData.nickname || 'N/A'}`,
-                        hydratedButtons: [
-                            {
-                                quickReplyButton: {
-                                    displayText: '🎵 Audio',
-                                    id: audioButtonId
-                                }
-                            }
-                        ]
-                    }
-                }
-            }, { userJid: sock.user.id, quoted: message });
+            // 2. Tuma button ya audio kwa kutumia non-v2 MessageBuilder
+            const button = new Button(sock)
+                .setBody('Bonyeza kitufe hapa chini kupata sauti (Audio) ya video hii.')
+                .setFooter(`TikTok Author: ${tikData.nickname || 'N/A'}`)
+                .addReply('🎵 Audio', audioButtonId);
 
-            await sock.relayMessage(chatId, templateMsg.message, { messageId: templateMsg.key.id });
+            await button.send(chatId, { quoted: message });
 
         } catch (err) {
             console.error('Button send error:', err.message);
