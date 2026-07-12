@@ -176,7 +176,8 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         await new ButtonV2(sock)
             .setBody(menuText)
             .setFooter(`MICKEY BOT`)
-            .setThumbnail('https://cdn.ornzora.eu.cc/4d2905ce-3707-4ec0-998a-68a3d851629f-FIORA.jpg')
+            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png
+')
             // Row Button 1: Dynamic Single Select List Menu
             .addRawButton({
                 buttonText: { displayText: 'Menu 📂' },
