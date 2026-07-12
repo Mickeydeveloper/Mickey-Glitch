@@ -4,7 +4,9 @@ const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
 const { pipeline } = require('stream');
 const { promisify } = require('util');
-const { ButtonV2 } = require('../lib/messageBuilder');
+
+// 🔥 Imebadilishwa hapa kutumia @whiskeysockets/baileys rasmi
+const { prepareWAMessageMedia, generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 
 const streamPipeline = promisify(pipeline);
 const TEMP_DIR = path.join(process.cwd(), 'tmp');
@@ -30,7 +32,6 @@ async function tryRequest(getter, attempts = 3) {
     throw lastError;
 }
 
-// Function ya kupata data kutoka kwenye API
 async function ensureTempDir() {
     if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
@@ -86,7 +87,7 @@ async function tiktokAudioCommand(sock, chatId, message, url) {
         const tiktokUrl = (url || '').trim();
         if (!tiktokUrl || !tiktokUrl.includes('tiktok.com')) {
             return await sock.sendMessage(chatId, {
-                text: '❌ Weka link ya TikTok au tumia kitufe cha Audio. Mfano: .tiktok_audio https://www.tiktok.com/@user/video/123'
+                text: '❌ Weka link ya TikTok. Mfano: .tiktok_audio https://www.tiktok.com/@user/video/123'
             }, { quoted: message });
         }
 
@@ -153,30 +154,71 @@ async function tiktokCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
         // ==============================================
-        // 📤 MUUNDO WA NAMBA 2: SEND VIDEO THEN BUTTONS
+        // 🎬 GHOST KING FORMAT: PAIRED MEDIA FEATURE
         // ==============================================
         try {
-            const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
-            const audioButtonId = `.tiktok_audio ${encodeURIComponent(url)}`;
+            const captionText = `✨ *TIKTOK DOWNLOADER*\n\n➔ *Title* : ${tikData.title || 'No Title'}\n➔ *Author* : ${tikData.nickname || 'N/A'}\n➔ *Source* : ${url}\n\n💡 *Note:* Ili kupata audio, tumia command \`.tiktok_audio ${url}\``;
 
+            // 1. Pakia picha (Jalada) kuwa Mzazi (Parent)
+            const imageUploaded = await prepareWAMessageMedia(
+                { image: { url: tikData.thumbnail || "https://files.catbox.moe/77r1u2.jpg" } },
+                { upload: sock.waUploadToServer }
+            );
+
+            // 2. Pakia video yenyewe kuwa Mtoto (Child)
+            const videoUploaded = await prepareWAMessageMedia(
+                { video: { url: tikData.url } },
+                { upload: sock.waUploadToServer }
+            );
+
+            // 3. Jenga ujumbe mkuu wa Picha (Parent Message)
+            const pairedMsg = generateWAMessageFromContent(
+                chatId,
+                {
+                    imageMessage: {
+                        ...imageUploaded.imageMessage,
+                        caption: captionText,
+                        contextInfo: {
+                            pairedMediaType: 5,
+                            statusSourceType: 0
+                        }
+                    }
+                },
+                { userJid: sock.user.id, quoted: message }
+            );
+
+            // Tuma picha kwanza
+            await sock.relayMessage(chatId, pairedMsg.message, { messageId: pairedMsg.key.id });
+
+            // 4. Sukuma video ikiwa imeunganishwa na ile picha ya juu
+            await sock.relayMessage(
+                chatId,
+                {
+                    videoMessage: {
+                        ...videoUploaded.videoMessage,
+                        contextInfo: {
+                            pairedMediaType: 6,
+                            statusSourceType: 0
+                        }
+                    },
+                    messageContextInfo: {
+                        messageAssociation: {
+                            associationType: 12,
+                            parentMessageKey: pairedMsg.key
+                        }
+                    }
+                },
+                {}
+            );
+
+        } catch (err) {
+            console.error('Paired media send error:', err.message);
+            // Fallback ya usalama isipo-load vizuri
             await sock.sendMessage(chatId, {
                 video: { url: tikData.url },
                 mimetype: 'video/mp4',
-                caption: captionText
+                caption: `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`
             }, { quoted: message });
-
-            const buttonCard = new ButtonV2(sock)
-                .setTitle('TikTok Downloader')
-                .setSubtitle(tikData.nickname || 'TikTok Author')
-                .setBody('Bonyeza kitufe hapa kupata sauti ya TikTok')
-                .footer('Audio inatoka kwa video uliyoiweka')
-                .addButton('Audio', audioButtonId);
-
-            await buttonCard.send(chatId, { quoted: message, fallbackText: 'Bonyeza Audio ili kupakua sauti ya TikTok' });
-        } catch (err) {
-            console.error('Button send error:', err.message);
-            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Video inaweza kuwa kubwa sana au link imeharibika.' });
-            return;
         }
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
