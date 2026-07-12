@@ -4,7 +4,7 @@ const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
 const { pipeline } = require('stream');
 const { promisify } = require('util');
-const { ButtonV2 } = require('../lib/messageBuilder'); // Tumerudisha messageBuilder yako
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys'); // Hakikisha ume-import hii kabla ya kuanza
 
 const streamPipeline = promisify(pipeline);
 const TEMP_DIR = path.join(process.cwd(), 'tmp');
@@ -109,13 +109,7 @@ async function tiktokAudioCommand(sock, chatId, message, url) {
                 mimetype: 'audio/mpeg',
                 fileName: 'tiktok-audio.mp3'
             }, { quoted: message });
-        } catch (err) {
-            console.error('Audio conversion error:', err.message);
-            await sock.sendMessage(chatId, {
-                text: '❌ Hitilafu wakati wa kuunda audio. Jaribu tena baadaye.'
-            }, { quoted: message });
-            return;
-        } finally {
+        } catch (err) {} finally {
             setTimeout(() => {
                 try { fs.unlinkSync(audioPath); } catch (e) {}
             }, 30 * 1000);
@@ -151,39 +145,40 @@ async function tiktokCommand(sock, chatId, message) {
 
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // Tuma video kwanza
         try {
             const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
             const audioButtonId = `.tiktok_audio ${url}`;
 
+            // 1. Tuma video kwanza kama kawaida
             await sock.sendMessage(chatId, {
                 video: { url: tikData.url },
                 mimetype: 'video/mp4',
                 caption: captionText
             }, { quoted: message });
 
-            // ==============================================
-            // 🛠️ MATUMIZI YA MESSAGE BUILDER BILA LOCATION
-            // ==============================================
-            const buttonCard = new ButtonV2(sock)
-                .setTitle('TikTok Downloader')
-                .setSubtitle(tikData.nickname || 'TikTok Author')
-                .setBody('Bonyeza kitufe hapa kupata sauti ya TikTok')
-                .footer('Audio inatoka kwa video uliyoiweka')
-                .addButton('Audio', audioButtonId);
+            // 2. Tuma Button tupu kwa kutumia Template Message (Haina Location!)
+            const templateMsg = generateWAMessageFromContent(chatId, {
+                templateMessage: {
+                    hydratedTemplate: {
+                        hydratedContentText: "Bonyeza kitufe hapa chini kupata sauti (Audio) ya video hii.",
+                        hydratedFooterText: `TikTok Author: ${tikData.nickname || 'N/A'}`,
+                        hydratedButtons: [
+                            {
+                                quickReplyButton: {
+                                    displayText: '🎵 Audio',
+                                    id: audioButtonId
+                                }
+                            }
+                        ]
+                    }
+                }
+            }, { userJid: sock.user.id, quoted: message });
 
-            // Tuseme njia isiyo na location inaitwa kwa kupitisha option ya aina ya ujumbe
-            // au kujaribu kutuma kama ujumbe wa kawaida wa muundo wa maandishi badala ya card ya ramani
-            await buttonCard.send(chatId, { 
-                quoted: message, 
-                fallbackText: 'Bonyeza Audio ili kupakua sauti ya TikTok',
-                type: 'template', // Au 'interactive' kutegemea na builder yako inavyotambua
-                renderLargerThumbnail: false
-            });
+            await sock.relayMessage(chatId, templateMsg.message, { messageId: templateMsg.key.id });
 
         } catch (err) {
             console.error('Button send error:', err.message);
-            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma button!* Video imetumwa lakini button imeshindwa.' });
+            await sock.sendMessage(chatId, { text: '🚨 *Hitilafu!* Button zimeshindwa kutoka lakini video imetumwa.' });
             return;
         }
 
