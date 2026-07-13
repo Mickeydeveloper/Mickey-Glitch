@@ -58,14 +58,16 @@ global.themeemoji = '•';
 // ────────────────────────────────────────────────
 const SESSION_DIR = path.resolve(process.cwd(), 'session');
 const TEMP_DIR = path.resolve(process.cwd(), 'tmp');
+const ALT_TEMP_DIR = path.resolve(process.cwd(), 'temp');
 const CACHE_DIR = path.resolve(process.cwd(), 'cache');
 const MEDIA_DIR = path.resolve(process.cwd(), 'media');
 const SESSION_BACKUP_DIR = path.resolve(process.cwd(), 'session_backup');
 const CLEANUP_INTERVAL_MS = 39 * 60 * 1000;
 const OLD_SESSION_AGE_MS = 24 * 60 * 60 * 1000;
+const TEMP_FILE_AGE_MS = 60 * 60 * 1000;
 
 function ensureDirectories() {
-    [SESSION_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
+    [SESSION_DIR, CACHE_DIR, MEDIA_DIR, TEMP_DIR, ALT_TEMP_DIR, SESSION_BACKUP_DIR].forEach(dir => {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     });
 }
@@ -78,6 +80,35 @@ function removePathIfExists(targetPath) {
     } catch (err) {
         return false;
     }
+}
+
+function pruneDirectoryFiles(targetPath, maxAgeMs = TEMP_FILE_AGE_MS) {
+    if (!fs.existsSync(targetPath)) {
+        fs.mkdirSync(targetPath, { recursive: true });
+        return 0;
+    }
+
+    let removed = 0;
+    try {
+        const entries = fs.readdirSync(targetPath, { withFileTypes: true });
+        const now = Date.now();
+        entries.forEach(entry => {
+            const entryPath = path.join(targetPath, entry.name);
+            try {
+                const stats = fs.statSync(entryPath);
+                if (now - stats.mtimeMs > maxAgeMs) {
+                    if (entry.isDirectory()) {
+                        fs.rmSync(entryPath, { recursive: true, force: true });
+                    } else {
+                        fs.unlinkSync(entryPath);
+                    }
+                    removed++;
+                }
+            } catch (e) {}
+        });
+    } catch (err) {}
+
+    return removed;
 }
 
 function pruneOldSessionArtifacts() {
@@ -107,18 +138,17 @@ function pruneOldSessionArtifacts() {
 
 function autoClean() {
     try {
+        ensureDirectories();
+
         let removed = 0;
-        [TEMP_DIR, path.resolve(process.cwd(), 'temp'), SESSION_BACKUP_DIR].forEach(target => {
-            if (removePathIfExists(target)) removed++;
+        [TEMP_DIR, ALT_TEMP_DIR].forEach(target => {
+            removed += pruneDirectoryFiles(target);
         });
 
-        if (removePathIfExists(path.join(process.cwd(), 'error_logs.json'))) removed++;
-
-        ensureDirectories();
         const pruned = pruneOldSessionArtifacts();
 
         if (removed > 0 || pruned > 0) {
-            console.log(chalk.cyan(`▓▒░ [CLEANER] lightweight cleanup finished: removed ${removed} temp/session files and pruned ${pruned} old session artifacts.`));
+            console.log(chalk.cyan(`▓▒░ [CLEANER] lightweight cleanup finished: pruned ${removed} temp files and ${pruned} old session artifacts.`));
         }
     } catch (err) {
         console.log(chalk.dim(`  [CLEANER] lightweight cleanup skipped: ${err.message}`));
@@ -897,7 +927,14 @@ async function showHelp() {
 // ────────────────────────────────────────────────
 // INITIALIZATION ENTRYPOINT
 // ────────────────────────────────────────────────
+function isTempPathError(err) {
+    const message = (err?.message || String(err || '')).toLowerCase();
+    return message.includes('enoent') && (message.includes('/temp/') || message.includes('/tmp/') || message.includes('temp/') || message.includes('tmp/'));
+}
+
 async function initializeBot() {
+    ensureDirectories();
+
     // Check for help flags
     if (process.argv.includes('--help') || process.argv.includes('-h')) {
         await showHelp();
@@ -954,6 +991,12 @@ async function initializeBot() {
     process.on('uncaughtException', async (err) => {
         console.error(chalk.red('❌ Uncaught Exception:'), err);
         errorRecovery.logError(err, 'uncaughtException');
+
+        if (isTempPathError(err)) {
+            ensureDirectories();
+            UI.warning('🗂️ Temporary media directory issue detected; recreated temp paths and continuing...');
+            return;
+        }
 
         if (errorRecovery.shouldAutoFix(err)) {
             UI.info('🔄 Attempting auto-recovery from uncaught exception...');
