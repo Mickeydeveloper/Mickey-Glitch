@@ -597,8 +597,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
             try {
                 const firstToken = (userMessage.split(' ')[0] || '').replace(/[^a-z0-9\-_]/gi, '').toLowerCase();
                 const knownCommands = helpCommand.getAllCommands ? helpCommand.getAllCommands() : [];
-                if (firstToken && knownCommands.includes(firstToken)) {
-                    userMessage = '.' + userMessage; 
+                if (!userMessage.startsWith('.') && firstToken && knownCommands.includes(firstToken)) {
+                    userMessage = '.' + userMessage;
                 }
             } catch (e) {
                 // ignore
