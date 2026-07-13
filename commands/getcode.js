@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const { AIRich, createCtx } = require('../lib/messageBuilder');
+const { createCtx } = require('../lib/messageBuilder');
 
 async function getcodeCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
-    
+
     try {
         const fileName = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
 
@@ -16,9 +16,8 @@ async function getcodeCommand(sock, chatId, message, args) {
             return ctx.reply('❌ *Invalid path!*');
         }
 
-        // Tafuta file kwenye folder la commands
         let fileNameWithExt = fileName.endsWith('.js') ? fileName : `${fileName}.js`;
-        const filePath = path.join(process.cwd(), 'commands', fileNameWithExt); 
+        const filePath = path.join(process.cwd(), 'commands', fileNameWithExt);
 
         if (!fs.existsSync(filePath)) {
             return ctx.reply(`❌ *File not found!*\nPath: ${filePath}`);
@@ -26,17 +25,16 @@ async function getcodeCommand(sock, chatId, message, args) {
 
         const fileContent = fs.readFileSync(filePath, 'utf8');
         const fileSize = (fs.statSync(filePath).size / 1024).toFixed(2);
+        const preview = fileContent.length > 3000 ? `${fileContent.slice(0, 3000)}\n\n... (trimmed)` : fileContent;
 
-        // 🧠 Kutengeneza Kadi ya AI yenye Code Highlighting (AIRich Layout)
-        const richCode = new AIRich(sock)
-            .setTitle('💻 Code Viewer (Glitch Engine)')
-            .setFooter('Mickey Glitch')
-            .addCode('javascript', fileContent) // Inamwaga kodi ikiwa na rangi za ndani ya WhatsApp
-            .addTip(`📄 File: ${fileNameWithExt} | 📊 Size: ${fileSize} KB`) // Inaleta kiji-maelezo chini
-            .addSuggest(['Msaada → .menu']); // Pill ya haraka
+        const text = `💻 *Code Viewer (Glitch Engine)*\n\n` +
+            `📄 File: ${fileNameWithExt}\n` +
+            `📊 Size: ${fileSize} KB\n\n` +
+            '```javascript\n' +
+            `${preview}\n` +
+            '```';
 
-        // Tuma ujumbe ukiwa umetiwa Verified Badge (forwarded: true)
-        return await richCode.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
+        return await sock.sendMessage(ctx.chatId, { text }, { quoted: ctx._msg });
 
     } catch (e) {
         console.error('GetCode Error:', e);
