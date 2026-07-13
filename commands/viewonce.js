@@ -1,39 +1,104 @@
-const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const { downloadContentFromMessage, downloadMediaMessage } = require('@whiskeysockets/baileys');
+
+function resolveQuotedMedia(message) {
+    const candidates = [];
+
+    const directQuoted = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (directQuoted) candidates.push(directQuoted);
+
+    const viewOnce = message?.message?.viewOnceMessage?.message;
+    if (viewOnce) candidates.push(viewOnce);
+
+    const viewOnceV2 = message?.message?.viewOnceMessageV2?.message;
+    if (viewOnceV2) candidates.push(viewOnceV2);
+
+    const viewOnceV2Extension = message?.message?.viewOnceMessageV2Extension?.message;
+    if (viewOnceV2Extension) candidates.push(viewOnceV2Extension);
+
+    const ephemeral = message?.message?.ephemeralMessage?.message;
+    if (ephemeral) candidates.push(ephemeral);
+
+    const topLevel = message?.message;
+    if (topLevel?.imageMessage || topLevel?.videoMessage) candidates.push(topLevel);
+
+    for (const candidate of candidates) {
+        if (candidate?.imageMessage) {
+            return {
+                type: 'image',
+                mediaMessage: candidate.imageMessage,
+                caption: candidate.imageMessage.caption || '',
+                fileName: 'media.jpg'
+            };
+        }
+
+        if (candidate?.videoMessage) {
+            return {
+                type: 'video',
+                mediaMessage: candidate.videoMessage,
+                caption: candidate.videoMessage.caption || '',
+                fileName: 'media.mp4'
+            };
+        }
+    }
+
+    return null;
+}
+
+async function downloadMediaBuffer(message, mediaMessage, mediaType) {
+    const strategies = [];
+
+    strategies.push(async () => {
+        const stream = await downloadContentFromMessage(mediaMessage, mediaType);
+        const chunks = [];
+        for await (const chunk of stream) chunks.push(chunk);
+        return Buffer.concat(chunks);
+    });
+
+    if (typeof downloadMediaMessage === 'function') {
+        strategies.push(async () => {
+            const wrappedMessage = {
+                key: mediaMessage?.key || message?.key || message?.message?.key,
+                message: {
+                    [mediaType === 'image' ? 'imageMessage' : 'videoMessage']: mediaMessage
+                }
+            };
+            return await downloadMediaMessage(wrappedMessage, 'buffer', {});
+        });
+    }
+
+    let lastError = null;
+    for (const strategy of strategies) {
+        try {
+            return await strategy();
+        } catch (err) {
+            lastError = err;
+        }
+    }
+
+    throw lastError || new Error('Unable to download media');
+}
 
 async function viewonceCommand(sock, chatId, message) {
-    // Extract quoted imageMessage or videoMessage
-    const quoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-    const quotedImage = quoted?.imageMessage;
-    const quotedVideo = quoted?.videoMessage;
+    const mediaInfo = resolveQuotedMedia(message);
 
-    if (quotedImage && quotedImage.viewOnce) {
-        // Download natively using modern array stream (Low RAM & CPU)
-        const stream = await downloadContentFromMessage(quotedImage, 'image');
-        const chunks = [];
-        for await (const chunk of stream) chunks.push(chunk);
-        const buffer = Buffer.concat(chunks); // Concat inafanyika MARA MOJA tu hapa
+    if (!mediaInfo) {
+        await sock.sendMessage(chatId, { text: '❌ Tafadhali jibu picha au video ya view-once.' }, { quoted: message });
+        return;
+    }
 
-        await sock.sendMessage(chatId, { 
-            image: buffer, 
-            fileName: 'media.jpg', 
-            caption: quotedImage.caption || '' 
+    try {
+        const buffer = await downloadMediaBuffer(message, mediaInfo.mediaMessage, mediaInfo.type);
+
+        await sock.sendMessage(chatId, {
+            [mediaInfo.type]: buffer,
+            fileName: mediaInfo.fileName,
+            caption: mediaInfo.caption || ''
         }, { quoted: message });
-
-    } else if (quotedVideo && quotedVideo.viewOnce) {
-        // Download natively using modern array stream (Low RAM & CPU)
-        const stream = await downloadContentFromMessage(quotedVideo, 'video');
-        const chunks = [];
-        for await (const chunk of stream) chunks.push(chunk);
-        const buffer = Buffer.concat(chunks); // Concat ya mara moja kuokoa RAM spikes
-
-        await sock.sendMessage(chatId, { 
-            video: buffer, 
-            fileName: 'media.mp4', 
-            caption: quotedVideo.caption || '' 
+    } catch (err) {
+        console.error('ViewOnce download failed:', err);
+        await sock.sendMessage(chatId, {
+            text: '❌ Media hii siwezi kupatikana kwa sasa. Jaribu tena baada ya muda mfupi.'
         }, { quoted: message });
-
-    } else {
-        await sock.sendMessage(chatId, { text: '❌ Please reply to a view-once image or video.' }, { quoted: message });
     }
 }
 

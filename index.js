@@ -61,37 +61,68 @@ const TEMP_DIR = path.resolve(process.cwd(), 'tmp');
 const CACHE_DIR = path.resolve(process.cwd(), 'cache');
 const MEDIA_DIR = path.resolve(process.cwd(), 'media');
 const SESSION_BACKUP_DIR = path.resolve(process.cwd(), 'session_backup');
+const CLEANUP_INTERVAL_MS = 39 * 60 * 1000;
+const OLD_SESSION_AGE_MS = 24 * 60 * 60 * 1000;
 
 function ensureDirectories() {
-    [SESSION_DIR, TEMP_DIR, CACHE_DIR, MEDIA_DIR, SESSION_BACKUP_DIR].forEach(dir => {
+    [SESSION_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     });
 }
 
+function removePathIfExists(targetPath) {
+    if (!fs.existsSync(targetPath)) return false;
+    try {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+        return true;
+    } catch (err) {
+        return false;
+    }
+}
+
+function pruneOldSessionArtifacts() {
+    try {
+        if (!fs.existsSync(SESSION_BACKUP_DIR)) return 0;
+
+        const now = Date.now();
+        const entries = fs.readdirSync(SESSION_BACKUP_DIR, { withFileTypes: true });
+        let pruned = 0;
+
+        entries.forEach(entry => {
+            const entryPath = path.join(SESSION_BACKUP_DIR, entry.name);
+            try {
+                const stats = fs.statSync(entryPath);
+                if (now - stats.mtimeMs > OLD_SESSION_AGE_MS) {
+                    fs.rmSync(entryPath, { recursive: true, force: true });
+                    pruned++;
+                }
+            } catch (e) {}
+        });
+
+        return pruned;
+    } catch (err) {
+        return 0;
+    }
+}
+
 function autoClean() {
     try {
-        let cleaned = 0;
-        [TEMP_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
-            if (fs.existsSync(dir)) {
-                const files = fs.readdirSync(dir);
-                files.forEach(file => {
-                    const filePath = path.join(dir, file);
-                    try {
-                        const stats = fs.statSync(filePath);
-                        if (Date.now() - stats.mtimeMs > 3600000) {
-                            if (stats.isDirectory()) {
-                                fs.rmSync(filePath, { recursive: true, force: true });
-                            } else {
-                                fs.unlinkSync(filePath);
-                            }
-                            cleaned++;
-                        }
-                    } catch (e) {}
-                });
-            }
+        let removed = 0;
+        [TEMP_DIR, path.resolve(process.cwd(), 'temp'), SESSION_BACKUP_DIR].forEach(target => {
+            if (removePathIfExists(target)) removed++;
         });
-        if (cleaned > 0) console.log(chalk.cyan(`▓▒░ [CLEANER] auto-purged ${cleaned} temporary cache files.`));
-    } catch (err) {}
+
+        if (removePathIfExists(path.join(process.cwd(), 'error_logs.json'))) removed++;
+
+        ensureDirectories();
+        const pruned = pruneOldSessionArtifacts();
+
+        if (removed > 0 || pruned > 0) {
+            console.log(chalk.cyan(`▓▒░ [CLEANER] lightweight cleanup finished: removed ${removed} temp/session files and pruned ${pruned} old session artifacts.`));
+        }
+    } catch (err) {
+        console.log(chalk.dim(`  [CLEANER] lightweight cleanup skipped: ${err.message}`));
+    }
 }
 
 // ────────────────────────────────────────────────
@@ -100,6 +131,8 @@ function autoClean() {
 function backupSession() {
     try {
         if (!fs.existsSync(SESSION_DIR)) return false;
+
+        fs.mkdirSync(SESSION_BACKUP_DIR, { recursive: true });
         
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const backupPath = path.join(SESSION_BACKUP_DIR, `session_${timestamp}`);
@@ -782,8 +815,8 @@ function formatUptime(seconds) {
 // KEEP ALIVE & MONITORING WITH AUTO-HEAL
 // ────────────────────────────────────────────────
 function startKeepAlive() {
-    // Auto-clean every 30 minutes
-    setInterval(autoClean, 30 * 60 * 1000);
+    autoClean();
+    setInterval(autoClean, CLEANUP_INTERVAL_MS);
 
     // Check bot health every 2 minutes
     setInterval(() => {
