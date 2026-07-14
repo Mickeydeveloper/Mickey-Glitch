@@ -22,7 +22,7 @@ async function lyricsCommand(sock, chatId, songTitle, message) {
         }, { quoted: message });
 
         // API call
-        const apiUrl = `https://eliteprotech-apis.zone.id/lyrics?query=${encodeURIComponent(songTitle)}`;
+        const apiUrl = `https://api.popcat.xyz/v2/lyrics?song=${encodeURIComponent(songTitle)}`;
         const res = await fetch(apiUrl);
 
         if (!res.ok) {
