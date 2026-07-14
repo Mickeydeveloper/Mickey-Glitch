@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { createCtx } = require("../lib/messageBuilder");
+const { AIRich, createCtx } = require("../lib/messageBuilder");
 
 async function getcodeCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
@@ -48,21 +48,23 @@ async function getcodeCommand(sock, chatId, message, args) {
         }
 
         const source = fs.readFileSync(targetFile, "utf8");
-        const maxLength = 15000; // Kupunguza urefu kidogo ili isilete lag kwenye simu za kawaida
+        const maxLength = 50000;
 
-        const cleanedSource = source.length > maxLength
-            ? source.slice(0, maxLength) + "\n\n// Output was truncated because it was too long..."
-            : source;
+        // 🔥 TUNATUMIA MUUNDO ULIOUPA WA AIRICH LAKINI TUMEBORESHA USALAMA:
+        // Picha tupu ya usalama (Buffer tupu ya 1x1 pikseli) ili kuondoa lile onyo la usalama la WhatsApp
+        const safePlaceholderThumb = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
-        // 🔥 BADALA YA CARD ILIYOFELI: Tunatengeneza muundo safi wa maandishi ghafi wa kijanja (Raw monospace text) 
-        // Hii haiwezi kuleta error ya usalama (security error) kwa mtumiaji yeyote yule
-        const formattedCodeMsg = `💻 *CODE VIEWER (GLITCH ENGINE)*\n` +
-            `📂 *Path:* \`commands/${path.basename(targetFile)}\`\n` +
-            `📊 *Size:* \`${(fs.statSync(targetFile).size / 1024).toFixed(2)} KB\`\n\n` +
-            `\`\`\`javascript\n${cleanedSource}\n\`\`\``;
-
-        // Tuma ujumbe wa maandishi ya kodi moja kwa moja bila unifiedResponse na bila card-payload inayozuia kupakua
-        await sock.sendMessage(chatId, { text: formattedCodeMsg }, { quoted: message });
+        await new AIRich(sock)
+            .setTitle(`📄 ${path.basename(targetFile)}`)
+            .addCode(
+                "javascript",
+                source.length > maxLength
+                    ? source.slice(0, maxLength) + "\n\n// Output was truncated because it was too long..."
+                    : source
+            )
+            .setThumbnail(safePlaceholderThumb) // 🔥 Huu ndio ufunguo wa bypass lile onyo!
+            .setMimetype("text/javascript")    // Inaiambia WhatsApp aina halisi ya file
+            .send(chatId);
 
     } catch (error) {
         console.error('GetCode Error:', error);
