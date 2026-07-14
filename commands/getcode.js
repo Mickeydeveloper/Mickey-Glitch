@@ -50,10 +50,10 @@ async function getcodeCommand(sock, chatId, message, args) {
         const source = fs.readFileSync(targetFile, "utf8");
         const maxLength = 50000;
 
-        // 🔥 TUNATUMIA MUUNDO ULIOUPA WA AIRICH LAKINI TUMEBORESHA USALAMA:
-        // Picha tupu ya usalama (Buffer tupu ya 1x1 pikseli) ili kuondoa lile onyo la usalama la WhatsApp
+        // 🔥 Buffer ya picha tupu ya usalama ili kuondoa lile onyo la usalama la WhatsApp
         const safePlaceholderThumb = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
+        // 🔥 Hapa tunarudi kwenye ule ule muundo wako mwanzo, bila kuweka method zisizokuwepo
         await new AIRich(sock)
             .setTitle(`📄 ${path.basename(targetFile)}`)
             .addCode(
@@ -62,9 +62,13 @@ async function getcodeCommand(sock, chatId, message, args) {
                     ? source.slice(0, maxLength) + "\n\n// Output was truncated because it was too long..."
                     : source
             )
-            .setThumbnail(safePlaceholderThumb) // 🔥 Huu ndio ufunguo wa bypass lile onyo!
-            .setMimetype("text/javascript")    // Inaiambia WhatsApp aina halisi ya file
-            .send(chatId);
+            // Tunapitisha options za usalama ndani ya .send() ili ku-bypass lile onyo
+            .send(chatId, {
+                quoted: message,
+                mimetype: "text/javascript",
+                jpegThumbnail: safePlaceholderThumb,
+                fileName: path.basename(targetFile)
+            });
 
     } catch (error) {
         console.error('GetCode Error:', error);
