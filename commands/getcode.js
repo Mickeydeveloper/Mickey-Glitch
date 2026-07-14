@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { AIRich, createCtx } = require("../lib/messageBuilder");
+const { createCtx } = require("../lib/messageBuilder");
 
 async function getcodeCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
@@ -14,14 +14,12 @@ async function getcodeCommand(sock, chatId, message, args) {
             );
         }
 
-        // 🔥 UJANJA: Kama mtumiaji kaandika ".js" mwishoni, tunaiondoa ili isijirudie
         if (query.endsWith('.js')) {
             query = query.slice(0, -3);
         }
 
         let targetFile = null;
 
-        // Kusaka faili (Recursive scan)
         const scanDir = (dir) => {
             if (targetFile) return; 
             
@@ -36,7 +34,6 @@ async function getcodeCommand(sock, chatId, message, args) {
                     continue;
                 }
 
-                // Linganisha jina la faili (bila kujali herufi kubwa au ndogo)
                 if (file.toLowerCase() === `${query}.js`) {
                     targetFile = fullPath;
                     return;
@@ -51,18 +48,21 @@ async function getcodeCommand(sock, chatId, message, args) {
         }
 
         const source = fs.readFileSync(targetFile, "utf8");
-        const maxLength = 50000;
+        const maxLength = 15000; // Kupunguza urefu kidogo ili isilete lag kwenye simu za kawaida
 
-        // Tuma kadi kwa AIRich bila unifiedResponse
-        await new AIRich(sock)
-            .setTitle(`📄 ${path.basename(targetFile)}`)
-            .addCode(
-                "javascript",
-                source.length > maxLength
-                    ? source.slice(0, maxLength) + "\n\n// Output was truncated because it was too long..."
-                    : source
-            )
-            .send(chatId);
+        const cleanedSource = source.length > maxLength
+            ? source.slice(0, maxLength) + "\n\n// Output was truncated because it was too long..."
+            : source;
+
+        // 🔥 BADALA YA CARD ILIYOFELI: Tunatengeneza muundo safi wa maandishi ghafi wa kijanja (Raw monospace text) 
+        // Hii haiwezi kuleta error ya usalama (security error) kwa mtumiaji yeyote yule
+        const formattedCodeMsg = `💻 *CODE VIEWER (GLITCH ENGINE)*\n` +
+            `📂 *Path:* \`commands/${path.basename(targetFile)}\`\n` +
+            `📊 *Size:* \`${(fs.statSync(targetFile).size / 1024).toFixed(2)} KB\`\n\n` +
+            `\`\`\`javascript\n${cleanedSource}\n\`\`\``;
+
+        // Tuma ujumbe wa maandishi ya kodi moja kwa moja bila unifiedResponse na bila card-payload inayozuia kupakua
+        await sock.sendMessage(chatId, { text: formattedCodeMsg }, { quoted: message });
 
     } catch (error) {
         console.error('GetCode Error:', error);
