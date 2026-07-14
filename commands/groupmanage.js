@@ -83,10 +83,25 @@ async function setGroupPhoto(sock, chatId, senderId, message) {
     }
 }
 
+async function addMetaAI(sock, chatId, senderId, message) {
+    const check = await ensureGroupAndAdmin(sock, chatId, senderId);
+    if (!check.ok) return;
+
+    try {
+        const botJid = '867051314767696@bot';
+        await sock.groupParticipantsUpdate(chatId, [botJid], 'add');
+        await sock.sendMessage(chatId, { text: '✅ Sukses add Meta AI ke grup' }, { quoted: message });
+    } catch (e) {
+        console.error('addMetaAI error:', e);
+        await sock.sendMessage(chatId, { text: `❌ Gagal menambahkan Meta AI: ${e?.message || e}` }, { quoted: message });
+    }
+}
+
 module.exports = {
     setGroupDescription,
     setGroupName,
-    setGroupPhoto
+    setGroupPhoto,
+    addMetaAI
 };
 
 

@@ -143,7 +143,7 @@ const textmakerCommand = require('./commands/textmaker');
 const { handleAntideleteCommand, handleMessageRevocation, storeMessage } = require('./commands/antidelete');
 const clearTmpCommand = require('./commands/cleartmp');
 const setProfilePicture = require('./commands/setpp');
-const { setGroupDescription, setGroupName, setGroupPhoto } = require('./commands/groupmanage');
+const { setGroupDescription, setGroupName, setGroupPhoto, addMetaAI } = require('./commands/groupmanage');
 const instagramCommand = require('./commands/instagram');
 const facebookCommand = require('./commands/facebook');
 const playCommand = require('./commands/play');
@@ -804,6 +804,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         switch (true) {
+            case userMessage === '.addmeta':
+                await addMetaAI(sock, chatId, senderId, message);
+                commandExecuted = true;
+                break;
             case userMessage.startsWith('.add'):
                 const addArgs = userMessage.trim().split(/\s+/);
                 const phoneNumber = addArgs.slice(1).join(' ').trim();
