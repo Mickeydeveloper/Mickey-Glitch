@@ -1,25 +1,29 @@
 const fs = require("fs");
 const path = require("path");
-const { AIRich, createCtx } = require("../lib/messageBuilder"); // Hakikisha njia hii ipo sawa
+const { AIRich, createCtx } = require("../lib/messageBuilder");
 
 async function getcodeCommand(sock, chatId, message, args) {
-    // 1. Anzisha context (ctx) kutoka kwenye messageBuilder
     const ctx = createCtx(sock, chatId, message, { args });
 
     try {
-        const query = Array.isArray(args) ? args.join(' ').trim().toLowerCase() : (args || '').toString().trim().toLowerCase();
+        let query = Array.isArray(args) ? args.join(' ').trim().toLowerCase() : (args || '').toString().trim().toLowerCase();
 
         if (!query) {
             return await ctx.reply(
-                `❌ *Please specify a file!* (Tafadhali taja file!)\nExample: .getcmd menu`
+                `❌ *Please specify a file!* (Tafadhali taja file!)\nExample: ${ctx.used?.prefix || '.'}getcode menu`
             );
+        }
+
+        // 🔥 UJANJA: Kama mtumiaji kaandika ".js" mwishoni, tunaiondoa ili isijirudie
+        if (query.endsWith('.js')) {
+            query = query.slice(0, -3);
         }
 
         let targetFile = null;
 
-        // Kazi ya kusaka faili ndani ya folda na sub-folda zake (Recursive scan)
+        // Kusaka faili (Recursive scan)
         const scanDir = (dir) => {
-            if (targetFile) return; // Kama lilishapatikana, sitisha
+            if (targetFile) return; 
             
             const files = fs.readdirSync(dir);
 
@@ -32,6 +36,7 @@ async function getcodeCommand(sock, chatId, message, args) {
                     continue;
                 }
 
+                // Linganisha jina la faili (bila kujali herufi kubwa au ndogo)
                 if (file.toLowerCase() === `${query}.js`) {
                     targetFile = fullPath;
                     return;
@@ -39,17 +44,16 @@ async function getcodeCommand(sock, chatId, message, args) {
             }
         };
 
-        // Anza kusaka kuanzia folda ya commands
         scanDir(path.join(process.cwd(), "commands"));
 
         if (!targetFile) {
-            return await ctx.reply(`❌ *Command "${query}" not found!*`);
+            return await ctx.reply(`❌ *Command "${query}.js" not found!*`);
         }
 
         const source = fs.readFileSync(targetFile, "utf8");
         const maxLength = 50000;
 
-        // 🔥 Tunatumia AIRich kutuma kadi ya kodi moja kwa moja bila unifiedResponse
+        // Tuma kadi kwa AIRich bila unifiedResponse
         await new AIRich(sock)
             .setTitle(`📄 ${path.basename(targetFile)}`)
             .addCode(
@@ -58,7 +62,7 @@ async function getcodeCommand(sock, chatId, message, args) {
                     ? source.slice(0, maxLength) + "\n\n// Output was truncated because it was too long..."
                     : source
             )
-            .send(chatId); // Inatuma moja kwa moja kwenye chat ya sasa
+            .send(chatId);
 
     } catch (error) {
         console.error('GetCode Error:', error);
@@ -66,5 +70,4 @@ async function getcodeCommand(sock, chatId, message, args) {
     }
 }
 
-// 🔥 Muundo wa export wa chini kama awali kabisa ili kuepuka ile error!
 module.exports = getcodeCommand;
