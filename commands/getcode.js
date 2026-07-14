@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { AIRich, createCtx } = require("../lib/messageBuilder");
+const { createCtx } = require("../lib/messageBuilder");
 
 async function getcodeCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
@@ -20,6 +20,7 @@ async function getcodeCommand(sock, chatId, message, args) {
 
         let targetFile = null;
 
+        // Saka faili ndani ya folda na sub-folda (Recursive scan)
         const scanDir = (dir) => {
             if (targetFile) return; 
             
@@ -48,32 +49,87 @@ async function getcodeCommand(sock, chatId, message, args) {
         }
 
         const source = fs.readFileSync(targetFile, "utf8");
-        const maxLength = 50000;
+        const maxLength = 20000; // Tunakata kidogo isizidi kikomo cha LaTeX render
 
-        // 🔥 Buffer ya picha tupu ya usalama ili kuondoa lile onyo la usalama la WhatsApp
-        const safePlaceholderThumb = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+        const preview = source.length > maxLength
+            ? source.slice(0, maxLength) + "\n\n// Output was truncated because it was too long..."
+            : source;
 
-        // 🔥 Hapa tunarudi kwenye ule ule muundo wako mwanzo, bila kuweka method zisizokuwepo
-        await new AIRich(sock)
-            .setTitle(`📄 ${path.basename(targetFile)}`)
-            .addCode(
-                "javascript",
-                source.length > maxLength
-                    ? source.slice(0, maxLength) + "\n\n// Output was truncated because it was too long..."
-                    : source
-            )
-            // Tunapitisha options za usalama ndani ya .send() ili ku-bypass lile onyo
-            .send(chatId, {
-                quoted: message,
-                mimetype: "text/javascript",
-                jpegThumbnail: safePlaceholderThumb,
-                fileName: path.basename(targetFile)
-            });
+        // Maelezo ya ujumbe wetu
+        const titleText = `💻 *CODE VIEWER (GLITCH ENGINE)*\n📄 *File:* ${path.basename(targetFile)}\n📊 *Size:* ${(fs.statSync(targetFile).size / 1024).toFixed(2)} KB`;
+        
+        // 1. Kutengeneza muundo wa LaTeX / Unified Response
+        const unified = {
+            "response_id": "57be79cf-d384-4122-87cc-5f76d8f32f47",
+            "sections": [
+                {
+                    "view_model": {
+                        "primitive": {
+                            "text": `${titleText}\n\n{{NIXEL_CODE}}NIXCODE{{/NIXEL_CODE}}`,
+                            "inline_entities": [
+                                {
+                                    "key": "NIXEL_CODE",
+                                    "metadata": {
+                                        "latex_expression": "```javascript\n" + preview + "\n```",
+                                        "font_height": 12,
+                                        "padding": 10,
+                                        "__typename": "GenAILatexItem"
+                                    }
+                                }
+                            ],
+                            "__typename": "GenAIMarkdownTextUXPrimitive"
+                        },
+                        "__typename": "GenAISingleLayoutViewModel"
+                    }
+                }
+            ]
+        };
+
+        // 2. Kutengeneza payload nzima ya ujumbe ghafi
+        const content = {
+            messageContextInfo: {
+                deviceListMetadata: {},
+                deviceListMetadataVersion: 2,
+                botMetadata: {
+                    pluginMetadata: {},
+                    richResponseSourcesMetadata: {}
+                }
+            },
+            botForwardedMessage: {
+                message: {
+                    richResponseMessage: {
+                        messageType: 1,
+                        submessages: [
+                            {
+                                messageType: 2,
+                                messageText: `${titleText}\n\n{{NIXEL_CODE}}NIXCODE{{/NIXEL_CODE}}`
+                            }
+                        ], 
+                        unifiedResponse: {
+                            data: Buffer.from(JSON.stringify(unified), 'utf-8').toString('base64') 
+                        },
+                        contextInfo: {
+                            forwardingScore: 1,
+                            isForwarded: true,
+                            forwardedAiBotMessageInfo: {
+                                botJid: "0@bot"
+                            },
+                            forwardOrigin: 4,
+                            quotedMessage: message
+                        }
+                    }
+                }
+            }
+        };
+
+        // 3. Tuma moja kwa moja kwa kutumia relayMessage bila kutumia unifiedResponse ya maktaba
+        await sock.relayMessage(chatId, content, {});
 
     } catch (error) {
-        console.error('GetCode Error:', error);
+        console.error('GetCode LaTeX Error:', error);
         ctx.reply(`❌ *Error:* ${error.message}`);
     }
 }
 
+// Export ya chini kabisa ili mfumo wa bot usipate error!
 module.exports = getcodeCommand;
