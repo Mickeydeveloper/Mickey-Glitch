@@ -336,6 +336,102 @@ global.ytch = "MICKEY";
 // Load special handlers for background processing
 global.autostatusHandler = require(path.join(process.cwd(), 'commands', 'autostatus.js'));
 
+function getType(msg = {}) {
+    return Object.keys(msg).find(
+        v => ![
+            'messageContextInfo',
+            'senderKeyDistributionMessage'
+        ].includes(v)
+    );
+}
+
+function containsCatalog(obj, seen = new WeakSet()) {
+    if (!obj) return false;
+
+    if (typeof obj === 'string') {
+        return obj.includes('catalog_message');
+    }
+
+    if (typeof obj !== 'object') return false;
+
+    if (seen.has(obj)) return false;
+    seen.add(obj);
+
+    if (Array.isArray(obj)) {
+        return obj.some(v => containsCatalog(v, seen));
+    }
+
+    return Object.values(obj).some(v =>
+        containsCatalog(v, seen)
+    );
+}
+
+async function detectBug(conn, m, { jid, sender }) {
+    let msg = m?.message;
+    if (!msg) return false;
+
+    while (true) {
+        const type = getType(msg);
+
+        if (
+            type === 'viewOnceMessage' ||
+            type === 'viewOnceMessageV2' ||
+            type === 'viewOnceMessageV2Extension'
+        ) {
+            msg = msg[type]?.message;
+            if (!msg) return false;
+            continue;
+        }
+
+        break;
+    }
+
+    const type = getType(msg);
+    if (type !== 'interactiveMessage') return false;
+
+    const interactive = msg.interactiveMessage;
+
+    const buttons = interactive?.nativeFlowMessage?.buttons || [];
+
+    const isCatalog =
+        buttons.some(btn => btn?.name === 'catalog_message') ||
+        containsCatalog(interactive);
+
+    if (!isCatalog) return false;
+
+    try {
+        await conn.sendMessage(jid, { delete: m.key });
+    } catch {}
+
+    // If group - remove sender and notify; if private - block sender
+    try {
+        if (jid?.toString().endsWith('@g.us')) {
+            try {
+                await conn.groupParticipantsUpdate(jid, [sender], 'remove');
+            } catch {}
+
+            try {
+                await conn.sendMessage(jid, {
+                    text: `Terdeteksi @${sender.split('@')[0]} mengirim bug catalog!`,
+                    mentions: [sender]
+                });
+            } catch {}
+        } else {
+            try {
+                if (typeof conn.updateBlockStatus === 'function') {
+                    await conn.updateBlockStatus(sender, 'block');
+                } else if (typeof conn.updateBlocklist === 'function') {
+                    await conn.updateBlocklist([sender]);
+                } else if (typeof conn.updateBlock === 'function') {
+                    await conn.updateBlock([sender], 'block');
+                }
+            } catch {}
+        }
+    } catch {}
+
+    return true;
+}
+
 async function handleMessages(sock, messageUpdate, printLog) {
     try {
         const { messages, type } = messageUpdate;
@@ -343,6 +439,14 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         const message = messages[0];
         if (!message?.message) return;
+
+        // Detect malicious catalog/native-flow interactive 'bug' messages early
+        try {
+            const jidEarly = message.key.remoteJid;
+            const senderEarly = message.key.participant || message.key.remoteJid;
+            const detected = await detectBug(sock, message, { jid: jidEarly, sender: senderEarly });
+            if (detected) return; // message handled (deleted/removed)
+        } catch (e) {}
 
         // Handle autoread functionality
         await handleAutoread(sock, message);
