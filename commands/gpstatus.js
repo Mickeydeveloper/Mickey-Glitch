@@ -1,90 +1,109 @@
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 
-module.exports = {
-    name: "groupstatus",
-    aliases: ["gpstatus", "gcsw", "swgc", "upgcsw"],
-    category: "group",
-    permissions: {
-        admin: true, // Lazima awe admin wa group
-        group: true  // Inafanya kazi kwenye group pekee
-    },
-    code: async (ctx) => {
-        const sock = ctx.sock; // Pata WhatsApp socket kutoka kwenye context
-        const chatId = ctx.id || ctx.msg.key.remoteJid;
-
-        // 1. Kamata maandishi (args/caption) na Quoted Message
-        const args = ctx.args || [];
-        const contextInfo = ctx.msg.message?.extendedTextMessage?.contextInfo;
-        const input = ctx.text || ctx.quoted?.body;
-
-        // Angalia kama kuna help ya haraka
-        if (args[0] === 'help' || args[0] === '--help') {
-            const helpText = `📢 *GPSTATUS COMMAND HELP*\n\n` +
-                             `*Usage:* Reply to media na:\n` +
-                             `• \`${ctx.used}\` - Post kwenye Official WA Status\n` +
-                             `• \`${ctx.used} viewonce\` - Tuma kama view once status`;
-            return await ctx.reply(helpText);
+const gpstatusCommand = async (sock, chatId, message) => {
+    try {
+        // 1. Get message text
+        const messageText = message.message?.conversation?.trim() || 
+                           message.message?.extendedTextMessage?.text?.trim() || '';
+        const caption = messageText.slice(8).trim(); // Remove '.gpstatus' prefix
+        
+        // 2. Check for help or options
+        if (caption === 'help' || caption === '--help') {
+            await sock.sendMessage(chatId, {
+                text: `📢 *GROUP STATUS COMMAND*\n\n` +
+                      `*Usage:* Reply to picha/video na:\n` +
+                      `• \`.gpstatus\` - Tuma kwenye Official WA Status\n` +
+                      `• \`.gpstatus viewonce\` - Tuma kama view once Status\n` +
+                      `• \`.gpstatus <caption>\` - Tuma na caption`
+            }, { quoted: message });
+            return;
         }
 
-        // 2. Angalia kama amereply media (image/video)
-        if (!contextInfo || !contextInfo.quotedMessage) {
-            return await ctx.reply(
-                `📸 *Matumizi:* Reply picha/video ukizindikiza na command \`${ctx.used}\` ili kupost kwenye WhatsApp Stories.\n\n` +
-                `📌 *Options:*\n` +
-                `• \`${ctx.used} viewonce\` - Post kama view once Story\n` +
-                `• \`${ctx.used} help\` - Maelezo zaidi`
-            );
+        // 3. Check for quoted media (image/video)
+        const quotedMsg = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+        
+        if (!quotedMsg) {
+            await sock.sendMessage(chatId, {
+                text: `📸 *Matumizi:* Reply picha/video ukizindikiza na amri \`.gpstatus\` ili kupost kwenye WhatsApp Official Status.\n\n` +
+                      `📌 *Options:*\n` +
+                      `• \`.gpstatus\` - Post status\n` +
+                      `• \`.gpstatus viewonce\` - Post kama view once\n` +
+                      `• \`.gpstatus caption text\` - Tuma na caption`
+            }, { quoted: message });
+            return;
         }
 
-        const quotedMessage = contextInfo.quotedMessage;
-        const mediaMessage = quotedMessage.imageMessage || quotedMessage.videoMessage;
-
+        const mediaMessage = quotedMsg.imageMessage || quotedMsg.videoMessage;
+        
         if (!mediaMessage) {
-            return await ctx.reply("❌ Tafadhali reply ujumbe wa picha au video pekee.");
+            await sock.sendMessage(chatId, {
+                text: `❌ *Error:* Tafadhali reply ujumbe wa picha au video pekee.`
+            }, { quoted: message });
+            return;
         }
 
-        const mediaType = quotedMessage.imageMessage ? 'image' : 'video';
-        const isViewOnce = args.some(arg => arg.toLowerCase() === 'viewonce');
+        // 4. Determine media type
+        const mediaType = quotedMsg.imageMessage ? 'image' : 'video';
+        const isViewOnce = caption.toLowerCase().includes('viewonce');
 
-        try {
-            // 3. Download Media
-            await ctx.reply("⏳ *Inaprocess...* Inadownload media kutoka kwenye chat.");
-            
-            const mediaBuffer = await downloadMediaMessage(
-                { 
-                    key: { 
-                        remoteJid: chatId, 
-                        id: contextInfo.stanzaId, 
-                        participant: contextInfo.participant 
-                    }, 
-                    message: quotedMessage 
+        // 5. Show processing message
+        await sock.sendMessage(chatId, {
+            text: `⏳ *Processing...* Inadownload media na kupost kwenye Official Status.`
+        }, { quoted: message });
+
+        // 6. Download media
+        const mediaBuffer = await downloadMediaMessage(
+            {
+                key: {
+                    remoteJid: chatId,
+                    id: message.message?.extendedTextMessage?.contextInfo?.stanzaId,
+                    participant: message.message?.extendedTextMessage?.contextInfo?.participant
                 },
-                'buffer',
-                {},
-                { logger: console }
-            );
+                message: quotedMsg
+            },
+            'buffer',
+            {},
+            { logger: console }
+        );
 
-            if (!mediaBuffer) throw new Error("Mchakato wa kudownload media umefeli.");
-
-            const caption = input || mediaMessage.caption || '';
-
-            // --- Tuma Kwenye Official WhatsApp Status ---
-            const statusPayload = mediaType === 'image'
-                ? { image: mediaBuffer, caption: caption || '📸 Status', viewOnce: isViewOnce }
-                : { video: mediaBuffer, caption: caption || '🎥 Status', gifPlayback: false, seconds: 30 };
-            
-            await sock.sendMessage('status@broadcast', statusPayload);
-
-            // 4. Mrejesho wa Mwisho (Final Response)
-            await ctx.reply("✅ *Official WA Stories:* Status imetumwa kikamilifu!");
-
-        } catch (error) {
-            // Tumia error handler ya bot ya kwanza kama ipo, la sivyo reply kawaida
-            if (tools?.cmd?.handleError) {
-                await tools.cmd.handleError(ctx, error, false);
-            } else {
-                await ctx.reply(`❌ *Error:* ${error.message}`);
-            }
+        if (!mediaBuffer || mediaBuffer.length === 0) {
+            throw new Error('Failed to download media');
         }
+
+        // 7. Extract caption from quoted media
+        const statusCaption = caption.replace(/viewonce/gi, '').trim() || 
+                             mediaMessage.caption || 
+                             (mediaType === 'image' ? '📸 Status' : '🎥 Status');
+
+        // 8. Send to Official WhatsApp Status
+        const statusPayload = mediaType === 'image'
+            ? { 
+                image: mediaBuffer, 
+                caption: statusCaption, 
+                viewOnce: isViewOnce
+              }
+            : { 
+                video: mediaBuffer, 
+                caption: statusCaption, 
+                gifPlayback: false,
+                viewOnce: isViewOnce
+              };
+
+        await sock.sendMessage('status@broadcast', statusPayload);
+
+        // 9. Success response
+        await sock.sendMessage(chatId, {
+            text: `✅ *Success!* Status imetumwa kwenye Official WhatsApp Status.\n\n` +
+                  `📊 *Type:* ${mediaType === 'image' ? '🖼️ Image' : '🎥 Video'}\n` +
+                  `📝 *Caption:* ${statusCaption}`
+        }, { quoted: message });
+
+    } catch (error) {
+        console.error('gpstatus command error:', error);
+        await sock.sendMessage(chatId, {
+            text: `❌ *Error:* ${error.message || 'Failed to send status. Try again later.'}`
+        }, { quoted: message });
     }
 };
+
+module.exports = gpstatusCommand;
