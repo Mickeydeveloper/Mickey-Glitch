@@ -1,59 +1,33 @@
-const fs = require('fs');
-const path = require('path');
-const { createCtx } = require('../lib/messageBuilder');
+const { AIRich } = require('../lib/messageBuilder');
 
-async function getcodeCommand(sock, chatId, message, args) {
-    // 1. Anzisha context (ctx) kutoka kwenye messageBuilder
-    const ctx = createCtx(sock, chatId, message, { args });
-
+async function sendTableCommand(sock, chatId, message) {
     try {
-        const fileName = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
+        // 1. Tengeneza jedwali lako kwa kutumia AIRich
+        const rich = new AIRich(sock)
+            .addTable([
+                ["H1", "H2"],  // Hizi ni Headers za jedwali
+                ["D1", "D2"],  // Mstari wa kwanza wa data
+                ["D3", "D4"]   // Mstari wa pili wa data
+            ]);
 
-        if (!fileName) {
-            if (ctx.react) await ctx.react('❌'); // React ya error
-            return ctx.reply('❌ *Please specify a file name!* (Tafadhali taja jina la file!)');
-        }
+        // 2. Tuma moja kwa moja bila kutumia unifiedResponse
+        // Njia ya kwanza (Kama AIRich yako ina method ya .send)
+        await rich.send(chatId, { quoted: message });
 
-        if (fileName.includes('..')) {
-            if (ctx.react) await ctx.react('❌');
-            return ctx.reply('❌ *Invalid path!* (Njia hii haitambuliki!)');
-        }
+        /* 
+        // 🔄 NJIA MBADALA: Kama unataka kutuma ghafi kwa relayMessage (Raw Relay):
+        const payload = rich.build(); // Inatengeneza message object ghafi
+        await sock.relayMessage(chatId, payload.message, {
+            messageId: payload.key.id,
+            quoted: message
+        });
+        */
 
-        let fileNameWithExt = fileName.endsWith('.js') ? fileName : `${fileName}.js`;
-        const filePath = path.join(process.cwd(), 'commands', fileNameWithExt);
-
-        if (!fs.existsSync(filePath)) {
-            if (ctx.react) await ctx.react('🤷'); // React ya kutopatikana
-            return ctx.reply(`❌ *File not found!*\nPath: \`${filePath}\``);
-        }
-
-        // 2. Weka react ya kutafuta/kusoma kodi
-        if (ctx.react) await ctx.react('🔎');
-
-        const fileContent = fs.readFileSync(filePath, 'utf8');
-        const fileSize = (fs.statSync(filePath).size / 1024).toFixed(2);
-        
-        // Kama file ni kubwa sana, tunakata ili lisilete crash/lag kwenye WhatsApp
-        const preview = fileContent.length > 3000 ? `${fileContent.slice(0, 3000)}\n\n... (Kodi imebaki, imekatwa kwa usalama)` : fileContent;
-
-        const text = `💻 *CODE VIEWER (GLITCH ENGINE)*\n\n` +
-            `📄 *File:* \`${fileNameWithExt}\`\n` +
-            `📊 *Size:* \`${fileSize} KB\`\n\n` +
-            '```javascript\n' +
-            `${preview}\n` +
-            '```';
-
-        // 3. Tuma ujumbe kupitia ctx.reply
-        await ctx.reply(text);
-        
-        // 4. React ya kumaliza kazi salama
-        if (ctx.react) await ctx.react('✅');
-
-    } catch (e) {
-        console.error('GetCode Error:', e);
-        if (ctx.react) await ctx.react('🚨'); // React ya dharura
-        ctx.reply(`❌ *Error:* ${e.message}`);
+    } catch (err) {
+        console.error("Table Send Error:", err.message);
+        // Fallback ya kawaida isipofanya kazi
+        await sock.sendMessage(chatId, { 
+            text: "❌ *Error:* Imeshindwa kutengeneza jedwali." 
+        }, { quoted: message });
     }
 }
-
-module.exports = getcodeCommand;
