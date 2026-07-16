@@ -1,4 +1,5 @@
 const axios = require('axios');
+const cheerio = require('cheerio');
 const yts = require('yt-search');
 
 const AXIOS_DEFAULTS = {
@@ -31,15 +32,123 @@ async function streamToBuffer(stream) {
     });
 }
 
+function extractYoutubeVideoId(ytUrl) {
+    if (!ytUrl) return '';
+
+    if (ytUrl.includes('youtu.be/')) {
+        return ytUrl.split('youtu.be/')[1].split('?')[0];
+    }
+
+    if (ytUrl.includes('youtube.com/watch')) {
+        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
+        return urlParams.get('v') || '';
+    }
+
+    return '';
+}
+
+class YouTubeMP4Downloader {
+    constructor() {
+        this.baseUrl = 'https://youtubemp4.to';
+        this.headers = {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+            'Accept-Language': 'id-ID,id;q=0.9',
+            Referer: `${this.baseUrl}/HAOT/`,
+            Origin: this.baseUrl
+        };
+    }
+
+    async fetchCookies() {
+        try {
+            const res = await axios.head(`${this.baseUrl}/HAOT/`, { headers: this.headers });
+            return res.headers['set-cookie'] ? res.headers['set-cookie'].join('; ') : '';
+        } catch {
+            return '';
+        }
+    }
+
+    async downloadVideo(url) {
+        const cookies = await this.fetchCookies();
+        const headers = {
+            ...this.headers,
+            Cookie: cookies,
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+
+        try {
+            const { data } = await axios.post(
+                `${this.baseUrl}/download_ajax/`,
+                new URLSearchParams({ url }).toString(),
+                { headers }
+            );
+            return this.parseDownloadPage(data);
+        } catch (error) {
+            console.error('[PLAY] [YouTubeMP4] ajax fetch failed:', error.message);
+            return null;
+        }
+    }
+
+    parseDownloadPage(data) {
+        const $ = cheerio.load(data?.result || '');
+        const title = $('.meta h2').text().trim() || 'Unknown';
+        const thumbnail = $('.poster img').attr('src') || '';
+        const allFormats = [];
+
+        $('.results-other table tbody tr').each((_, el) => {
+            const qualityText = $(el).find('td').eq(0).text().trim();
+            const sizeText = $(el).find('td').eq(1).text().trim();
+            const linkUrl = $(el).find('td a').attr('href') || '';
+
+            if (linkUrl) {
+                allFormats.push({ quality: qualityText, size: sizeText, link: linkUrl });
+            }
+        });
+
+        const audioFormats = allFormats.filter(f => /audio|mp3|kbps|kbit/i.test(f.quality));
+        const bestAudio = audioFormats.length > 0 ? audioFormats[0] : null;
+        const filteredVideos = allFormats.filter(f => {
+            if (/audio|mp3|kbps|kbit/i.test(f.quality)) return false;
+            const match = f.quality.match(/\d+/);
+            if (match) return ['480', '720', '1080'].includes(match[0]);
+            return false;
+        });
+
+        return { title, thumbnail, audio: bestAudio, video: filteredVideos };
+    }
+}
+
+// Function to get audio from ytToMP4 scraper
+async function getAudioFromYouTubeMP4Scraper(ytUrl) {
+    const videoId = extractYoutubeVideoId(ytUrl);
+    if (!videoId) throw new Error('Invalid YouTube URL for YouTubeMP4 scraper');
+
+    const downloader = new YouTubeMP4Downloader();
+    const result = await downloader.downloadVideo(ytUrl);
+
+    if (!result?.audio?.link) {
+        throw new Error('YouTubeMP4 scraper returned no audio link');
+    }
+
+    const fileRes = await tryRequest(() => axios.get(result.audio.link, {
+        headers: AXIOS_DEFAULTS.headers,
+        responseType: 'stream'
+    }));
+
+    const buffer = await streamToBuffer(fileRes.data);
+
+    return {
+        buffer: buffer,
+        title: result.title || 'Unknown Title',
+        thumbnail: result.thumbnail,
+        source: 'YouTubeMP4.to',
+        mimeType: 'audio/mp3'
+    };
+}
+
 // Function to get audio from Nayan AllDown API
 async function getAudioFromAllDown(ytUrl) {
-    let videoId = '';
-    if (ytUrl.includes('youtu.be/')) {
-        videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
-    } else if (ytUrl.includes('youtube.com/watch')) {
-        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
-        videoId = urlParams.get('v');
-    }
+    const videoId = extractYoutubeVideoId(ytUrl);
 
     if (!videoId) throw new Error('Invalid URL');
 
@@ -78,13 +187,7 @@ async function getAudioFromAllDown(ytUrl) {
 
 // Function to get audio from Nayan YouTube API
 async function getAudioFromYoutubeAPI(ytUrl) {
-    let videoId = '';
-    if (ytUrl.includes('youtu.be/')) {
-        videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
-    } else if (ytUrl.includes('youtube.com/watch')) {
-        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
-        videoId = urlParams.get('v');
-    }
+    const videoId = extractYoutubeVideoId(ytUrl);
 
     if (!videoId) throw new Error('Invalid URL');
 
@@ -154,13 +257,7 @@ async function getAudioFromYoutubeAPI(ytUrl) {
 }
 
 async function getAudioFromPrexzyAPI(ytUrl) {
-    let videoId = '';
-    if (ytUrl.includes('youtu.be/')) {
-        videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
-    } else if (ytUrl.includes('youtube.com/watch')) {
-        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
-        videoId = urlParams.get('v');
-    }
+    const videoId = extractYoutubeVideoId(ytUrl);
 
     if (!videoId) throw new Error('Invalid YouTube URL for Prexzy API');
 
@@ -197,18 +294,23 @@ async function getAudioFromPrexzyAPI(ytUrl) {
 
 async function getYoutubeAudio(ytUrl) {
     try {
-        console.log('[PLAY] Trying Prexzy API...');
-        return await getAudioFromPrexzyAPI(ytUrl);
-    } catch (prexzyErr) {
-        console.log(`[PLAY] Prexzy API failed: ${prexzyErr.message}, trying AllDown API...`);
+        console.log('[PLAY] Trying YouTubeMP4 scraper...');
+        return await getAudioFromYouTubeMP4Scraper(ytUrl);
+    } catch (scraperErr) {
+        console.log(`[PLAY] YouTubeMP4 scraper failed: ${scraperErr.message}, trying Prexzy API...`);
         try {
-            return await getAudioFromAllDown(ytUrl);
-        } catch (allDownErr) {
-            console.log(`[PLAY] AllDown failed: ${allDownErr.message}, trying YouTube API...`);
+            return await getAudioFromPrexzyAPI(ytUrl);
+        } catch (prexzyErr) {
+            console.log(`[PLAY] Prexzy API failed: ${prexzyErr.message}, trying AllDown API...`);
             try {
-                return await getAudioFromYoutubeAPI(ytUrl);
-            } catch (ytErr) {
-                throw new Error(`All APIs failed: ${ytErr.message}`);
+                return await getAudioFromAllDown(ytUrl);
+            } catch (allDownErr) {
+                console.log(`[PLAY] AllDown failed: ${allDownErr.message}, trying YouTube API...`);
+                try {
+                    return await getAudioFromYoutubeAPI(ytUrl);
+                } catch (ytErr) {
+                    throw new Error(`All download sources failed: ${ytErr.message}`);
+                }
             }
         }
     }

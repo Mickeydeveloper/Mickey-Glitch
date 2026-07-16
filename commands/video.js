@@ -1,4 +1,5 @@
 const axios = require('axios');
+const cheerio = require('cheerio');
 const yts = require('yt-search');
 
 const AXIOS_DEFAULTS = {
@@ -21,15 +22,120 @@ async function tryRequest(getter, attempts = 2) {
     throw lastErr;
 }
 
+function extractYoutubeVideoId(ytUrl) {
+    if (!ytUrl) return '';
+
+    if (ytUrl.includes('youtu.be/')) {
+        return ytUrl.split('youtu.be/')[1].split('?')[0];
+    }
+
+    if (ytUrl.includes('youtube.com/watch')) {
+        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
+        return urlParams.get('v') || '';
+    }
+
+    return '';
+}
+
+class YouTubeMP4Downloader {
+    constructor() {
+        this.baseUrl = 'https://youtubemp4.to';
+        this.headers = {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+            'Accept-Language': 'id-ID,id;q=0.9',
+            Referer: `${this.baseUrl}/HAOT/`,
+            Origin: this.baseUrl
+        };
+    }
+
+    async fetchCookies() {
+        try {
+            const res = await axios.head(`${this.baseUrl}/HAOT/`, { headers: this.headers });
+            return res.headers['set-cookie'] ? res.headers['set-cookie'].join('; ') : '';
+        } catch {
+            return '';
+        }
+    }
+
+    async downloadVideo(url) {
+        const cookies = await this.fetchCookies();
+        const headers = {
+            ...this.headers,
+            Cookie: cookies,
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+
+        try {
+            const { data } = await axios.post(
+                `${this.baseUrl}/download_ajax/`,
+                new URLSearchParams({ url }).toString(),
+                { headers }
+            );
+            return this.parseDownloadPage(data);
+        } catch (error) {
+            console.error('[VIDEO] [YouTubeMP4] ajax fetch failed:', error.message);
+            return null;
+        }
+    }
+
+    parseDownloadPage(data) {
+        const $ = cheerio.load(data?.result || '');
+        const title = $('.meta h2').text().trim() || 'Unknown';
+        const thumbnail = $('.poster img').attr('src') || '';
+        const allFormats = [];
+
+        $('.results-other table tbody tr').each((_, el) => {
+            const qualityText = $(el).find('td').eq(0).text().trim();
+            const sizeText = $(el).find('td').eq(1).text().trim();
+            const linkUrl = $(el).find('td a').attr('href') || '';
+
+            if (linkUrl) {
+                allFormats.push({ quality: qualityText, size: sizeText, link: linkUrl });
+            }
+        });
+
+        const audioFormats = allFormats.filter(f => /audio|mp3|kbps|kbit/i.test(f.quality));
+        const videoFormats = allFormats.filter(f => {
+            if (/audio|mp3|kbps|kbit/i.test(f.quality)) return false;
+            const match = f.quality.match(/\d+/);
+            if (match) return ['480', '720', '1080'].includes(match[0]);
+            return false;
+        });
+
+        return { title, thumbnail, audio: audioFormats[0] || null, video: videoFormats };
+    }
+}
+
+async function getVideoFromYouTubeMP4Scraper(ytUrl) {
+    const videoId = extractYoutubeVideoId(ytUrl);
+    if (!videoId) throw new Error('Invalid YouTube URL for YouTubeMP4 scraper');
+
+    const downloader = new YouTubeMP4Downloader();
+    const result = await downloader.downloadVideo(ytUrl);
+
+    const bestVideo = result?.video?.[0];
+    if (!bestVideo?.link) {
+        throw new Error('YouTubeMP4 scraper returned no video link');
+    }
+
+    const fileRes = await tryRequest(() => axios.get(bestVideo.link, {
+        headers: AXIOS_DEFAULTS.headers,
+        responseType: 'arraybuffer'
+    }));
+
+    return {
+        buffer: Buffer.from(fileRes.data),
+        title: result.title || 'Unknown Title',
+        thumbnail: result.thumbnail,
+        quality: bestVideo.quality || 'MP4',
+        source: 'YouTubeMP4.to'
+    };
+}
+
 // Get video from Nayan AllDown API
 async function getVideoFromAllDown(ytUrl) {
-    let videoId = '';
-    if (ytUrl.includes('youtu.be/')) {
-        videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
-    } else if (ytUrl.includes('youtube.com/watch')) {
-        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
-        videoId = urlParams.get('v');
-    }
+    const videoId = extractYoutubeVideoId(ytUrl);
 
     if (!videoId) throw new Error('Invalid URL');
 
@@ -64,13 +170,7 @@ async function getVideoFromAllDown(ytUrl) {
 
 // Get video from Nayan YouTube API (best quality)
 async function getVideoFromYoutubeAPI(ytUrl) {
-    let videoId = '';
-    if (ytUrl.includes('youtu.be/')) {
-        videoId = ytUrl.split('youtu.be/')[1].split('?')[0];
-    } else if (ytUrl.includes('youtube.com/watch')) {
-        const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
-        videoId = urlParams.get('v');
-    }
+    const videoId = extractYoutubeVideoId(ytUrl);
 
     if (!videoId) throw new Error('Invalid URL');
 
@@ -148,17 +248,22 @@ async function getVideoFromYoutubeAPI(ytUrl) {
     }
 }
 
-// Main function - tries AllDown first, then YouTube API
+// Main function - tries YouTubeMP4 scraper first, then AllDown, then YouTube API
 async function getYoutubeVideo(ytUrl) {
     try {
-        console.log('[VIDEO] Trying AllDown API...');
-        return await getVideoFromAllDown(ytUrl);
-    } catch (allDownErr) {
-        console.log('[VIDEO] AllDown failed, trying YouTube API...');
+        console.log('[VIDEO] Trying YouTubeMP4 scraper...');
+        return await getVideoFromYouTubeMP4Scraper(ytUrl);
+    } catch (scraperErr) {
+        console.log(`[VIDEO] YouTubeMP4 failed: ${scraperErr.message}, trying AllDown API...`);
         try {
-            return await getVideoFromYoutubeAPI(ytUrl);
-        } catch (ytErr) {
-            throw new Error('All APIs failed');
+            return await getVideoFromAllDown(ytUrl);
+        } catch (allDownErr) {
+            console.log(`[VIDEO] AllDown failed: ${allDownErr.message}, trying YouTube API...`);
+            try {
+                return await getVideoFromYoutubeAPI(ytUrl);
+            } catch (ytErr) {
+                throw new Error(`All download sources failed: ${ytErr.message}`);
+            }
         }
     }
 }
