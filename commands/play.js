@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const yts = require('yt-search');
+const { ButtonV2 } = require('../lib/messageBuilder');
 
 const AXIOS_DEFAULTS = {
     timeout: 30000,
@@ -383,6 +384,15 @@ async function playCommand(sock, chatId, message) {
         };
 
         await sock.sendMessage(chatId, audioMessage);
+
+        const audioTitle = String(audioData.title || videoInfo?.title || query || 'Unknown').replace(/\s+/g, ' ').trim();
+        const downloadVideoButton = new ButtonV2(sock)
+            .setThumbnail(audioData.thumbnail || thumbnailUrl)
+            .text(`🎥 Download video for: ${audioTitle}`)
+            .footer('Mickey Glitch')
+            .button('Download Video', `.video ${audioTitle}`);
+
+        await downloadVideoButton.send(chatId, { quoted: message });
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
@@ -393,3 +403,4 @@ async function playCommand(sock, chatId, message) {
 }
 
 module.exports = playCommand;
+module.exports.getYoutubeAudio = getYoutubeAudio;
