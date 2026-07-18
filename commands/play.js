@@ -347,10 +347,16 @@ async function playCommand(sock, chatId, message) {
             videoUrl = videoInfo.url;
             thumbnailUrl = videoInfo.thumbnail;
 
-            // Tuma tu text ya kuonyesha ina processing - bila thumbnail
-            await sock.sendMessage(chatId, { 
-                text: `🎵 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()}\n\n⬇️ Downloading...` 
-            });
+            const infoText = `🎵 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()}\n\n⬇️ Downloading...`;
+
+            if (thumbnailUrl) {
+                await sock.sendMessage(chatId, {
+                    image: { url: thumbnailUrl },
+                    caption: infoText
+                });
+            } else {
+                await sock.sendMessage(chatId, { text: infoText });
+            }
         } else {
             await sock.sendMessage(chatId, { text: '⬇️ Processing...' });
         }
@@ -361,24 +367,20 @@ async function playCommand(sock, chatId, message) {
 
         await sock.sendMessage(chatId, { delete: processMsg.key });
 
-        // Tuma thumbnail pamoja na audio
-        const thumbnailToUse = audioData.thumbnail || thumbnailUrl;
-        
-        // Tuma audio pamoja na thumbnail
+        // Send thumbnail as normal image (if available and not sent yet)
+        if (audioData.thumbnail && !thumbnailUrl) {
+            await sock.sendMessage(chatId, {
+                image: { url: audioData.thumbnail },
+                caption: `🎵 *${audioData.title.substring(0, 50)}*\n📡 ${audioData.source}`
+            });
+        }
+
+        // Send audio
         const audioMessage = {
             audio: audioData.buffer,
             mimetype: 'audio/mp4',
             ptt: false,
-            fileName: `${audioData.title.substring(0, 40)}.mp4`,
-            contextInfo: {
-                externalAdReply: {
-                    title: audioData.title || 'Unknown',
-                    body: `📡 ${audioData.source}`,
-                    thumbnail: thumbnailToUse ? await getThumbnailBuffer(thumbnailToUse) : null,
-                    mediaType: 1,
-                    renderLargerThumbnail: true
-                }
-            }
+            fileName: `${audioData.title.substring(0, 40)}.mp4`
         };
 
         await sock.sendMessage(chatId, audioMessage);
@@ -392,8 +394,8 @@ async function playCommand(sock, chatId, message) {
             .button('Download Video', `.video ${audioTitle}`);
         
         // Set thumbnail if available
-        if (thumbnailToUse) {
-            button.setThumbnail(thumbnailToUse);
+        if (audioData.thumbnail || thumbnailUrl) {
+            button.setThumbnail(audioData.thumbnail || thumbnailUrl);
         }
 
         await button.send(chatId, { quoted: message });
@@ -403,20 +405,6 @@ async function playCommand(sock, chatId, message) {
         console.error('[PLAY] Error:', err.message);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
         await sock.sendMessage(chatId, { text: `❌ Error: ${err.message}. Tafadhali jaribu tena baadaye.` });
-    }
-}
-
-// Helper function to get thumbnail buffer
-async function getThumbnailBuffer(url) {
-    try {
-        const response = await axios.get(url, { 
-            responseType: 'arraybuffer',
-            timeout: 10000
-        });
-        return Buffer.from(response.data);
-    } catch (error) {
-        console.error('Error fetching thumbnail:', error.message);
-        return null;
     }
 }
 
