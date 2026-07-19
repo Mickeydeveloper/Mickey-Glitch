@@ -1,12 +1,20 @@
-const express = require('express')
-const app = express()
+const http = require('http')
 
-app.get('/', (req, res) => res.send('OK'))
+const server = http.createServer((req, res) => {
+  if (req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' })
+    res.end('OK')
+    return
+  }
+
+  res.writeHead(404, { 'Content-Type': 'text/plain' })
+  res.end('Not Found')
+})
 
 const port = process.env.PORT || 3000
-app.listen(port, () => console.log(`✅ Server listening on port ${port}`))
+server.listen(port, () => console.log(`✅ Server listening on port ${port}`))
 
-// Start the bot after the HTTP server is listening so Heroku sees a bound port
+// Start the bot after the HTTP server is listening so platforms like Heroku see a bound port
 try {
   require('./index')
 } catch (err) {
