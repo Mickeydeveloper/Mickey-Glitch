@@ -146,13 +146,23 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
+const formatCommandDescription = (desc = '') => {
+    const cleaned = String(desc)
+        .replace(/^Cmd:\s*/i, '')
+        .replace(/^\./, '')
+        .trim();
+
+    if (!cleaned) return 'Available command';
+    return cleaned.length > 30 ? `${cleaned.substring(0, 27)}...` : cleaned;
+};
+
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
-        title: `${cat.icon} ${cat.title}`,
-        highlight_label: `${cat.items.length} cmd`,
-        rows: cat.items.slice(0, 15).map(item => ({
+        title: `${cat.icon} ${cat.title.replace(/_/g, ' ')}`,
+        highlight_label: `${cat.items.length} commands`,
+        rows: cat.items.slice(0, 20).map(item => ({
             title: item.cmd,
-            description: item.desc ? item.desc.substring(0, 20) : '',
+            description: formatCommandDescription(item.desc),
             id: item.cmd 
         }))
     }));
@@ -175,17 +185,17 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         // Menu header iliyoboreshwa
         const menuText = `✨ *MICKEY GLITCH V3.0.5* ✨
         
-${buttonStyles.primary} *Habari za ${greeting.text}* ${greeting.emoji}
+${buttonStyles.primary} *${greeting.text}* ${greeting.emoji}
 ${buttonStyles.info} *User:* ${userName}
 ${buttonStyles.success} *Date:* ${date} | ⏰ *Time:* ${time}
 
 ━━━━━━━━━━━━━━━━━━━━
-💫 *Bonyeza buttons chini:*
+⚡ *Quick Access*
 ━━━━━━━━━━━━━━━━━━━━
 
-📌 *Menu* - Angalia command zote
-👑 *Owner* - Wasiliana na mwenye bot
-❤️ *I love mom* - Special message`;
+📌 *Commands* — Browse available commands
+👑 *Owner* — Contact the bot owner
+❤️ *Mom* — Special message`;
 
         // ==============================================
         // 📤 SEND INTERACTIVE MENU WITH IMPROVED BUTTONS
@@ -197,13 +207,13 @@ ${buttonStyles.success} *Date:* ${date} | ⏰ *Time:* ${time}
         
         // Button 1: Menu 📂 - Kwa kutumia nativeFlowInfo iliyoboreshwa
         buttonBuilder.addRawButton({
-            buttonText: { displayText: '📂 Menu' },
+            buttonText: { displayText: '📂 Commands' },
             buttonId: 'mickey_list_menu',
             type: 1,
             nativeFlowInfo: {
                 name: 'single_select',
                 paramsJson: JSON.stringify({
-                    title: '📂 Orodha ya Command Zote',
+                    title: '📂 Available Commands',
                     sections: buildSections(menuData)
                 })
             }
@@ -225,7 +235,7 @@ ${buttonStyles.success} *Date:* ${date} | ⏰ *Time:* ${time}
         
         // Button 3: Alive 🟢 - Button mpya ya kuangalia bot status
         buttonBuilder.addRawButton({
-            buttonText: { displayText: '🟢 Alive' },
+            buttonText: { displayText: '🟢 Status' },
             buttonId: '.alive',
             type: 1,
             nativeFlowInfo: {
