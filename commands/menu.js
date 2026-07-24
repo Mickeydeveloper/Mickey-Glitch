@@ -158,17 +158,6 @@ const formatCommandDescription = (desc = '') => {
 };
 
 
-const formatCommandDescription = (desc = '') => {
-    const cleaned = String(desc)
-        .replace(/^Cmd:\s*/i, '')
-        .replace(/^\./, '')
-        .trim();
-
-    if (!cleaned) return 'Available command';
-    return cleaned.length > 30 ? `${cleaned.substring(0, 27)}...` : cleaned;
-};
-
-
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
         title: `${cat.icon} ${cat.title.replace(/_/g, ' ')}`,
