@@ -239,7 +239,7 @@ ${buttonStyles.success} *Date:* ${date} | ⏰ *Time:* ${time}
         
         // Button 4: I 💖 Mom - Button maalum yenye hisia
         buttonBuilder.addRawButton({
-            buttonText: { displayText: '❤️ I ❤️ Mom' },
+            buttonText: { displayText: '❤️ Mom' },
             buttonId: 'love_mom',
             type: 1,
             nativeFlowInfo: {

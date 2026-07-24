@@ -28,13 +28,14 @@ const {
 
 const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require("./main");
 const { handleAnticall } = require("./commands/anticall");
-const { getButtonId, isButtonResponse, autoDetectButtonCommand, isCommandId } = require("./lib/buttonLoader");
+const { getButtonId, isButtonResponse, autoDetectButtonCommand, isCommandId, loadButtonHandlers, executeButtonHandler } = require("./lib/buttonLoader");
 const store = require("./lib/lightweight_store");
 const settings = require("./settings");
 const MickeyHelper = require("./lib/Mickey");
 
 // Try to load telegram module
 let startTelegramBot = null;
+let buttonHandlers = null;
 try {
     const telegramModule = require("./telegram-bot");
     startTelegramBot = telegramModule.startTelegramBot;
@@ -580,6 +581,8 @@ async function startMickeyBot() {
                 if (!mek?.message) return;
 
                 if (isButtonResponse && isButtonResponse(mek)) {
+                    if (!buttonHandlers) buttonHandlers = await loadButtonHandlers();
+
                     const buttonId = getButtonId && getButtonId(mek);
                     if (buttonId && isCommandId && isCommandId(buttonId)) {
                         const command = autoDetectButtonCommand && autoDetectButtonCommand(mek);
@@ -589,6 +592,11 @@ async function startMickeyBot() {
                             await handleMessages(Mickey, chatUpdate, true);
                             return;
                         }
+                    }
+
+                    if (buttonId && buttonHandlers) {
+                        const handled = await executeButtonHandler(buttonId, Mickey, mek.key?.remoteJid || chatUpdate?.chatId || '', mek, buttonHandlers);
+                        if (handled) return;
                     }
                 }
 
