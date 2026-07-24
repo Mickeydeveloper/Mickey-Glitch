@@ -146,6 +146,18 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
+
+const formatCommandDescription = (desc = '') => {
+    const cleaned = String(desc)
+        .replace(/^Cmd:\s*/i, '')
+        .replace(/^\./, '')
+        .trim();
+
+    if (!cleaned) return 'Available command';
+    return cleaned.length > 28 ? `${cleaned.substring(0, 25)}...` : cleaned;
+};
+
+
 const formatCommandDescription = (desc = '') => {
     const cleaned = String(desc)
         .replace(/^Cmd:\s*/i, '')
@@ -155,6 +167,7 @@ const formatCommandDescription = (desc = '') => {
     if (!cleaned) return 'Available command';
     return cleaned.length > 30 ? `${cleaned.substring(0, 27)}...` : cleaned;
 };
+
 
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
