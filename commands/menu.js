@@ -130,7 +130,7 @@ const loadDynamicMenu = (showAll = true) => {
 const getGreeting = (hour) => {
     if (hour >= 0 && hour <= 4) return { text: 'Usiku sana', emoji: '🌙' };
     if (hour >= 5 && hour <= 11) return { text: 'Asubuhi', emoji: '☀️' };
-    if (hour >= 12 && hour <= 16) return { text: 'Mchana', emoji: '☀️' };
+    if (hour >= 12 && hour <= 16) return { text: 'Mchana', emoji: '🎉' };
     if (hour >= 17 && hour <= 18) return { text: 'Jioni', emoji: '🌤️' };
     return { text: 'Usiku', emoji: '🌙' };
 };
@@ -148,7 +148,7 @@ const buildSections = (menuData) => {
 };
 
 // ==============================================
-// 🚀 MAIN MENU COMMAND
+// 🚀 MAIN MENU COMMAND - BUTTONS ZIWE KWA ULALO
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
@@ -164,58 +164,63 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const menuText = `✨ *MICKEY GLITCH V3.0.5*
 👋 *Habari za ${greeting.text}* ${greeting.emoji}
 👤 *User:* ${userName}
-📅 *Date:* ${date} | ⏰ *Time:* ${time}
+📅 *Date:* ${date} | 🕒 *Time:* ${time}
 
 👇 _Bonyeza "Menu 📂" kuona command zote_
 ❤️ _i love mom_`;
 
         // ==============================================
-        // 📤 SEND INTERACTIVE MENU
+        // 📤 SEND INTERACTIVE MENU - BUTTONS KWA ULALO
         // ==============================================
-        await new ButtonV2(sock)
+        const buttonBuilder = new ButtonV2(sock)
             .setBody(menuText)
             .setFooter(`MICKEY BOT`)
-            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png')
-            // BUTTON 1: LIST MENU - IWE JUU
-            .addRawButton({
-                buttonText: { displayText: '📂 Menu' },
-                buttonId: 'mickey_list_menu',
-                type: 1,
-                nativeFlowInfo: {
-                    name: 'single_select',
-                    paramsJson: JSON.stringify({
-                        title: '📂 Fungua Orodha',
-                        sections: buildSections(menuData)
-                    })
-                }
-            })
-            // BUTTON 2: OWNER - KWENYE ULALO NA BUTTON 3
-            .addRawButton({
-                buttonText: { displayText: '👑 Owner' },
-                buttonId: '.owner',
-                type: 1,
-                nativeFlowInfo: {
-                    name: 'quick_reply',
-                    paramsJson: JSON.stringify({
-                        display_text: '👑 Wasiliana na Owner',
-                        id: '.owner'
-                    })
-                }
-            })
-            // BUTTON 3: ALIVE - KWENYE ULALO NA BUTTON 2
-            .addRawButton({
-                buttonText: { displayText: '🟢 Alive' },
-                buttonId: '.alive',
-                type: 1,
-                nativeFlowInfo: {
-                    name: 'quick_reply',
-                    paramsJson: JSON.stringify({
-                        display_text: '🟢 Angalia Status',
-                        id: '.alive'
-                    })
-                }
-            })
-            .send(chatId, { quoted: m });
+            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png');
+
+        // BUTTON YA KWANZA: MENU - INAFUNGUA LIST
+        buttonBuilder.addRawButton({
+            buttonText: { displayText: '📂 Menu' },
+            buttonId: 'mickey_list_menu',
+            type: 1,
+            nativeFlowInfo: {
+                name: 'single_select',
+                paramsJson: JSON.stringify({
+                    title: '📂 Fungua Orodha',
+                    sections: buildSections(menuData)
+                })
+            }
+        });
+
+        // BUTTON YA PILI: OWNER - KWENYE ULALO NA BUTTON YA TATU
+        buttonBuilder.addRawButton({
+            buttonText: { displayText: '👑 Owner' },
+            buttonId: '.owner',
+            type: 1,
+            nativeFlowInfo: {
+                name: 'quick_reply',
+                paramsJson: JSON.stringify({
+                    display_text: '👑 Wasiliana na Owner',
+                    id: '.owner'
+                })
+            }
+        });
+
+        // BUTTON YA TATU: ALIVE - KWENYE ULALO NA BUTTON YA PILI
+        buttonBuilder.addRawButton({
+            buttonText: { displayText: '🟢 Alive' },
+            buttonId: '.alive',
+            type: 1,
+            nativeFlowInfo: {
+                name: 'quick_reply',
+                paramsJson: JSON.stringify({
+                    display_text: '🟢 Angalia Status',
+                    id: '.alive'
+                })
+            }
+        });
+
+        // Tuma ujumbe
+        await buttonBuilder.send(chatId, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
@@ -252,3 +257,4 @@ if (typeof global !== 'undefined') {
 }
 
 console.log(chalk.green('✓ Menu System Loaded Successfully'));
+console.log(chalk.cyan('✓ Buttons Arranged Horizontally'));
