@@ -69,7 +69,29 @@ async function fetchPasteContent(pasteId) {
 }
 
 // ==============================================
-// 🎬 LIVE SAMPLES ZA NIXELLV2
+// 🗑️ DELETE MESSAGES FUNCTION
+// ==============================================
+
+async function deletePreviousMessages(sock, chatId, messages) {
+    try {
+        for (const msg of messages) {
+            if (msg && msg.key) {
+                await sock.sendMessage(chatId, {
+                    delete: msg.key
+                });
+                await delay(200);
+            }
+        }
+    } catch (e) {
+        console.log('Error deleting messages:', e);
+    }
+}
+
+// Store ya messages za kila user
+const userMessages = {};
+
+// ==============================================
+// 🎬 LIVE SAMPLES ZA NIXELLV2 (ZENYE CONTENT HALISI)
 // ==============================================
 
 // Function ya ku-run live samples kutoka pastebin
@@ -77,11 +99,14 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
     try {
         if (!content) return false;
 
+        // SAVE MESSAGE KWA AJILI YA KUFUTA BAADAYE
+        if (!userMessages[chatId]) userMessages[chatId] = [];
+        userMessages[chatId].push(msg);
+
         // Kama kodi ina muundo wa relayMessage au interactiveMessage, itakuwa executed kama live sample
         if (content.includes('relayMessage') || content.includes('interactiveMessage') || 
             content.includes('documentMessage') || content.includes('stickerMessage')) {
             try {
-                // Tunatengeneza mazingira ya sanduku la usalama (Sandbox/Function Eval)
                 const runTemplate = new Function('sock', 'chatId', 'msg', 'baileys', `
                     const conn = sock; 
                     const m = { chat: chatId };
@@ -101,10 +126,10 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
         // Hardcoded options kwa ajili ya usalama wa ziada
         const title = example.title.toLowerCase();
 
-        // THUMBNAIL EDIT (tmte)
+        // THUMBNAIL EDIT (tmte) - ZENYE CONTENT HALISI
         if (title.includes('thumbnail edit') || title.includes('tmte')) {
             const imgUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg";
-            await sock.sendMessage(chatId, {
+            const sentMsg = await sock.sendMessage(chatId, {
                 text: '🖼️ *Thumbnail Edit Live Sample*\n\nInaonyesha jinsi ya kubadilisha thumbnail ya link...',
                 linkPreview: {
                     'matched-text': 'https://example.com',
@@ -112,59 +137,65 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
                     jpegThumbnail: await baileys.prepareWAMessageMedia({ image: { url: imgUrl } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' })
                 }
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // TO STICKERPACK (tspk)
+        // TO STICKERPACK (tspk) - ZENYE CONTENT HALISI
         else if (title.includes('stickerpack') || title.includes('tspk')) {
             const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg";
             const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { upload: sock.waUploadToServer });
-            await sock.sendMessage(chatId, {
+            const sentMsg = await sock.sendMessage(chatId, {
                 sticker: media,
                 contextInfo: { isStickerPack: true }
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // GROUP ADD META AI
+        // GROUP ADD META AI - ZENYE CONTENT HALISI
         else if (title.includes('group') && title.includes('meta')) {
-            await sock.sendMessage(chatId, {
-                text: '👥 *Group Add Meta AI Live Sample*\n\nSimulizi ya kuongeza AI kwenye kikundi...'
+            const sentMsg = await sock.sendMessage(chatId, {
+                text: '👥 *Group Add Meta AI Live Sample*\n\nSimulizi ya kuongeza AI kwenye kikundi...\n\n📌 *Code Sample:*\n```javascript\nconst addMetaAI = async (groupId) => {\n  // Code ya kuongeza Meta AI\n  await sock.groupAdd(groupId, [metaAI]);\n};\n```'
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // STICKER (SPREM)
+        // STICKER (SPREM) - ZENYE CONTENT HALISI
         else if (title.includes('sticker') && title.includes('sprem')) {
             const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg";
             const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { upload: sock.waUploadToServer });
-            await sock.sendMessage(chatId, {
+            const sentMsg = await sock.sendMessage(chatId, {
                 sticker: media,
                 contextInfo: { isStickerPack: false }
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // STICKER (ANTI COLONG)
+        // STICKER (ANTI COLONG) - ZENYE CONTENT HALISI
         else if (title.includes('sticker') && title.includes('anti colong')) {
             const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy3.jpg";
             const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { upload: sock.waUploadToServer });
-            await sock.sendMessage(chatId, {
+            const sentMsg = await sock.sendMessage(chatId, {
                 sticker: media,
                 contextInfo: { isStickerPack: false }
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // LATEX
+        // LATEX - ZENYE CONTENT HALISI
         else if (title.includes('latex')) {
-            await sock.sendMessage(chatId, {
-                text: '📐 *LaTeX Live Sample*\n\n`E = mc²`\n`∫₀¹ x² dx = ⅓`\n`\\frac{-b ± √(b²-4ac)}{2a}`\n\n*Formulas:*\n`\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}`\n`\\lim_{x\\to\\infty} f(x)`'
+            const sentMsg = await sock.sendMessage(chatId, {
+                text: '📐 *LaTeX Live Sample*\n\n`E = mc²`\n`∫₀¹ x² dx = ⅓`\n`\\frac{-b ± √(b²-4ac)}{2a}`\n\n*Formulas:*\n`\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}`\n`\\lim_{x\\to\\infty} f(x)`\n\n📝 *Code:*\n```javascript\nconst latex = new LaTeX(sock)\n  .setFormula("E = mc^2")\n  .send(chatId);\n```'
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // SINGLE SELECT
+        // SINGLE SELECT - ZENYE CONTENT HALISI
         else if (title.includes('single select')) {
             const btn = new Button(sock)
                 .setTitle('🔘 Single Select Sample')
@@ -172,50 +203,56 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
                 .addReply('✅ Option 1', '.source nixell_selected')
                 .addReply('✅ Option 2', '.source nixell_selected')
                 .addReply('✅ Option 3', '.source nixell_selected');
-            await btn.send(chatId, { quoted: msg });
+            const sentMsg = await btn.send(chatId, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // GALAXY MESSAGE
+        // GALAXY MESSAGE - ZENYE CONTENT HALISI
         else if (title.includes('galaxy')) {
-            await sock.sendMessage(chatId, {
-                text: '🌌 *Galaxy Message Live Sample*\n\n✨ Ujumbe wa kimajini!\n⭐ Nyota zinang'aa\n🌟 Galaxy inakungoja...'
+            const sentMsg = await sock.sendMessage(chatId, {
+                text: '🌌 *Galaxy Message Live Sample*\n\n✨ Ujumbe wa kimajini!\n⭐ Nyota zinang\'aa\n🌟 Galaxy inakungoja...\n\n📝 *Code:*\n```javascript\nconst galaxy = new Galaxy(sock)\n  .setMessage("✨ Ujumbe wa kimajini!")\n  .send(chatId);\n```'
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // REVIEW AND PAY
+        // REVIEW AND PAY - ZENYE CONTENT HALISI
         else if (title.includes('review') && title.includes('pay')) {
             const reviewBtn = new Button(sock)
                 .setTitle('💳 Review & Pay')
                 .setBody('Tathmini na malipo:')
                 .addReply('✅ Review Order', '.source review_order')
                 .addReply('💳 Pay Now', '.source pay_now');
-            await reviewBtn.send(chatId, { quoted: msg });
+            const sentMsg = await reviewBtn.send(chatId, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // INAPP SIGNUP
+        // INAPP SIGNUP - ZENYE CONTENT HALISI
         else if (title.includes('inapp signup')) {
-            await sock.sendMessage(chatId, {
-                text: '📝 *InApp Signup Live Sample*\n\nJisajili ndani ya app:\n👤 Jina lako\n📧 Barua pepe\n🔑 Nenosiri'
+            const sentMsg = await sock.sendMessage(chatId, {
+                text: '📝 *InApp Signup Live Sample*\n\nJisajili ndani ya app:\n👤 Jina lako\n📧 Barua pepe\n🔑 Nenosiri\n\n📝 *Code:*\n```javascript\nconst signup = new Signup(sock)\n  .setFields(["Jina", "Barua pepe", "Nenosiri"])\n  .send(chatId);\n```'
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // BOOKING CONFIRMATION
+        // BOOKING CONFIRMATION - ZENYE CONTENT HALISI
         else if (title.includes('booking confirmation')) {
-            await sock.sendMessage(chatId, {
-                text: '✅ *Booking Confirmation Live Sample*\n\nBooking #12345 imethibitishwa!\n📅 Tarehe: 25 July 2026\n🕐 Saa: 14:30\n📍 Mahali: Dar es Salaam'
+            const sentMsg = await sock.sendMessage(chatId, {
+                text: '✅ *Booking Confirmation Live Sample*\n\nBooking #12345 imethibitishwa!\n📅 Tarehe: 25 July 2026\n🕐 Saa: 14:30\n📍 Mahali: Dar es Salaam\n\n📝 *Code:*\n```javascript\nconst booking = new Booking(sock)\n  .setId("12345")\n  .setDate("25 July 2026")\n  .send(chatId);\n```'
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
         
-        // PAYMENT KEY INFO
+        // PAYMENT KEY INFO - ZENYE CONTENT HALISI
         else if (title.includes('payment key')) {
-            await sock.sendMessage(chatId, {
-                text: '🔑 *Payment Key Info Live Sample*\n\nMaelezo ya malipo:\n💰 Kiasi: TSh 50,000\n🔢 Namba: 1234-5678-9012\n📅 Tarehe: 25/07/2026'
+            const sentMsg = await sock.sendMessage(chatId, {
+                text: '🔑 *Payment Key Info Live Sample*\n\nMaelezo ya malipo:\n💰 Kiasi: TSh 50,000\n🔢 Namba: 1234-5678-9012\n📅 Tarehe: 25/07/2026\n\n📝 *Code:*\n```javascript\nconst payment = new Payment(sock)\n  .setAmount("TSh 50,000")\n  .setKey("1234-5678-9012")\n  .send(chatId);\n```'
             }, { quoted: msg });
+            userMessages[chatId].push(sentMsg);
             return true;
         }
 
@@ -234,6 +271,9 @@ const sourceCommand = async (sock, chatId, msg, args) => {
     const ctx = createCtx(sock, chatId, msg, { args });
     const input = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
 
+    // Initialize user messages
+    if (!userMessages[chatId]) userMessages[chatId] = [];
+
     // Raw links za picha na video
     const img1 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg";
     const img2 = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg";
@@ -244,6 +284,10 @@ const sourceCommand = async (sock, chatId, msg, args) => {
     // ─── 1. MENU KUU ───
     if (!input) {
         try {
+            // Futa messages zote za nyuma
+            await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+            userMessages[chatId] = [];
+
             const nixellExamples = await fetchNixellExamples();
 
             const mainMenus = new Button(sock)
@@ -262,7 +306,8 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             mainMenus.addReply('🔄 Refresh Examples', '.source refresh');
             mainMenus.addReply('❌ Close Menu', '.source close');
 
-            await mainMenus.send(ctx.chatId, { quoted: ctx._msg });
+            const sentMsg = await mainMenus.send(ctx.chatId, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg);
             return;
         } catch (e) {
             console.error('Error kwenye menu kuu:', e);
@@ -272,24 +317,37 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
     // ─── REFRESH EXAMPLES ───
     if (input === 'refresh') {
-        await sock.sendMessage(ctx.chatId, { text: '🔄 Inapakua mifano mpya kutoka Nixellv2...' }, { quoted: ctx._msg });
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
+        const sentMsg = await sock.sendMessage(ctx.chatId, { text: '🔄 Inapakua mifano mpya kutoka Nixellv2...' }, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg);
+        
         const examples = await fetchNixellExamples();
         if (examples.length > 0) {
-            return sock.sendMessage(ctx.chatId, { 
+            const sentMsg2 = await sock.sendMessage(ctx.chatId, { 
                 text: `✅ Imepakua ${examples.length} mifano mpya!\nTumia .source nixell_menu kuona orodha.` 
             }, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg2);
         } else {
-            return sock.sendMessage(ctx.chatId, { text: '❌ Imeshindwa kupakua mifano. Jaribu tena.' }, { quoted: ctx._msg });
+            const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: '❌ Imeshindwa kupakua mifano. Jaribu tena.' }, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg2);
         }
+        return;
     }
 
     // ─── NIXELLV2 MENU ───
     if (input === 'nixell_menu') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         const examples = await fetchNixellExamples();
         if (examples.length === 0) {
-            return sock.sendMessage(ctx.chatId, { 
+            const sentMsg = await sock.sendMessage(ctx.chatId, { 
                 text: '❌ Hakuna mifano iliyopatikana. Jaribu .source refresh' 
             }, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg);
+            return;
         }
 
         // Panga mifano kwa makundi
@@ -315,25 +373,32 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
         nixellMenu.addReply('⬅️ Rudi Nyuma', '.source');
 
-        await nixellMenu.send(ctx.chatId, { quoted: ctx._msg });
+        const sentMsg = await nixellMenu.send(ctx.chatId, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg);
         return;
     }
 
     // ─── SHOW SPECIFIC NIXELL EXAMPLE (LIVE SAMPLE + CODE) ───
     if (input.startsWith('nixell_')) {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         const index = parseInt(input.split('_')[1]);
         const examples = await fetchNixellExamples();
 
         if (isNaN(index) || index >= examples.length) {
-            return sock.sendMessage(ctx.chatId, { 
+            const sentMsg = await sock.sendMessage(ctx.chatId, { 
                 text: '❌ Namba ya mfano haipo. Tumia .source nixell_menu kuona orodha.' 
             }, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg);
+            return;
         }
 
         const example = examples[index];
-        await sock.sendMessage(ctx.chatId, { 
+        const sentMsg = await sock.sendMessage(ctx.chatId, { 
             text: `🎬 Inapakua na kuandaa Live Sample ya: *${example.title}*...` 
         }, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg);
 
         // 1. VUTA KODI KWANZA KUTOKA KWENYE PASTEBIN
         const content = await fetchPasteContent(example.id);
@@ -343,9 +408,10 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             const isLiveRendered = await showNixellLiveSample(sock, chatId, msg, example, content);
 
             if (!isLiveRendered) {
-                await sock.sendMessage(ctx.chatId, { 
+                const sentMsg2 = await sock.sendMessage(ctx.chatId, { 
                     text: '💡 _Mfano huu hauna muundo wa live render, unaonyeshwa kama kodi tu._' 
                 }, { quoted: ctx._msg });
+                userMessages[chatId].push(sentMsg2);
             }
 
             await delay(1500); // Mpe mtumiaji muda kuona Live Sample
@@ -354,23 +420,30 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             const codeMessage = `📌 *${example.title}*\n📅 Added: ${example.added}\n🔧 Syntax: ${example.syntax}\n🔗 Link: ${example.link}\n\n📝 *Source Code:*\n\`\`\`javascript\n${content.substring(0, 4000)}\n\`\`\``;
 
             if (content.length > 4000) {
-                await sock.sendMessage(ctx.chatId, { text: codeMessage }, { quoted: ctx._msg });
-                await sock.sendMessage(ctx.chatId, { 
+                const sentMsg3 = await sock.sendMessage(ctx.chatId, { text: codeMessage }, { quoted: ctx._msg });
+                userMessages[chatId].push(sentMsg3);
+                const sentMsg4 = await sock.sendMessage(ctx.chatId, { 
                     text: `📎 *Link kamili ya kodi:* ${example.link}` 
                 }, { quoted: ctx._msg });
+                userMessages[chatId].push(sentMsg4);
             } else {
-                await sock.sendMessage(ctx.chatId, { text: codeMessage }, { quoted: ctx._msg });
+                const sentMsg3 = await sock.sendMessage(ctx.chatId, { text: codeMessage }, { quoted: ctx._msg });
+                userMessages[chatId].push(sentMsg3);
             }
         } else {
-            return sock.sendMessage(ctx.chatId, { 
+            const sentMsg2 = await sock.sendMessage(ctx.chatId, { 
                 text: `❌ Imeshindwa kupata kodi ya paste hii. Jaribu kuifungua moja kwa moja hapa: ${example.link}` 
             }, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg2);
         }
         return;
     }
 
     // ─── SUB-MENU 1: CORE ENGINE ───
     if (input === 'kundi_core') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         const coreMenu = new Button(sock)
             .setTitle('📁 Core Engine Features')
             .setBody('Maumbo ya msingi ya messageBuilder yako:')
@@ -382,12 +455,16 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         coreMenu.addReply('📊 AIRich (Tables/Meza)', '.source test_table');
         coreMenu.addReply('⬅️ Rudi Nyuma', '.source');
 
-        await coreMenu.send(ctx.chatId, { quoted: ctx._msg });
+        const sentMsg = await coreMenu.send(ctx.chatId, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg);
         return;
     }
 
     // ─── SUB-MENU 2: ADVANCED HACKS ───
     if (input === 'kundi_advanced') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         const advMenu = new Button(sock)
             .setTitle('🚀 Advanced & Other Hacks')
             .setBody('Mbinu mpya zinazoonyesha Sample na kodi zake:')
@@ -398,24 +475,34 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         advMenu.addReply('💬 AI Message with Icon', '.source test_ai_message');
         advMenu.addReply('⬅️ Rudi Nyuma', '.source');
 
-        await advMenu.send(ctx.chatId, { quoted: ctx._msg });
+        const sentMsg = await advMenu.send(ctx.chatId, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg);
         return;
     }
 
     // ─── BUTTON V2 ───
     if (input === 'test_v2') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         const btnV2 = new ButtonV2(sock)
             .setTitle("Mickey ButtonV2")
             .setBody("Huu ni mfano wa muundo wa ButtonV2.");
         btnV2.addButton("Menu 📦", ".menu");
-        await btnV2.send(ctx.chatId, { quoted: ctx._msg });
+        const sentMsg = await btnV2.send(ctx.chatId, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg);
 
         const code = `// Muundo wa ButtonV2\nconst { ButtonV2 } = require('./lib/messageBuilder');\nconst btnV2 = new ButtonV2(sock)\n  .setTitle("Mickey ButtonV2")\n  .addButton("Menu 📦", ".menu");\nawait btnV2.send(chatId, { quoted: msg });`;
-        return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg2);
+        return;
     }
 
     // ─── CAROUSEL ───
     if (input === 'test_carousel') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         try {
             const waLink = "https://wa.me/255719632816";
             const sampleCarousel = new Carousel(sock).setBody("🛒 *Mickey Store Preview*");
@@ -430,37 +517,57 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             ];
 
             cards.forEach(card => sampleCarousel.addCard(card));
-            await sampleCarousel.send(ctx.chatId, { quoted: ctx._msg });
+            const sentMsg = await sampleCarousel.send(ctx.chatId, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg);
 
             const code = `// Muundo wa Carousel\nconst crsl = new Carousel(sock);\n// ...addCard(card);\nawait crsl.send(chatId);`;
-            return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+            const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg2);
         } catch (e) { 
-            return sock.sendMessage(ctx.chatId, { text: "❌ Error: " + e.message }, { quoted: ctx._msg }); 
+            const sentMsg = await sock.sendMessage(ctx.chatId, { text: "❌ Error: " + e.message }, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg);
         }
+        return;
     }
 
     // ─── AIRICH TEXT ───
     if (input === 'test_airich') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         const rich = new AIRich(sock).setTitle('🧠 AI Engine').addText('Mfano wa AIRich Markdown Text.').addSuggest(['.menu']);
-        await rich.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
+        const sentMsg = await rich.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
+        userMessages[chatId].push(sentMsg);
 
         const code = `const rich = new AIRich(sock).setTitle('🧠 AI Engine').addText('Text').send(chatId);`;
-        return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg2);
+        return;
     }
 
     // ─── AIRICH TABLES ───
     if (input === 'test_table') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         const richTable = new AIRich(sock).setTitle('📊 Table').addTable([["Command", "Status"], [".fromai", "Online ✅"]]);
-        await richTable.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
+        const sentMsg = await richTable.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
+        userMessages[chatId].push(sentMsg);
 
         const code = `const rich = new AIRich(sock).addTable([["H1", "H2"], ["D1", "D2"]]);`;
-        return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg2);
+        return;
     }
 
     // ─── ADVANCED: PAIRED MEDIA ───
     if (input === 'test_paired') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         try {
-            await sock.sendMessage(ctx.chatId, { text: '⏳ _Inatengeneza muundo wa Paired Media Live..._' }, { quoted: ctx._msg });
+            const sentMsg = await sock.sendMessage(ctx.chatId, { text: '⏳ _Inatengeneza muundo wa Paired Media Live..._' }, { quoted: ctx._msg });
+            userMessages[chatId].push(sentMsg);
 
             const image = await baileys.prepareWAMessageMedia({ image: { url: img1 } }, { upload: sock.waUploadToServer });
             const video = await baileys.prepareWAMessageMedia({ video: { url: sampleVideo } }, { upload: sock.waUploadToServer });
@@ -479,11 +586,16 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         }
 
         const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: '${img1}' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: '${sampleVideo}' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
-        return sock.sendMessage(ctx.chatId, { text: "💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg2);
+        return;
     }
 
     // ─── ADVANCED: ANIMATED LINK LOOP ───
     if (input === 'test_linkloop') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
         try {
             const { key } = await sock.sendMessage(ctx.chatId, { text: '🎬 PRIVACY SLIDESHOW LOADING...' }, { quoted: ctx._msg });
 
@@ -512,49 +624,4 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             console.error("Error kwenye Link Loop Sample:", e);
         }
 
-        const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://nixel.dev\\n🎬 SLIDESHOW RUNNING",\n      linkPreview: { \n        'matched-text': "https://nixel.dev",\n        title: "Mickey Privacy Loop",\n        jpegThumbnail: image.jpegThumbnail\n      }\n    });\n    await delay(1500);\n  }\n}`;
-        return sock.sendMessage(ctx.chatId, { text: "💡 *Animated Link Loop Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
-    }
-
-    // ─── AI MESSAGE WITH ICON ───
-    if (input === 'test_ai_message') {
-        try {
-            const aiMsg = new AIRich(sock)
-                .setTitle('🤖 AI Assistant')
-                .addText('💬 *Mickey AI Message*\n\nHii ni mfano wa ujumbe wa AI ulioboreshwa na icons.')
-                .addSuggest(['.menu', '.source'])
-                .setFooter('MICKEY AI • v1.0');
-            await aiMsg.send(ctx.chatId, { quoted: ctx._msg });
-        } catch (e) {
-            console.error('AI Message Error:', e);
-        }
-
-        const code = `// 💬 AI MESSAGE WITH ICON\nconst aiMsg = new AIRich(sock)\n  .setTitle('🤖 AI Assistant')\n  .addText('💬 *Mickey AI Message*\\n\\nHii ni mfano wa ujumbe wa AI.')\n  .addSuggest(['.menu', '.source'])\n  .setFooter('MICKEY AI • v1.0');\nawait aiMsg.send(chatId, { quoted: msg });`;
-        return sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
-    }
-
-    // ─── CLOSE ───
-    if (input === 'close') {
-        await sock.sendMessage(ctx.chatId, { 
-            text: '✅ *Menu Imefungwa*\n\nTumia .source tena kuifungua.' 
-        }, { quoted: ctx._msg });
-        return;
-    }
-
-    // ─── DEFAULT ───
-    await sock.sendMessage(ctx.chatId, { 
-        text: '❌ Amri haijulikani. Tumia *.source* kuona menu.' 
-    }, { quoted: ctx._msg });
-};
-
-// ==============================================
-// 📤 EXPORTS
-// ==============================================
-
-module.exports = sourceCommand;
-module.exports.fetchNixellExamples = fetchNixellExamples;
-module.exports.fetchPasteContent = fetchPasteContent;
-module.exports.showNixellLiveSample = showNixellLiveSample;
-
-console.log('✅ Source Command Loaded Successfully');
-console.log('📚 Nixellv2 Pastebin Integration Active');
+        const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\
