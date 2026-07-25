@@ -50,7 +50,7 @@ const getSystemStats = () => {
 };
 
 // ==============================================
-// 🎨 MENU ICONS & STYLES
+// 🎨 MENU ICONS
 // ==============================================
 const icons = {
     'GENERAL': '🏠', 'GROUP': '👥', 'MODERATION': '🛡️',
@@ -59,17 +59,6 @@ const icons = {
     'EFFECTS': '✨', 'OWNER/ADMIN': '👑', 'OTHER': '📂',
     'UTILITY': '🔧', 'GAMES': '🎯', 'SOCIAL': '💬',
     'TOOLS': '🛠️', 'ANIME': '🎭'
-};
-
-// Button styles za kuvutia
-const buttonStyles = {
-    primary: '⭐',
-    secondary: '💫',
-    accent: '🌟',
-    info: 'ℹ️',
-    success: '✅',
-    warning: '⚠️',
-    danger: '🔥'
 };
 
 // ==============================================
@@ -146,32 +135,20 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
-
-const formatCommandDescription = (desc = '') => {
-    const cleaned = String(desc)
-        .replace(/^Cmd:\s*/i, '')
-        .replace(/^\./, '')
-        .trim();
-
-    if (!cleaned) return 'Available command';
-    return cleaned.length > 28 ? `${cleaned.substring(0, 25)}...` : cleaned;
-};
-
-
 const buildSections = (menuData) => {
     return menuData.map(cat => ({
-        title: `${cat.icon} ${cat.title.replace(/_/g, ' ')}`,
-        highlight_label: `${cat.items.length} commands`,
-        rows: cat.items.slice(0, 20).map(item => ({
+        title: `${cat.icon} ${cat.title}`,
+        highlight_label: `${cat.items.length} cmd`,
+        rows: cat.items.slice(0, 15).map(item => ({
             title: item.cmd,
-            description: formatCommandDescription(item.desc),
+            description: item.desc ? item.desc.substring(0, 20) : '',
             id: item.cmd 
         }))
     }));
 };
 
 // ==============================================
-// 🚀 MAIN MENU COMMAND - BORESHWA BUTTONS
+// 🚀 MAIN MENU COMMAND
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
@@ -183,97 +160,67 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 
         const date = now.format('DD MMMM YYYY'); 
         const time = now.format('HH:mm:ss');
-        
-        // Menu header iliyoboreshwa
-        const menuText = `✨ *MICKEY GLITCH V3.0.5* ✨
-        
-${buttonStyles.primary} *${greeting.text}* ${greeting.emoji}
-${buttonStyles.info} *User:* ${userName}
-${buttonStyles.success} *Date:* ${date} | ⏰ *Time:* ${time}
 
-━━━━━━━━━━━━━━━━━━━━
-⚡ *Quick Access*
-━━━━━━━━━━━━━━━━━━━━
+        const menuText = `✨ *MICKEY GLITCH V3.0.5*
+👋 *Habari za ${greeting.text}* ${greeting.emoji}
+👤 *User:* ${userName}
+📅 *Date:* ${date} | ⏰ *Time:* ${time}
 
-📌 *Commands* — Browse available commands
-👑 *Owner* — Contact the bot owner
-❤️ *Mom* — Special message`;
+👇 _Bonyeza "Menu 📂" kuona command zote_
+❤️ _i love mom_`;
 
         // ==============================================
-        // 📤 SEND INTERACTIVE MENU WITH IMPROVED BUTTONS
+        // 📤 SEND INTERACTIVE MENU
         // ==============================================
-        const buttonBuilder = new ButtonV2(sock)
+        await new ButtonV2(sock)
             .setBody(menuText)
-            .setFooter(`MICKEY BOT • ${date}`)
-            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png');
-        
-        // Button 1: Menu 📂 - Kwa kutumia nativeFlowInfo iliyoboreshwa
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '📂 Commands' },
-            buttonId: 'mickey_list_menu',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'single_select',
-                paramsJson: JSON.stringify({
-                    title: '📂 Available Commands',
-                    sections: buildSections(menuData)
-                })
-            }
-        });
-        
-        // Button 2: Owner 👑 - Quick reply iliyoboreshwa
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '👑 Owner' },
-            buttonId: '.owner',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '👑 Wasiliana na Owner',
-                    id: '.owner'
-                })
-            }
-        });
-        
-        // Button 3: Alive 🟢 - Button mpya ya kuangalia bot status
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '🟢 Status' },
-            buttonId: '.alive',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '🟢 Angalia Status ya Bot',
-                    id: '.alive'
-                })
-            }
-        });
-        
-        // Button 4: I 💖 Mom - Button maalum yenye hisia
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '❤️ Mom' },
-            buttonId: 'love_mom',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '❤️ I Love Mom ❤️',
-                    id: 'love_mom'
-                })
-            }
-        });
-        
-        await buttonBuilder.send(chatId, { quoted: m });
+            .setFooter(`MICKEY BOT`)
+            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png')
+            // BUTTON 1: LIST MENU - IWE JUU
+            .addRawButton({
+                buttonText: { displayText: '📂 Menu' },
+                buttonId: 'mickey_list_menu',
+                type: 1,
+                nativeFlowInfo: {
+                    name: 'single_select',
+                    paramsJson: JSON.stringify({
+                        title: '📂 Fungua Orodha',
+                        sections: buildSections(menuData)
+                    })
+                }
+            })
+            // BUTTON 2: OWNER - KWENYE ULALO NA BUTTON 3
+            .addRawButton({
+                buttonText: { displayText: '👑 Owner' },
+                buttonId: '.owner',
+                type: 1,
+                nativeFlowInfo: {
+                    name: 'quick_reply',
+                    paramsJson: JSON.stringify({
+                        display_text: '👑 Wasiliana na Owner',
+                        id: '.owner'
+                    })
+                }
+            })
+            // BUTTON 3: ALIVE - KWENYE ULALO NA BUTTON 2
+            .addRawButton({
+                buttonText: { displayText: '🟢 Alive' },
+                buttonId: '.alive',
+                type: 1,
+                nativeFlowInfo: {
+                    name: 'quick_reply',
+                    paramsJson: JSON.stringify({
+                        display_text: '🟢 Angalia Status',
+                        id: '.alive'
+                    })
+                }
+            })
+            .send(chatId, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
         try {
-            // Error handling iliyoboreshwa
-            const errorMsg = `❌ *Menu Error!*
-            
-⚠️ Tafadhali jaribu tena baadaye.
-📞 Wasiliana na *Owner* kama tatizo linaendelea.`;
-            await sock.sendMessage(chatId, { text: errorMsg }, { quoted: m });
+            await sock.sendMessage(chatId, { text: `❌ *Menu Error!*` }, { quoted: m });
         } catch (err) {}
     }
 };
@@ -305,4 +252,3 @@ if (typeof global !== 'undefined') {
 }
 
 console.log(chalk.green('✓ Menu System Loaded Successfully'));
-console.log(chalk.cyan('✓ Buttons Enhanced With Beautiful UI'));
