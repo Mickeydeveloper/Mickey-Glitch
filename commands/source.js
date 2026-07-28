@@ -18,32 +18,39 @@ async function fetchNixellExamples() {
         const response = await axios.get('https://pastebin.com/u/Nixellv2', {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
+            },
+            timeout: 10000 // 10 second timeout
         });
 
         const $ = cheerio.load(response.data);
         const examples = [];
 
-        $('table.maintable tr').each((i, row) => {
-            if (i === 0) return;
-            const columns = $(row).find('td');
-            if (columns.length >= 4) {
-                const title = $(columns[0]).text().trim();
-                const link = $(columns[0]).find('a').attr('href');
-                const added = $(columns[1]).text().trim();
-                const syntax = $(columns[4]).text().trim();
+        // Imeongezwa error handling kwa ajili ya selectors
+        try {
+            $('table.maintable tr').each((i, row) => {
+                if (i === 0) return;
+                const columns = $(row).find('td');
+                if (columns.length >= 4) {
+                    const title = $(columns[0]).text().trim();
+                    const link = $(columns[0]).find('a').attr('href');
+                    const added = $(columns[1]).text().trim();
+                    const syntax = $(columns[4]).text().trim();
 
-                if (title && link) {
-                    examples.push({
-                        title: title,
-                        link: link.startsWith('http') ? link : `https://pastebin.com${link}`,
-                        added: added,
-                        syntax: syntax,
-                        id: link.split('/').pop()
-                    });
+                    if (title && link) {
+                        examples.push({
+                            title: title,
+                            link: link.startsWith('http') ? link : `https://pastebin.com${link}`,
+                            added: added,
+                            syntax: syntax,
+                            id: link.split('/').pop()
+                        });
+                    }
                 }
-            }
-        });
+            });
+        } catch (parseError) {
+            console.error('❌ Imeshindwa kuparsa HTML:', parseError.message);
+            return [];
+        }
 
         console.log(`✅ Imepata ${examples.length} mifano kutoka Nixellv2`);
         return examples;
@@ -59,7 +66,8 @@ async function fetchPasteContent(pasteId) {
         const response = await axios.get(`https://pastebin.com/raw/${pasteId}`, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
+            },
+            timeout: 10000
         });
         return response.data;
     } catch (error) {
@@ -74,12 +82,19 @@ async function fetchPasteContent(pasteId) {
 
 async function deletePreviousMessages(sock, chatId, messages) {
     try {
+        if (!messages || messages.length === 0) return;
+        
         for (const msg of messages) {
             if (msg && msg.key) {
-                await sock.sendMessage(chatId, {
-                    delete: msg.key
-                });
-                await delay(200);
+                try {
+                    await sock.sendMessage(chatId, {
+                        delete: msg.key
+                    });
+                    await delay(200);
+                } catch (deleteError) {
+                    // Ignore individual deletion errors
+                    console.log('Error deleting single message:', deleteError.message);
+                }
             }
         }
     } catch (e) {
@@ -107,19 +122,26 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
         if (content.includes('relayMessage') || content.includes('interactiveMessage') || 
             content.includes('documentMessage') || content.includes('stickerMessage')) {
             try {
+                // Imeongezwa safety check
+                const sanitizedContent = content
+                    .replace(/sock\.sendMessage/g, 'sock?.sendMessage')
+                    .replace(/sock\.relayMessage/g, 'sock?.relayMessage');
+                
                 const runTemplate = new Function('sock', 'chatId', 'msg', 'baileys', `
                     const conn = sock; 
                     const m = { chat: chatId };
                     try {
-                        ${content}
+                        ${sanitizedContent}
                     } catch(err) {
                         console.error("Internal template runtime error:", err);
+                        return false;
                     }
+                    return true;
                 `);
-                runTemplate(sock, chatId, msg, baileys);
-                return true;
+                return await runTemplate(sock, chatId, msg, baileys) || false;
             } catch (e) {
                 console.error("❌ Imeshindwa ku-render live template kutoka pastebin:", e.message);
+                return false;
             }
         }
 
@@ -129,30 +151,47 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
         // THUMBNAIL EDIT (tmte) - ZENYE CONTENT HALISI
         if (title.includes('thumbnail edit') || title.includes('tmte')) {
             const imgUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg";
-            const sentMsg = await sock.sendMessage(chatId, {
-                text: '🖼️ *Thumbnail Edit Live Sample*\n\nInaonyesha jinsi ya kubadilisha thumbnail ya link...',
-                linkPreview: {
-                    'matched-text': 'https://example.com',
-                    title: 'Thumbnail Edit Demo',
-                    jpegThumbnail: await baileys.prepareWAMessageMedia({ image: { url: imgUrl } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' })
-                }
-            }, { quoted: msg });
-            userMessages[chatId].push(sentMsg);
-            return true;
+            try {
+                const media = await baileys.prepareWAMessageMedia({ image: { url: imgUrl } }, { 
+                    upload: sock.waUploadToServer, 
+                    mediaTypeOverride: 'thumbnail-link' 
+                });
+                const sentMsg = await sock.sendMessage(chatId, {
+                    text: '🖼️ *Thumbnail Edit Live Sample*\n\nInaonyesha jinsi ya kubadilisha thumbnail ya link...',
+                    linkPreview: {
+                        'matched-text': 'https://example.com',
+                        title: 'Thumbnail Edit Demo',
+                        jpegThumbnail: media.imageMessage.jpegThumbnail,
+                        highQualityThumbnail: media.imageMessage
+                    }
+                }, { quoted: msg });
+                userMessages[chatId].push(sentMsg);
+                return true;
+            } catch (mediaError) {
+                console.error('❌ Error preparing thumbnail media:', mediaError);
+                return false;
+            }
         }
-        
+
         // TO STICKERPACK (tspk) - ZENYE CONTENT HALISI
         else if (title.includes('stickerpack') || title.includes('tspk')) {
             const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg";
-            const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { upload: sock.waUploadToServer });
-            const sentMsg = await sock.sendMessage(chatId, {
-                sticker: media,
-                contextInfo: { isStickerPack: true }
-            }, { quoted: msg });
-            userMessages[chatId].push(sentMsg);
-            return true;
+            try {
+                const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { 
+                    upload: sock.waUploadToServer 
+                });
+                const sentMsg = await sock.sendMessage(chatId, {
+                    sticker: media,
+                    contextInfo: { isStickerPack: true }
+                }, { quoted: msg });
+                userMessages[chatId].push(sentMsg);
+                return true;
+            } catch (mediaError) {
+                console.error('❌ Error preparing sticker media:', mediaError);
+                return false;
+            }
         }
-        
+
         // GROUP ADD META AI - ZENYE CONTENT HALISI
         else if (title.includes('group') && title.includes('meta')) {
             const sentMsg = await sock.sendMessage(chatId, {
@@ -161,31 +200,45 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             userMessages[chatId].push(sentMsg);
             return true;
         }
-        
+
         // STICKER (SPREM) - ZENYE CONTENT HALISI
         else if (title.includes('sticker') && title.includes('sprem')) {
             const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg";
-            const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { upload: sock.waUploadToServer });
-            const sentMsg = await sock.sendMessage(chatId, {
-                sticker: media,
-                contextInfo: { isStickerPack: false }
-            }, { quoted: msg });
-            userMessages[chatId].push(sentMsg);
-            return true;
+            try {
+                const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { 
+                    upload: sock.waUploadToServer 
+                });
+                const sentMsg = await sock.sendMessage(chatId, {
+                    sticker: media,
+                    contextInfo: { isStickerPack: false }
+                }, { quoted: msg });
+                userMessages[chatId].push(sentMsg);
+                return true;
+            } catch (mediaError) {
+                console.error('❌ Error preparing sticker media:', mediaError);
+                return false;
+            }
         }
-        
+
         // STICKER (ANTI COLONG) - ZENYE CONTENT HALISI
         else if (title.includes('sticker') && title.includes('anti colong')) {
             const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy3.jpg";
-            const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { upload: sock.waUploadToServer });
-            const sentMsg = await sock.sendMessage(chatId, {
-                sticker: media,
-                contextInfo: { isStickerPack: false }
-            }, { quoted: msg });
-            userMessages[chatId].push(sentMsg);
-            return true;
+            try {
+                const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { 
+                    upload: sock.waUploadToServer 
+                });
+                const sentMsg = await sock.sendMessage(chatId, {
+                    sticker: media,
+                    contextInfo: { isStickerPack: false }
+                }, { quoted: msg });
+                userMessages[chatId].push(sentMsg);
+                return true;
+            } catch (mediaError) {
+                console.error('❌ Error preparing sticker media:', mediaError);
+                return false;
+            }
         }
-        
+
         // LATEX - ZENYE CONTENT HALISI
         else if (title.includes('latex')) {
             const sentMsg = await sock.sendMessage(chatId, {
@@ -194,7 +247,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             userMessages[chatId].push(sentMsg);
             return true;
         }
-        
+
         // SINGLE SELECT - ZENYE CONTENT HALISI
         else if (title.includes('single select')) {
             const btn = new Button(sock)
@@ -207,7 +260,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             userMessages[chatId].push(sentMsg);
             return true;
         }
-        
+
         // GALAXY MESSAGE - ZENYE CONTENT HALISI
         else if (title.includes('galaxy')) {
             const sentMsg = await sock.sendMessage(chatId, {
@@ -216,7 +269,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             userMessages[chatId].push(sentMsg);
             return true;
         }
-        
+
         // REVIEW AND PAY - ZENYE CONTENT HALISI
         else if (title.includes('review') && title.includes('pay')) {
             const reviewBtn = new Button(sock)
@@ -228,7 +281,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             userMessages[chatId].push(sentMsg);
             return true;
         }
-        
+
         // INAPP SIGNUP - ZENYE CONTENT HALISI
         else if (title.includes('inapp signup')) {
             const sentMsg = await sock.sendMessage(chatId, {
@@ -237,7 +290,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             userMessages[chatId].push(sentMsg);
             return true;
         }
-        
+
         // BOOKING CONFIRMATION - ZENYE CONTENT HALISI
         else if (title.includes('booking confirmation')) {
             const sentMsg = await sock.sendMessage(chatId, {
@@ -246,7 +299,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             userMessages[chatId].push(sentMsg);
             return true;
         }
-        
+
         // PAYMENT KEY INFO - ZENYE CONTENT HALISI
         else if (title.includes('payment key')) {
             const sentMsg = await sock.sendMessage(chatId, {
@@ -311,8 +364,17 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             return;
         } catch (e) {
             console.error('Error kwenye menu kuu:', e);
-            return sock.sendMessage(ctx.chatId, { text: '❌ Imeshindwa kufungua Tester Menu.' }, { quoted: ctx._msg });
+            await sock.sendMessage(ctx.chatId, { text: '❌ Imeshindwa kufungua Tester Menu.' }, { quoted: ctx._msg });
+            return;
         }
+    }
+
+    // ─── CLOSE MENU ───
+    if (input === 'close') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+        await sock.sendMessage(ctx.chatId, { text: '✅ Menu imefungwa. Tuma .source tena kufungua.' }, { quoted: ctx._msg });
+        return;
     }
 
     // ─── REFRESH EXAMPLES ───
@@ -322,7 +384,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
         const sentMsg = await sock.sendMessage(ctx.chatId, { text: '🔄 Inapakua mifano mpya kutoka Nixellv2...' }, { quoted: ctx._msg });
         userMessages[chatId].push(sentMsg);
-        
+
         const examples = await fetchNixellExamples();
         if (examples.length > 0) {
             const sentMsg2 = await sock.sendMessage(ctx.chatId, { 
@@ -583,6 +645,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             }, {});
         } catch (e) {
             console.error("Error kwenye Paired Media Sample:", e);
+            await sock.sendMessage(ctx.chatId, { text: `❌ Paired Media Error: ${e.message}` }, { quoted: ctx._msg });
         }
 
         const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: '${img1}' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: '${sampleVideo}' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
@@ -601,7 +664,10 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
             const demoUrls = [img2, img3, img4];
             const medias = await Promise.all(demoUrls.map(async url => {
-                const { imageMessage } = await baileys.prepareWAMessageMedia({ image: { url } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });
+                const { imageMessage } = await baileys.prepareWAMessageMedia({ image: { url } }, { 
+                    upload: sock.waUploadToServer, 
+                    mediaTypeOverride: 'thumbnail-link' 
+                });
                 return imageMessage;
             }));
 
@@ -622,6 +688,32 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             }
         } catch (e) {
             console.error("Error kwenye Link Loop Sample:", e);
+            await sock.sendMessage(ctx.chatId, { text: `❌ Link Loop Error: ${e.message}` }, { quoted: ctx._msg });
         }
 
-        const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\
+        const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://nixel.dev\\n🎬 PRIVACY SLIDESHOW PLAYING...",\n      linkPreview: {\n        'matched-text': "https://nixel.dev",\n        title: "Mickey Privacy Loop",\n        jpegThumbnail: image.jpegThumbnail,\n        highQualityThumbnail: image\n      }\n    });\n    await delay(1500);\n  }\n}`;
+        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "💡 *Link Loop Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg2);
+        return;
+    }
+
+    // ─── AI MESSAGE WITH ICON ───
+    if (input === 'test_ai_message') {
+        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
+        userMessages[chatId] = [];
+
+        const sentMsg = await sock.sendMessage(ctx.chatId, { 
+            text: '🤖 *AI Message with Icon*\n\nHii ni message yenye icon ya AI.\n\n📌 *Sample Code:*\n```javascript\nconst aiMsg = new AIMessage(sock)\n  .setIcon("🤖")\n  .setTitle("AI Assistant")\n  .setBody("How can I help you today?")\n  .send(chatId);\n```'
+        }, { quoted: ctx._msg });
+        userMessages[chatId].push(sentMsg);
+        return;
+    }
+
+    // ─── DEFAULT: UNKNOWN COMMAND ───
+    const sentMsg = await sock.sendMessage(ctx.chatId, { 
+        text: '❓ Amri haijulikani. Tuma .source kuona menyu.' 
+    }, { quoted: ctx._msg });
+    userMessages[chatId].push(sentMsg);
+};
+
+module.exports = { sourceCommand };
