@@ -64,8 +64,57 @@ const icons = {
 // ==============================================
 // 📂 LOAD DYNAMIC MENU
 // ==============================================
+const resolveCommandsDir = () => {
+    const candidates = [
+        path.resolve(__dirname, '..', 'commands'),
+        path.join(process.cwd(), 'commands'),
+        path.join(__dirname, 'commands')
+    ];
+
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) return candidate;
+    }
+
+    return path.resolve(__dirname, '..', 'commands');
+};
+
+const normalizeCommandName = (value, fallback) => {
+    if (!value) return fallback;
+    const cleaned = String(value).trim();
+    if (!cleaned) return fallback;
+    return cleaned.startsWith('.') ? cleaned.toLowerCase() : `.${cleaned.toLowerCase()}`;
+};
+
+const getCommandMeta = (cmdModule, fallbackName) => {
+    const fallback = normalizeCommandName(fallbackName, `.${fallbackName}`);
+
+    if (!cmdModule || typeof cmdModule !== 'object') {
+        return { commandId: fallback, description: `Cmd: ${fallbackName}` };
+    }
+
+    const candidates = [];
+    const pushCandidate = (value) => {
+        if (typeof value === 'string' && value.trim()) {
+            candidates.push(normalizeCommandName(value, fallback));
+        }
+    };
+
+    pushCandidate(cmdModule.commandName);
+    pushCandidate(cmdModule.command);
+    pushCandidate(cmdModule.name);
+
+    if (Array.isArray(cmdModule.aliases)) {
+        cmdModule.aliases.forEach(alias => pushCandidate(alias));
+    }
+
+    const commandId = candidates.find(Boolean) || fallback;
+    const description = cmdModule.description || `Cmd: ${fallbackName}`;
+
+    return { commandId, description };
+};
+
 const loadDynamicMenu = (showAll = true) => {
-    const commandsDir = path.join(process.cwd(), 'commands');
+    const commandsDir = resolveCommandsDir();
     const dynamicMenu = {};
     const userCategories = ['GENERAL', 'GROUP', 'MODERATION', 'MEDIA', 'AUDIO/VIDEO', 
                            'DOWNLOAD', 'FUN', 'AUTOMATION', 'AI/BOT', 'EFFECTS', 
@@ -80,25 +129,32 @@ const loadDynamicMenu = (showAll = true) => {
     };
 
     const fileMapping = {
-        'alive': 'GENERAL', 'ping': 'GENERAL', 'stats': 'GENERAL', 'owner': 'GENERAL', 
+        'alive': 'GENERAL', 'ping': 'GENERAL', 'stats': 'GENERAL', 'owner': 'GENERAL',
         'sticker': 'MEDIA', 'facebook': 'DOWNLOAD', 'tiktok': 'DOWNLOAD',
         'play': 'AUDIO/VIDEO', 'ai': 'AI/BOT', 'gpt': 'AI/BOT'
     };
 
     if (fs.existsSync(commandsDir)) {
-        const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.js'));
+        const files = fs.readdirSync(commandsDir)
+            .filter(f => f.endsWith('.js'))
+            .sort();
+
         files.forEach(file => {
-            const baseName = file.replace('.js', '');
+            const baseName = file.replace(/\.js$/i, '');
+            if (baseName === 'menu') return;
+
             try {
-                const cmdModule = require(path.join(commandsDir, file));
-                const category = cmdModule.category || fileMapping[baseName] || 'OTHER';
+                const fullPath = path.join(commandsDir, file);
+                const cmdModule = require(fullPath);
+                const meta = getCommandMeta(cmdModule, baseName);
+                const category = (cmdModule && (cmdModule.category || fileMapping[baseName] || fileMapping[meta.commandId.replace(/^\./, '')])) || 'OTHER';
                 addItem(category, {
-                    cmd: `.${baseName}`,
-                    desc: cmdModule.description || `Cmd: ${baseName}`
+                    cmd: meta.commandId,
+                    desc: meta.description
                 });
             } catch (e) {
                 addItem(fileMapping[baseName] || 'OTHER', {
-                    cmd: `.${baseName}`,
+                    cmd: normalizeCommandName(baseName, `.${baseName}`),
                     desc: `Cmd: ${baseName}`
                 });
             }
@@ -110,7 +166,7 @@ const loadDynamicMenu = (showAll = true) => {
             if (cmd.name) {
                 const category = cmd.category || fileMapping[cmd.name] || 'OTHER';
                 addItem(category, {
-                    cmd: `.${cmd.name}`,
+                    cmd: normalizeCommandName(cmd.name, `.${cmd.name}`),
                     desc: cmd.description || `Cmd: ${cmd.name}`
                 });
             }
@@ -191,32 +247,24 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
             }
         });
 
-        // BUTTON YA PILI: OWNER - KWENYE ULALO NA BUTTON YA TATU
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '👑 Owner' },
-            buttonId: '.owner',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '👑 Wasiliana na Owner',
-                    id: '.owner'
-                })
-            }
-        });
-
-        // BUTTON YA TATU: ALIVE - KWENYE ULALO NA BUTTON YA PILI
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '🟢 Alive' },
-            buttonId: '.alive',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '🟢 Angalia Status',
-                    id: '.alive'
-                })
-            }
+        // BUTTON ZA HARAKA ZILIZO NA COMMAND HALISI
+        [
+            { label: '🟢 Alive', id: '.alive' },
+            { label: '📡 Ping', id: '.ping' },
+            { label: '👑 Owner', id: '.owner' }
+        ].forEach(button => {
+            buttonBuilder.addRawButton({
+                buttonText: { displayText: button.label },
+                buttonId: button.id,
+                type: 1,
+                nativeFlowInfo: {
+                    name: 'quick_reply',
+                    paramsJson: JSON.stringify({
+                        display_text: button.label,
+                        id: button.id
+                    })
+                }
+            });
         });
 
         // Tuma ujumbe
