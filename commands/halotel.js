@@ -186,7 +186,11 @@ async function halotelCommand(sock, chatId, message, args) {
 
         // ─── LIST ALL PRODUCTS ──────────────────────────────────────────────
         if (subCommand === 'list' || subCommand === 'all') {
-            await sendProductList(ctx);
+            if (supportsInteractive) {
+                await sendCarouselView(ctx);
+            } else {
+                await sendProductList(ctx);
+            }
             return;
         }
 
@@ -249,14 +253,10 @@ async function checkWhatsAppVersion(ctx) {
     try {
         if (!ctx?.sock) return false;
 
-        const msg = ctx._msg || {};
-        const messageType = msg.message ? Object.keys(msg.message)[0] : '';
-        const hasInteractive = ['interactiveMessage', 'buttonsMessage', 'listMessage'].includes(messageType);
-
         const supportsRelay = typeof ctx.sock.relayMessage === 'function';
         const supportsSendMessage = typeof ctx.sock.sendMessage === 'function';
 
-        return hasInteractive && supportsRelay && supportsSendMessage;
+        return supportsRelay && supportsSendMessage;
     } catch (error) {
         console.error('[VERSION CHECK]', error?.message || error);
         return false;
