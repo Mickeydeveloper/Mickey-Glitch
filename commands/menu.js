@@ -85,6 +85,16 @@ const normalizeCommandName = (value, fallback) => {
     return cleaned.startsWith('.') ? cleaned.toLowerCase() : `.${cleaned.toLowerCase()}`;
 };
 
+const isLikelyRealCommandName = (value) => {
+    if (typeof value !== 'string') return false;
+    const cleaned = String(value).trim();
+    if (!cleaned) return false;
+    const noPrefix = cleaned.startsWith('.') ? cleaned.slice(1) : cleaned;
+    if (!noPrefix) return false;
+    if (/command$/i.test(noPrefix)) return false;
+    return /^[a-z0-9._-]+$/i.test(noPrefix);
+};
+
 const getCommandMeta = (cmdModule, fallbackName) => {
     const fallback = normalizeCommandName(fallbackName, `.${fallbackName}`);
 
@@ -94,7 +104,7 @@ const getCommandMeta = (cmdModule, fallbackName) => {
 
     const candidates = [];
     const pushCandidate = (value) => {
-        if (typeof value === 'string' && value.trim()) {
+        if (typeof value === 'string' && value.trim() && isLikelyRealCommandName(value)) {
             candidates.push(normalizeCommandName(value, fallback));
         }
     };
@@ -195,7 +205,7 @@ const buildSections = (menuData) => {
     return menuData.map(cat => ({
         title: `${cat.icon} ${cat.title}`,
         highlight_label: `${cat.items.length} cmd`,
-        rows: cat.items.slice(0, 15).map(item => ({
+        rows: cat.items.map(item => ({
             title: item.cmd,
             description: item.desc ? item.desc.substring(0, 20) : '',
             id: item.cmd 

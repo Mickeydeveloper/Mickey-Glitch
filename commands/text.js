@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { sendInteractiveMessage } = require('../lib/myfunc');
+const { ButtonV2 } = require('../lib/messageBuilder');
 
 /**
  * Mickey Glitch - Text Styling Command
@@ -29,20 +29,25 @@ async function textCommand(sock, chatId, m, body = '') {
 
             if (!style) return sock.sendMessage(chatId, { text: '❌ Style haikupatikana.' });
 
-            return await sendInteractiveMessage(sock, chatId, {
-                text: `✨ *Muundo:* ${style.style_name}\n\n${style.styled_text}`,
-                footer: "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑 𝚃𝚎𝚌𝚑",
-                interactiveButtons: [
-                    {
+            const copyButton = new ButtonV2(sock)
+                .setBody(`✨ *Muundo:* ${style.style_name}\n\n${style.styled_text}`)
+                .setFooter('𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑 𝚃𝚎𝚌𝚑')
+                .setThumbnail('https://cdn.ornzora.eu.cc/4d2905ce-3707-4ec0-998a-68a3d851629f-FIORA.jpg')
+                .addRawButton({
+                    buttonText: { displayText: '📋 COPY STYLED TEXT' },
+                    buttonId: 'copy_styled',
+                    type: 1,
+                    nativeFlowInfo: {
                         name: 'cta_copy',
-                        buttonParamsJson: JSON.stringify({
+                        paramsJson: JSON.stringify({
                             display_text: '📋 COPY STYLED TEXT',
                             id: 'copy_styled',
                             copy_code: style.styled_text
                         })
                     }
-                ]
-            }, { quoted: m });
+                });
+
+            return await copyButton.send(chatId, { quoted: m });
         }
 
         // 2. Initial Command (Mtu akiandika .text Mickey)
@@ -78,19 +83,23 @@ async function textCommand(sock, chatId, m, body = '') {
                          `✨ *Jumla ya Miundo:* ${styles.length}\n\n` +
                          `👇 Chagua muundo hapo chini ili uutumie:`;
 
-        await sendInteractiveMessage(sock, chatId, {
-            text: menuText,
-            footer: "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑 𝚃𝚎𝚌𝚑",
-            interactiveButtons: [
-                {
+        await new ButtonV2(sock)
+            .setBody(menuText)
+            .setFooter('𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑 𝚃𝚎𝚌𝚑')
+            .setThumbnail('https://cdn.ornzora.eu.cc/4d2905ce-3707-4ec0-998a-68a3d851629f-FIORA.jpg')
+            .addRawButton({
+                buttonText: { displayText: '📋 FUNGUA ORODHA' },
+                buttonId: 'text_styles_menu',
+                type: 1,
+                nativeFlowInfo: {
                     name: 'single_select',
-                    buttonParamsJson: JSON.stringify({
+                    paramsJson: JSON.stringify({
                         title: '📋 FUNGUA ORODHA',
                         sections: sections
                     })
                 }
-            ]
-        }, { quoted: m });
+            })
+            .send(chatId, { quoted: m });
 
     } catch (e) {
         console.error('Text Styler Error:', e);

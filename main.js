@@ -698,15 +698,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
             }
 
-            try {
-                const firstToken = (userMessage.split(' ')[0] || '').replace(/[^a-z0-9\-_]/gi, '').toLowerCase();
-                const knownCommands = helpCommand.getAllCommands ? helpCommand.getAllCommands() : [];
-                if (!userMessage.startsWith('.') && firstToken && knownCommands.includes(firstToken)) {
-                    userMessage = '.' + userMessage;
-                }
-            } catch (e) {
-                // ignore
-            }
+            // Keep command handling consistent with private mode: only explicitly prefixed commands are accepted in groups.
+            // Bare command names are ignored instead of being auto-converted into commands.
         }
 
         // If userMessage is still not a command, check for active halotel pending state first
