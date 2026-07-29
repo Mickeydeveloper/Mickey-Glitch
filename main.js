@@ -142,6 +142,7 @@ const stickerTelegramCommand = require('./commands/stickertelegram');
 const textmakerCommand = require('./commands/textmaker');
 const { handleAntideleteCommand, handleMessageRevocation, storeMessage } = require('./commands/antidelete');
 const clearTmpCommand = require('./commands/cleartmp');
+const { antiSpam } = require('./lib/antispam');
 const setProfilePicture = require('./commands/setpp');
 const { setGroupDescription, setGroupName, setGroupPhoto, addMetaAI } = require('./commands/groupmanage');
 const instagramCommand = require('./commands/instagram');
@@ -737,6 +738,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // In private mode, only owner/sudo can run commands
         if (!isPublic && !isOwnerOrSudoCheck) {
+            return;
+        }
+
+        const antispamCheck = antiSpam.check(chatId, senderId, userMessage);
+        if (!antispamCheck.allowed) {
+            await sock.sendMessage(chatId, { text: antispamCheck.message || '⏳ Please slow down.' }, { quoted: message });
             return;
         }
 
