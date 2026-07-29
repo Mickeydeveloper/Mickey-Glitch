@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { AIRich, createCtx } = require('../lib/messageBuilder');
+const { AIRich } = require('../lib/messageBuilder');
 
 function readJsonSafe(path, fallback) {
     try {
@@ -12,26 +12,25 @@ function readJsonSafe(path, fallback) {
 
 const isOwnerOrSudo = require('../lib/isOwner');
 
-async function settingsCommand(sock, chatId, message) {
-    const ctx = createCtx(sock, chatId, message, { args: [] });
-
-    const safeSend = async (content, extra = {}) => {
-        try {
-            if (ctx?.sendMessage) {
-                return await ctx.sendMessage(ctx.chatId, content, extra);
-            }
-            return await sock.sendMessage(chatId, content, extra);
-        } catch (error) {
-            console.error('[SETTINGS SAFE SEND]', error?.message || error);
-            try {
-                return await sock.sendMessage(chatId, { text: typeof content === 'string' ? content : content?.text || '⚠️ Unable to display settings.' }, { quoted: message, ...extra });
-            } catch (fallbackError) {
-                console.error('[SETTINGS SAFE SEND FALLBACK]', fallbackError?.message || fallbackError);
-                return null;
-            }
+async function safeSendMessage(sock, chatId, message, content, options = {}) {
+    try {
+        if (typeof content === 'string') {
+            return await sock.sendMessage(chatId, { text: content }, { quoted: message, ...options });
         }
-    };
+        return await sock.sendMessage(chatId, content, { quoted: message, ...options });
+    } catch (error) {
+        console.error('[SETTINGS SAFE SEND]', error?.message || error);
+        try {
+            const text = typeof content === 'string' ? content : content?.text || '⚠️ Unable to display settings.';
+            return await sock.sendMessage(chatId, { text }, { quoted: message, ...options });
+        } catch (fallbackError) {
+            console.error('[SETTINGS SAFE SEND FALLBACK]', fallbackError?.message || fallbackError);
+            return null;
+        }
+    }
+}
 
+async function settingsCommand(sock, chatId, message) {
     try {
         const senderId = message.key.participant || message.key.remoteJid;
         const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
@@ -95,14 +94,14 @@ async function settingsCommand(sock, chatId, message) {
             .addTable(rows)
             .addSuggest(['.menu', '.help']);
 
-        await table.send(ctx.chatId, {
+        await table.send(chatId, {
             quoted: message,
             forwarded: false,
-            fallbackText: rows.map(r => r.join(' | ')).join('\n')
+            fallbackText: rows.map((row) => row.join(' | ')).join('\n')
         });
     } catch (error) {
-        console.error('Error in settings command:', error);
-        await safeSend({ text: 'Failed to read settings.' }, { quoted: message });
+        console.error('Error in settings command:', error?.message || error);
+        await safeSendMessage(sock, chatId, message, '❌ Failed to load settings. Please try again later.');
     }
 }
 
