@@ -91,8 +91,7 @@ async function settingsCommand(sock, chatId, message) {
         const table = new AIRich(sock)
             .setTitle('⚙️ BOT SETTINGS')
             .addText('Here are the current bot settings in table form.')
-            .addTable(rows)
-            .addSuggest(['.menu', '.help']);
+            .addTable(rows);
 
         await table.send(chatId, {
             quoted: message,

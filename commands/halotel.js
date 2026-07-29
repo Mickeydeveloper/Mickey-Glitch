@@ -364,28 +364,12 @@ async function sendCarouselView(ctx) {
                     body: {
                         text: `📦 *${product.data}* | ⏱️ ${product.validity}\n` +
                               `💰 ${product.sale_price || product.price}\n\n` +
-                              `${featuresText}`
+                              `${featuresText}\n\n` +
+                              `Details: .halotel ${product.id}\n` +
+                              `Order: .halotel order ${product.id}`
                     },
                     footer: {
                         text: `Brand: ${product.brand}`
-                    },
-                    nativeFlowMessage: {
-                        buttons: [
-                            {
-                                name: "quick_reply",
-                                buttonParamsJson: JSON.stringify({
-                                    display_text: "🔍 Details",
-                                    id: `.halotel ${product.id}`
-                                })
-                            },
-                            {
-                                name: "quick_reply",
-                                buttonParamsJson: JSON.stringify({
-                                    display_text: "📞 Order",
-                                    id: `.halotel order ${product.id}`
-                                })
-                            }
-                        ]
                     }
                 };
 
