@@ -3,9 +3,26 @@
  * @author: Quantum Base Developer (TZ)
  */
 
-const { downloadContentFromMessage } = require('@whiskeysockets/baileys'); // au `@adiwajshing/baileys` kulingana na lib yako
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const { Button } = require('../lib/messageBuilder');
 const moment = require('moment-timezone');
+
+const safeSend = async (sock, chatId, content, quoted = null) => {
+    try {
+        if (!sock?.sendMessage) throw new Error('sendMessage unavailable');
+        return await sock.sendMessage(chatId, content, quoted ? { quoted } : undefined);
+    } catch (error) {
+        console.error('[SERVER SAFE SEND]', error?.message || error);
+        try {
+            if (sock?.relayMessage) {
+                return await sock.relayMessage(chatId, { conversation: typeof content === 'string' ? content : '' }, { messageId: Date.now().toString() });
+            }
+        } catch (fallbackError) {
+            console.error('[SERVER SAFE SEND FALLBACK]', fallbackError?.message || fallbackError);
+        }
+        return null;
+    }
+};
 
 const normalizeIncomingMessage = (m) => {
     if (!m) return { messages: [] };
@@ -79,7 +96,7 @@ module.exports = async (sock, m, chatUpdate) => {
                                          `⚙️ *Matumizi:* ${sababu}\n\n` +
                                          `Asante kwa kujaza fomu yako ya *Mickey Glitch v3.0.5*! 🚀`;
 
-                    await sock.sendMessage(chatId, { text: responseText }, { quoted: msg });
+                    await safeSend(sock, chatId, { text: responseText }, msg);
                     return; // Inazuia bot isiendelee kutafuta kama ni command ya kawaida
                 } catch (err) {
                     console.error('Error parsing form data in server.js:', err);
@@ -105,7 +122,7 @@ module.exports = async (sock, m, chatUpdate) => {
             
             // Mfano wa command ya owner
             else if (command === 'owner') {
-                await sock.sendMessage(chatId, { text: `👑 *Mickey Glitch Owner:* t.me/QuantumBase` }, { quoted: msg });
+                await safeSend(sock, chatId, { text: `👑 *Mickey Glitch Owner:* t.me/QuantumBase` }, msg);
             }
             // Booking confirmation pattern using new Button() builder
             else if (command === 'booking') {
@@ -127,7 +144,7 @@ module.exports = async (sock, m, chatUpdate) => {
                         user_phone: '+255712345678',
                         comment: 'Please deliver in high quality audio.'
                     })
-                    .send(chatId, { quoted: msg });
+                    .send(chatId, { quoted: msg, fallbackText: 'Booking Confirmation' });
             }
             // Hapa ndipo codes zako nyingine za commands (kama .ping, .sticker) zinapoendelea...
             // console.log(`Executing Command: ${command}`);

@@ -1,5 +1,22 @@
 const { createCtx, Carousel, AIRich, Button, Toolkit } = require('../lib/messageBuilder');
 
+const safeSend = async (ctx, content, extra = {}) => {
+    try {
+        if (!ctx?.sendMessage) throw new Error('ctx.sendMessage unavailable');
+        return await ctx.sendMessage(ctx.chatId, content, extra);
+    } catch (error) {
+        console.error('[HALOTEL SAFE SEND]', error?.message || error);
+        try {
+            if (ctx?.sock?.sendMessage) {
+                return await ctx.sock.sendMessage(ctx.chatId, content, extra);
+            }
+        } catch (fallbackError) {
+            console.error('[HALOTEL SAFE SEND FALLBACK]', fallbackError?.message || fallbackError);
+        }
+        return null;
+    }
+};
+
 // ─── HALOTEL PRODUCT DATABASE ────────────────────────────────────────────────
 const HALOTEL_PRODUCTS = [
     {
@@ -230,23 +247,19 @@ async function halotelCommand(sock, chatId, message, args) {
 // ─── CHECK WHATSAPP VERSION COMPATIBILITY ──────────────────────────────────
 async function checkWhatsAppVersion(ctx) {
     try {
-        // Try to detect if interactive messages are supported
+        if (!ctx?.sock) return false;
+
         const msg = ctx._msg || {};
         const messageType = msg.message ? Object.keys(msg.message)[0] : '';
-        
-        // Check if the user has a newer WhatsApp version
-        // If they have interactive messages, they've likely seen them before
-        const hasInteractive = messageType === 'interactiveMessage' || 
-                              messageType === 'buttonsMessage' ||
-                              messageType === 'listMessage';
-        
-        // Also check if the socket supports interactive messages
-        const sockSupports = typeof ctx.sock.sendMessage === 'function';
-        
-        return hasInteractive || sockSupports;
+        const hasInteractive = ['interactiveMessage', 'buttonsMessage', 'listMessage'].includes(messageType);
+
+        const supportsRelay = typeof ctx.sock.relayMessage === 'function';
+        const supportsSendMessage = typeof ctx.sock.sendMessage === 'function';
+
+        return hasInteractive && supportsRelay && supportsSendMessage;
     } catch (error) {
-        console.error('[VERSION CHECK]', error.message);
-        return false; // Default to false for safety
+        console.error('[VERSION CHECK]', error?.message || error);
+        return false;
     }
 }
 
@@ -296,7 +309,7 @@ async function sendMainMenu(ctx, ownerNumber) {
         `🔢 *Products:* ${HALOTEL_PRODUCTS.length} bundles\n\n` +
         `> *Mickey Glitch Sub* | *Traxxion Tech*`;
 
-    await ctx.sendMessage(ctx.chatId, { text: menuText });
+    await safeSend(ctx, { text: menuText });
 }
 
 // ─── SEND PRODUCT LIST ──────────────────────────────────────────────────────
@@ -319,7 +332,7 @@ async function sendProductList(ctx) {
         `• \`.halotel order <id>\` - Order\n\n` +
         `> *Mickey Glitch Sub* | *Traxxion Tech*`;
 
-    await ctx.sendMessage(ctx.chatId, { text: listText });
+    await safeSend(ctx, { text: listText });
 }
 
 // ─── SEND CAROUSEL VIEW (With error handling) ──────────────────────────────
@@ -397,6 +410,8 @@ async function sendCarouselView(ctx) {
         await carousel.send(ctx.chatId, {
             quoted: ctx._msg,
             fallbackText: "📶 Open .halotel list to view all bundles"
+        }).catch(async () => {
+            await safeSend(ctx, { text: "📶 Open .halotel list to view all bundles" });
         });
 
     } catch (error) {
@@ -429,13 +444,13 @@ async function sendProductDetails(ctx, product) {
 
     try {
         // Try to send with image
-        await ctx.sendMessage(ctx.chatId, {
+        await safeSend(ctx, {
             image: { url: product.image },
             caption: detailText
         });
     } catch (error) {
         // Fallback without image
-        await ctx.sendMessage(ctx.chatId, { text: detailText });
+        await safeSend(ctx, { text: detailText });
     }
 }
 
@@ -449,7 +464,7 @@ async function searchProducts(ctx, query) {
     );
 
     if (results.length === 0) {
-        await ctx.sendMessage(ctx.chatId, { 
+        await safeSend(ctx, { 
             text: `❌ No bundles found for "${query}"\n\n` +
                 `📶 Available bundles:\n` +
                 HALOTEL_PRODUCTS.map(p => `• ${p.title}`).join('\n')
@@ -471,14 +486,14 @@ async function searchProducts(ctx, query) {
     resultText += `📌 Type \`.halotel <id>\` for details\n\n` +
         `> *Mickey Glitch Sub* | *Traxxion Tech*`;
 
-    await ctx.sendMessage(ctx.chatId, { text: resultText });
+    await safeSend(ctx, { text: resultText });
 }
 
 // ─── HANDLE ORDER ─────────────────────────────────────────────────────────────
 async function handleOrder(ctx, productId) {
     const product = HALOTEL_PRODUCTS.find(p => p.id === productId);
     if (!product) {
-        await ctx.sendMessage(ctx.chatId, { 
+        await safeSend(ctx, { 
             text: `❌ Product "${productId}" not found.\n\n` +
                 `📶 Available IDs:\n` +
                 HALOTEL_PRODUCTS.map(p => `• \`${p.id}\` - ${p.title}`).join('\n')
@@ -499,7 +514,7 @@ async function handleOrder(ctx, productId) {
         `• \`cancel\` - To cancel\n\n` +
         `> *Mickey Glitch Sub* | *Traxxion Tech*`;
 
-    await ctx.sendMessage(ctx.chatId, { text: orderText });
+    await safeSend(ctx, { text: orderText });
 }
 
 // ─── PLAIN LIST (Ultimate Fallback) ──────────────────────────────────────────
@@ -520,7 +535,7 @@ async function sendPlainList(ctx) {
     text += `📞 *Order:* https://wa.me/255615944741\n\n` +
         `> *Mickey Glitch Sub* | *Traxxion Tech*`;
 
-    await ctx.sendMessage(ctx.chatId, { text });
+    await safeSend(ctx, { text });
 }
 
 // ─── EXPORT ───────────────────────────────────────────────────────────────────

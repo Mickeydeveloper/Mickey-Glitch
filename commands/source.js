@@ -250,15 +250,21 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
 
         // SINGLE SELECT - ZENYE CONTENT HALISI
         else if (title.includes('single select')) {
-            const btn = new Button(sock)
-                .setTitle('🔘 Single Select Sample')
-                .setBody('Chagua moja kati ya chaguzi zifuatazo:')
-                .addReply('✅ Option 1', '.source nixell_selected')
-                .addReply('✅ Option 2', '.source nixell_selected')
-                .addReply('✅ Option 3', '.source nixell_selected');
-            const sentMsg = await btn.send(chatId, { quoted: msg });
-            userMessages[chatId].push(sentMsg);
-            return true;
+            try {
+                const btn = new Button(sock)
+                    .setTitle('🔘 Single Select Sample')
+                    .setBody('Chagua moja kati ya chaguzi zifuatazo:')
+                    .setFooter('Mickey Glitch');
+                btn.addReply('✅ Option 1', '.source nixell_selected');
+                btn.addReply('✅ Option 2', '.source nixell_selected');
+                btn.addReply('✅ Option 3', '.source nixell_selected');
+                const sentMsg = await btn.send(chatId, { quoted: msg, fallbackText: '🔘 Single Select Sample\nChagua moja kati ya chaguzi zifuatazo:' });
+                userMessages[chatId].push(sentMsg);
+                return true;
+            } catch (sampleError) {
+                console.error('❌ Single select sample failed:', sampleError.message);
+                return false;
+            }
         }
 
         // GALAXY MESSAGE - ZENYE CONTENT HALISI
@@ -548,10 +554,11 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         userMessages[chatId] = [];
 
         const btnV2 = new ButtonV2(sock)
-            .setTitle("Mickey ButtonV2")
-            .setBody("Huu ni mfano wa muundo wa ButtonV2.");
-        btnV2.addButton("Menu 📦", ".menu");
-        const sentMsg = await btnV2.send(ctx.chatId, { quoted: ctx._msg });
+            .setBody('Huu ni mfano wa muundo wa ButtonV2.')
+            .setFooter('MICKEY BOT')
+            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg');
+        btnV2.addButton('Menu 📦', '.menu');
+        const sentMsg = await btnV2.send(ctx.chatId, { quoted: ctx._msg, fallbackText: 'Huu ni mfano wa muundo wa ButtonV2.' });
         userMessages[chatId].push(sentMsg);
 
         const code = `// Muundo wa ButtonV2\nconst { ButtonV2 } = require('./lib/messageBuilder');\nconst btnV2 = new ButtonV2(sock)\n  .setTitle("Mickey ButtonV2")\n  .addButton("Menu 📦", ".menu");\nawait btnV2.send(chatId, { quoted: msg });`;
@@ -598,7 +605,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         userMessages[chatId] = [];
 
         const rich = new AIRich(sock).setTitle('🧠 AI Engine').addText('Mfano wa AIRich Markdown Text.').addSuggest(['.menu']);
-        const sentMsg = await rich.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
+        const sentMsg = await rich.send(ctx.chatId, { quoted: ctx._msg, forwarded: true, fallbackText: '🧠 AI Engine\nMfano wa AIRich Markdown Text.' });
         userMessages[chatId].push(sentMsg);
 
         const code = `const rich = new AIRich(sock).setTitle('🧠 AI Engine').addText('Text').send(chatId);`;
@@ -613,7 +620,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         userMessages[chatId] = [];
 
         const richTable = new AIRich(sock).setTitle('📊 Table').addTable([["Command", "Status"], [".fromai", "Online ✅"]]);
-        const sentMsg = await richTable.send(ctx.chatId, { quoted: ctx._msg, forwarded: true });
+        const sentMsg = await richTable.send(ctx.chatId, { quoted: ctx._msg, forwarded: true, fallbackText: '📊 Table\nCommand | Status\n.fromai | Online ✅' });
         userMessages[chatId].push(sentMsg);
 
         const code = `const rich = new AIRich(sock).addTable([["H1", "H2"], ["D1", "D2"]]);`;
