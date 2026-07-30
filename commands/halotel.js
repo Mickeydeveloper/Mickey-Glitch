@@ -35,7 +35,7 @@ const HALOTEL_PRODUCTS = [
             "✅ 24 Hours Validity",
             "✅ Social Media Access"
         ],
-        ussd: "*150*01*1#"  // USSD code for ordering
+        ussd: "*150*01*1#"
     },
     {
         id: 'basic_20gb',
@@ -169,7 +169,7 @@ const HALOTEL_PRODUCTS = [
 // ─── MAIN COMMAND ─────────────────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
-    
+
     try {
         const ownerNumber = "255615944741";
         const waLink = `https://wa.me/${ownerNumber}`;
@@ -177,7 +177,7 @@ async function halotelCommand(sock, chatId, message, args) {
 
         // ─── CHECK WHATSAPP VERSION COMPATIBILITY ──────────────────────────
         const supportsInteractive = await checkWhatsAppVersion(ctx);
-        
+
         // ─── HELP / MAIN MENU ──────────────────────────────────────────────
         if (subCommand === 'help' || subCommand === 'menu') {
             await sendMainMenu(ctx, ownerNumber);
@@ -233,16 +233,17 @@ async function halotelCommand(sock, chatId, message, args) {
             return;
         }
 
-        // ─── DEFAULT: Send compatible message ──────────────────────────────
+        // ─── DEFAULT: Send ONLY Card 4 (Social Bundle) using Carousel ──────
         if (supportsInteractive) {
-            await sendCarouselView(ctx);
+            // 🎯 TUMIA CARD 4 PEKEE (index 3 - Halo Kasi 30GB)
+            await sendSingleCarouselCard(ctx, 3); // index 3 = product ya 4
         } else {
             await sendCompatibleView(ctx);
         }
 
     } catch (error) {
         console.error("Halotel Command Error:", error);
-        
+
         // ─── FALLBACK: Always send plain text if anything fails ────────────
         await sendPlainList(ctx);
     }
@@ -263,82 +264,75 @@ async function checkWhatsAppVersion(ctx) {
     }
 }
 
-// ─── SEND COMPATIBLE VIEW (No interactive messages) ────────────────────────
-async function sendCompatibleView(ctx) {
-    const ownerNumber = "255615944741";
-    const waLink = `https://wa.me/${ownerNumber}`;
-    
-    let text = `📶 *HALOTEL INTERNET BUNDLES*\n\n`;
-    text += `*Mickey Glitch Engine* ⚡\n\n`;
-    
-    HALOTEL_PRODUCTS.forEach((p, i) => {
-        const price = p.sale_price 
-            ? `~${p.price}~ ➜ *${p.sale_price}*`
-            : `*${p.price}*`;
-        text += `${i + 1}. *${p.title}*\n`;
-        text += `   📦 ${p.data} | ⏱️ ${p.validity}\n`;
-        text += `   💰 ${price}\n`;
-        text += `   🆔 \`${p.id}\`\n\n`;
-    });
+// ─── 🆕 SEND SINGLE CAROUSEL CARD (Card 4 pekee) ────────────────────────────
+async function sendSingleCarouselCard(ctx, productIndex) {
+    try {
+        if (!Carousel) {
+            await sendCompatibleView(ctx);
+            return;
+        }
 
-    text += `📌 *Commands:*\n`;
-    text += `• \`.halotel <id>\` - View details\n`;
-    text += `• \`.halotel list\` - Full list\n`;
-    text += `• \`.halotel search <name>\` - Search\n`;
-    text += `• \`.halotel order <id>\` - Order\n\n`;
-    text += `📞 *Order:* ${waLink}\n\n`;
-    text += `> *Mickey Glitch Sub* | *Traxxion Tech*`;
+        // Chukua product kwa index (0-based)
+        const product = HALOTEL_PRODUCTS[productIndex];
+        if (!product) {
+            await sendCompatibleView(ctx);
+            return;
+        }
 
-    await safeSend(ctx, { text });
+        const carousel = new Carousel(ctx.sock);
+        
+        // Tengeneza card moja tu (Card 4)
+        const featuresText = product.features.slice(0, 3).join('\n');
+        
+        const card = {
+            header: {
+                title: product.title,
+                hasMediaAttachment: true,
+                imageMessage: {
+                    url: product.image,
+                    mimetype: 'image/png'
+                }
+            },
+            body: {
+                text: `📦 *${product.data}* | ⏱️ ${product.validity}\n` +
+                      `💰 ${product.sale_price || product.price}\n\n` +
+                      `${featuresText}\n\n` +
+                      `Details: .halotel ${product.id}\n` +
+                      `Order: .halotel order ${product.id}`
+            },
+            footer: {
+                text: `Brand: ${product.brand}`
+            }
+        };
+
+        // Ongeza card kwenye carousel
+        carousel
+            .setTitle(`📶 ${product.title}`)
+            .setBody(`🎯 *${product.title}*\n\n${product.description}`)
+            .setFooter(`⚡ ${product.brand} | Mickey Glitch Sub`)
+            .addCard(card);
+
+        // Tuma
+        await carousel.send(ctx.chatId, {
+            quoted: ctx._msg,
+            fallbackText: `📶 ${product.title}\n💰 ${product.sale_price || product.price}\n\n${product.description}`
+        });
+
+    } catch (error) {
+        console.error('[SINGLE CAROUSEL ERROR]', error.message);
+        // Fallback
+        const product = HALOTEL_PRODUCTS[productIndex];
+        if (product) {
+            await sendProductDetails(ctx, product);
+        } else {
+            await sendCompatibleView(ctx);
+        }
+    }
 }
 
-// ─── SEND MAIN MENU ──────────────────────────────────────────────────────────
-async function sendMainMenu(ctx, ownerNumber) {
-    const waLink = `https://wa.me/${ownerNumber}`;
-    
-    const menuText = `📶 *HALOTEL COMMANDS*\n\n` +
-        `*Mickey Glitch Engine* ⚡\n\n` +
-        `📋 *Available Commands:*\n` +
-        `• \`.halotel\` - Show bundles\n` +
-        `• \`.halotel list\` - List all products\n` +
-        `• \`.halotel <id>\` - Product details\n` +
-        `• \`.halotel search <name>\` - Search bundles\n` +
-        `• \`.halotel order <id>\` - Order now\n` +
-        `• \`.halotel help\` - This menu\n\n` +
-        `📞 *Contact:* ${waLink}\n` +
-        `🔢 *Products:* ${HALOTEL_PRODUCTS.length} bundles\n\n` +
-        `> *Mickey Glitch Sub* | *Traxxion Tech*`;
-
-    await safeSend(ctx, { text: menuText });
-}
-
-// ─── SEND PRODUCT LIST ──────────────────────────────────────────────────────
-async function sendProductList(ctx) {
-    let listText = `📶 *HALOTEL BUNDLE CATALOG*\n\n`;
-    listText += `🎯 *All Bundles:*\n\n`;
-    
-    HALOTEL_PRODUCTS.forEach((p, i) => {
-        const price = p.sale_price 
-            ? `~~${p.price}~~ ➜ *${p.sale_price}*`
-            : `*${p.price}*`;
-        listText += `${i + 1}. *${p.title}*\n`;
-        listText += `   📦 ${p.data} | ⏱️ ${p.validity}\n`;
-        listText += `   💰 ${price}\n`;
-        listText += `   🆔 \`${p.id}\`\n\n`;
-    });
-
-    listText += `📌 *Commands:*\n` +
-        `• \`.halotel <id>\` - View details\n` +
-        `• \`.halotel order <id>\` - Order\n\n` +
-        `> *Mickey Glitch Sub* | *Traxxion Tech*`;
-
-    await safeSend(ctx, { text: listText });
-}
-
-// ─── SEND CAROUSEL VIEW (With error handling) ──────────────────────────────
+// ─── SEND CAROUSEL VIEW (Multiple cards - All products) ──────────────────────
 async function sendCarouselView(ctx) {
     try {
-        // Check if Carousel is available
         if (!Carousel) {
             await sendCompatibleView(ctx);
             return;
@@ -351,7 +345,7 @@ async function sendCarouselView(ctx) {
         for (const product of productsToShow) {
             try {
                 const featuresText = product.features.slice(0, 3).join('\n');
-                
+
                 const card = {
                     header: {
                         title: product.title,
@@ -376,7 +370,6 @@ async function sendCarouselView(ctx) {
                 cards.push(card);
             } catch (err) {
                 console.error('[CARD ERROR]', err.message);
-                // Skip this card if it fails
             }
         }
 
@@ -400,9 +393,80 @@ async function sendCarouselView(ctx) {
 
     } catch (error) {
         console.error('[CAROUSEL ERROR]', error.message);
-        // Fallback to compatible view
         await sendCompatibleView(ctx);
     }
+}
+
+// ─── SEND COMPATIBLE VIEW (No interactive messages) ────────────────────────
+async function sendCompatibleView(ctx) {
+    const ownerNumber = "255615944741";
+    const waLink = `https://wa.me/${ownerNumber}`;
+
+    let text = `📶 *HALOTEL INTERNET BUNDLES*\n\n`;
+    text += `*Mickey Glitch Engine* ⚡\n\n`;
+
+    HALOTEL_PRODUCTS.forEach((p, i) => {
+        const price = p.sale_price 
+            ? `~${p.price}~ ➜ *${p.sale_price}*`
+            : `*${p.price}*`;
+        text += `${i + 1}. *${p.title}*\n`;
+        text += `   📦 ${p.data} | ⏱️ ${p.validity}\n`;
+        text += `   💰 ${price}\n`;
+        text += `   🆔 \`${p.id}\`\n\n`;
+    });
+
+    text += `📌 *Commands:*\n`;
+    text += `• \`.halotel <id>\` - View details\n`;
+    text += `• \`.halotel list\` - Full list\n`;
+    text += `• \`.halotel search <name>\` - Search\n`;
+    text += `• \`.halotel order <id>\` - Order\n\n`;
+    text += `📞 *Order:* ${waLink}\n\n`;
+    text += `> *Mickey Glitch Sub* | *Traxxion Tech*`;
+
+    await safeSend(ctx, { text });
+}
+
+// ─── SEND MAIN MENU ──────────────────────────────────────────────────────────
+async function sendMainMenu(ctx, ownerNumber) {
+    const waLink = `https://wa.me/${ownerNumber}`;
+
+    const menuText = `📶 *HALOTEL COMMANDS*\n\n` +
+        `*Mickey Glitch Engine* ⚡\n\n` +
+        `📋 *Available Commands:*\n` +
+        `• \`.halotel\` - Show bundles\n` +
+        `• \`.halotel list\` - List all products\n` +
+        `• \`.halotel <id>\` - Product details\n` +
+        `• \`.halotel search <name>\` - Search bundles\n` +
+        `• \`.halotel order <id>\` - Order now\n` +
+        `• \`.halotel help\` - This menu\n\n` +
+        `📞 *Contact:* ${waLink}\n` +
+        `🔢 *Products:* ${HALOTEL_PRODUCTS.length} bundles\n\n` +
+        `> *Mickey Glitch Sub* | *Traxxion Tech*`;
+
+    await safeSend(ctx, { text: menuText });
+}
+
+// ─── SEND PRODUCT LIST ──────────────────────────────────────────────────────
+async function sendProductList(ctx) {
+    let listText = `📶 *HALOTEL BUNDLE CATALOG*\n\n`;
+    listText += `🎯 *All Bundles:*\n\n`;
+
+    HALOTEL_PRODUCTS.forEach((p, i) => {
+        const price = p.sale_price 
+            ? `~~${p.price}~~ ➜ *${p.sale_price}*`
+            : `*${p.price}*`;
+        listText += `${i + 1}. *${p.title}*\n`;
+        listText += `   📦 ${p.data} | ⏱️ ${p.validity}\n`;
+        listText += `   💰 ${price}\n`;
+        listText += `   🆔 \`${p.id}\`\n\n`;
+    });
+
+    listText += `📌 *Commands:*\n` +
+        `• \`.halotel <id>\` - View details\n` +
+        `• \`.halotel order <id>\` - Order\n\n` +
+        `> *Mickey Glitch Sub* | *Traxxion Tech*`;
+
+    await safeSend(ctx, { text: listText });
 }
 
 // ─── SEND PRODUCT DETAILS ────────────────────────────────────────────────────
@@ -427,13 +491,11 @@ async function sendProductDetails(ctx, product) {
         `> *Mickey Glitch Sub* | *Traxxion Tech*`;
 
     try {
-        // Try to send with image
         await safeSend(ctx, {
             image: { url: product.image },
             caption: detailText
         });
     } catch (error) {
-        // Fallback without image
         await safeSend(ctx, { text: detailText });
     }
 }
@@ -505,7 +567,7 @@ async function handleOrder(ctx, productId) {
 async function sendPlainList(ctx) {
     let text = `📶 *HALOTEL INTERNET BUNDLES*\n\n`;
     text += `*Mickey Glitch Engine* ⚡\n\n`;
-    
+
     HALOTEL_PRODUCTS.forEach((p, i) => {
         const price = p.sale_price 
             ? `~${p.price}~ ➜ ${p.sale_price}`
