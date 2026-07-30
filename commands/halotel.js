@@ -289,7 +289,7 @@ async function sendCompatibleView(ctx) {
     text += `📞 *Order:* ${waLink}\n\n`;
     text += `> *Mickey Glitch Sub* | *Traxxion Tech*`;
 
-    await ctx.sendMessage(ctx.chatId, { text });
+    await safeSend(ctx, { text });
 }
 
 // ─── SEND MAIN MENU ──────────────────────────────────────────────────────────
