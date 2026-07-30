@@ -28,7 +28,7 @@ const PRODUCTS = [
     }
 ];
 
-// ─── SIMPLE COMMAND ──────────────────────────────────────────────────────
+// ─── MAIN FUNCTION ──────────────────────────────────────────────────────
 async function halotelCommand(sock, chatId, message, args) {
     try {
         console.log('[HALOTEL] Command executed!');
@@ -37,21 +37,18 @@ async function halotelCommand(sock, chatId, message, args) {
 
         const ctx = createCtx(sock, chatId, message, { args });
         
-        // ─── TEST 1: Send simple text ──────────────────────────────────
-        console.log('[HALOTEL] Sending test message...');
+        // ─── SEND TEST MESSAGE ──────────────────────────────────────────
         await ctx.sendMessage(chatId, { text: "✅ Halotel command is working!" });
         
-        // ─── TEST 2: Send product info ─────────────────────────────────
-        const product = PRODUCTS[0]; // Chukua product ya kwanza
-        console.log('[HALOTEL] Product:', product.title);
+        // ─── GET PRODUCT (Card 4 - Halo Kasi 30GB) ─────────────────────
+        const product = PRODUCTS[0]; // Index 0 = Halo Kasi 30GB
         
-        // ─── TEST 3: Try Carousel ──────────────────────────────────────
+        // ─── TRY CAROUSEL ──────────────────────────────────────────────
         try {
             console.log('[HALOTEL] Creating Carousel...');
             
-            // Check if Carousel exists
             if (typeof Carousel !== 'function') {
-                console.log('[HALOTEL] Carousel is not available!');
+                console.log('[HALOTEL] Carousel not available!');
                 await ctx.sendMessage(chatId, { 
                     text: `⚠️ Carousel not available.\n\nProduct: ${product.title}\nPrice: ${product.price}` 
                 });
@@ -59,9 +56,8 @@ async function halotelCommand(sock, chatId, message, args) {
             }
             
             const carousel = new Carousel(sock);
-            console.log('[HALOTEL] Carousel created!');
             
-            // Create ONE simple card
+            // Create ONE card
             const card = {
                 header: {
                     title: product.title,
@@ -79,8 +75,6 @@ async function halotelCommand(sock, chatId, message, args) {
                 }
             };
             
-            console.log('[HALOTEL] Card created!');
-            
             carousel
                 .setTitle("📶 Halotel Bundle")
                 .setBody("Choose your bundle")
@@ -94,31 +88,32 @@ async function halotelCommand(sock, chatId, message, args) {
                 fallbackText: `📶 ${product.title}\n💰 ${product.price}`
             });
             
-            console.log('[HALOTEL] Carousel sent successfully!');
+            console.log('[HALOTEL] Carousel sent!');
             
         } catch (carouselError) {
             console.error('[HALOTEL] Carousel error:', carouselError.message);
-            console.error('[HALOTEL] Carousel stack:', carouselError.stack);
             
-            // Fallback: Send plain text
+            // Fallback: Send plain text with image
             await ctx.sendMessage(chatId, {
-                text: `📶 *${product.title}*\n💰 ${product.price}\n📦 ${product.data}\n\n${product.description}`
+                image: { url: product.image },
+                caption: `📶 *${product.title}*\n💰 ${product.price}\n📦 ${product.data}\n\n${product.description}`
             });
         }
         
     } catch (error) {
         console.error('[HALOTEL] Fatal error:', error.message);
-        console.error('[HALOTEL] Stack:', error.stack);
         
         // Ultimate fallback
-        try {
-            await sock.sendMessage(chatId, { 
-                text: `❌ Error: ${error.message}\n\nPlease check console for details.` 
-            });
-        } catch (e) {
-            console.error('[HALOTEL] Even fallback failed:', e.message);
-        }
+        await sock.sendMessage(chatId, { 
+            text: `❌ Error: ${error.message}` 
+        });
     }
 }
 
+// ─── EXPORT CORRECTLY ────────────────────────────────────────────────────
+// ✅ NJIA 1: Export kama function direct
 module.exports = halotelCommand;
+
+// ✅ NJIA 2: Export kama object (ikiwa inahitajika)
+// module.exports = { halotelCommand };
+// module.exports.default = halotelCommand;
