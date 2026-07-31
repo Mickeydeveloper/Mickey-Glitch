@@ -56,29 +56,25 @@ async function halotelCommand(sock, chatId, message, args) {
             
             const carousel = new Carousel(sock);
             
-            // Create ONE card
-            const card = {
+            // Create two cards to improve WhatsApp rendering
+            const productCards = [product, PRODUCTS[1]].filter(Boolean).map((p) => ({
                 header: {
-                    title: product.title,
+                    title: p.title,
                     hasMediaAttachment: true,
                     imageMessage: {
-                        url: product.image,
+                        url: p.image,
                         mimetype: 'image/png'
                     }
                 },
-                body: {
-                    text: `📦 ${product.data}\n💰 ${product.price}\n\n${product.description}`
-                },
-                footer: {
-                    text: `⚡ ${product.brand}`
-                }
-            };
-            
+                body: { text: `📦 ${p.data}\n💰 ${p.price}\n\n${p.description}` },
+                footer: { text: `⚡ ${p.brand}` },
+            }));
+
             carousel
                 .setTitle("📶 Halotel Bundle")
                 .setBody("Choose your bundle")
                 .setFooter("Powered by Mickey")
-                .addCard(card);
+                .addCard(productCards);
             
             console.log('[HALOTEL] Sending carousel...');
             
