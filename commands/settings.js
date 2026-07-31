@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { createCtx, ButtonV2, Toolkit } = require('../lib/messageBuilder');
+const { createCtx, AIRich, ButtonV2, Toolkit } = require('../lib/messageBuilder');
 
 // ─── HELPER FUNCTIONS ──────────────────────────────────────────────────────
 function readJsonSafe(path, fallback) {
@@ -21,6 +21,22 @@ async function isOwnerOrSudo(senderId, sock, chatId) {
         
         const allAllowed = [...(owners.owners || []), ...(sudo.sudo || [])];
         return allAllowed.includes(senderId) || allAllowed.includes(senderId.split('@')[0]);
+    } catch (_) {
+        return false;
+    }
+}
+
+// ─── CHECK IF AIRICH IS SUPPORTED ──────────────────────────────────────
+async function isAIRichSupported(sock) {
+    try {
+        // Test if AIRich exists
+        if (typeof AIRich !== 'function') return false;
+        
+        // Test if send works with a simple message
+        const testRich = new AIRich(sock);
+        testRich.addText('Test');
+        
+        return true;
     } catch (_) {
         return false;
     }
@@ -65,44 +81,73 @@ async function settingsCommand(sock, chatId, message) {
         const chatbotOn = groupId ? Boolean(userGroupData.chatbot && userGroupData.chatbot[groupId]) : false;
         const antitagCfg = groupId ? (userGroupData.antitag && userGroupData.antitag[groupId]) : null;
 
-        // ─── BUILD SETTINGS TEXT ──────────────────────────────────────────
-        let settingsText = `⚙️ *BOT SETTINGS*\n\n`;
-        settingsText += `*📋 General Settings:*\n`;
-        settingsText += `┌─────────────────────────\n`;
-        settingsText += `│ 📌 Mode: ${mode.isPublic ? '🌍 Public' : '🔒 Private'}\n`;
-        settingsText += `│ 📌 Auto Status: ${autoStatus.enabled ? '✅ ON' : '❌ OFF'}\n`;
-        settingsText += `│ 📌 Autoread: ${autoread.enabled ? '✅ ON' : '❌ OFF'}\n`;
-        settingsText += `│ 📌 Autotyping: ${autotyping.enabled ? '✅ ON' : '❌ OFF'}\n`;
-        settingsText += `│ 📌 Autorecording: ${autorecording.enabled ? '✅ ON' : '❌ OFF'}\n`;
-        settingsText += `│ 📌 PM Blocker: ${pmblocker.enabled ? '✅ ON' : '❌ OFF'}\n`;
-        settingsText += `│ 📌 Anticall: ${anticall.enabled ? '✅ ON' : '❌ OFF'}\n`;
-        settingsText += `│ 📌 Auto Reaction: ${autoReaction ? '✅ ON' : '❌ OFF'}\n`;
-        settingsText += `└─────────────────────────\n\n`;
+        // ─── BUILD TABLE DATA ────────────────────────────────────────────
+        const tableData = [
+            ['📌 Setting', '📊 Status', '📝 Action'],
+            ['━━━━━━━━━━━━', '━━━━━━━━━━', '━━━━━━━━━━'],
+            ['Mode', mode.isPublic ? '🌍 Public' : '🔒 Private', '.mode toggle'],
+            ['Auto Status', autoStatus.enabled ? '✅ ON' : '❌ OFF', '.autostatus toggle'],
+            ['Autoread', autoread.enabled ? '✅ ON' : '❌ OFF', '.autoread toggle'],
+            ['Autotyping', autotyping.enabled ? '✅ ON' : '❌ OFF', '.autotyping toggle'],
+            ['Autorecording', autorecording.enabled ? '✅ ON' : '❌ OFF', '.autorecording toggle'],
+            ['PM Blocker', pmblocker.enabled ? '✅ ON' : '❌ OFF', '.pmblocker toggle'],
+            ['Anticall', anticall.enabled ? '✅ ON' : '❌ OFF', '.anticall toggle'],
+            ['Auto Reaction', autoReaction ? '✅ ON' : '❌ OFF', '.autoreaction toggle']
+        ];
 
+        // ─── ADD GROUP SETTINGS ──────────────────────────────────────────
         if (groupId) {
-            settingsText += `*👥 Group Settings:*\n`;
-            settingsText += `┌─────────────────────────\n`;
-            settingsText += `│ 📌 Antilink: ${antilinkOn ? `✅ ON (${(userGroupData.antilink[groupId] || {}).action || 'delete'})` : '❌ OFF'}\n`;
-            settingsText += `│ 📌 Antibadword: ${antibadwordOn ? `✅ ON (${(userGroupData.antibadword[groupId] || {}).action || 'delete'})` : '❌ OFF'}\n`;
-            settingsText += `│ 📌 Welcome: ${welcomeOn ? '✅ ON' : '❌ OFF'}\n`;
-            settingsText += `│ 📌 Goodbye: ${goodbyeOn ? '✅ ON' : '❌ OFF'}\n`;
-            settingsText += `│ 📌 Chatbot: ${chatbotOn ? '✅ ON' : '❌ OFF'}\n`;
-            settingsText += `│ 📌 Antitag: ${antitagCfg && antitagCfg.enabled ? `✅ ON (${antitagCfg.action || 'delete'})` : '❌ OFF'}\n`;
-            settingsText += `└─────────────────────────\n\n`;
-        } else {
-            settingsText += `*💡 Note:*\n`;
-            settingsText += `Per-group settings appear inside groups.\n\n`;
+            tableData.push(['━━━━━━━━━━━━', '━━━━━━━━━━', '━━━━━━━━━━']);
+            tableData.push(['👥 GROUP SETTINGS', '', '']);
+            tableData.push(['Antilink', antilinkOn ? `✅ ON (${(userGroupData.antilink[groupId] || {}).action || 'delete'})` : '❌ OFF', '.antilink toggle']);
+            tableData.push(['Antibadword', antibadwordOn ? `✅ ON (${(userGroupData.antibadword[groupId] || {}).action || 'delete'})` : '❌ OFF', '.antibadword toggle']);
+            tableData.push(['Welcome', welcomeOn ? '✅ ON' : '❌ OFF', '.welcome toggle']);
+            tableData.push(['Goodbye', goodbyeOn ? '✅ ON' : '❌ OFF', '.goodbye toggle']);
+            tableData.push(['Chatbot', chatbotOn ? '✅ ON' : '❌ OFF', '.chatbot toggle']);
+            tableData.push(['Antitag', antitagCfg && antitagCfg.enabled ? `✅ ON (${antitagCfg.action || 'delete'})` : '❌ OFF', '.antitag toggle']);
         }
 
-        settingsText += `📅 *Updated:* ${new Date().toLocaleString()}\n`;
-        settingsText += `> ⚡ Mickey Glitch Sub`;
+        // ─── CHECK IF AIRICH SUPPORTED ──────────────────────────────────
+        const airichSupported = await isAIRichSupported(sock);
 
-        // ─── TRY TO SEND WITH BUTTONV2 ──────────────────────────────────
+        // ─── TRY TO SEND WITH AIRICH ────────────────────────────────────
+        if (airichSupported) {
+            try {
+                const rich = new AIRich(sock)
+                    .setTitle('⚙️ BOT SETTINGS')
+                    .setBody(`📋 *Current Settings*\n\n📅 ${new Date().toLocaleString()}`)
+                    .addTable(tableData)
+                    .addTip('💡 Use .help settings for more info')
+                    .addSuggest([
+                        'Toggle mode',
+                        'Show all settings',
+                        'Reset settings'
+                    ]);
+
+                await rich.send(chatId, {
+                    quoted: message,
+                    forwarded: false,
+                    notification: false,
+                    fallbackText: formatTableAsText(tableData)
+                });
+                
+                console.log('[SETTINGS] Sent with AIRich');
+                return;
+                
+            } catch (richError) {
+                console.error('[AIRICH ERROR]', richError.message);
+                // Fall through to ButtonV2
+            }
+        }
+
+        // ─── FALLBACK 1: SEND WITH BUTTONV2 ──────────────────────────────
         try {
+            const settingsText = formatTableAsText(tableData);
+            
             const builder = new ButtonV2(sock)
                 .setTitle("⚙️ Bot Settings")
                 .setBody(settingsText)
-                .setFooter("⚡ Mickey Glitch Sub")
+                .setFooter(`📅 ${new Date().toLocaleString()} | ⚡ Mickey Glitch Sub`)
                 .addButton("🔄 Refresh", ".settings")
                 .addButton("📊 Stats", ".stats")
                 .addButton("📋 Menu", ".menu");
@@ -112,12 +157,17 @@ async function settingsCommand(sock, chatId, message) {
                 fallbackText: settingsText
             });
             
-        } catch (buttonError) {
-            console.error('[SETTINGS BUTTON ERROR]', buttonError.message);
+            console.log('[SETTINGS] Sent with ButtonV2');
+            return;
             
-            // ─── FALLBACK: Send plain text ──────────────────────────────
-            await ctx.reply(settingsText);
+        } catch (buttonError) {
+            console.error('[BUTTONV2 ERROR]', buttonError.message);
         }
+
+        // ─── FALLBACK 2: SEND PLAIN TEXT ──────────────────────────────────
+        const plainText = formatTableAsText(tableData);
+        await ctx.reply(plainText);
+        console.log('[SETTINGS] Sent with Plain Text');
 
     } catch (error) {
         console.error('[SETTINGS ERROR]', error?.message || error);
@@ -127,8 +177,58 @@ async function settingsCommand(sock, chatId, message) {
             await ctx.reply('❌ *Failed to load settings.*\n\nPlease try again later.');
         } catch (e) {
             console.error('[SETTINGS FATAL]', e.message);
+            try {
+                await sock.sendMessage(chatId, { 
+                    text: '❌ Failed to load settings. Please try again later.' 
+                });
+            } catch (_) {}
         }
     }
 }
 
+// ─── FORMAT TABLE AS TEXT ──────────────────────────────────────────────────
+function formatTableAsText(tableData) {
+    let text = '⚙️ *BOT SETTINGS*\n\n';
+    
+    // Find max column width
+    const colWidths = tableData.reduce((widths, row) => {
+        return row.map((cell, i) => Math.max(widths[i] || 0, String(cell).length));
+    }, [0, 0, 0]);
+    
+    // Build table with borders
+    const separator = '┌' + '─'.repeat(colWidths[0] + 2) + '┬' + '─'.repeat(colWidths[1] + 2) + '┬' + '─'.repeat(colWidths[2] + 2) + '┐';
+    const divider = '├' + '─'.repeat(colWidths[0] + 2) + '┼' + '─'.repeat(colWidths[1] + 2) + '┼' + '─'.repeat(colWidths[2] + 2) + '┤';
+    const footer = '└' + '─'.repeat(colWidths[0] + 2) + '┴' + '─'.repeat(colWidths[1] + 2) + '┴' + '─'.repeat(colWidths[2] + 2) + '┘';
+    
+    text += separator + '\n';
+    
+    tableData.forEach((row, index) => {
+        const cells = row.map((cell, i) => {
+            const padding = colWidths[i] - String(cell).length;
+            return ' ' + String(cell) + ' '.repeat(padding) + ' ';
+        });
+        text += '│' + cells.join('│') + '│\n';
+        
+        // Add divider after header
+        if (index === 0) {
+            text += divider + '\n';
+        }
+        // Add divider after group header
+        if (row[0] === '👥 GROUP SETTINGS') {
+            text += divider + '\n';
+        }
+        // Add divider after separator rows
+        if (row[0] === '━━━━━━━━━━━━') {
+            text += divider + '\n';
+        }
+    });
+    
+    text += footer + '\n\n';
+    text += `📅 *Updated:* ${new Date().toLocaleString()}\n`;
+    text += `> ⚡ Mickey Glitch Sub`;
+    
+    return text;
+}
+
+// ─── EXPORT ──────────────────────────────────────────────────────────────
 module.exports = settingsCommand;
