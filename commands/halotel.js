@@ -111,9 +111,9 @@ async function halotelCommand(sock, chatId, message, args) {
 }
 
 // ─── EXPORT CORRECTLY ────────────────────────────────────────────────────
-// ✅ NJIA 1: Export kama function direct
+// Support both import styles:
+// - require('./commands/halotel')(...) 
+// - const { halotelCommand } = require('./commands/halotel')
 module.exports = halotelCommand;
-
-// ✅ NJIA 2: Export kama object (ikiwa inahitajika)
-// module.exports = { halotelCommand };
-// module.exports.default = halotelCommand;
+module.exports.halotelCommand = halotelCommand;
+module.exports.default = halotelCommand;
