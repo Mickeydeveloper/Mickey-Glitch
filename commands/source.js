@@ -723,4 +723,4 @@ const sourceCommand = async (sock, chatId, msg, args) => {
     userMessages[chatId].push(sentMsg);
 };
 
-module.exports = { sourceCommand };
+module.exports =  sourceCommand ;
