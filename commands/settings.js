@@ -1,6 +1,7 @@
 const fs = require('fs');
-const { AIRich } = require('../lib/messageBuilder');
+const { createCtx, ButtonV2, Toolkit } = require('../lib/messageBuilder');
 
+// ─── HELPER FUNCTIONS ──────────────────────────────────────────────────────
 function readJsonSafe(path, fallback) {
     try {
         const txt = fs.readFileSync(path, 'utf8');
@@ -10,36 +11,36 @@ function readJsonSafe(path, fallback) {
     }
 }
 
-const isOwnerOrSudo = require('../lib/isOwner');
-
-async function safeSendMessage(sock, chatId, message, content, options = {}) {
+async function isOwnerOrSudo(senderId, sock, chatId) {
     try {
-        if (typeof content === 'string') {
-            return await sock.sendMessage(chatId, { text: content }, { quoted: message, ...options });
-        }
-        return await sock.sendMessage(chatId, content, { quoted: message, ...options });
-    } catch (error) {
-        console.error('[SETTINGS SAFE SEND]', error?.message || error);
-        try {
-            const text = typeof content === 'string' ? content : content?.text || '⚠️ Unable to display settings.';
-            return await sock.sendMessage(chatId, { text }, { quoted: message, ...options });
-        } catch (fallbackError) {
-            console.error('[SETTINGS SAFE SEND FALLBACK]', fallbackError?.message || fallbackError);
-            return null;
-        }
+        const ownerFile = './data/owner.json';
+        const sudoFile = './data/sudo.json';
+        
+        const owners = readJsonSafe(ownerFile, { owners: [] });
+        const sudo = readJsonSafe(sudoFile, { sudo: [] });
+        
+        const allAllowed = [...(owners.owners || []), ...(sudo.sudo || [])];
+        return allAllowed.includes(senderId) || allAllowed.includes(senderId.split('@')[0]);
+    } catch (_) {
+        return false;
     }
 }
 
+// ─── MAIN SETTINGS COMMAND ────────────────────────────────────────────────
 async function settingsCommand(sock, chatId, message) {
     try {
-        const senderId = message.key.participant || message.key.remoteJid;
+        // ─── CREATE CTX ──────────────────────────────────────────────────
+        const ctx = createCtx(sock, chatId, message);
+        
+        // ─── CHECK PERMISSIONS ──────────────────────────────────────────
+        const senderId = message.key?.participant || message.key?.remoteJid || chatId;
         const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
         
-        if (!message.key.fromMe && !isOwner) {
-            await safeSend({ text: 'Only bot owner can use this command!' }, { quoted: message });
-            return;
+        if (!message.key?.fromMe && !isOwner) {
+            return await ctx.reply('🔒 *Only bot owner can use this command!*');
         }
 
+        // ─── READ SETTINGS ──────────────────────────────────────────────
         const isGroup = chatId.endsWith('@g.us');
         const dataDir = './data';
 
@@ -55,7 +56,7 @@ async function settingsCommand(sock, chatId, message) {
         });
         const autoReaction = Boolean(userGroupData.autoReaction);
 
-        // Per-group features
+        // ─── PER-GROUP FEATURES ──────────────────────────────────────────
         const groupId = isGroup ? chatId : null;
         const antilinkOn = groupId ? Boolean(userGroupData.antilink && userGroupData.antilink[groupId]) : false;
         const antibadwordOn = groupId ? Boolean(userGroupData.antibadword && userGroupData.antibadword[groupId]) : false;
@@ -64,46 +65,70 @@ async function settingsCommand(sock, chatId, message) {
         const chatbotOn = groupId ? Boolean(userGroupData.chatbot && userGroupData.chatbot[groupId]) : false;
         const antitagCfg = groupId ? (userGroupData.antitag && userGroupData.antitag[groupId]) : null;
 
-        const rows = [
-            ['Setting', 'Status'],
-            ['Mode', mode.isPublic ? 'Public' : 'Private'],
-            ['Auto Status', autoStatus.enabled ? 'ON' : 'OFF'],
-            ['Autoread', autoread.enabled ? 'ON' : 'OFF'],
-            ['Autotyping', autotyping.enabled ? 'ON' : 'OFF'],
-            ['Autorecording', autorecording.enabled ? 'ON' : 'OFF'],
-            ['PM Blocker', pmblocker.enabled ? 'ON' : 'OFF'],
-            ['Anticall', anticall.enabled ? 'ON' : 'OFF'],
-            ['Auto Reaction', autoReaction ? 'ON' : 'OFF']
-        ];
+        // ─── BUILD SETTINGS TEXT ──────────────────────────────────────────
+        let settingsText = `⚙️ *BOT SETTINGS*\n\n`;
+        settingsText += `*📋 General Settings:*\n`;
+        settingsText += `┌─────────────────────────\n`;
+        settingsText += `│ 📌 Mode: ${mode.isPublic ? '🌍 Public' : '🔒 Private'}\n`;
+        settingsText += `│ 📌 Auto Status: ${autoStatus.enabled ? '✅ ON' : '❌ OFF'}\n`;
+        settingsText += `│ 📌 Autoread: ${autoread.enabled ? '✅ ON' : '❌ OFF'}\n`;
+        settingsText += `│ 📌 Autotyping: ${autotyping.enabled ? '✅ ON' : '❌ OFF'}\n`;
+        settingsText += `│ 📌 Autorecording: ${autorecording.enabled ? '✅ ON' : '❌ OFF'}\n`;
+        settingsText += `│ 📌 PM Blocker: ${pmblocker.enabled ? '✅ ON' : '❌ OFF'}\n`;
+        settingsText += `│ 📌 Anticall: ${anticall.enabled ? '✅ ON' : '❌ OFF'}\n`;
+        settingsText += `│ 📌 Auto Reaction: ${autoReaction ? '✅ ON' : '❌ OFF'}\n`;
+        settingsText += `└─────────────────────────\n\n`;
 
         if (groupId) {
-            rows.push(['Group', groupId]);
-            rows.push(['Antilink', antilinkOn ? `ON (${(userGroupData.antilink[groupId] || {}).action || 'delete'})` : 'OFF']);
-            rows.push(['Antibadword', antibadwordOn ? `ON (${(userGroupData.antibadword[groupId] || {}).action || 'delete'})` : 'OFF']);
-            rows.push(['Welcome', welcomeOn ? 'ON' : 'OFF']);
-            rows.push(['Goodbye', goodbyeOn ? 'ON' : 'OFF']);
-            rows.push(['Chatbot', chatbotOn ? 'ON' : 'OFF']);
-            rows.push(['Antitag', antitagCfg && antitagCfg.enabled ? `ON (${antitagCfg.action || 'delete'})` : 'OFF']);
+            settingsText += `*👥 Group Settings:*\n`;
+            settingsText += `┌─────────────────────────\n`;
+            settingsText += `│ 📌 Antilink: ${antilinkOn ? `✅ ON (${(userGroupData.antilink[groupId] || {}).action || 'delete'})` : '❌ OFF'}\n`;
+            settingsText += `│ 📌 Antibadword: ${antibadwordOn ? `✅ ON (${(userGroupData.antibadword[groupId] || {}).action || 'delete'})` : '❌ OFF'}\n`;
+            settingsText += `│ 📌 Welcome: ${welcomeOn ? '✅ ON' : '❌ OFF'}\n`;
+            settingsText += `│ 📌 Goodbye: ${goodbyeOn ? '✅ ON' : '❌ OFF'}\n`;
+            settingsText += `│ 📌 Chatbot: ${chatbotOn ? '✅ ON' : '❌ OFF'}\n`;
+            settingsText += `│ 📌 Antitag: ${antitagCfg && antitagCfg.enabled ? `✅ ON (${antitagCfg.action || 'delete'})` : '❌ OFF'}\n`;
+            settingsText += `└─────────────────────────\n\n`;
         } else {
-            rows.push(['Note', 'Per-group settings appear inside groups.']);
+            settingsText += `*💡 Note:*\n`;
+            settingsText += `Per-group settings appear inside groups.\n\n`;
         }
 
-        const table = new AIRich(sock)
-            .setTitle('⚙️ BOT SETTINGS')
-            .addText('Here are the current bot settings in table form.')
-            .addTable(rows);
+        settingsText += `📅 *Updated:* ${new Date().toLocaleString()}\n`;
+        settingsText += `> ⚡ Mickey Glitch Sub`;
 
-        await table.send(chatId, {
-            quoted: message,
-            forwarded: false,
-            fallbackText: rows.map((row) => row.join(' | ')).join('\n')
-        });
+        // ─── TRY TO SEND WITH BUTTONV2 ──────────────────────────────────
+        try {
+            const builder = new ButtonV2(sock)
+                .setTitle("⚙️ Bot Settings")
+                .setBody(settingsText)
+                .setFooter("⚡ Mickey Glitch Sub")
+                .addButton("🔄 Refresh", ".settings")
+                .addButton("📊 Stats", ".stats")
+                .addButton("📋 Menu", ".menu");
+
+            await builder.send(chatId, {
+                quoted: message,
+                fallbackText: settingsText
+            });
+            
+        } catch (buttonError) {
+            console.error('[SETTINGS BUTTON ERROR]', buttonError.message);
+            
+            // ─── FALLBACK: Send plain text ──────────────────────────────
+            await ctx.reply(settingsText);
+        }
+
     } catch (error) {
-        console.error('Error in settings command:', error?.message || error);
-        await safeSendMessage(sock, chatId, message, '❌ Failed to load settings. Please try again later.');
+        console.error('[SETTINGS ERROR]', error?.message || error);
+        
+        // ─── ULTIMATE FALLBACK ──────────────────────────────────────────
+        try {
+            await ctx.reply('❌ *Failed to load settings.*\n\nPlease try again later.');
+        } catch (e) {
+            console.error('[SETTINGS FATAL]', e.message);
+        }
     }
 }
 
 module.exports = settingsCommand;
-
-
