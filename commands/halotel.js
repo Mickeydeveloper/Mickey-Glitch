@@ -37,8 +37,7 @@ async function halotelCommand(sock, chatId, message, args) {
 
         const ctx = createCtx(sock, chatId, message, { args });
         
-        // ─── SEND TEST MESSAGE ──────────────────────────────────────────
-        await ctx.sendMessage(chatId, { text: "✅ Halotel command is working!" });
+        console.log('[HALOTEL] Command is working; building carousel...');
         
         // ─── GET PRODUCT (Card 4 - Halo Kasi 30GB) ─────────────────────
         const product = PRODUCTS[0]; // Index 0 = Halo Kasi 30GB
