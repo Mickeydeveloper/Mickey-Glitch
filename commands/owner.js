@@ -2,7 +2,7 @@
  * owner.js - Owner Profile with Multiple Buttons + Review & Pay
  */
 
-const { Button, ButtonV2, createCtx } = require('../lib/messageBuilder');
+const { Button, createCtx } = require('../lib/messageBuilder');
 
 const CONFIG = {
     OWNER: {
@@ -70,6 +70,7 @@ async function ownerCommand(sock, chatId, message) {
                     `💬 Chat`
                 )
                 .setFooter(`⚡ ${CONFIG.OWNER.NAME}`)
+                .setImage(randomImage)
                 .addButton('cta_call', {
                     display_text: `📞 Call ${CONFIG.OWNER.PHONE_1}`,
                     id: 'call_1'
