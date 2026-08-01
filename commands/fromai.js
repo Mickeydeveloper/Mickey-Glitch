@@ -9,7 +9,7 @@ const { createCtx, ButtonV2 } = require('../lib/messageBuilder');
 
 // ─── AI CONFIG ──────────────────────────────────────────────────────────────
 const AI_CONFIG = {
-    name: 'Fiora Sylvie',
+    name: 'Mickey Dady',
     ticketId: '1669945700536053',
     version: 1,
     is_ai_message: true,
