@@ -1,5 +1,5 @@
 /**
- * fromai.js - Send exact message only (no badge, no name)
+ * fromai.js - Send message with AI structure (conversation + metadata)
  * Usage: .fromai <number> <message>
  * Example: .fromai 255612130873 habari kaka
  */
@@ -9,6 +9,7 @@ const { createCtx } = require('../lib/messageBuilder');
 
 // ─── AI CONFIG ──────────────────────────────────────────────────────────────
 const AI_CONFIG = {
+    name: 'Fiora Sylvie',  // ← JINA LA AI
     ticketId: '1669945700536053',
     version: 1,
     is_ai_message: true,
@@ -46,8 +47,8 @@ async function fromaiCommand(sock, chatId, message, args = []) {
         // ─── SEND PROCESSING ──────────────────────────────────────────────
         await ctx.reply(`⏳ _Sending to ${targetNumber}..._`);
 
-        // ─── SEND EXACT MESSAGE (NO BADGE, NO NAME) ───────────────────────
-        await sendExactMessage(sock, targetJid, messageText);
+        // ─── SEND AI-STRUCTURED MESSAGE ──────────────────────────────────
+        await sendAIStructuredMessage(sock, targetJid, messageText);
 
         // ─── SEND CONFIRMATION ────────────────────────────────────────────
         await ctx.reply(
@@ -68,18 +69,48 @@ async function fromaiCommand(sock, chatId, message, args = []) {
     }
 }
 
-// ─── SEND EXACT MESSAGE ────────────────────────────────────────────────────
-async function sendExactMessage(sock, targetJid, messageText) {
+// ─── SEND AI STRUCTURED MESSAGE ────────────────────────────────────────────
+async function sendAIStructuredMessage(sock, targetJid, messageText) {
     try {
-        // ─── METHOD 1: Send as normal message ──────────────────────────────
-        await sock.sendMessage(targetJid, {
-            text: messageText  // ← UJUMBE TU, HAKUNA BADGE WALA JINA
+        // ─── CREATE AI-STRUCTURED MESSAGE ──────────────────────────────────
+        const aiMessage = {
+            conversation: AI_CONFIG.name,  // ← "Fiora Sylvie"
+            messageContextInfo: {
+                messageSecret: randomBytes(32),
+                supportPayload: JSON.stringify({
+                    version: AI_CONFIG.version,
+                    is_ai_message: AI_CONFIG.is_ai_message,
+                    should_show_system_message: AI_CONFIG.should_show_system_message,
+                    ticket_id: AI_CONFIG.ticketId
+                })
+            }
+        };
+
+        // ─── SEND AI-STRUCTURED MESSAGE (FIRST) ──────────────────────────
+        await sock.relayMessage(targetJid, aiMessage, {
+            additionalNodes: [
+                {
+                    tag: 'bot',
+                    attrs: {
+                        biz_bot: '1'
+                    }
+                },
+                {
+                    tag: 'biz',
+                    attrs: {}
+                }
+            ]
         });
 
-        console.log('[FROMAI] Exact message sent');
+        // ─── SEND ACTUAL TEXT MESSAGE ─────────────────────────────────────
+        await sock.sendMessage(targetJid, {
+            text: messageText  // ← UJUMBE TU
+        });
+
+        console.log('[FROMAI] AI-structured message sent');
 
     } catch (error) {
-        console.error('[SEND MESSAGE ERROR]', error.message);
+        console.error('[SEND AI STRUCTURED ERROR]', error.message);
         
         // ─── FALLBACK ────────────────────────────────────────────────────
         await sock.sendMessage(targetJid, {
