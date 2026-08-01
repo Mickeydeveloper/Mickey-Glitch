@@ -1,5 +1,5 @@
 /**
- * owner.js - Owner Profile with Review & Pay Style
+ * owner.js - Owner Profile with Review & Pay Node
  * Usage: .owner
  */
 
@@ -25,6 +25,14 @@ const CONFIG = {
     ]
 };
 
+// ─── REVIEW & PAY ADDITIONAL NODE (From Pastebin) ──────────────────────
+const REVIEW_AND_PAY_NODE = {
+    tag: 'biz',
+    attrs: {
+        native_flow_name: 'order_details'
+    }
+};
+
 // ─── MAIN OWNER COMMAND ──────────────────────────────────────────────────
 async function ownerCommand(sock, chatId, message) {
     try {
@@ -48,21 +56,18 @@ async function ownerCommand(sock, chatId, message) {
             `└ Website: ${CONFIG.OWNER.WEBSITE}\n\n` +
             `> ⚡ Mickey Glitch Technology`;
 
-        // ─── SEND PROCESSING ──────────────────────────────────────────────
-        await ctx.reply('⏳ _Loading owner profile..._');
-
-        // ─── SEND OWNER PROFILE ──────────────────────────────────────────
+        // ─── SEND IMAGE WITH CAPTION ──────────────────────────────────────
         await sock.sendMessage(chatId, {
             image: { url: randomImage },
             caption: profileText
         }, { quoted: message });
 
-        // ─── CREATE REVIEW & PAY STYLE BUTTON ────────────────────────────
+        // ─── CREATE REVIEW & PAY BUTTON ──────────────────────────────────
         const button = new Button(sock)
-            .setTitle('👑 Owner Profile')
+            .setTitle('💳 Contact Options')
             .setSubtitle(CONFIG.OWNER.NAME)
             .setBody(
-                `📋 *Contact Options*\n\n` +
+                `📋 *Contact ${CONFIG.OWNER.NAME}*\n\n` +
                 `📱 Phone 1: ${CONFIG.OWNER.PHONE_1}\n` +
                 `📱 Phone 2: ${CONFIG.OWNER.PHONE_2}\n` +
                 `🌐 Website: ${CONFIG.OWNER.WEBSITE}\n` +
@@ -74,9 +79,6 @@ async function ownerCommand(sock, chatId, message) {
             // ─── REVIEW & PAY BUTTON ──────────────────────────────────────
             .addButton('review_and_pay', {
                 "currency": "TZS",
-                "payment_configuration": "",
-                "payment_type": "",
-                "transaction_id": "",
                 "total_amount": {
                     "value": 1000000,
                     "offset": 100
@@ -84,7 +86,6 @@ async function ownerCommand(sock, chatId, message) {
                 "reference_id": `OWNER-${Date.now()}`,
                 "order_request_id": `ORD-${Date.now()}-${Math.random().toString(36).substring(7)}`,
                 "type": "digital-goods",
-                "payment_method": "",
                 "payment_status": "pending",
                 "payment_timestamp": Math.floor(Date.now() / 1000),
                 "order": {
@@ -107,54 +108,57 @@ async function ownerCommand(sock, chatId, message) {
                         "offset": 100
                     },
                     "order_type": "CONTACT",
-                    "items": [
-                        {
-                            "retailer_id": "OWNER-001",
-                            "name": `Contact ${CONFIG.OWNER.NAME}`,
-                            "amount": {
-                                "value": 1000000,
-                                "offset": 100
-                            },
-                            "quantity": 1
-                        }
-                    ]
+                    "items": [{
+                        "retailer_id": "OWNER-001",
+                        "name": `Contact ${CONFIG.OWNER.NAME}`,
+                        "amount": {
+                            "value": 1000000,
+                            "offset": 100
+                        },
+                        "quantity": 1
+                    }]
                 },
                 "additional_note": `📞 Contact: ${CONFIG.OWNER.PHONE_1} | ${CONFIG.OWNER.PHONE_2}`,
                 "native_payment_methods": [
                     `{"name":"📞 Call ${CONFIG.OWNER.PHONE_1}","enabled":true}`,
                     `{"name":"📞 Call ${CONFIG.OWNER.PHONE_2}","enabled":true}`,
-                    `{"name":"🌐 Website","enabled":true}`,
-                    `{"name":"🐙 GitHub","enabled":true}`
+                    `{"name":"🌐 ${CONFIG.OWNER.WEBSITE}","enabled":true}`,
+                    `{"name":"🐙 ${CONFIG.OWNER.GITHUB}","enabled":true}`
                 ],
                 "share_payment_status": true,
                 "is_soft_deleted": false
             });
 
-        // ─── SEND WITH ADDITIONAL NODES ──────────────────────────────────
+        // ─── SEND WITH REVIEW & PAY ADDITIONAL NODE ──────────────────────
         await button.send(chatId, {
             quoted: message,
-            additionalNodes: [{
-                tag: 'biz',
-                attrs: {
-                    native_flow_name: 'order_details'
-                }
-            }],
+            additionalNodes: [REVIEW_AND_PAY_NODE],
             fallbackText: 
-                `👑 *Owner: ${CONFIG.OWNER.NAME}*\n\n` +
+                `👑 *${CONFIG.OWNER.NAME}*\n\n` +
                 `📱 ${CONFIG.OWNER.PHONE_1}\n` +
                 `📱 ${CONFIG.OWNER.PHONE_2}\n` +
                 `🌐 ${CONFIG.OWNER.WEBSITE}\n` +
                 `🐙 ${CONFIG.OWNER.GITHUB}`
         });
 
-        console.log('[OWNER] Profile sent to:', chatId);
+        console.log('[OWNER] Profile sent with Review & Pay node');
 
     } catch (error) {
         console.error('[OWNER ERROR]', error?.message || error);
 
+        // ─── FALLBACK: Send without review & pay ──────────────────────────
         try {
             const ctx = createCtx(sock, chatId, message);
-            await ctx.reply(`❌ *Error:* ${error.message}`);
+            
+            const fallbackText = 
+                `👑 *${CONFIG.OWNER.NAME}*\n\n` +
+                `📱 ${CONFIG.OWNER.PHONE_1}\n` +
+                `📱 ${CONFIG.OWNER.PHONE_2}\n` +
+                `🌐 ${CONFIG.OWNER.WEBSITE}\n` +
+                `🐙 ${CONFIG.OWNER.GITHUB}\n\n` +
+                `> ⚡ Mickey Glitch Sub`;
+
+            await ctx.reply(fallbackText);
         } catch (e) {
             console.error('[OWNER FATAL]', e.message);
         }
