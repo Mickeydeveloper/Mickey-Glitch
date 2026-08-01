@@ -1,71 +1,85 @@
 /**
  * fromai.js - AI Style Message with Buttons
- * Fixed: Now works properly!
+ * Fully working version using messageBuilder
+ * Creator: Mickey Glitch Sub
  */
 
-const { randomBytes } = require('crypto');
-const { ButtonV2, Button, createCtx, AIRich } = require('../lib/messageBuilder');
+const { ButtonV2, createCtx } = require('../lib/messageBuilder');
 
-// ─── AI USER CONFIG ──────────────────────────────────────────────────────
+// ─── AI CONFIG ──────────────────────────────────────────────────────────────
 const AI_CONFIG = {
     name: 'Fiora Sylvie',
-    fromNumber: '255612130873',
     ticketId: '1669945700536053',
-    version: 1,
-    is_ai_message: true,
-    should_show_system_message: true
+    version: '1.0'
 };
 
 // ─── MAIN FROMAI COMMAND ──────────────────────────────────────────────────
 async function fromaiCommand(sock, chatId, message, args = []) {
     try {
+        // ─── CHECK SOCKET ──────────────────────────────────────────────────
+        if (!sock || typeof sock !== 'object') {
+            console.error('[FROMAI] Invalid socket');
+            return;
+        }
+
+        // ─── CHECK IF sendMessage EXISTS ──────────────────────────────────
+        if (typeof sock.sendMessage !== 'function') {
+            console.error('[FROMAI] sendMessage is not a function');
+            console.log('[FROMAI] Socket keys:', Object.keys(sock));
+            
+            // Try to find sendMessage in sock
+            if (sock.core && typeof sock.core.sendMessage === 'function') {
+                sock = sock.core; // Use core if available
+            } else if (sock.sock && typeof sock.sock.sendMessage === 'function') {
+                sock = sock.sock; // Use sock if available
+            } else {
+                throw new Error('sendMessage not found in socket');
+            }
+        }
+
         // ─── CREATE CTX ──────────────────────────────────────────────────
         const ctx = createCtx(sock, chatId, message, { args });
 
-        if (!sock) throw new Error('Socket connection not found');
-        if (!chatId) throw new Error('Chat ID not found');
-
-        // ─── GET ARGUMENTS ────────────────────────────────────────────────
+        // ─── GET QUERY ──────────────────────────────────────────────────────
         const query = Array.isArray(args) ? args.join(' ') : args;
 
-        // ─── CHECK SUBCOMMANDS ────────────────────────────────────────────
-        if (query?.toLowerCase() === 'help' || query?.toLowerCase() === 'menu') {
-            return await showFromAIHelp(sock, chatId, message);
+        // ─── HELP COMMAND ──────────────────────────────────────────────────
+        if (query === 'help' || query === 'menu') {
+            return await sendHelpMessage(sock, chatId, message);
         }
 
         // ─── SEND PROCESSING MESSAGE ────────────────────────────────────
-        await ctx.reply('⏳ _Processing AI media engine, please wait..._');
-
-        // ─── SEND NORMAL MESSAGE FIRST (FOR TESTING) ────────────────────
         await sock.sendMessage(chatId, {
-            text: '🤖 *FromAI Engine Active*\n\n📌 This message is powered by AI technology.'
-        }, { quoted: message });
+            text: '⏳ _Processing AI media engine, please wait..._'
+        }, { quoted: message }).catch(() => {});
 
-        // ─── CREATE AI-STYLE MESSAGE (FIXED) ────────────────────────────
-        try {
-            // Option 1: Send as normal message with special formatting
-            const aiText = 
-                `╭━━━━〔 *FIORA SYLVIE AI* 〕━━━━┈⊷\n` +
-                `┃\n` +
-                `┃ 👋 Halo dunia!\n` +
-                `┃\n` +
-                `┃ 📌 *FromAI Engine Active*\n` +
-                `┃\n` +
-                `┃ 💡 This message is powered by AI technology.\n` +
-                `┃\n` +
-                `┃ 🔗 Ticket: ${AI_CONFIG.ticketId}\n` +
-                `┃\n` +
-                `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
+        // ─── SEND AI STYLE MESSAGE ──────────────────────────────────────
+        const aiText = 
+            `╭━━━━〔 *FIORA SYLVIE AI* 〕━━━━┈⊷\n` +
+            `┃\n` +
+            `┃ 👋 *Halo dunia!*\n` +
+            `┃\n` +
+            `┃ 🤖 *FromAI Engine Active*\n` +
+            `┃\n` +
+            `┃ 📌 This message is powered by AI technology.\n` +
+            `┃\n` +
+            `┃ 🔗 Ticket: ${AI_CONFIG.ticketId}\n` +
+            `┃ 📡 Version: ${AI_CONFIG.version}\n` +
+            `┃\n` +
+            `┃ 💡 *Choose an option below:*\n` +
+            `┃\n` +
+            `┃ 📡 Nixel AI - AI Assistant\n` +
+            `┃ 🤖 ChatGPT - OpenAI Integration\n` +
+            `┃ 🎨 AI Image - Generate Images\n` +
+            `┃ 📝 AI Text - Text Generation\n` +
+            `┃\n` +
+            `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-            await sock.sendMessage(chatId, {
-                text: aiText
-            }, { quoted: message });
+        await sock.sendMessage(chatId, {
+            text: aiText
+        }, { quoted: message }).catch(() => {});
 
-        } catch (aiError) {
-            console.error('[AI MESSAGE ERROR]', aiError.message);
-        }
-
-        // ─── CREATE BUTTONV2 WITH AI STYLE ────────────────────────────────
+        // ─── CREATE BUTTONV2 WITH AI STYLE ──────────────────────────────
         try {
             const buttonBuilder = new ButtonV2(sock)
                 .setTitle('🤖 Fiora Sylvie AI')
@@ -75,8 +89,8 @@ async function fromaiCommand(sock, chatId, message, args = []) {
                     `Choose an option below:\n\n` +
                     `📡 Nixel AI - AI-powered assistant\n` +
                     `🤖 ChatGPT - OpenAI integration\n` +
-                    `🎨 AI Image - Generate images\n` +
-                    `📝 AI Text - Text generation\n\n` +
+                    `🎨 AI Image - Generate images with AI\n` +
+                    `📝 AI Text - Advanced text generation\n\n` +
                     `💡 *Click a button to continue*`
                 )
                 .setFooter(`🤖 AI-Powered | ${new Date().toLocaleDateString()}`)
@@ -89,76 +103,87 @@ async function fromaiCommand(sock, chatId, message, args = []) {
 
             await buttonBuilder.send(chatId, {
                 quoted: message,
-                fallbackText: '🤖 FromAI Engine: Halo dunia!\n\nPowered by Fiora Sylvie AI'
+                fallbackText: '🤖 FromAI Engine: Powered by Fiora Sylvie AI'
             });
+
+            console.log('[FROMAI] Sent successfully to:', chatId);
 
         } catch (buttonError) {
             console.error('[BUTTON ERROR]', buttonError.message);
-            
-            // ─── FALLBACK: Send with normal Button ──────────────────────
-            const fallbackButton = new Button(sock)
-                .setTitle('🤖 FromAI Engine')
-                .setBody(
-                    `📋 *AI Menu*\n\n` +
-                    `📡 Nixel AI - AI assistant\n` +
-                    `🤖 ChatGPT - OpenAI\n` +
-                    `🎨 AI Image - Generate\n` +
-                    `📝 AI Text - Text gen`
-                )
-                .setFooter('⚡ Mickey Glitch Sub')
-                .addButton('📡 Nixel AI', 'nixel_ai')
-                .addButton('🤖 ChatGPT', 'chatgpt_ai')
-                .addButton('🎨 AI Image', 'image_ai')
-                .addButton('📝 AI Text', 'text_ai');
 
-            await fallbackButton.send(chatId, {
-                quoted: message,
-                fallbackText: 'FromAI Engine: Halo dunia!'
-            });
+            // ─── FALLBACK: Send simple text with links ──────────────────
+            const fallbackText = 
+                `🤖 *Fiora Sylvie AI*\n\n` +
+                `📋 *AI Menu (Fallback)*\n\n` +
+                `📡 Nixel AI - .nixel\n` +
+                `🤖 ChatGPT - .chatgpt\n` +
+                `🎨 AI Image - .image\n` +
+                `📝 AI Text - .text\n\n` +
+                `⚡ Mickey Glitch Sub`;
+
+            await sock.sendMessage(chatId, {
+                text: fallbackText
+            }, { quoted: message }).catch(() => {});
         }
-
-        console.log('[FROMAI] AI message sent to:', chatId);
 
     } catch (error) {
         console.error('[FROMAI ERROR]', error?.message || error);
         console.error('[FROMAI STACK]', error?.stack);
 
-        // ─── FALLBACK ────────────────────────────────────────────────────
+        // ─── ULTIMATE FALLBACK ────────────────────────────────────────────
         try {
+            const errorText = 
+                `❌ *FromAI Engine failed*\n\n` +
+                `📌 Error: ${error.message || 'Unknown error'}\n\n` +
+                `🔄 Please try again later.\n\n` +
+                `⚡ Mickey Glitch Sub`;
+
             await sock.sendMessage(chatId, {
-                text: `❌ *FromAI Engine failed:*\n${error.message}\n\nPlease try again later.`
-            }, { quoted: message });
+                text: errorText
+            }, { quoted: message }).catch(() => {});
         } catch (e) {
             console.error('[FROMAI FATAL]', e.message);
-            await sock.sendMessage(chatId, {
-                text: '❌ FromAI Engine failed. Please try again later.'
-            });
         }
     }
 };
 
-// ─── SHOW HELP ──────────────────────────────────────────────────────────────
-async function showFromAIHelp(sock, chatId, message) {
-    const helpText = 
-        `╭━━━━〔 *FROMAI HELP* 〕━━━━┈⊷\n` +
-        `┃\n` +
-        `┃ 🤖 *FromAI Engine*\n` +
-        `┃\n` +
-        `┃ 📌 *Usage:*\n` +
-        `┃ • .fromai - Show AI menu\n` +
-        `┃ • .fromai help - Show this help\n` +
-        `┃\n` +
-        `┃ 📋 *Features:*\n` +
-        `┃ • AI-Powered Messages\n` +
-        `┃ • Interactive Menu\n` +
-        `┃ • Multiple AI Options\n` +
-        `┃\n` +
-        `┃ 💡 *Example:*\n` +
-        `┃ .fromai\n` +
-        `┃\n` +
-        `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
+// ─── SEND HELP MESSAGE ──────────────────────────────────────────────────────
+async function sendHelpMessage(sock, chatId, message) {
+    try {
+        const helpText = 
+            `╭━━━━〔 *FROMAI HELP* 〕━━━━┈⊷\n` +
+            `┃\n` +
+            `┃ 🤖 *FromAI Engine*\n` +
+            `┃\n` +
+            `┃ 📌 *Usage:*\n` +
+            `┃ • .fromai - Show AI menu\n` +
+            `┃ • .fromai help - Show this help\n` +
+            `┃ • .fromai chat - Start AI chat\n` +
+            `┃\n` +
+            `┃ 📋 *Features:*\n` +
+            `┃ • AI-Powered Messages\n` +
+            `┃ • Interactive Menu\n` +
+            `┃ • Multiple AI Options\n` +
+            `┃ • View Once Support\n` +
+            `┃\n` +
+            `┃ 💡 *Example:*\n` +
+            `┃ .fromai\n` +
+            `┃\n` +
+            `┃ 🔗 *Creator:* Mickdadi Hamza\n` +
+            `┃ 📞 *Support:* wa.me/255612130873\n` +
+            `┃\n` +
+            `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-    await sock.sendMessage(chatId, { text: helpText }, { quoted: message });
+        await sock.sendMessage(chatId, {
+            text: helpText
+        }, { quoted: message }).catch(() => {});
+
+    } catch (error) {
+        console.error('[HELP ERROR]', error.message);
+        await sock.sendMessage(chatId, {
+            text: '❌ Could not load help.'
+        }).catch(() => {});
+    }
 }
 
 // ─── EXPORT ──────────────────────────────────────────────────────────────
@@ -167,5 +192,5 @@ module.exports.name = 'fromai';
 module.exports.aliases = ['aimedia', 'pairedmedia', 'fiora'];
 module.exports.category = 'ai';
 module.exports.default = fromaiCommand;
-module.exports.code = fromaiCommand;
 module.exports.handler = fromaiCommand;
+module.exports.code = fromaiCommand;
