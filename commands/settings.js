@@ -1,10 +1,10 @@
 /**
- * settings.js - Bot settings with single AIRich Table
+ * settings.js - Bot settings with ctx and fallback
  * Usage: .settings
  */
 
 const fs = require('fs');
-const { createCtx, AIRich, ButtonV2 } = require('../lib/messageBuilder');
+const { createCtx, AIRich, ButtonV2, Toolkit } = require('../lib/messageBuilder');
 
 // ─── HELPER FUNCTIONS ──────────────────────────────────────────────────────
 function readJsonSafe(path, fallback) {
@@ -31,19 +31,7 @@ async function isOwnerOrSudo(senderId, sock, chatId) {
     }
 }
 
-// ─── CHECK IF AIRICH SUPPORTED ────────────────────────────────────────────
-async function isAIRichSupported(sock) {
-    try {
-        if (typeof AIRich !== 'function') return false;
-        const testRich = new AIRich(sock);
-        testRich.addText('Test');
-        return true;
-    } catch (_) {
-        return false;
-    }
-}
-
-// ─── MAIN SETTINGS COMMAND ──────────────────────────────────────────────────
+// ─── MAIN SETTINGS COMMAND ────────────────────────────────────────────────
 module.exports = async (sock, chatId, message) => {
     try {
         const ctx = createCtx(sock, chatId, message);
@@ -84,7 +72,6 @@ module.exports = async (sock, chatId, message) => {
         // ─── BUILD TABLE DATA ────────────────────────────────────────────
         const tableData = [
             ["📌 SETTING", "📊 STATUS", "📝 COMMAND"],
-            // ─── GENERAL SETTINGS ──────────────────────────────────────
             ["━━━━━━━━━━━━━━", "━━━━━━━━━━━━", "━━━━━━━━━━━━"],
             ["⚙️ GENERAL", "", ""],
             ["Mode", mode.isPublic ? "🌍 Public" : "🔒 Private", ".mode toggle"],
@@ -97,7 +84,6 @@ module.exports = async (sock, chatId, message) => {
             ["Auto Reaction", autoReaction ? "✅ ON" : "❌ OFF", ".autoreaction toggle"]
         ];
 
-        // ─── ADD GROUP SETTINGS ──────────────────────────────────────────
         if (groupId) {
             tableData.push(["━━━━━━━━━━━━━━", "━━━━━━━━━━━━", "━━━━━━━━━━━━"]);
             tableData.push(["👥 GROUP", "", ""]);
@@ -109,77 +95,69 @@ module.exports = async (sock, chatId, message) => {
             tableData.push(["Antitag", antitagCfg && antitagCfg.enabled ? `✅ ON (${antitagCfg.action || 'delete'})` : "❌ OFF", ".antitag toggle"]);
         }
 
-        // ─── ADD TIMESTAMP ──────────────────────────────────────────────
         tableData.push(["━━━━━━━━━━━━━━", "━━━━━━━━━━━━", "━━━━━━━━━━━━"]);
         tableData.push(["📅 UPDATED", new Date().toLocaleString(), ""]);
 
-        // ─── SEND WITH AIRICH ────────────────────────────────────────────
+        // ─── FORMAT AS TEXT ──────────────────────────────────────────────
+        const settingsText = formatTableAsText(tableData);
+
+        // ─── TRY AIRICH (WITH FALLBACK) ──────────────────────────────────
         try {
             const rich = new AIRich(sock)
                 .setTitle('⚙️ BOT SETTINGS')
-                .setBody(`📋 *Current Configuration*\n\n👤 Owner: ${senderId.split('@')[0]}`)
+                .setBody(`📋 *Current Configuration*`)
                 .addTable(tableData)
                 .addTip('💡 Use .help for more commands')
-                .addSuggest([
-                    'Toggle mode',
-                    'Show all settings',
-                    'Reset settings'
-                ]);
+                .addSuggest(['Toggle mode', 'Show all settings', 'Reset settings']);
 
             await rich.send(chatId, {
                 quoted: message,
                 forwarded: false,
                 notification: false,
-                fallbackText: formatTableAsText(tableData)
+                fallbackText: settingsText
             });
 
             console.log('[SETTINGS] Sent with AIRich');
+            return;
 
         } catch (richError) {
             console.error('[AIRICH ERROR]', richError.message);
-            
-            // ─── FALLBACK: SEND WITH BUTTONV2 ──────────────────────────
-            try {
-                const settingsText = formatTableAsText(tableData);
-                
-                const builder = new ButtonV2(sock)
-                    .setTitle("⚙️ Bot Settings")
-                    .setBody(settingsText)
-                    .setFooter(`📅 ${new Date().toLocaleString()} | ⚡ Mickey Glitch Sub`)
-                    .addButton("🔄 Refresh", ".settings")
-                    .addButton("📊 Stats", ".stats")
-                    .addButton("📋 Menu", ".menu");
-
-                await builder.send(chatId, {
-                    quoted: message,
-                    fallbackText: settingsText
-                });
-
-                console.log('[SETTINGS] Sent with ButtonV2');
-
-            } catch (buttonError) {
-                console.error('[BUTTONV2 ERROR]', buttonError.message);
-                
-                // ─── FINAL FALLBACK ──────────────────────────────────────
-                const plainText = formatTableAsText(tableData);
-                await ctx.reply(plainText);
-                console.log('[SETTINGS] Sent with Plain Text');
-            }
         }
+
+        // ─── FALLBACK 1: BUTTONV2 ──────────────────────────────────────────
+        try {
+            const builder = new ButtonV2(sock)
+                .setTitle('⚙️ Bot Settings')
+                .setBody(settingsText)
+                .setFooter(`📅 ${new Date().toLocaleString()} | ⚡ Mickey Glitch Sub`)
+                .addButton('🔄 Refresh', '.settings')
+                .addButton('📊 Stats', '.stats')
+                .addButton('📋 Menu', '.menu');
+
+            await builder.send(chatId, {
+                quoted: message,
+                fallbackText: settingsText
+            });
+
+            console.log('[SETTINGS] Sent with ButtonV2');
+            return;
+
+        } catch (buttonError) {
+            console.error('[BUTTONV2 ERROR]', buttonError.message);
+        }
+
+        // ─── FALLBACK 2: PLAIN TEXT ──────────────────────────────────────
+        await ctx.reply(settingsText);
+        console.log('[SETTINGS] Sent with Plain Text');
 
     } catch (error) {
         console.error('[SETTINGS ERROR]', error?.message || error);
-        
+
         try {
             const ctx = createCtx(sock, chatId, message);
             await ctx.reply('❌ *Failed to load settings.*\n\nPlease try again later.');
         } catch (e) {
             console.error('[SETTINGS FATAL]', e.message);
-            try {
-                await sock.sendMessage(chatId, { 
-                    text: '❌ Failed to load settings. Please try again later.' 
-                });
-            } catch (_) {}
         }
     }
 };
@@ -188,12 +166,10 @@ module.exports = async (sock, chatId, message) => {
 function formatTableAsText(tableData) {
     let text = '⚙️ *BOT SETTINGS*\n\n';
     
-    // Find max column width
     const colWidths = tableData.reduce((widths, row) => {
         return row.map((cell, i) => Math.max(widths[i] || 0, String(cell).length));
     }, [0, 0, 0]);
     
-    // Build table with borders
     const separator = '┌' + '─'.repeat(colWidths[0] + 2) + '┬' + '─'.repeat(colWidths[1] + 2) + '┬' + '─'.repeat(colWidths[2] + 2) + '┐';
     const divider = '├' + '─'.repeat(colWidths[0] + 2) + '┼' + '─'.repeat(colWidths[1] + 2) + '┼' + '─'.repeat(colWidths[2] + 2) + '┤';
     const footer = '└' + '─'.repeat(colWidths[0] + 2) + '┴' + '─'.repeat(colWidths[1] + 2) + '┴' + '─'.repeat(colWidths[2] + 2) + '┘';
@@ -207,16 +183,7 @@ function formatTableAsText(tableData) {
         });
         text += '│' + cells.join('│') + '│\n';
         
-        // Add divider after header
-        if (index === 0) {
-            text += divider + '\n';
-        }
-        // Add divider after group header
-        if (row[0] === '👥 GROUP' || row[0] === '⚙️ GENERAL') {
-            text += divider + '\n';
-        }
-        // Add divider after separator rows
-        if (row[0] === '━━━━━━━━━━━━━━' || row[0] === '') {
+        if (index === 0 || row[0] === '👥 GROUP' || row[0] === '⚙️ GENERAL' || row[0] === '━━━━━━━━━━━━━━') {
             text += divider + '\n';
         }
     });
