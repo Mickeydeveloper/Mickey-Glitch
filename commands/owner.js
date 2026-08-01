@@ -52,23 +52,13 @@ async function ownerCommand(sock, chatId, message) {
             `🔗 ${CONFIG.OWNER.GITHUB}\n\n` +
             `> ⚡ Mickey Glitch Sub`;
 
-        await sock.sendMessage(chatId, {
-            image: { url: randomImage },
-            caption: profileText
-        }, { quoted: message });
+        // Use Button to present profile (header image + body) instead of separate image message
 
         // ─── BUTTON WITH REVIEW & PAY ──────────────────────────────────
         try {
             const button = new Button(sock)
                 .setTitle('📋 Contact Options')
-                .setBody(
-                    `*Choose how to contact ${CONFIG.OWNER.NAME}:*\n\n` +
-                    `📞 Call\n` +
-                    `📋 Copy\n` +
-                    `🌐 Website\n` +
-                    `🐙 GitHub\n` +
-                    `💬 Chat`
-                )
+                .setBody(profileText)
                 .setFooter(`⚡ ${CONFIG.OWNER.NAME}`)
                 .setImage(randomImage)
                 .addButton('cta_call', {
