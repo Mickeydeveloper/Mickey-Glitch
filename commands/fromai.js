@@ -1,14 +1,16 @@
 /**
- * fromai.js - Send message with AI badge icon (no name visible)
+ * fromai.js - Send single message with AI badge
  * Usage: .fromai <number> <message>
+ * Example: .fromai 255612130873 Habari yako?
  */
 
 const { randomBytes } = require('crypto');
 const { createCtx } = require('../lib/messageBuilder');
 
-// ─── AI CONFIG WITH BADGE ──────────────────────────────────────────────────
+// ─── AI CONFIG ──────────────────────────────────────────────────────────────
 const AI_CONFIG = {
-    badge: '✨',  // ← AI BADGE/ICON (huu ndio muundo wa icon)
+    badge: '✨',  // AI BADGE/ICON
+    name: 'AI Assistant',
     ticketId: '1669945700536053',
     version: 1,
     is_ai_message: true,
@@ -42,7 +44,7 @@ async function fromaiCommand(sock, chatId, message, args = []) {
             return await ctx.reply(`❌ *Invalid number:* ${targetNumber || 'Empty'}`);
         }
 
-        if (!messageText) {
+        if (!messageText || messageText.length < 1) {
             return await ctx.reply(`❌ *Empty message*`);
         }
 
@@ -51,8 +53,8 @@ async function fromaiCommand(sock, chatId, message, args = []) {
         // ─── SEND PROCESSING ──────────────────────────────────────────────
         await ctx.reply(`⏳ _Sending AI message to ${targetNumber}..._`);
 
-        // ─── SEND AI MESSAGE WITH BADGE ──────────────────────────────────
-        await sendAIMessageWithBadge(sock, targetJid, messageText);
+        // ─── SEND SINGLE MESSAGE WITH AI BADGE ────────────────────────────
+        await sendSingleAIMessage(sock, targetJid, messageText);
 
         // ─── SEND CONFIRMATION ────────────────────────────────────────────
         await ctx.reply(
@@ -60,7 +62,7 @@ async function fromaiCommand(sock, chatId, message, args = []) {
             `📌 *To:* ${targetNumber}\n` +
             `📝 *Message:* ${messageText}\n` +
             `✨ *Sent with AI badge*\n\n` +
-            `💡 The message has been sent with AI badge icon.`
+            `💡 The message has been sent as a single AI message.`
         );
 
         console.log('[FROMAI] Sent to:', targetNumber);
@@ -81,13 +83,13 @@ async function fromaiCommand(sock, chatId, message, args = []) {
     }
 }
 
-// ─── SEND AI MESSAGE WITH BADGE ────────────────────────────────────────────
-async function sendAIMessageWithBadge(sock, targetJid, messageText) {
+// ─── SEND SINGLE MESSAGE WITH AI BADGE ────────────────────────────────────
+async function sendSingleAIMessage(sock, targetJid, messageText) {
     try {
-        // ─── METHOD 1: Send as AI message with badge ──────────────────────
-        // Hii inaweka jina la mtumaji kuwa na badge ✨
-        const aiMessage = {
-            conversation: `${AI_CONFIG.badge} AI Assistant`,  // ← JINA LINA BADGE
+        // ─── SEND AS RELAY MESSAGE WITH AI BADGE ──────────────────────────
+        // Hii inatuma ujumbe mmoja tu wenye badge ya AI kwenye jina
+        await sock.relayMessage(targetJid, {
+            conversation: `${AI_CONFIG.badge} ${AI_CONFIG.name}`,  // ← JINA LINA BADGE
             messageContextInfo: {
                 messageSecret: randomBytes(32),
                 supportPayload: JSON.stringify({
@@ -97,10 +99,7 @@ async function sendAIMessageWithBadge(sock, targetJid, messageText) {
                     ticket_id: AI_CONFIG.ticketId
                 })
             }
-        };
-
-        // ─── SEND AI MESSAGE ──────────────────────────────────────────────
-        await sock.relayMessage(targetJid, aiMessage, {
+        }, {
             additionalNodes: [
                 {
                     tag: 'bot',
@@ -115,17 +114,17 @@ async function sendAIMessageWithBadge(sock, targetJid, messageText) {
             ]
         });
 
-        // ─── SEND ACTUAL TEXT ─────────────────────────────────────────────
+        // ─── SEND THE ACTUAL TEXT (UJUMBE TU) ─────────────────────────────
         await sock.sendMessage(targetJid, {
-            text: messageText  // ← UJUMBE TU, HAKUNA ICON KWA SABABU BADGE IKO KWENYE JINA
+            text: messageText  // ← UJUMBE TU, HAKUNA BADGE KWA SABABU IKO KWENYE JINA
         });
 
-        console.log('[FROMAI] Message sent with AI badge');
+        console.log('[FROMAI] Single AI message sent');
 
     } catch (error) {
         console.error('[SEND AI MESSAGE ERROR]', error.message);
         
-        // ─── FALLBACK ────────────────────────────────────────────────────
+        // ─── FALLBACK: Send as single normal message ──────────────────────
         await sock.sendMessage(targetJid, {
             text: `✨ ${messageText}`
         });
