@@ -39,13 +39,15 @@ function findHandler(commandModule) {
 }
 
 // Helper to create sandbox environment
-function createSandbox(sock, chatId, message, args, senderId) {
+function createSandbox(sock, chatId, message, args, senderId, commandName = '') {
     const sandbox = {
         sock,
         chatId,
         message,
         args: args || [],
         senderId,
+        commandName,
+        prefix: '.',
         console: {
             log: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
             error: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
@@ -78,17 +80,27 @@ function createSandbox(sock, chatId, message, args, senderId) {
         Map,
         Set,
         // WhatsApp specific helpers
-        sendMessage: async (text, options = {}) => {
-            return await sock.sendMessage(chatId, { text, ...options }, { quoted: message });
+        sendMessage: async (content, options = {}) => {
+            const messageContent = typeof content === 'string' ? { text: content } : content;
+            const result = await sock.sendMessage(chatId, messageContent, { quoted: message, ...options });
+            sandbox.__sent = true;
+            sandbox.__sentMessages.push(result);
+            return result;
         },
-        reply: async (text) => {
-            return await sock.sendMessage(chatId, { text }, { quoted: message });
+        reply: async (content, options = {}) => {
+            const messageContent = typeof content === 'string' ? { text: content } : content;
+            const result = await sock.sendMessage(chatId, messageContent, { quoted: message, ...options });
+            sandbox.__sent = true;
+            sandbox.__sentMessages.push(result);
+            return result;
         },
         getMessage: () => message,
         getSender: () => senderId,
         getChatId: () => chatId,
     };
     sandbox.__logs = [];
+    sandbox.__sent = false;
+    sandbox.__sentMessages = [];
     return sandbox;
 }
 
@@ -147,7 +159,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
                 await sock.sendMessage(chatId, { text: '📭 No custom commands found.' }, { quoted: message });
                 return;
             }
-            const commandList = commands.map(cmd => `• .${cmd.name}`).join('\n');
+            const commandList = commands.map((cmd) => `• .${cmd}`).join('\n');
             await sock.sendMessage(chatId, { 
                 text: `📋 Available custom commands:\n\n${commandList}\n\nTotal: ${commands.length} commands` 
             }, { quoted: message });
@@ -247,19 +259,25 @@ Examples:
             }
 
             try {
-                // Create sandbox for command execution
-                const sandbox = createSandbox(sock, chatId, message, args, senderId);
-                // Execute handler
-                await handler(sandbox.sock, sandbox.chatId, sandbox.message, sandbox.args, { 
-                    senderId: sandbox.senderId, 
-                    commandName 
-                });
-                
-                // Check if handler returned a result or sent a message
-                if (!sandbox.__logs.length) {
-                    await sock.sendMessage(chatId, { 
-                        text: `✅ Command .${commandName} executed successfully.` 
-                    }, { quoted: message });
+                const sandbox = createSandbox(sock, chatId, message, args, senderId, commandName);
+                const handlerResult = handler.length <= 1
+                    ? await handler(sandbox)
+                    : await handler(sandbox.sock, sandbox.chatId, sandbox.message, sandbox.args, {
+                        senderId: sandbox.senderId,
+                        commandName: sandbox.commandName,
+                    });
+
+                if (!sandbox.__sent) {
+                    let response;
+                    if (handlerResult !== undefined) {
+                        response = `✅ Command .${commandName} executed successfully.\nResult:\n${util.inspect(handlerResult, { depth: 2, colors: false })}`;
+                    } else if (sandbox.__logs.length) {
+                        response = `✅ Command .${commandName} completed.\n\n📋 Logs:\n${sandbox.__logs.join('\n')}`;
+                    } else {
+                        response = `✅ Command .${commandName} executed successfully.`;
+                    }
+
+                    await sock.sendMessage(chatId, { text: response }, { quoted: message });
                 }
             } catch (execError) {
                 await sock.sendMessage(chatId, { 
@@ -372,12 +390,11 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
         // Save the command
         try {
             const result = await saveCustomCommand(commandName, cleaned);
-            // Reload custom commands
-            loadCustomCommands();
-            
             await sock.sendMessage(chatId, {
-                text: `✅ Custom command saved as .${commandName}\n\nFile: commands/custom/${commandName}.js\n\nUse .run ${commandName} to test it.`
+                text: `✅ Custom command saved as .${commandName}\n\nFile: commands/custom/${commandName}.js\n\nRunning it now...`
             }, { quoted: message });
+
+            await runCommand(sock, chatId, senderId, `.run ${commandName}`, message);
         } catch (saveError) {
             await sock.sendMessage(chatId, { 
                 text: `❌ Failed to save command: ${saveError?.message || saveError}` 
