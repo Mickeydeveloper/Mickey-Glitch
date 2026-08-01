@@ -1,5 +1,5 @@
 /**
- * fromai.js - Send message with AI structure (conversation + metadata)
+ * fromai.js - Send exact message only (no name, no AI badge)
  * Usage: .fromai <number> <message>
  * Example: .fromai 255612130873 habari kaka
  */
@@ -9,7 +9,6 @@ const { createCtx } = require('../lib/messageBuilder');
 
 // ─── AI CONFIG ──────────────────────────────────────────────────────────────
 const AI_CONFIG = {
-    name: 'Fiora Sylvie',  // ← JINA LA AI
     ticketId: '1669945700536053',
     version: 1,
     is_ai_message: true,
@@ -47,7 +46,7 @@ async function fromaiCommand(sock, chatId, message, args = []) {
         // ─── SEND PROCESSING ──────────────────────────────────────────────
         await ctx.reply(`⏳ _Sending to ${targetNumber}..._`);
 
-        // ─── SEND AI-STRUCTURED MESSAGE ──────────────────────────────────
+        // ─── SEND AI STRUCTURED MESSAGE (WITHOUT NAME) ────────────────────
         await sendAIStructuredMessage(sock, targetJid, messageText);
 
         // ─── SEND CONFIRMATION ────────────────────────────────────────────
@@ -69,12 +68,13 @@ async function fromaiCommand(sock, chatId, message, args = []) {
     }
 }
 
-// ─── SEND AI STRUCTURED MESSAGE ────────────────────────────────────────────
+// ─── SEND AI STRUCTURED MESSAGE (NO NAME) ─────────────────────────────────
 async function sendAIStructuredMessage(sock, targetJid, messageText) {
     try {
-        // ─── CREATE AI-STRUCTURED MESSAGE ──────────────────────────────────
-        const aiMessage = {
-            conversation: AI_CONFIG.name,  // ← "Fiora Sylvie"
+        // ─── SEND AI MESSAGE WITH EMPTY CONVERSATION ──────────────────────
+        // conversation: '' → JINA HALIONEKANI
+        await sock.relayMessage(targetJid, {
+            conversation: '',  // ← JINA TUPU (HALIONEKANI)
             messageContextInfo: {
                 messageSecret: randomBytes(32),
                 supportPayload: JSON.stringify({
@@ -84,10 +84,7 @@ async function sendAIStructuredMessage(sock, targetJid, messageText) {
                     ticket_id: AI_CONFIG.ticketId
                 })
             }
-        };
-
-        // ─── SEND AI-STRUCTURED MESSAGE (FIRST) ──────────────────────────
-        await sock.relayMessage(targetJid, aiMessage, {
+        }, {
             additionalNodes: [
                 {
                     tag: 'bot',
@@ -102,12 +99,12 @@ async function sendAIStructuredMessage(sock, targetJid, messageText) {
             ]
         });
 
-        // ─── SEND ACTUAL TEXT MESSAGE ─────────────────────────────────────
+        // ─── SEND THE ACTUAL MESSAGE ──────────────────────────────────────
         await sock.sendMessage(targetJid, {
             text: messageText  // ← UJUMBE TU
         });
 
-        console.log('[FROMAI] AI-structured message sent');
+        console.log('[FROMAI] Message sent with AI structure (no name)');
 
     } catch (error) {
         console.error('[SEND AI STRUCTURED ERROR]', error.message);
