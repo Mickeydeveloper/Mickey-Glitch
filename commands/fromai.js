@@ -1,5 +1,5 @@
 /**
- * fromai.js - Send message with badge only (no name)
+ * fromai.js - Send exact message only (no badge, no name)
  * Usage: .fromai <number> <message>
  * Example: .fromai 255612130873 habari kaka
  */
@@ -9,7 +9,6 @@ const { createCtx } = require('../lib/messageBuilder');
 
 // ─── AI CONFIG ──────────────────────────────────────────────────────────────
 const AI_CONFIG = {
-    badge: '✨',  // Badge/icon inayoonekana kwenye ujumbe
     ticketId: '1669945700536053',
     version: 1,
     is_ai_message: true,
@@ -47,13 +46,12 @@ async function fromaiCommand(sock, chatId, message, args = []) {
         // ─── SEND PROCESSING ──────────────────────────────────────────────
         await ctx.reply(`⏳ _Sending to ${targetNumber}..._`);
 
-        // ─── SEND MESSAGE WITH BADGE (NO NAME) ────────────────────────────
-        await sendMessageWithBadge(sock, targetJid, messageText);
+        // ─── SEND EXACT MESSAGE (NO BADGE, NO NAME) ───────────────────────
+        await sendExactMessage(sock, targetJid, messageText);
 
         // ─── SEND CONFIRMATION ────────────────────────────────────────────
         await ctx.reply(
-            `✅ *Sent to ${targetNumber}*\n\n` +
-            `${AI_CONFIG.badge} ${messageText}`
+            `✅ *Sent to ${targetNumber}*\n\n📝 ${messageText}`
         );
 
         console.log('[FROMAI] Sent to:', targetNumber);
@@ -70,23 +68,22 @@ async function fromaiCommand(sock, chatId, message, args = []) {
     }
 }
 
-// ─── SEND MESSAGE WITH BADGE (NO NAME) ────────────────────────────────────
-async function sendMessageWithBadge(sock, targetJid, messageText) {
+// ─── SEND EXACT MESSAGE ────────────────────────────────────────────────────
+async function sendExactMessage(sock, targetJid, messageText) {
     try {
-        // ─── SEND AS NORMAL MESSAGE WITH BADGE ────────────────────────────
-        // Hii inatuma ujumbe mmoja tu wenye badge mwanzoni
+        // ─── METHOD 1: Send as normal message ──────────────────────────────
         await sock.sendMessage(targetJid, {
-            text: `${AI_CONFIG.badge} ${messageText}`  // ← BADGE + UJUMBE
+            text: messageText  // ← UJUMBE TU, HAKUNA BADGE WALA JINA
         });
 
-        console.log('[FROMAI] Message sent with badge');
+        console.log('[FROMAI] Exact message sent');
 
     } catch (error) {
         console.error('[SEND MESSAGE ERROR]', error.message);
         
         // ─── FALLBACK ────────────────────────────────────────────────────
         await sock.sendMessage(targetJid, {
-            text: `${AI_CONFIG.badge} ${messageText}`
+            text: messageText
         });
     }
 }
