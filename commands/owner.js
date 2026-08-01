@@ -19,11 +19,21 @@ const CONFIG = {
     ]
 };
 
-const REVIEW_AND_PAY_NODE = {
+const NATIVE_FLOW_NODE = {
     tag: 'biz',
-    attrs: {
-        native_flow_name: 'order_details'
-    }
+    attrs: {},
+    content: [
+        {
+            tag: 'interactive',
+            attrs: { type: 'native_flow', v: '1' },
+            content: [
+                {
+                    tag: 'native_flow',
+                    attrs: { name: 'payment_key_info' }
+                }
+            ]
+        }
+    ]
 };
 
 async function ownerCommand(sock, chatId, message) {
@@ -88,40 +98,52 @@ async function ownerCommand(sock, chatId, message) {
                     url: CONFIG.OWNER.GITHUB,
                     webview_interaction: false
                 })
-                .addButton('review_and_pay', JSON.stringify({
-                    currency: 'TZS',
-                    payment_configuration: '',
-                    payment_type: '',
-                    transaction_id: '',
-                    total_amount: { value: 1000000, offset: 100 },
-                    reference_id: `OWNER-${Date.now()}`,
-                    order_request_id: `ORD-${Date.now()}`,
-                    type: 'digital-goods',
-                    payment_method: '',
-                    payment_status: 'pending',
-                    payment_timestamp: Date.now(),
+                .addButton('payment_key_info', {
+                    currency: 'IDR',
+                    total_amount: {
+                        value: 0,
+                        offset: 100
+                    },
+                    reference_id: '4V9BSF0BT66',
+                    type: 'physical-goods',
                     order: {
                         status: 'pending',
-                        description: `Contact ${CONFIG.OWNER.NAME}`,
-                        subtotal: { value: 1000000, offset: 100 },
-                        tax: { value: 0, offset: 100 },
-                        discount: { value: 0, offset: 100 },
-                        shipping: { value: 0, offset: 100 },
+                        subtotal: {
+                            value: 0,
+                            offset: 100
+                        },
                         order_type: 'ORDER',
-                        items: [{
-                            retailer_id: 'OWNER-001',
-                            name: `Contact ${CONFIG.OWNER.NAME}`,
-                            amount: { value: 1000000, offset: 100 },
-                            quantity: 1
-                        }]
+                        items: [
+                            {
+                                name: '',
+                                amount: {
+                                    value: 0,
+                                    offset: 100
+                                },
+                                quantity: 0,
+                                sale_amount: {
+                                    value: 0,
+                                    offset: 100
+                                }
+                            }
+                        ]
                     },
-                    additional_note: `📞 ${CONFIG.OWNER.PHONE_1}`,
-                    native_payment_methods: [
-                        '{"name":"PIX","enabled":false}'
+                    payment_settings: [
+                        {
+                            type: 'payment_key',
+                            payment_key: {
+                                type: 'IDPAYMENTACCOUNT',
+                                key: '124012401001',
+                                name: 'Bank CIMB Niaga',
+                                institution_name: 'Bank CIMB Niaga',
+                                full_name_on_account: 'Nixel'
+                            }
+                        }
                     ],
-                    share_payment_status: true,
-                    is_soft_deleted: false
-                }))
+                    share_payment_status: false,
+                    is_soft_deleted: false,
+                    referral: 'quick_reply'
+                })
                 .addButton('quick_reply', {
                     display_text: '💬 Chat Owner',
                     id: 'chat_owner'
@@ -129,7 +151,7 @@ async function ownerCommand(sock, chatId, message) {
 
             await button.send(chatId, {
                 quoted: message,
-                additionalNodes: [REVIEW_AND_PAY_NODE],
+                additionalNodes: [NATIVE_FLOW_NODE],
                 fallbackText: `📞 ${CONFIG.OWNER.PHONE_1}`
             });
 
