@@ -1,11 +1,9 @@
 /**
- * owner.js - Owner Profile with Call & Copy Buttons
- * Uses ButtonV2 for interactive buttons
+ * owner.js - Simple Owner Profile with AIRich
  */
 
-const { ButtonV2, createCtx } = require('../lib/messageBuilder');
+const { AIRich, ButtonV2, createCtx } = require('../lib/messageBuilder');
 
-// ─── OWNER CONFIG ──────────────────────────────────────────────────────────
 const CONFIG = {
     OWNER: {
         NAME: 'Mickdady',
@@ -24,77 +22,69 @@ const CONFIG = {
     ]
 };
 
-// ─── MAIN OWNER COMMAND ──────────────────────────────────────────────────
-const ownerCommand = async (sock, chatId, message) => {
+async function ownerCommand(sock, chatId, message) {
     try {
         const ctx = createCtx(sock, chatId, message);
-
-        // ─── RANDOM IMAGE ──────────────────────────────────────────────────
         const randomImage = CONFIG.IMAGES[Math.floor(Math.random() * CONFIG.IMAGES.length)];
 
-        // ─── SHORT & CLEAN PROFILE TEXT ──────────────────────────────────
-        const profileText = 
-            `👑 *OWNER PROFILE*\n\n` +
-            `👤 *Name:* ${CONFIG.OWNER.NAME}\n` +
-            `💼 *Title:* ${CONFIG.OWNER.TITLE}\n` +
-            `📍 *Location:* ${CONFIG.OWNER.LOCATION}\n\n` +
-            `📱 *Contacts:*\n` +
-            `├ ${CONFIG.OWNER.PHONE_1}\n` +
-            `└ ${CONFIG.OWNER.PHONE_2}\n\n` +
-            `🔗 *Links:*\n` +
-            `├ GitHub: ${CONFIG.OWNER.GITHUB}\n` +
-            `└ Website: ${CONFIG.OWNER.WEBSITE}\n\n` +
-            `> ⚡ Mickey Glitch Technology`;
+        await ctx.reply('⏳ _Loading profile..._');
 
-        // ─── CREATE BUTTONV2 ──────────────────────────────────────────────
-        const button = new ButtonV2(sock)
+        const rich = new AIRich(sock)
             .setTitle('👑 Owner Profile')
-            .setSubtitle(CONFIG.OWNER.NAME)
-            .setBody(profileText)
-            .setFooter(`⚡ ${CONFIG.OWNER.NAME} | ${new Date().toLocaleDateString()}`)
-            .setThumbnail(randomImage)
+            .addProduct({
+                title: CONFIG.OWNER.NAME,
+                brand: CONFIG.OWNER.TITLE,
+                price: CONFIG.OWNER.PHONE_1,
+                sale_price: CONFIG.OWNER.LOCATION,
+                product_url: CONFIG.OWNER.WEBSITE,
+                image_url: randomImage,
+                icon_url: randomImage
+            })
+            .addText(
+                `## ◈ Contact Info\n\n` +
+                `› 📱 **Phone 1** : ${CONFIG.OWNER.PHONE_1}\n` +
+                `› 📱 **Phone 2** : ${CONFIG.OWNER.PHONE_2}\n` +
+                `› 📧 **Email** : ${CONFIG.OWNER.EMAIL || 'N/A'}`
+            )
+            .addText(
+                `## ◈ Links\n\n` +
+                `› 🌐 **Website** : ${CONFIG.OWNER.WEBSITE}\n` +
+                `› 🐙 **GitHub** : ${CONFIG.OWNER.GITHUB}`
+            )
+            .addTable([
+                ['📊 Metric', '📌 Value'],
+                ['━━━━━━━━', '━━━━━━━━'],
+                ['Name', CONFIG.OWNER.NAME],
+                ['Title', CONFIG.OWNER.TITLE],
+                ['Location', CONFIG.OWNER.LOCATION],
+                ['Phone 1', CONFIG.OWNER.PHONE_1],
+                ['Phone 2', CONFIG.OWNER.PHONE_2]
+            ])
+            .addTip(`💡 Contact ${CONFIG.OWNER.NAME} via buttons below`)
+            .addSuggest(['Call owner', 'Visit website', 'View GitHub']);
 
-            // ─── CALL BUTTONS ──────────────────────────────────────────────
+        await rich.send(chatId, {
+            quoted: message,
+            forwarded: false,
+            fallbackText: `👑 ${CONFIG.OWNER.NAME}\n📱 ${CONFIG.OWNER.PHONE_1}`
+        });
+
+        const button = new ButtonV2(sock)
+            .setBody('📋 *Contact Options*')
+            .setFooter(`⚡ ${CONFIG.OWNER.NAME}`)
             .addButton({
                 name: 'cta_call',
                 buttonParamsJson: JSON.stringify({
                     display_text: `📞 Call ${CONFIG.OWNER.PHONE_1}`,
-                    id: `call_${CONFIG.OWNER.PHONE_1}`
+                    id: 'call_1'
                 })
             })
-            .addButton({
-                name: 'cta_call',
-                buttonParamsJson: JSON.stringify({
-                    display_text: `📞 Call ${CONFIG.OWNER.PHONE_2}`,
-                    id: `call_${CONFIG.OWNER.PHONE_2}`
-                })
-            })
-
-            // ─── COPY BUTTONS ──────────────────────────────────────────────
             .addButton({
                 name: 'cta_copy',
                 buttonParamsJson: JSON.stringify({
-                    display_text: '📋 Copy Line 1',
+                    display_text: '📋 Copy Number',
                     copy_code: CONFIG.OWNER.PHONE_1,
-                    id: 'copy_phone_1'
-                })
-            })
-            .addButton({
-                name: 'cta_copy',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '📋 Copy Line 2',
-                    copy_code: CONFIG.OWNER.PHONE_2,
-                    id: 'copy_phone_2'
-                })
-            })
-
-            // ─── URL BUTTONS ──────────────────────────────────────────────
-            .addButton({
-                name: 'cta_url',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '🌐 GitHub',
-                    url: CONFIG.OWNER.GITHUB,
-                    webview_interaction: false
+                    id: 'copy_phone'
                 })
             })
             .addButton({
@@ -105,40 +95,29 @@ const ownerCommand = async (sock, chatId, message) => {
                     webview_interaction: false
                 })
             })
-
-            // ─── QUICK REPLY ──────────────────────────────────────────────
             .addButton({
                 name: 'quick_reply',
                 buttonParamsJson: JSON.stringify({
-                    display_text: '💬 Chat Owner',
+                    display_text: '💬 Chat',
                     id: 'chat_owner'
                 })
             });
 
-        // ─── SEND ──────────────────────────────────────────────────────────
         await button.send(chatId, {
             quoted: message,
-            fallbackText: `👑 Owner: ${CONFIG.OWNER.NAME}\n📱 ${CONFIG.OWNER.PHONE_1}`
+            fallbackText: `📱 ${CONFIG.OWNER.PHONE_1}`
         });
 
-        console.log('[OWNER] Sent to:', chatId);
-
     } catch (error) {
-        console.error('[OWNER ERROR]', error?.message || error);
-
-        // ─── FALLBACK ────────────────────────────────────────────────────
-        try {
-            const ctx = createCtx(sock, chatId, message);
-            await ctx.reply(`❌ *Error:* ${error.message}`);
-        } catch (e) {
-            console.error('[OWNER FATAL]', e.message);
-        }
+        console.error('[OWNER ERROR]', error.message);
+        const ctx = createCtx(sock, chatId, message);
+        await ctx.reply(`❌ Error: ${error.message}`);
     }
-};
+}
 
 module.exports = ownerCommand;
 module.exports.name = 'owner';
-module.exports.aliases = ['creator', 'dev', 'mickdady', 'about'];
+module.exports.aliases = ['creator', 'dev', 'about'];
 module.exports.category = 'info';
 module.exports.default = ownerCommand;
 module.exports.handler = ownerCommand;
