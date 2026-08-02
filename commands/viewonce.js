@@ -4,7 +4,12 @@ function resolveQuotedMedia(message) {
     const candidates = [];
 
     const directQuoted = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-    if (directQuoted) candidates.push(directQuoted);
+    if (directQuoted) {
+        candidates.push(directQuoted);
+        if (directQuoted.viewOnceMessage?.message) candidates.push(directQuoted.viewOnceMessage.message);
+        if (directQuoted.viewOnceMessageV2?.message) candidates.push(directQuoted.viewOnceMessageV2.message);
+        if (directQuoted.viewOnceMessageV2Extension?.message) candidates.push(directQuoted.viewOnceMessageV2Extension.message);
+    }
 
     const viewOnce = message?.message?.viewOnceMessage?.message;
     if (viewOnce) candidates.push(viewOnce);
@@ -22,10 +27,20 @@ function resolveQuotedMedia(message) {
     if (topLevel?.imageMessage || topLevel?.videoMessage) candidates.push(topLevel);
 
     for (const candidate of candidates) {
+        if (candidate?.viewOnceMessage?.message) {
+            candidates.push(candidate.viewOnceMessage.message);
+        }
+        if (candidate?.viewOnceMessageV2?.message) {
+            candidates.push(candidate.viewOnceMessageV2.message);
+        }
+        if (candidate?.viewOnceMessageV2Extension?.message) {
+            candidates.push(candidate.viewOnceMessageV2Extension.message);
+        }
+
         if (candidate?.imageMessage) {
             return {
                 type: 'image',
-                mediaMessage: candidate.imageMessage,
+                mediaMessage: candidate,
                 caption: candidate.imageMessage.caption || '',
                 fileName: 'media.jpg'
             };
@@ -34,7 +49,7 @@ function resolveQuotedMedia(message) {
         if (candidate?.videoMessage) {
             return {
                 type: 'video',
-                mediaMessage: candidate.videoMessage,
+                mediaMessage: candidate,
                 caption: candidate.videoMessage.caption || '',
                 fileName: 'media.mp4'
             };
@@ -57,9 +72,11 @@ async function downloadMediaBuffer(message, mediaMessage, mediaType) {
     if (typeof downloadMediaMessage === 'function') {
         strategies.push(async () => {
             const wrappedMessage = {
-                key: mediaMessage?.key || message?.key || message?.message?.key,
+                key: message?.key || mediaMessage?.key,
                 message: {
-                    [mediaType === 'image' ? 'imageMessage' : 'videoMessage']: mediaMessage
+                    viewOnceMessage: {
+                        message: mediaMessage
+                    }
                 }
             };
             return await downloadMediaMessage(wrappedMessage, 'buffer', {});
