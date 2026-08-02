@@ -32,46 +32,27 @@ async function ownerCommand(sock, chatId, message) {
         const randomImage = CONFIG.IMAGES[Math.floor(Math.random() * CONFIG.IMAGES.length)];
         const isPrivate = String(chatId || '').endsWith('@s.whatsapp.net');
 
-        const featureText =
-            `📌 *Quick Bot Features:*
-` +
-            `├ .menu - Open the main menu
-` +
-            `├ .source - View bot source code
-` +
-            `└ .help - Get usage instructions
-
-`;
-
         const profileText =
             `👑 *OWNER PROFILE*
 
 ` +
-            `👤 *Name:* ${CONFIG.OWNER.NAME}
+            `👤 ${CONFIG.OWNER.NAME}
 ` +
-            `💼 *Title:* ${CONFIG.OWNER.TITLE}
+            `💼 ${CONFIG.OWNER.TITLE}
 ` +
-            `📍 *Location:* ${CONFIG.OWNER.LOCATION}
-` +
-            `📧 *Email:* ${CONFIG.OWNER.EMAIL}
+            `📍 ${CONFIG.OWNER.LOCATION}
 
 ` +
-            `📱 *Contacts:*
+            `📱 ${CONFIG.OWNER.PHONE_1}
 ` +
-            `├ ${CONFIG.OWNER.PHONE_1}
-` +
-            `└ ${CONFIG.OWNER.PHONE_2}
+            `📱 ${CONFIG.OWNER.PHONE_2}
 
 ` +
-            `🔗 *Links:*
+            `✉️ ${CONFIG.OWNER.EMAIL}
 ` +
-            `├ ${CONFIG.OWNER.GITHUB}
+            `🌐 ${CONFIG.OWNER.WEBSITE}
 ` +
-            `└ ${CONFIG.OWNER.WEBSITE}
-
-` +
-            featureText +
-            `> ⚡ Mickey Glitch Technology`;
+            `🐙 ${CONFIG.OWNER.GITHUB}`;
 
         const buildVCard = () => {
             const owner = CONFIG.OWNER;
@@ -132,11 +113,10 @@ async function ownerCommand(sock, chatId, message) {
                 .setTitle('👑 Owner Profile')
                 .setSubtitle(CONFIG.OWNER.NAME)
                 .setBody(profileText)
-                .setFooter(`⚡ ${CONFIG.OWNER.NAME} | ${new Date().toLocaleDateString()}`)
+                .setFooter(`⚡ ${CONFIG.OWNER.NAME}`)
                 .setThumbnail(randomImage)
                 .addButton('📞 Call 1', `call_${CONFIG.OWNER.PHONE_1}`)
                 .addButton('📞 Call 2', `call_${CONFIG.OWNER.PHONE_2}`)
-                .addButton('📋 Copy Email', 'copy_email')
                 .addButton('🌐 Website', 'visit_website')
                 .addButton('🐙 GitHub', 'visit_github');
 

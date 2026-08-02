@@ -349,7 +349,7 @@ async function playCommand(sock, chatId, message) {
 
         if (!query) {
             return sock.sendMessage(chatId, { 
-                text: '🎵 *Play Music*\n\n📝 .play <song name>\n🔗 .play <YouTube URL>' 
+                text: '🎵 Use .play <song name or URL>' 
             });
         }
 
@@ -389,26 +389,17 @@ async function playCommand(sock, chatId, message) {
         const title = audioData.title || searchTitle || 'Unknown Title';
 
         // Build caption
-        let caption = `🎵 *${title.substring(0, 60)}*\n`;
-        if (audioData.author) {
-            caption += `👤 ${audioData.author}\n`;
-        }
-        if (audioData.duration_string) {
-            caption += `⏱️ ${audioData.duration_string}\n`;
-        }
-        if (audioData.quality) {
-            caption += `🎚️ Quality: ${audioData.quality}\n`;
-        }
-        if (audioData.filesize) {
-            caption += `📦 Size: ${formatSize(audioData.filesize)}\n`;
-        }
-        caption += `📡 Source: ${audioData.source}\n\n> ⚡ Mickey Glitch Sub`;
+        let caption = `🎵 ${title.substring(0, 60)}\n`;
+        if (audioData.author) caption += `👤 ${audioData.author}\n`;
+        caption += `⏱️ ${audioData.duration_string || 'Unknown'}\n`;
+        if (audioData.quality) caption += `🎚️ ${audioData.quality}\n`;
+        caption += `📦 ${audioData.filesize ? formatSize(audioData.filesize) : 'Unknown'}\n`;
+        caption += `📡 ${audioData.source}`;
 
-        // Create ButtonV2 with thumbnail
         const button = new ButtonV2(sock)
-            .setTitle('🎵 Download Audio')
+            .setTitle('🎧 Audio Ready')
             .setBody(caption)
-            .setFooter('⚡ Mickey Glitch Sub');
+            .setFooter('⚡ Mickey Glitch');
 
         // Set thumbnail
         if (thumb) {
@@ -458,12 +449,10 @@ async function playCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, audioMessage);
 
         // ─── 3. SEND INFO TEXT (Short summary) ──────────────────────────
-        const infoText = 
-            `✅ *Download Complete!*\n\n` +
+        const infoText =
+            `✅ Download complete!\n` +
             `🎵 ${title}\n` +
-            `📡 ${audioData.source}\n` +
-            `📦 ${audioData.filesize ? formatSize(audioData.filesize) : 'Unknown'}\n\n` +
-            `> ⚡ Mickey Glitch Sub`;
+            `📡 ${audioData.source}`;
 
         await sock.sendMessage(chatId, { text: infoText });
 
