@@ -48,24 +48,45 @@ async function ownerCommand(sock, chatId, message) {
         // ─── TRY CAROUSEL ──────────────────────────────────────────────────
         try {
             const carousel = new Carousel(sock);
-            const card = {
-                header: {
-                    title: `👑 ${CONFIG.OWNER.NAME}`,
-                    hasMediaAttachment: true,
-                    imageMessage: {
-                        url: randomImage,
-                        mimetype: 'image/png'
-                    }
+            const cards = [
+                {
+                    header: {
+                        title: `👑 ${CONFIG.OWNER.NAME}`,
+                        hasMediaAttachment: true,
+                        imageMessage: {
+                            url: randomImage,
+                            mimetype: 'image/png'
+                        }
+                    },
+                    body: { text: profileText },
+                    footer: { text: `⚡ ${CONFIG.OWNER.TITLE} | ${new Date().toLocaleDateString()}` }
                 },
-                body: { text: profileText },
-                footer: { text: `⚡ ${CONFIG.OWNER.TITLE} | ${new Date().toLocaleDateString()}` }
-            };
+                {
+                    header: {
+                        title: '📞 Contact & Links',
+                        hasMediaAttachment: true,
+                        imageMessage: {
+                            url: randomImage,
+                            mimetype: 'image/png'
+                        }
+                    },
+                    body: {
+                        text:
+                            `📱 *Call:* ${CONFIG.OWNER.PHONE_1}\n` +
+                            `📱 *Call:* ${CONFIG.OWNER.PHONE_2}\n` +
+                            `📧 *Email:* ${CONFIG.OWNER.EMAIL}\n` +
+                            `🔗 *GitHub:* ${CONFIG.OWNER.GITHUB}\n` +
+                            `🌐 *Website:* ${CONFIG.OWNER.WEBSITE}`
+                    },
+                    footer: { text: `⚡ ${CONFIG.OWNER.NAME} | ${CONFIG.OWNER.LOCATION}` }
+                }
+            ];
 
             carousel
                 .setTitle('👑 Owner Profile')
                 .setBody('📋 *Contact Information*')
                 .setFooter('⚡ Mickey Glitch Sub')
-                .addCard(card);
+                .addCard(cards);
 
             await carousel.send(chatId, {
                 quoted: message,
