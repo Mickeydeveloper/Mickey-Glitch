@@ -1,6 +1,8 @@
-"use strict";
+/**
+ * owner.js - Owner Profile with AIRich
+ */
 
-const { Button, createCtx } = require('../lib/messageBuilder');
+const { AIRich, ButtonV2, createCtx } = require('../lib/messageBuilder');
 
 const CONFIG = {
     OWNER: {
@@ -9,94 +11,95 @@ const CONFIG = {
         LOCATION: 'Tanzania 🇹🇿',
         PHONE_1: '255615944741',
         PHONE_2: '255612130873',
-        WEBSITE: 'https://mickey-glitch.vercel.app',
-        GITHUB: 'https://github.com/Mickeydeveloper'
+        EMAIL: 'mickey@example.com',
+        GITHUB: 'https://github.com/Mickeydeveloper',
+        WEBSITE: 'https://mickey-glitch.vercel.app'
     },
-    IMAGE: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg'
-};
-
-// Native flow node used to surface payment_key_info in clients that support it
-const NATIVE_FLOW_NODE = {
-    tag: 'biz',
-    attrs: {},
-    content: [
-        {
-            tag: 'interactive',
-            attrs: { type: 'native_flow', v: '1' },
-            content: [
-                { tag: 'native_flow', attrs: { name: 'payment_key_info' } }
-            ]
-        }
+    IMAGES: [
+        'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg',
+        'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg',
+        'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy3.jpg',
+        'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy4.jpg'
     ]
 };
 
 async function ownerCommand(sock, chatId, message) {
-    const ctx = createCtx(sock, chatId, message);
-
     try {
-        const profileText = [
-            `👑 OWNER PROFILE`,
-            `👤 ${CONFIG.OWNER.NAME}`,
-            `💼 ${CONFIG.OWNER.TITLE}`,
-            `📍 ${CONFIG.OWNER.LOCATION}`,
-            ``,
-            `📱 ${CONFIG.OWNER.PHONE_1}`,
-            `📱 ${CONFIG.OWNER.PHONE_2}`,
-            ``,
-            `🔗 ${CONFIG.OWNER.WEBSITE}`,
-            `🔗 ${CONFIG.OWNER.GITHUB}`
-        ].join('\n');
+        const ctx = createCtx(sock, chatId, message);
+        const randomImage = CONFIG.IMAGES[Math.floor(Math.random() * CONFIG.IMAGES.length)];
 
-        // Build a single interactive message using the messageBuilder Button helper
-        const button = new Button(sock)
-            .setTitle('📋 Contact Options')
-            .setBody(profileText)
-            .setFooter(`⚡ ${CONFIG.OWNER.NAME}`)
-            .setImage(CONFIG.IMAGE)
+        // ─── SEND WITH AIRICH ──────────────────────────────────────────────
+        try {
+            const rich = new AIRich(sock)
+                .setTitle('👑 Owner Profile')
+                .setBody(`📋 *${CONFIG.OWNER.NAME} - ${CONFIG.OWNER.TITLE}*`)
+                .addProduct({
+                    title: CONFIG.OWNER.NAME,
+                    brand: CONFIG.OWNER.TITLE,
+                    price: CONFIG.OWNER.PHONE_1,
+                    sale_price: CONFIG.OWNER.LOCATION,
+                    product_url: CONFIG.OWNER.WEBSITE,
+                    image_url: randomImage,
+                    icon_url: randomImage
+                })
+                .addText(
+                    `## ◈ Contact Info\n\n` +
+                    `› 📱 **Phone 1:** ${CONFIG.OWNER.PHONE_1}\n` +
+                    `› 📱 **Phone 2:** ${CONFIG.OWNER.PHONE_2}\n` +
+                    `› 📧 **Email:** ${CONFIG.OWNER.EMAIL}`
+                )
+                .addText(
+                    `## ◈ Links\n\n` +
+                    `› 🌐 **Website:** ${CONFIG.OWNER.WEBSITE}\n` +
+                    `› 🐙 **GitHub:** ${CONFIG.OWNER.GITHUB}`
+                )
+                .addTable([
+                    ['📊 METRIC', '📌 VALUE'],
+                    ['━━━━━━━━', '━━━━━━━━'],
+                    ['👤 Name', CONFIG.OWNER.NAME],
+                    ['💼 Title', CONFIG.OWNER.TITLE],
+                    ['📍 Location', CONFIG.OWNER.LOCATION],
+                    ['📱 Phone 1', CONFIG.OWNER.PHONE_1],
+                    ['📱 Phone 2', CONFIG.OWNER.PHONE_2],
+                    ['📧 Email', CONFIG.OWNER.EMAIL],
+                    ['🌐 Website', CONFIG.OWNER.WEBSITE],
+                    ['🐙 GitHub', CONFIG.OWNER.GITHUB]
+                ])
+                .addTip(`💡 Click buttons below to contact ${CONFIG.OWNER.NAME}`)
+                .addSuggest([
+                    'Call owner',
+                    'Visit website',
+                    'View GitHub'
+                ]);
 
-            // Call buttons
-            .addButton('cta_call', { display_text: `📞 Call ${CONFIG.OWNER.PHONE_1}`, id: 'call_1' })
-            .addButton('cta_call', { display_text: `📞 Call ${CONFIG.OWNER.PHONE_2}`, id: 'call_2' })
+            await rich.send(chatId, {
+                quoted: message,
+                forwarded: false,
+                notification: false,
+                fallbackText: `👑 ${CONFIG.OWNER.NAME}\n📱 ${CONFIG.OWNER.PHONE_1}`
+            });
 
-            // Copy buttons
-            .addButton('cta_copy', { display_text: '📋 Copy Line 1', copy_code: CONFIG.OWNER.PHONE_1, id: 'copy_1' })
-            .addButton('cta_copy', { display_text: '📋 Copy Line 2', copy_code: CONFIG.OWNER.PHONE_2, id: 'copy_2' })
+            console.log('[OWNER] Sent with AIRich');
 
-            // URLs
-            .addButton('cta_url', { display_text: '🌐 Website', url: CONFIG.OWNER.WEBSITE, webview_interaction: false })
-            .addButton('cta_url', { display_text: '🐙 GitHub', url: CONFIG.OWNER.GITHUB, webview_interaction: false })
+        } catch (richError) {
+            console.error('[AIRICH ERROR]', richError.message);
+            
+            // ─── FALLBACK ──────────────────────────────────────────────────
+            const fallbackText = 
+                `👑 *${CONFIG.OWNER.NAME}*\n\n` +
+                `📱 ${CONFIG.OWNER.PHONE_1}\n` +
+                `📱 ${CONFIG.OWNER.PHONE_2}\n` +
+                `🌐 ${CONFIG.OWNER.WEBSITE}\n` +
+                `🐙 ${CONFIG.OWNER.GITHUB}\n\n` +
+                `> ⚡ Mickey Glitch Sub`;
 
-            // Payment / native flow button — payload follows requested structure
-            .addButton('payment_key_info', {
-                currency: 'IDR',
-                total_amount: { value: 0, offset: 100 },
-                reference_id: '4V9BSF0BT66',
-                type: 'physical-goods',
-                order: {
-                    status: 'pending',
-                    subtotal: { value: 0, offset: 100 },
-                    order_type: 'ORDER',
-                    items: [ { name: '', amount: { value: 0, offset: 100 }, quantity: 0, sale_amount: { value: 0, offset: 100 } } ]
-                },
-                payment_settings: [ { type: 'payment_key', payment_key: { type: 'IDPAYMENTACCOUNT', key: '124012401001', name: 'Bank CIMB Niaga', institution_name: 'Bank CIMB Niaga', full_name_on_account: 'Nixel' } } ],
-                share_payment_status: false,
-                is_soft_deleted: false,
-                referral: 'quick_reply'
-            })
+            await ctx.reply(fallbackText);
+        }
 
-            // Quick reply
-            .addButton('quick_reply', { display_text: '💬 Chat Owner', id: 'chat_owner' });
-
-        await button.send(chatId, {
-            quoted: message,
-            additionalNodes: [NATIVE_FLOW_NODE],
-            fallbackText: `📞 ${CONFIG.OWNER.PHONE_1}`
-        });
-
-        return;
-    } catch (err) {
-        console.error('[OWNER ERROR]', err);
-        await ctx.reply(`❌ Error: ${err?.message || err}`);
+    } catch (error) {
+        console.error('[OWNER ERROR]', error.message);
+        const ctx = createCtx(sock, chatId, message);
+        await ctx.reply(`❌ Error: ${error.message}`);
     }
 }
 
