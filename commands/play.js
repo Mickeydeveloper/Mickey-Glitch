@@ -1,8 +1,16 @@
+/**
+ * play.js - YouTube Audio Downloader
+ * Priority: Prexvy API → YouTubeMP4 → Nayan AllDown → Nayan YouTube
+ * Output Order: 1. Thumbnail + ButtonV2, 2. Audio, 3. Info
+ * Usage: .play <song name or YouTube URL>
+ */
+
 const axios = require('axios');
 const cheerio = require('cheerio');
 const yts = require('yt-search');
 const { ButtonV2 } = require('../lib/messageBuilder');
 
+// ─── CONSTANTS ──────────────────────────────────────────────────────────────
 const AXIOS_DEFAULTS = {
     timeout: 30000,
     headers: {
@@ -10,6 +18,7 @@ const AXIOS_DEFAULTS = {
     }
 };
 
+// ─── HELPERS ──────────────────────────────────────────────────────────────
 async function tryRequest(getter, attempts = 2) {
     let lastErr;
     for (let i = 1; i <= attempts; i++) {
@@ -23,7 +32,6 @@ async function tryRequest(getter, attempts = 2) {
     throw lastErr;
 }
 
-// Helper to convert stream to buffer (Safely handles large chunks)
 async function streamToBuffer(stream) {
     return new Promise((resolve, reject) => {
         const chunks = [];
@@ -35,19 +43,76 @@ async function streamToBuffer(stream) {
 
 function extractYoutubeVideoId(ytUrl) {
     if (!ytUrl) return '';
-
     if (ytUrl.includes('youtu.be/')) {
         return ytUrl.split('youtu.be/')[1].split('?')[0];
     }
-
     if (ytUrl.includes('youtube.com/watch')) {
         const urlParams = new URLSearchParams(ytUrl.split('?')[1]);
         return urlParams.get('v') || '';
     }
-
     return '';
 }
 
+function formatDuration(seconds) {
+    if (!seconds) return 'Unknown';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function formatSize(bytes) {
+    if (!bytes) return 'Unknown';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+    return `${(bytes / 1073741824).toFixed(2)} GB`;
+}
+
+// ─── PREXVY API (PRIORITY 1) ──────────────────────────────────────────────
+async function getAudioFromPrexvy(ytUrl) {
+    const videoId = extractYoutubeVideoId(ytUrl);
+    if (!videoId) throw new Error('Invalid YouTube URL');
+
+    const apiUrl = `https://prexzyapis.com/download/ytmp3?url=https://youtu.be/${videoId}`;
+
+    try {
+        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
+
+        if (res.data?.status === true && res.data?.download_url) {
+            const data = res.data;
+            const downloadUrl = data.download_url;
+
+            const fileRes = await tryRequest(() => axios.get(downloadUrl, {
+                headers: AXIOS_DEFAULTS.headers,
+                responseType: 'stream'
+            }));
+
+            const buffer = await streamToBuffer(fileRes.data);
+
+            return {
+                buffer: buffer,
+                title: data.info?.title || 'Unknown Title',
+                author: data.info?.uploader || 'Unknown',
+                thumbnail: data.info?.thumbnail || '',
+                duration: data.info?.duration || 0,
+                duration_string: data.info?.duration_string || '0:00',
+                view_count: data.info?.view_count || 0,
+                like_count: data.info?.like_count || 0,
+                source: 'Prexvy API',
+                quality: data.quality || 'medium',
+                filesize: data.filesize || 0,
+                format_id: data.format_id || '140',
+                mimeType: 'audio/mp4',
+                download_url: downloadUrl
+            };
+        }
+        throw new Error('Prexvy API response invalid');
+    } catch (err) {
+        throw new Error(`Prexvy API failed: ${err.message}`);
+    }
+}
+
+// ─── YOUTUBEMP4 SCRAPER (PRIORITY 2) ──────────────────────────────────────
 class YouTubeMP4Downloader {
     constructor() {
         this.baseUrl = 'https://youtubemp4.to';
@@ -85,7 +150,7 @@ class YouTubeMP4Downloader {
             );
             return this.parseDownloadPage(data);
         } catch (error) {
-            console.error('[PLAY] [YouTubeMP4] ajax fetch failed:', error.message);
+            console.error('[PLAY] YouTubeMP4 ajax failed:', error.message);
             return null;
         }
     }
@@ -108,21 +173,14 @@ class YouTubeMP4Downloader {
 
         const audioFormats = allFormats.filter(f => /audio|mp3|kbps|kbit/i.test(f.quality));
         const bestAudio = audioFormats.length > 0 ? audioFormats[0] : null;
-        const filteredVideos = allFormats.filter(f => {
-            if (/audio|mp3|kbps|kbit/i.test(f.quality)) return false;
-            const match = f.quality.match(/\d+/);
-            if (match) return ['480', '720', '1080'].includes(match[0]);
-            return false;
-        });
 
-        return { title, thumbnail, audio: bestAudio, video: filteredVideos };
+        return { title, thumbnail, audio: bestAudio };
     }
 }
 
-// Function to get audio from ytToMP4 scraper
-async function getAudioFromYouTubeMP4Scraper(ytUrl) {
+async function getAudioFromYouTubeMP4(ytUrl) {
     const videoId = extractYoutubeVideoId(ytUrl);
-    if (!videoId) throw new Error('Invalid YouTube URL for YouTubeMP4 scraper');
+    if (!videoId) throw new Error('Invalid YouTube URL');
 
     const downloader = new YouTubeMP4Downloader();
     const result = await downloader.downloadVideo(ytUrl);
@@ -147,10 +205,9 @@ async function getAudioFromYouTubeMP4Scraper(ytUrl) {
     };
 }
 
-// Function to get audio from Nayan AllDown API
+// ─── NAYAN ALLDOWN API (PRIORITY 3) ──────────────────────────────────────
 async function getAudioFromAllDown(ytUrl) {
     const videoId = extractYoutubeVideoId(ytUrl);
-
     if (!videoId) throw new Error('Invalid URL');
 
     const apiUrl = `https://nayan-video-downloader.vercel.app/alldown?url=https://youtu.be/${videoId}`;
@@ -164,7 +221,6 @@ async function getAudioFromAllDown(ytUrl) {
 
             if (!videoUrl) throw new Error('No download URL');
 
-            // FIXED: Using stream and removed timeout for large downloads
             const fileRes = await tryRequest(() => axios.get(videoUrl, {
                 headers: AXIOS_DEFAULTS.headers,
                 responseType: 'stream'
@@ -174,8 +230,8 @@ async function getAudioFromAllDown(ytUrl) {
 
             return {
                 buffer: buffer,
-                title: data.title,
-                thumbnail: data.thumbnail,
+                title: data.title || 'Unknown',
+                thumbnail: data.thumbnail || '',
                 source: 'Nayan AllDown',
                 mimeType: 'audio/mp4'
             };
@@ -186,10 +242,9 @@ async function getAudioFromAllDown(ytUrl) {
     }
 }
 
-// Function to get audio from Nayan YouTube API
+// ─── NAYAN YOUTUBE API (PRIORITY 4) ──────────────────────────────────────
 async function getAudioFromYoutubeAPI(ytUrl) {
     const videoId = extractYoutubeVideoId(ytUrl);
-
     if (!videoId) throw new Error('Invalid URL');
 
     const apiUrl = `https://nayan-video-downloader.vercel.app/youtube?url=https://youtu.be/${videoId}`;
@@ -201,7 +256,6 @@ async function getAudioFromYoutubeAPI(ytUrl) {
             const formats = res.data.data.data.formats;
             const title = res.data.data.data.title;
             const thumbnail = res.data.data.data.thumbnail;
-            const author = res.data.data.data.author;
 
             let bestAudio = null;
             let priority = 0;
@@ -232,7 +286,6 @@ async function getAudioFromYoutubeAPI(ytUrl) {
             }
 
             if (bestAudio?.url) {
-                // FIXED: Using stream and removed timeout for large downloads
                 const fileRes = await tryRequest(() => axios.get(bestAudio.url, {
                     headers: AXIOS_DEFAULTS.headers,
                     responseType: 'stream'
@@ -242,11 +295,10 @@ async function getAudioFromYoutubeAPI(ytUrl) {
 
                 return {
                     buffer: buffer,
-                    title: title,
-                    thumbnail: thumbnail,
-                    author: author,
-                    quality: bestAudio.quality || bestAudio.label,
+                    title: title || 'Unknown',
+                    thumbnail: thumbnail || '',
                     source: 'Nayan YouTube API',
+                    quality: bestAudio.quality || bestAudio.label,
                     mimeType: 'audio/mp4'
                 };
             }
@@ -257,56 +309,28 @@ async function getAudioFromYoutubeAPI(ytUrl) {
     }
 }
 
-async function getAudioFromPrexzyAPI(ytUrl) {
-    const videoId = extractYoutubeVideoId(ytUrl);
-
-    if (!videoId) throw new Error('Invalid YouTube URL for Prexzy API');
-
-    const encodedYoutubeUrl = encodeURIComponent(`https://youtu.be/${videoId}`);
-    const apiUrl = `https://prexzyapis.com/download/youtube-audio?url=${encodedYoutubeUrl}`;
-
-    try {
-        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
-
-        if (res.data?.status === true && res.data?.download_url) {
-            const data = res.data;
-            const downloadUrl = data.download_url;
-
-            const fileRes = await tryRequest(() => axios.get(downloadUrl, {
-                headers: AXIOS_DEFAULTS.headers,
-                responseType: 'stream'
-            }));
-
-            const buffer = await streamToBuffer(fileRes.data);
-
-            return {
-                buffer: buffer,
-                title: data.info?.title || 'Unknown Title',
-                thumbnail: data.info?.thumbnail,
-                source: 'Prexzy API',
-                mimeType: 'audio/mp3' // Assuming it's always mp3 from this API
-            };
-        }
-        throw new Error('Prexzy API response invalid or no download URL');
-    } catch (err) {
-        throw new Error(`Prexzy API failed: ${err.message}`);
-    }
-}
-
+// ─── MAIN DOWNLOAD FUNCTION ──────────────────────────────────────────────
 async function getYoutubeAudio(ytUrl) {
+    // Priority 1: Prexvy API
     try {
-        console.log('[PLAY] Trying YouTubeMP4 scraper...');
-        return await getAudioFromYouTubeMP4Scraper(ytUrl);
-    } catch (scraperErr) {
-        console.log(`[PLAY] YouTubeMP4 scraper failed: ${scraperErr.message}, trying Prexzy API...`);
+        console.log('[PLAY] Trying Prexvy API...');
+        return await getAudioFromPrexvy(ytUrl);
+    } catch (prexvyErr) {
+        console.log(`[PLAY] Prexvy failed: ${prexvyErr.message}, trying YouTubeMP4...`);
+        
+        // Priority 2: YouTubeMP4
         try {
-            return await getAudioFromPrexzyAPI(ytUrl);
-        } catch (prexzyErr) {
-            console.log(`[PLAY] Prexzy API failed: ${prexzyErr.message}, trying AllDown API...`);
+            return await getAudioFromYouTubeMP4(ytUrl);
+        } catch (scraperErr) {
+            console.log(`[PLAY] YouTubeMP4 failed: ${scraperErr.message}, trying AllDown...`);
+            
+            // Priority 3: Nayan AllDown
             try {
                 return await getAudioFromAllDown(ytUrl);
             } catch (allDownErr) {
                 console.log(`[PLAY] AllDown failed: ${allDownErr.message}, trying YouTube API...`);
+                
+                // Priority 4: Nayan YouTube API
                 try {
                     return await getAudioFromYoutubeAPI(ytUrl);
                 } catch (ytErr) {
@@ -317,6 +341,7 @@ async function getYoutubeAudio(ytUrl) {
     }
 }
 
+// ─── COMMAND HANDLER ──────────────────────────────────────────────────────
 async function playCommand(sock, chatId, message) {
     try {
         const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
@@ -324,7 +349,7 @@ async function playCommand(sock, chatId, message) {
 
         if (!query) {
             return sock.sendMessage(chatId, { 
-                text: '🎵 *Play Music*\n\n📝 .play song name\n🔗 .play youtube_url' 
+                text: '🎵 *Play Music*\n\n📝 .play <song name>\n🔗 .play <YouTube URL>' 
             });
         }
 
@@ -333,7 +358,9 @@ async function playCommand(sock, chatId, message) {
         let videoUrl = query;
         let videoInfo = null;
         let thumbnailUrl = '';
+        let searchTitle = '';
 
+        // ─── SEARCH IF NOT YOUTUBE URL ────────────────────────────────────
         if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
             const searchResults = await yts(query);
             const videos = searchResults?.videos;
@@ -346,67 +373,117 @@ async function playCommand(sock, chatId, message) {
             videoInfo = videos[0];
             videoUrl = videoInfo.url;
             thumbnailUrl = videoInfo.thumbnail;
-
-            const infoText = `🎵 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()}\n\n⬇️ Downloading...`;
-
-            if (thumbnailUrl) {
-                await sock.sendMessage(chatId, {
-                    image: { url: thumbnailUrl },
-                    caption: infoText
-                });
-            } else {
-                await sock.sendMessage(chatId, { text: infoText });
-            }
-        } else {
-            await sock.sendMessage(chatId, { text: '⬇️ Processing...' });
+            searchTitle = videoInfo.title;
         }
 
-        const processMsg = await sock.sendMessage(chatId, { text: '⏳ Loading...' });
+        // ─── PROCESSING ──────────────────────────────────────────────────
+        const processMsg = await sock.sendMessage(chatId, { text: '⏳ Processing...' });
 
+        // ─── DOWNLOAD AUDIO ──────────────────────────────────────────────
         const audioData = await getYoutubeAudio(videoUrl);
 
         await sock.sendMessage(chatId, { delete: processMsg.key });
 
-        // Send thumbnail as normal image (if available and not sent yet)
-        if (audioData.thumbnail && !thumbnailUrl) {
-            await sock.sendMessage(chatId, {
-                image: { url: audioData.thumbnail },
-                caption: `🎵 *${audioData.title.substring(0, 50)}*\n📡 ${audioData.source}`
+        // ─── 1. SEND THUMBNAIL + BUTTONV2 ──────────────────────────────
+        const thumb = audioData.thumbnail || thumbnailUrl;
+        const title = audioData.title || searchTitle || 'Unknown Title';
+
+        // Build caption
+        let caption = `🎵 *${title.substring(0, 60)}*\n`;
+        if (audioData.author) {
+            caption += `👤 ${audioData.author}\n`;
+        }
+        if (audioData.duration_string) {
+            caption += `⏱️ ${audioData.duration_string}\n`;
+        }
+        if (audioData.quality) {
+            caption += `🎚️ Quality: ${audioData.quality}\n`;
+        }
+        if (audioData.filesize) {
+            caption += `📦 Size: ${formatSize(audioData.filesize)}\n`;
+        }
+        caption += `📡 Source: ${audioData.source}\n\n> ⚡ Mickey Glitch Sub`;
+
+        // Create ButtonV2 with thumbnail
+        const button = new ButtonV2(sock)
+            .setTitle('🎵 Download Audio')
+            .setBody(caption)
+            .setFooter('⚡ Mickey Glitch Sub');
+
+        // Set thumbnail
+        if (thumb) {
+            button.setThumbnail(thumb);
+        }
+
+        // Add download button if URL available
+        if (audioData.download_url) {
+            button.addButton({
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📥 Download Audio',
+                    url: audioData.download_url,
+                    webview_interaction: false
+                })
+            });
+            button.addButton({
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📋 Copy Link',
+                    copy_code: audioData.download_url,
+                    id: 'copy_link'
+                })
             });
         }
 
-        // Send audio
+        // Add refresh button
+        button.addButton({
+            name: 'quick_reply',
+            buttonParamsJson: JSON.stringify({
+                display_text: '🔄 Play Again',
+                id: `.play ${query}`
+            })
+        });
+
+        // Send ButtonV2 with thumbnail
+        await button.send(chatId, { quoted: message });
+
+        // ─── 2. SEND AUDIO FILE ──────────────────────────────────────────
         const audioMessage = {
             audio: audioData.buffer,
             mimetype: 'audio/mp4',
             ptt: false,
-            fileName: `${audioData.title.substring(0, 40)}.mp4`
+            fileName: `${title.substring(0, 40)}.mp4`
         };
 
         await sock.sendMessage(chatId, audioMessage);
 
-        const audioTitle = String(audioData.title || videoInfo?.title || query || 'Unknown').replace(/\s+/g, ' ').trim();
-        
-        // Create button with thumbnail
-        const button = new ButtonV2(sock)
-            .text(`🎥 Download video for: ${audioTitle}`)
-            .footer('Mickey Glitch')
-            .button('Download Video', `.video ${audioTitle}`);
-        
-        // Set thumbnail if available
-        if (audioData.thumbnail || thumbnailUrl) {
-            button.setThumbnail(audioData.thumbnail || thumbnailUrl);
-        }
+        // ─── 3. SEND INFO TEXT (Short summary) ──────────────────────────
+        const infoText = 
+            `✅ *Download Complete!*\n\n` +
+            `🎵 ${title}\n` +
+            `📡 ${audioData.source}\n` +
+            `📦 ${audioData.filesize ? formatSize(audioData.filesize) : 'Unknown'}\n\n` +
+            `> ⚡ Mickey Glitch Sub`;
 
-        await button.send(chatId, { quoted: message });
+        await sock.sendMessage(chatId, { text: infoText });
+
+        // ─── REACTION ──────────────────────────────────────────────────────
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
         console.error('[PLAY] Error:', err.message);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-        await sock.sendMessage(chatId, { text: `❌ Error: ${err.message}. Tafadhali jaribu tena baadaye.` });
+        await sock.sendMessage(chatId, { 
+            text: `❌ *Error:* ${err.message}\n\n💡 Please try again later or use a different link.` 
+        });
     }
 }
 
+// ─── EXPORT ──────────────────────────────────────────────────────────────
 module.exports = playCommand;
 module.exports.getYoutubeAudio = getYoutubeAudio;
+module.exports.name = 'play';
+module.exports.aliases = ['music', 'song', 'audio'];
+module.exports.category = 'downloader';
+module.exports.default = playCommand;
+module.exports.handler = playCommand;
