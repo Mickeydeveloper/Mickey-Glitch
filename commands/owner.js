@@ -3,7 +3,7 @@
  * Usage: .owner
  */
 
-const { Button, ButtonV2, Carousel, AIRich, createCtx } = require('../lib/messageBuilder');
+const { Carousel, ButtonV2, Button, createCtx } = require('../lib/messageBuilder');
 
 // ─── OWNER CONFIG ──────────────────────────────────────────────────────────
 const CONFIG = {
@@ -29,11 +29,8 @@ const CONFIG = {
 async function ownerCommand(sock, chatId, message) {
     try {
         const ctx = createCtx(sock, chatId, message);
-
-        // ─── RANDOM IMAGE ──────────────────────────────────────────────────
         const randomImage = CONFIG.IMAGES[Math.floor(Math.random() * CONFIG.IMAGES.length)];
 
-        // ─── PROFILE TEXT ──────────────────────────────────────────────────
         const profileText = 
             `👑 *OWNER PROFILE*\n\n` +
             `👤 *Name:* ${CONFIG.OWNER.NAME}\n` +
@@ -44,14 +41,13 @@ async function ownerCommand(sock, chatId, message) {
             `├ ${CONFIG.OWNER.PHONE_1}\n` +
             `└ ${CONFIG.OWNER.PHONE_2}\n\n` +
             `🔗 *Links:*\n` +
-            `├ GitHub: ${CONFIG.OWNER.GITHUB}\n` +
-            `└ Website: ${CONFIG.OWNER.WEBSITE}\n\n` +
+            `├ ${CONFIG.OWNER.GITHUB}\n` +
+            `└ ${CONFIG.OWNER.WEBSITE}\n\n` +
             `> ⚡ Mickey Glitch Technology`;
 
-        // ─── SEND WITH CAROUSEL ──────────────────────────────────────────
+        // ─── TRY CAROUSEL ──────────────────────────────────────────────────
         try {
             const carousel = new Carousel(sock);
-            
             const card = {
                 header: {
                     title: `👑 ${CONFIG.OWNER.NAME}`,
@@ -61,12 +57,8 @@ async function ownerCommand(sock, chatId, message) {
                         mimetype: 'image/png'
                     }
                 },
-                body: {
-                    text: profileText
-                },
-                footer: {
-                    text: `⚡ ${CONFIG.OWNER.TITLE} | ${new Date().toLocaleDateString()}`
-                }
+                body: { text: profileText },
+                footer: { text: `⚡ ${CONFIG.OWNER.TITLE} | ${new Date().toLocaleDateString()}` }
             };
 
             carousel
@@ -79,10 +71,8 @@ async function ownerCommand(sock, chatId, message) {
                 quoted: message,
                 fallbackText: profileText
             });
-
             console.log('[OWNER] Sent with Carousel');
             return;
-
         } catch (carouselError) {
             console.error('[CAROUSEL ERROR]', carouselError.message);
         }
@@ -95,50 +85,18 @@ async function ownerCommand(sock, chatId, message) {
                 .setBody(profileText)
                 .setFooter(`⚡ ${CONFIG.OWNER.NAME} | ${new Date().toLocaleDateString()}`)
                 .setThumbnail(randomImage)
-                .addButton({
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: `📞 Call ${CONFIG.OWNER.PHONE_1}`,
-                        id: `call_${CONFIG.OWNER.PHONE_1}`
-                    })
-                })
-                .addButton({
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: `📞 Call ${CONFIG.OWNER.PHONE_2}`,
-                        id: `call_${CONFIG.OWNER.PHONE_2}`
-                    })
-                })
-                .addButton({
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '📋 Copy Number',
-                        id: 'copy_number'
-                    })
-                })
-                .addButton({
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '🌐 Website',
-                        id: 'visit_website'
-                    })
-                })
-                .addButton({
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '🐙 GitHub',
-                        id: 'visit_github'
-                    })
-                });
+                .addButton('📞 Call 1', `call_${CONFIG.OWNER.PHONE_1}`)
+                .addButton('📞 Call 2', `call_${CONFIG.OWNER.PHONE_2}`)
+                .addButton('📋 Copy Number', 'copy_number')
+                .addButton('🌐 Website', 'visit_website')
+                .addButton('🐙 GitHub', 'visit_github');
 
             await button.send(chatId, {
                 quoted: message,
                 fallbackText: profileText
             });
-
             console.log('[OWNER] Sent with ButtonV2');
             return;
-
         } catch (buttonError) {
             console.error('[BUTTONV2 ERROR]', buttonError.message);
         }
@@ -150,8 +108,8 @@ async function ownerCommand(sock, chatId, message) {
                 .setBody(profileText)
                 .setFooter(`⚡ ${CONFIG.OWNER.NAME}`)
                 .setImage(randomImage)
-                .addReply(`📞 Call ${CONFIG.OWNER.PHONE_1}`, `call_1`)
-                .addReply(`📞 Call ${CONFIG.OWNER.PHONE_2}`, `call_2`)
+                .addReply(`📞 Call ${CONFIG.OWNER.PHONE_1}`, 'call_1')
+                .addReply(`📞 Call ${CONFIG.OWNER.PHONE_2}`, 'call_2')
                 .addReply('📋 Copy Number', 'copy_number')
                 .addReply('🌐 Website', 'visit_website')
                 .addReply('🐙 GitHub', 'visit_github');
@@ -160,10 +118,8 @@ async function ownerCommand(sock, chatId, message) {
                 quoted: message,
                 fallbackText: profileText
             });
-
             console.log('[OWNER] Sent with Button V1');
             return;
-
         } catch (buttonV1Error) {
             console.error('[BUTTON V1 ERROR]', buttonV1Error.message);
         }
@@ -174,7 +130,6 @@ async function ownerCommand(sock, chatId, message) {
 
     } catch (error) {
         console.error('[OWNER ERROR]', error?.message || error);
-
         try {
             const ctx = createCtx(sock, chatId, message);
             await ctx.reply(`❌ *Error:* ${error.message}`);
@@ -184,7 +139,6 @@ async function ownerCommand(sock, chatId, message) {
     }
 }
 
-// ─── EXPORT ──────────────────────────────────────────────────────────────
 module.exports = ownerCommand;
 module.exports.name = 'owner';
 module.exports.aliases = ['creator', 'dev', 'mickdady', 'about'];
