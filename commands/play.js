@@ -389,12 +389,10 @@ async function playCommand(sock, chatId, message) {
         const title = audioData.title || searchTitle || 'Unknown Title';
 
         // Build caption
-        let caption = `🎵 ${title.substring(0, 60)}\n`;
+        let caption = `🎵 ${title.substring(0, 45)}\n`;
         if (audioData.author) caption += `👤 ${audioData.author}\n`;
         caption += `⏱️ ${audioData.duration_string || 'Unknown'}\n`;
-        if (audioData.quality) caption += `🎚️ ${audioData.quality}\n`;
-        caption += `📦 ${audioData.filesize ? formatSize(audioData.filesize) : 'Unknown'}\n`;
-        caption += `📡 ${audioData.source}`;
+        if (audioData.filesize) caption += `📦 ${formatSize(audioData.filesize)}\n`;
 
         const button = new ButtonV2(sock)
             .setTitle('🎧 Audio Ready')
@@ -411,17 +409,9 @@ async function playCommand(sock, chatId, message) {
             button.addButton({
                 name: 'cta_url',
                 buttonParamsJson: JSON.stringify({
-                    display_text: '📥 Download Audio',
+                    display_text: '📥 Download',
                     url: audioData.download_url,
                     webview_interaction: false
-                })
-            });
-            button.addButton({
-                name: 'cta_copy',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '📋 Copy Link',
-                    copy_code: audioData.download_url,
-                    id: 'copy_link'
                 })
             });
         }
@@ -438,6 +428,9 @@ async function playCommand(sock, chatId, message) {
         // Send ButtonV2 with thumbnail
         await button.send(chatId, { quoted: message });
 
+        // ─── REACTION ──────────────────────────────────────────────────────
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+
         // ─── 2. SEND AUDIO FILE ──────────────────────────────────────────
         const audioMessage = {
             audio: audioData.buffer,
@@ -449,15 +442,8 @@ async function playCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, audioMessage);
 
         // ─── 3. SEND INFO TEXT (Short summary) ──────────────────────────
-        const infoText =
-            `✅ Download complete!\n` +
-            `🎵 ${title}\n` +
-            `📡 ${audioData.source}`;
-
+        const infoText = `✅ ${title}`;
         await sock.sendMessage(chatId, { text: infoText });
-
-        // ─── REACTION ──────────────────────────────────────────────────────
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
         console.error('[PLAY] Error:', err.message);
