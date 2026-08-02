@@ -30,75 +30,103 @@ async function ownerCommand(sock, chatId, message) {
     try {
         const ctx = createCtx(sock, chatId, message);
         const randomImage = CONFIG.IMAGES[Math.floor(Math.random() * CONFIG.IMAGES.length)];
+        const isPrivate = String(chatId || '').endsWith('@s.whatsapp.net');
 
-        const profileText = 
-            `👑 *OWNER PROFILE*\n\n` +
-            `👤 *Name:* ${CONFIG.OWNER.NAME}\n` +
-            `💼 *Title:* ${CONFIG.OWNER.TITLE}\n` +
-            `📍 *Location:* ${CONFIG.OWNER.LOCATION}\n` +
-            `📧 *Email:* ${CONFIG.OWNER.EMAIL}\n\n` +
-            `📱 *Contacts:*\n` +
-            `├ ${CONFIG.OWNER.PHONE_1}\n` +
-            `└ ${CONFIG.OWNER.PHONE_2}\n\n` +
-            `🔗 *Links:*\n` +
-            `├ ${CONFIG.OWNER.GITHUB}\n` +
-            `└ ${CONFIG.OWNER.WEBSITE}\n\n` +
+        const featureText =
+            `📌 *Quick Bot Features:*
+` +
+            `├ .menu - Open the main menu
+` +
+            `├ .source - View bot source code
+` +
+            `└ .help - Get usage instructions
+
+`;
+
+        const profileText =
+            `👑 *OWNER PROFILE*
+
+` +
+            `👤 *Name:* ${CONFIG.OWNER.NAME}
+` +
+            `💼 *Title:* ${CONFIG.OWNER.TITLE}
+` +
+            `📍 *Location:* ${CONFIG.OWNER.LOCATION}
+` +
+            `📧 *Email:* ${CONFIG.OWNER.EMAIL}
+
+` +
+            `📱 *Contacts:*
+` +
+            `├ ${CONFIG.OWNER.PHONE_1}
+` +
+            `└ ${CONFIG.OWNER.PHONE_2}
+
+` +
+            `🔗 *Links:*
+` +
+            `├ ${CONFIG.OWNER.GITHUB}
+` +
+            `└ ${CONFIG.OWNER.WEBSITE}
+
+` +
+            featureText +
             `> ⚡ Mickey Glitch Technology`;
 
-        // ─── TRY CAROUSEL ──────────────────────────────────────────────────
-        try {
-            const carousel = new Carousel(sock);
-            const cards = [
-                {
-                    header: {
-                        title: `👑 ${CONFIG.OWNER.NAME}`,
-                        hasMediaAttachment: true,
-                        imageMessage: {
-                            url: randomImage,
-                            mimetype: 'image/png'
-                        }
-                    },
-                    body: { text: profileText },
-                    footer: { text: `⚡ ${CONFIG.OWNER.TITLE} | ${new Date().toLocaleDateString()}` }
-                },
-                {
-                    header: {
-                        title: '📞 Contact & Links',
-                        hasMediaAttachment: true,
-                        imageMessage: {
-                            url: randomImage,
-                            mimetype: 'image/png'
-                        }
-                    },
-                    body: {
-                        text:
-                            `📱 *Call:* ${CONFIG.OWNER.PHONE_1}\n` +
-                            `📱 *Call:* ${CONFIG.OWNER.PHONE_2}\n` +
-                            `📧 *Email:* ${CONFIG.OWNER.EMAIL}\n` +
-                            `🔗 *GitHub:* ${CONFIG.OWNER.GITHUB}\n` +
-                            `🌐 *Website:* ${CONFIG.OWNER.WEBSITE}`
-                    },
-                    footer: { text: `⚡ ${CONFIG.OWNER.NAME} | ${CONFIG.OWNER.LOCATION}` }
-                }
-            ];
+        const buildVCard = () => {
+            const owner = CONFIG.OWNER;
+            return [
+                'BEGIN:VCARD',
+                'VERSION:3.0',
+                `FN:${owner.NAME}`,
+                `ORG:${owner.TITLE}`,
+                `TEL;type=CELL;type=VOICE;waid=${owner.PHONE_1}:${owner.PHONE_1}`,
+                `TEL;type=CELL;type=VOICE;waid=${owner.PHONE_2}:${owner.PHONE_2}`,
+                `EMAIL:${owner.EMAIL}`,
+                `URL:${owner.WEBSITE}`,
+                `NOTE:${owner.GITHUB}`,
+                'END:VCARD',
+            ].join('\n');
+        };
 
-            carousel
-                .setTitle('👑 Owner Profile')
-                .setBody('📋 *Contact Information*')
-                .setFooter('⚡ Mickey Glitch Sub')
-                .addCard(cards);
-
-            await carousel.send(chatId, {
-                quoted: message,
-                fallbackText: profileText
-            });
-            console.log('[OWNER] Sent with Carousel');
-            return;
-        } catch (carouselError) {
-            console.error('[CAROUSEL ERROR]', carouselError.message);
+        if (isPrivate) {
+            try {
+                await sock.sendMessage(chatId, {
+                    contacts: {
+                        displayName: CONFIG.OWNER.NAME,
+                        contacts: [{ vcard: buildVCard() }],
+                    },
+                }, { quoted: message });
+                console.log('[OWNER] Shared contact card');
+            } catch (contactError) {
+                console.error('[OWNER CONTACT ERROR]', contactError?.message || contactError);
+            }
         }
 
-        // ─── FALLBACK 1: BUTTONV2 ──────────────────────────────────────────
+        // ─── PRIMARY: BUTTON V1 WITH ACTIONS ───────────────────────────────
+        try {
+            const button = new Button(sock)
+                .setTitle('👑 Owner Profile')
+                .setBody(profileText)
+                .setFooter(`⚡ ${CONFIG.OWNER.NAME}`)
+                .setImage(randomImage)
+                .addCall(`📞 ${CONFIG.OWNER.PHONE_1}`, `call_${CONFIG.OWNER.PHONE_1}`)
+                .addCall(`📞 ${CONFIG.OWNER.PHONE_2}`, `call_${CONFIG.OWNER.PHONE_2}`)
+                .addUrl('🌐 Website', CONFIG.OWNER.WEBSITE)
+                .addUrl('🐙 GitHub', CONFIG.OWNER.GITHUB)
+                .addCopy('📧 Email', CONFIG.OWNER.EMAIL);
+
+            await button.send(chatId, {
+                quoted: message,
+                fallbackText: profileText,
+            });
+            console.log('[OWNER] Sent with Button V1');
+            return;
+        } catch (buttonError) {
+            console.error('[OWNER BUTTON ERROR]', buttonError?.message || buttonError);
+        }
+
+        // ─── FALLBACK 1: BUTTONV2 QUICK REPLIES ────────────────────────────
         try {
             const button = new ButtonV2(sock)
                 .setTitle('👑 Owner Profile')
@@ -108,44 +136,21 @@ async function ownerCommand(sock, chatId, message) {
                 .setThumbnail(randomImage)
                 .addButton('📞 Call 1', `call_${CONFIG.OWNER.PHONE_1}`)
                 .addButton('📞 Call 2', `call_${CONFIG.OWNER.PHONE_2}`)
-                .addButton('📋 Copy Number', 'copy_number')
+                .addButton('📋 Copy Email', 'copy_email')
                 .addButton('🌐 Website', 'visit_website')
                 .addButton('🐙 GitHub', 'visit_github');
 
             await button.send(chatId, {
                 quoted: message,
-                fallbackText: profileText
+                fallbackText: profileText,
             });
             console.log('[OWNER] Sent with ButtonV2');
             return;
-        } catch (buttonError) {
-            console.error('[BUTTONV2 ERROR]', buttonError.message);
+        } catch (buttonV2Error) {
+            console.error('[BUTTONV2 ERROR]', buttonV2Error?.message || buttonV2Error);
         }
 
-        // ─── FALLBACK 2: BUTTON V1 ──────────────────────────────────────────
-        try {
-            const button = new Button(sock)
-                .setTitle('👑 Owner Profile')
-                .setBody(profileText)
-                .setFooter(`⚡ ${CONFIG.OWNER.NAME}`)
-                .setImage(randomImage)
-                .addReply(`📞 Call ${CONFIG.OWNER.PHONE_1}`, 'call_1')
-                .addReply(`📞 Call ${CONFIG.OWNER.PHONE_2}`, 'call_2')
-                .addReply('📋 Copy Number', 'copy_number')
-                .addReply('🌐 Website', 'visit_website')
-                .addReply('🐙 GitHub', 'visit_github');
-
-            await button.send(chatId, {
-                quoted: message,
-                fallbackText: profileText
-            });
-            console.log('[OWNER] Sent with Button V1');
-            return;
-        } catch (buttonV1Error) {
-            console.error('[BUTTON V1 ERROR]', buttonV1Error.message);
-        }
-
-        // ─── FALLBACK 3: PLAIN TEXT ──────────────────────────────────────
+        // ─── FALLBACK 2: PLAIN TEXT ──────────────────────────────────────
         await ctx.reply(profileText);
         console.log('[OWNER] Sent with Plain Text');
 
