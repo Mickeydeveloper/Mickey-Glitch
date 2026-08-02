@@ -8,7 +8,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const yts = require('yt-search');
-const { ButtonV2 } = require('../lib/messageBuilder');
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
 const AXIOS_DEFAULTS = {
@@ -384,49 +383,24 @@ async function playCommand(sock, chatId, message) {
 
         await sock.sendMessage(chatId, { delete: processMsg.key });
 
-        // ─── 1. SEND THUMBNAIL + BUTTONV2 ──────────────────────────────
+        // ─── 1. SEND SONG INFO WITH THUMBNAIL ───────────────────────────
         const thumb = audioData.thumbnail || thumbnailUrl;
         const title = audioData.title || searchTitle || 'Unknown Title';
 
-        // Build caption
-        let caption = `🎵 ${title.substring(0, 45)}\n`;
-        if (audioData.author) caption += `👤 ${audioData.author}\n`;
-        caption += `⏱️ ${audioData.duration_string || 'Unknown'}\n`;
-        if (audioData.filesize) caption += `📦 ${formatSize(audioData.filesize)}\n`;
+        let infoCaption = `🎵 ${title.substring(0, 45)}\n`;
+        if (audioData.author) infoCaption += `👤 ${audioData.author}\n`;
+        infoCaption += `⏱️ ${audioData.duration_string || 'Unknown'}\n`;
+        if (audioData.filesize) infoCaption += `📦 ${formatSize(audioData.filesize)}\n`;
+        infoCaption += `📡 ${audioData.source}`;
 
-        const button = new ButtonV2(sock)
-            .setTitle('🎧 Audio Ready')
-            .setBody(caption)
-            .setFooter('⚡ Mickey Glitch');
-
-        // Set thumbnail
         if (thumb) {
-            button.setThumbnail(thumb);
+            await sock.sendMessage(chatId, {
+                image: { url: thumb },
+                caption: infoCaption
+            }, { quoted: message });
+        } else {
+            await sock.sendMessage(chatId, { text: infoCaption }, { quoted: message });
         }
-
-        // Add download button if URL available
-        if (audioData.download_url) {
-            button.addButton({
-                name: 'cta_url',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '📥 Download',
-                    url: audioData.download_url,
-                    webview_interaction: false
-                })
-            });
-        }
-
-        // Add refresh button
-        button.addButton({
-            name: 'quick_reply',
-            buttonParamsJson: JSON.stringify({
-                display_text: '🔄 Play Again',
-                id: `.play ${query}`
-            })
-        });
-
-        // Send ButtonV2 with thumbnail
-        await button.send(chatId, { quoted: message });
 
         // ─── REACTION ──────────────────────────────────────────────────────
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
@@ -441,10 +415,9 @@ async function playCommand(sock, chatId, message) {
 
         await sock.sendMessage(chatId, audioMessage);
 
-        // ─── 3. SEND INFO TEXT (Short summary) ──────────────────────────
-        const infoText = `✅ ${title}`;
+        // ─── 3. SEND DOWNLOAD CONFIRMATION ────────────────────────────────
+        const infoText = `✅ Nyimbo imeshapakuliwa!\n🎵 ${title}`;
         await sock.sendMessage(chatId, { text: infoText });
-
     } catch (err) {
         console.error('[PLAY] Error:', err.message);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
