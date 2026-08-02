@@ -387,11 +387,14 @@ async function playCommand(sock, chatId, message) {
         const thumb = audioData.thumbnail || thumbnailUrl;
         const title = audioData.title || searchTitle || 'Unknown Title';
 
-        let infoCaption = `🎵 ${title.substring(0, 45)}\n`;
-        if (audioData.author) infoCaption += `👤 ${audioData.author}\n`;
-        infoCaption += `⏱️ ${audioData.duration_string || 'Unknown'}\n`;
-        if (audioData.filesize) infoCaption += `📦 ${formatSize(audioData.filesize)}\n`;
-        infoCaption += `📡 ${audioData.source}`;
+        const duration = audioData.duration_string ? audioData.duration_string : 'Unknown duration';
+        const size = audioData.filesize ? formatSize(audioData.filesize) : 'Unknown size';
+        const author = audioData.author ? audioData.author : 'Unknown artist';
+
+        let infoCaption = `🎵 *${title.substring(0, 45)}*\n`;
+        infoCaption += `👤 ${author}\n`;
+        infoCaption += `⏱️ ${duration}    📦 ${size}\n`;
+        infoCaption += `📡 Source: ${audioData.source}`;
 
         if (thumb) {
             await sock.sendMessage(chatId, {
@@ -414,10 +417,6 @@ async function playCommand(sock, chatId, message) {
         };
 
         await sock.sendMessage(chatId, audioMessage);
-
-        // ─── 3. SEND DOWNLOAD CONFIRMATION ────────────────────────────────
-        const infoText = `✅ Nyimbo imeshapakuliwa!\n🎵 ${title}`;
-        await sock.sendMessage(chatId, { text: infoText });
     } catch (err) {
         console.error('[PLAY] Error:', err.message);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
