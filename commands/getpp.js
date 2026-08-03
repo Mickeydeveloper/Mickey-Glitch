@@ -1,21 +1,22 @@
 /**
- * profile.js - Get WhatsApp Profile Picture with Interactive Card
- * Features: Profile picture display with interactive buttons
+ * profile.js - Get WhatsApp Profile Picture
+ * Features: Display profile picture with user info
  * Usage: .profile [@mention or phone number]
  */
 
 const { 
-    generateWAMessageFromContent, 
-    prepareWAMessageMedia,
+    generateWAMessageFromContent,
     proto 
-} = require('@whiskeysockets/baileys');
+} = require('@whiskysockets/baileys');
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
 const FOOTER = '© Mickey Glith ™';
-const DEFAULT_AVATAR = 'https://i.imgur.com/6N4H8Xj.png'; // Default avatar fallback
+const DEFAULT_AVATAR = 'https://i.imgur.com/6N4H8Xj.png';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────
 function normalizeJid(value, fallback = '') {
+    if (!value) return fallback;
+    
     if (typeof value === 'string') {
         const trimmed = value.trim();
         if (trimmed) return trimmed;
@@ -43,14 +44,17 @@ function toWhatsAppJid(value, fallback = '') {
     if (normalized.includes('@')) {
         const [number, suffix] = normalized.split('@');
         if (suffix === 'g.us' || suffix === 'broadcast') {
-            return normalized; // Group or broadcast
+            return normalized;
         }
-        return `${number}@s.whatsapp.net`;
+        if (number && number.length >= 10) {
+            return `${number}@s.whatsapp.net`;
+        }
+        return normalized;
     }
 
     // Just numbers
     const digitsOnly = normalized.replace(/\D/g, '');
-    if (digitsOnly.length >= 10) {
+    if (digitsOnly.length >= 10 && digitsOnly.length <= 15) {
         return `${digitsOnly}@s.whatsapp.net`;
     }
 
@@ -60,253 +64,158 @@ function toWhatsAppJid(value, fallback = '') {
 function formatPhoneNumber(jid) {
     if (!jid) return 'Unknown';
     const clean = jid.split('@')[0];
-    if (clean.length <= 10) return clean;
-    // Format: +XXX XXX XXX XXX
+    if (!clean) return 'Unknown';
+    
+    // Format with country code
     if (clean.startsWith('255') && clean.length === 12) {
         return `+${clean.slice(0,3)} ${clean.slice(3,6)} ${clean.slice(6,9)} ${clean.slice(9)}`;
     }
-    if (clean.length === 12 && clean.startsWith('1')) {
+    if (clean.startsWith('1') && clean.length === 11) {
         return `+${clean.slice(0,1)} ${clean.slice(1,4)} ${clean.slice(4,7)} ${clean.slice(7)}`;
+    }
+    if (clean.length === 10) {
+        return `+${clean.slice(0,3)} ${clean.slice(3,6)} ${clean.slice(6)}`;
     }
     return clean;
 }
 
-async function getUserName(sock, jid, message) {
-    try {
-        // Try to get from store first
-        if (global.store?.contacts?.[jid]) {
-            const contact = global.store.contacts[jid];
-            return contact.name || contact.notify || contact.verifiedName || null;
-        }
-
-        // Try to get from message
-        if (message.pushName && jid === message.key?.remoteJid) {
-            return message.pushName;
-        }
-
-        // Try to fetch presence
-        try {
-            const presence = await sock.presenceSubscribe(jid);
-            if (presence?.presence?.participants?.[0]?.name) {
-                return presence.presence.participants[0].name;
-            }
-        } catch {
-            // Ignore presence errors
-        }
-
-        return null;
-    } catch {
-        return null;
-    }
-}
-
-async function getProfilePicture(sock, jid) {
-    try {
-        // Try primary method
-        const ppUrl = await sock.profilePictureUrl(jid, 'image');
-        return ppUrl;
-    } catch (err) {
-        console.log('[PROFILE] Profile picture not found, using default:', err.message);
-        
-        // Try alternative method for groups
-        if (jid.includes('@g.us')) {
-            try {
-                const metadata = await sock.groupMetadata(jid);
-                if (metadata?.profilePictureUrl) {
-                    return metadata.profilePictureUrl;
-                }
-            } catch (groupErr) {
-                console.log('[PROFILE] Group picture not found:', groupErr.message);
-            }
-        }
-        
-        // Return default avatar
-        return DEFAULT_AVATAR;
-    }
-}
-
-async function getStatus(sock, jid) {
-    try {
-        const status = await sock.getStatus(jid);
-        return status?.status || 'No status set';
-    } catch {
-        return 'Status not available';
-    }
+function truncateString(str, maxLength = 30) {
+    if (!str) return 'User';
+    if (str.length <= maxLength) return str;
+    return str.substring(0, maxLength) + '...';
 }
 
 // ─── MAIN PROFILE COMMAND ──────────────────────────────────────────────────
 async function profileCommand(sock, chatId, senderId, message, args) {
     try {
-        const normalizedSenderJid = toWhatsAppJid(senderId, '');
+        // Validate inputs
+        if (!sock || !chatId || !senderId) {
+            throw new Error('Invalid socket or chat ID');
+        }
+
+        // Get sender JID
+        const normalizedSenderJid = toWhatsAppJid(senderId);
+        if (!normalizedSenderJid) {
+            throw new Error('Could not determine sender ID');
+        }
+
         let targetJid = normalizedSenderJid;
         let isGroup = chatId.includes('@g.us');
-        let targetName = '';
 
         // ─── 1. DETERMINE TARGET ──────────────────────────────────────────
-        // Check mentions
-        const mentionedJids = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-        if (mentionedJids.length > 0) {
-            targetJid = toWhatsAppJid(mentionedJids[0], normalizedSenderJid);
-        } 
-        // Check args (phone number)
-        else if (args.length > 0) {
-            const rawArg = normalizeJid(args[0], '');
-            const num = rawArg.replace(/[^0-9]/g, '');
-            if (num.length >= 10) {
-                targetJid = `${num}@s.whatsapp.net`;
+        try {
+            // Check mentions
+            const mentionedJids = message?.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (mentionedJids.length > 0 && mentionedJids[0]) {
+                const mentioned = toWhatsAppJid(mentionedJids[0]);
+                if (mentioned) targetJid = mentioned;
+            } 
+            // Check args (phone number)
+            else if (args && args.length > 0) {
+                const rawArg = args[0] || '';
+                const num = rawArg.replace(/[^0-9]/g, '');
+                if (num.length >= 10 && num.length <= 15) {
+                    targetJid = `${num}@s.whatsapp.net`;
+                }
             }
-        }
-        // Check quoted message
-        else if (message.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
-            const quoted = message.message.extendedTextMessage.contextInfo;
-            if (quoted.participant) {
-                targetJid = toWhatsAppJid(quoted.participant, normalizedSenderJid);
+            // Check quoted message
+            else if (message?.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
+                const quoted = message.message.extendedTextMessage.contextInfo;
+                if (quoted.participant) {
+                    const quotedJid = toWhatsAppJid(quoted.participant);
+                    if (quotedJid) targetJid = quotedJid;
+                }
             }
+        } catch (err) {
+            console.log('[PROFILE] Target detection error:', err);
+            // Continue with default target
         }
 
         // Validate target JID
-        if (!targetJid) {
+        if (!targetJid || targetJid.length < 10) {
             throw new Error('Invalid target user');
         }
 
         // ─── 2. GET USER INFORMATION ──────────────────────────────────────
-        // Get name
-        const nameFromStore = await getUserName(sock, targetJid, message);
-        const displayName = nameFromStore || targetJid.split('@')[0] || 'User';
-        targetName = displayName;
+        let displayName = targetJid.split('@')[0] || 'User';
+        let ppUrl = DEFAULT_AVATAR;
+        let status = 'No status set';
+
+        // Get name from store
+        try {
+            if (global.store?.contacts?.[targetJid]) {
+                const contact = global.store.contacts[targetJid];
+                displayName = contact.name || contact.notify || contact.verifiedName || displayName;
+            } else if (message?.pushName && targetJid === normalizedSenderJid) {
+                displayName = message.pushName;
+            }
+        } catch (err) {
+            console.log('[PROFILE] Name fetch error:', err);
+        }
 
         // Get profile picture
-        let ppUrl;
         try {
-            ppUrl = await getProfilePicture(sock, targetJid);
+            ppUrl = await sock.profilePictureUrl(targetJid, 'image');
         } catch (err) {
-            console.error('[PROFILE] Error getting profile picture:', err);
+            console.log('[PROFILE] No profile picture:', err.message);
             ppUrl = DEFAULT_AVATAR;
         }
 
         // Get status
-        const status = await getStatus(sock, targetJid);
-
-        // ─── 3. PREPARE MEDIA ─────────────────────────────────────────────
-        let mediaMessage;
         try {
-            // Download and prepare image
-            const imageResponse = await fetch(ppUrl);
-            if (!imageResponse.ok) throw new Error('Failed to fetch image');
-            
-            const imageBuffer = await imageResponse.arrayBuffer();
-            
-            mediaMessage = await prepareWAMessageMedia(
-                { image: Buffer.from(imageBuffer) },
-                { upload: sock.waUploadToServer }
-            );
-        } catch (mediaErr) {
-            console.error('[PROFILE] Media preparation error:', mediaErr);
-            
-            // Fallback: Use direct URL
-            mediaMessage = {
-                imageMessage: {
-                    url: ppUrl,
-                    mimetype: 'image/jpeg',
-                    caption: 'Profile picture',
-                    fileSha256: Buffer.alloc(32),
-                    fileLength: 0,
-                    height: 512,
-                    width: 512,
-                    mediaKey: Buffer.alloc(32),
-                    fileEncSha256: Buffer.alloc(32),
-                    directPath: '/',
-                    mediaKeyTimestamp: 0
-                }
-            };
+            const statusData = await sock.getStatus(targetJid);
+            if (statusData?.status) {
+                status = statusData.status;
+            }
+        } catch (err) {
+            console.log('[PROFILE] Status fetch error:', err);
         }
 
-        // ─── 4. BUILD CARD ──────────────────────────────────────────────
+        // ─── 3. SEND PROFILE INFO ────────────────────────────────────────
         const phoneNumber = formatPhoneNumber(targetJid);
         const isSelf = targetJid === normalizedSenderJid;
         const userType = isSelf ? '👤 You' : '👤 User';
-        
-        let bodyText = `✨ *Profile Retrieved Successfully!*\n\n`;
-        bodyText += `📋 *Name:* ${targetName}\n`;
-        bodyText += `🆔 *Phone:* ${phoneNumber}\n`;
-        bodyText += `📝 *Status:* ${status}\n`;
-        bodyText += `👥 *Type:* ${targetJid.includes('@g.us') ? '👥 Group' : '🧑 Person'}\n`;
-        bodyText += `🔄 *Self:* ${isSelf ? '✅ Yes' : '❌ No'}\n\n`;
-        bodyText += `📱 *JID:* ${targetJid}\n`;
-        bodyText += `🕐 *Retrieved:* ${new Date().toLocaleString()}`;
+        const cleanName = truncateString(displayName, 30);
 
-        // ─── 5. CREATE BUTTONS ──────────────────────────────────────────
-        const buttons = [];
+        // Build caption
+        let caption = `👤 *PROFILE: ${cleanName}*\n\n`;
+        caption += `📋 *Name:* ${cleanName}\n`;
+        caption += `🆔 *Phone:* ${phoneNumber}\n`;
+        caption += `📝 *Status:* ${status}\n`;
+        caption += `🔄 *Type:* ${isSelf ? 'Your Profile' : 'User Profile'}\n`;
+        caption += `👥 *Group:* ${isGroup ? '✅ Yes' : '❌ No'}\n\n`;
+        caption += `📱 *JID:* ${targetJid}\n`;
+        caption += `🕐 *Fetched:* ${new Date().toLocaleString()}`;
 
-        // Chat button (if not self)
-        if (!isSelf && !targetJid.includes('@g.us')) {
-            buttons.push({
-                name: "cta_url",
-                buttonParamsJson: JSON.stringify({
-                    display_text: "💬 Chat with them",
-                    url: `https://wa.me/${targetJid.split('@')[0]}`
-                })
-            });
-        }
-
-        // Voice call button (if not self and not group)
-        if (!isSelf && !targetJid.includes('@g.us')) {
-            buttons.push({
-                name: "cta_url",
-                buttonParamsJson: JSON.stringify({
-                    display_text: "📞 Voice Call",
-                    url: `tel:+${targetJid.split('@')[0]}`
-                })
-            });
-        }
-
-        // Download button
-        buttons.push({
-            name: "cta_url",
-            buttonParamsJson: JSON.stringify({
-                display_text: "📥 Download Image",
-                url: ppUrl
-            })
-        });
-
-        // ─── 6. SEND CARD ──────────────────────────────────────────────
-        const cardMessage = {
-            viewOnceMessage: {
-                message: {
-                    interactiveMessage: {
-                        header: {
-                            title: `👤 PROFILE: ${targetName.toUpperCase().substring(0, 30)}`,
-                            hasMediaAttachment: true,
-                            imageMessage: mediaMessage.imageMessage || mediaMessage
-                        },
-                        body: {
-                            text: bodyText
-                        },
-                        footer: {
-                            text: FOOTER
-                        },
-                        nativeFlowMessage: {
-                            buttons: buttons,
-                            version: 3
-                        }
-                    }
+        // ─── 4. SEND MESSAGE ─────────────────────────────────────────────
+        try {
+            // Send as image with caption
+            await sock.sendMessage(chatId, {
+                image: { url: ppUrl },
+                caption: caption,
+                contextInfo: {
+                    mentionedJid: [targetJid]
                 }
-            }
-        };
+            }, { quoted: message });
 
-        // Generate and send message
-        const msg = generateWAMessageFromContent(chatId, cardMessage, { quoted: message });
-        await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
+            // Send reaction
+            await sock.sendMessage(chatId, { 
+                react: { text: '✅', key: message.key } 
+            });
 
-        // ─── 7. REACTION ──────────────────────────────────────────────────
-        await sock.sendMessage(chatId, { 
-            react: { text: '✅', key: message.key } 
-        });
+        } catch (sendErr) {
+            console.error('[PROFILE] Send error:', sendErr);
+            
+            // Fallback: Send text only
+            await sock.sendMessage(chatId, {
+                text: `👤 *${cleanName}*\n🆔 ${phoneNumber}\n📝 ${status}`
+            }, { quoted: message });
+        }
 
     } catch (err) {
         console.error('[PROFILE] Error:', err);
         
-        // Send error message
+        // Send simple error message
         try {
             await sock.sendMessage(chatId, { 
                 react: { text: '❌', key: message.key } 
@@ -316,30 +225,34 @@ async function profileCommand(sock, chatId, senderId, message, args) {
                 text: `❌ *Profile Error*\n\n${err.message || 'Unknown error'}\n\n` +
                       `💡 *Usage:*\n` +
                       `• .profile - Show your profile\n` +
-                      `• .profile @user - Show tagged user's profile\n` +
-                      `• .profile 255xxx - Show user by phone number\n` +
-                      `• Reply to a message with .profile` 
+                      `• .profile @user - Show tagged user\n` +
+                      `• .profile 255xxx - Show by phone number\n` +
+                      `• Reply to message with .profile` 
             }, { quoted: message });
-        } catch (sockErr) {
-            console.error('[PROFILE] Failed to send error:', sockErr);
+        } catch (err2) {
+            console.error('[PROFILE] Failed to send error:', err2);
         }
     }
 }
 
-// ─── ALTERNATIVE SIMPLE VERSION ──────────────────────────────────────────
+// ─── SIMPLE VERSION ──────────────────────────────────────────────────────
 async function profileSimple(sock, chatId, senderId, message, args) {
     try {
         const senderJid = toWhatsAppJid(senderId);
+        if (!senderJid) {
+            throw new Error('Invalid sender');
+        }
+
         let targetJid = senderJid;
 
         // Determine target
-        const mentionedJids = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-        if (mentionedJids.length > 0) {
+        const mentionedJids = message?.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+        if (mentionedJids.length > 0 && mentionedJids[0]) {
             targetJid = mentionedJids[0];
-        } else if (args.length > 0) {
+        } else if (args && args.length > 0) {
             const num = args[0].replace(/\D/g, '');
             if (num.length >= 10) targetJid = `${num}@s.whatsapp.net`;
-        } else if (message.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
+        } else if (message?.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
             const quoted = message.message.extendedTextMessage.contextInfo;
             if (quoted.participant) targetJid = quoted.participant;
         }
@@ -358,16 +271,16 @@ async function profileSimple(sock, chatId, senderId, message, args) {
             name = global.store.contacts[targetJid].name || name;
         }
 
-        // Send simple message
+        // Send message
         await sock.sendMessage(chatId, {
             image: { url: ppUrl },
             caption: `👤 *${name}*\n🆔 ${targetJid.split('@')[0]}\n\n${FOOTER}`
         }, { quoted: message });
 
     } catch (err) {
-        console.error('[PROFILE] Simple version error:', err);
+        console.error('[PROFILE] Simple error:', err);
         await sock.sendMessage(chatId, { 
-            text: `❌ Error: ${err.message}` 
+            text: `❌ Error: ${err.message || 'Unknown'}` 
         });
     }
 }
@@ -376,9 +289,9 @@ async function profileSimple(sock, chatId, senderId, message, args) {
 module.exports = profileCommand;
 module.exports.simple = profileSimple;
 module.exports.name = 'profile';
-module.exports.aliases = ['pp', 'avatar', 'pic', 'foto'];
+module.exports.aliases = ['pp', 'avatar', 'pic', 'foto', 'getpp'];
 module.exports.category = 'utility';
-module.exports.description = 'Get WhatsApp profile picture with interactive card';
+module.exports.description = 'Get WhatsApp profile picture with user info';
 module.exports.usage = '.profile [@mention|phone number]';
 module.exports.default = profileCommand;
 module.exports.handler = profileCommand;
