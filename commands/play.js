@@ -1,7 +1,6 @@
 /**
  * play.js - YouTube Audio Downloader
  * Priority: Prexvy API → YouTubeMP4 → Nayan AllDown → Nayan YouTube
- * Output Order: 1. Thumbnail + Info, 2. Audio
  * Usage: .play <song name or YouTube URL>
  */
 
@@ -80,26 +79,20 @@ function extractYoutubeVideoId(ytUrl) {
 
 function formatDuration(seconds) {
     if (!seconds || seconds < 0) return 'Unknown';
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
+    const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    
-    if (hours > 0) {
-        return `${hours}h ${mins}m ${secs}s`;
+    if (mins > 0) {
+        return `${mins}m ${secs}s`;
     }
-    return `${mins}m ${secs}s`;
+    return `${secs}s`;
 }
 
 function formatSize(bytes) {
     if (!bytes || bytes < 0) return 'Unknown';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let size = bytes;
-    let unitIndex = 0;
-    while (size >= 1024 && unitIndex < units.length - 1) {
-        size /= 1024;
-        unitIndex++;
-    }
-    return `${size.toFixed(1)} ${units[unitIndex]}`;
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+    return `${(bytes / 1073741824).toFixed(1)} GB`;
 }
 
 function cleanString(str) {
@@ -145,15 +138,10 @@ async function getAudioFromPrexvy(ytUrl) {
                 author: cleanString(data.info?.uploader),
                 thumbnail: data.info?.thumbnail || '',
                 duration: parseInt(data.info?.duration) || 0,
-                duration_string: data.info?.duration_string || '0:00',
-                view_count: parseInt(data.info?.view_count) || 0,
-                like_count: parseInt(data.info?.like_count) || 0,
                 source: 'Prexvy API',
                 quality: data.quality || 'medium',
                 filesize: parseInt(data.filesize) || buffer.length,
-                format_id: data.format_id || '140',
-                mimeType: 'audio/mp4',
-                download_url: downloadUrl
+                mimeType: 'audio/mp4'
             };
         }
         throw new Error('Prexvy API response invalid');
@@ -393,7 +381,6 @@ async function getAudioFromYoutubeAPI(ytUrl) {
                     source: 'Nayan YouTube API',
                     quality: bestAudio.quality || bestAudio.label || 'medium',
                     filesize: buffer.length,
-                    format_id: bestAudio.formatId || '140',
                     mimeType: bestAudio.mimeType || 'audio/mp4'
                 };
             }
@@ -484,6 +471,7 @@ async function playCommand(sock, chatId, message) {
         let videoInfo = null;
         let thumbnailUrl = '';
         let searchTitle = '';
+        let searchArtist = '';
 
         // ─── SEARCH IF NOT YOUTUBE URL ────────────────────────────────────
         if (!query.includes('youtube.com') && !query.includes('youtu.be') && !query.includes('youtube')) {
@@ -503,6 +491,7 @@ async function playCommand(sock, chatId, message) {
                 videoUrl = videoInfo.url;
                 thumbnailUrl = videoInfo.thumbnail;
                 searchTitle = videoInfo.title;
+                searchArtist = videoInfo.author?.name || 'Unknown Artist';
             } catch (searchErr) {
                 console.error('[PLAY] Search error:', searchErr);
                 await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
@@ -513,54 +502,17 @@ async function playCommand(sock, chatId, message) {
             }
         }
 
-        // ─── PROCESSING ──────────────────────────────────────────────────
-        const processMsg = await sock.sendMessage(chatId, { 
-            text: '⏳ *Processing audio...*\n' +
-                  'This may take a moment depending on the source.' 
-        });
+        // ─── SEND THUMBNAIL WITH SONG INFO ──────────────────────────────
+        const thumb = thumbnailUrl || '';
+        const songTitle = truncateString(searchTitle || query, 50);
+        const artistName = truncateString(searchArtist || 'Unknown Artist', 30);
 
-        // ─── DOWNLOAD AUDIO ──────────────────────────────────────────────
-        let audioData;
-        try {
-            audioData = await getYoutubeAudio(videoUrl);
-        } catch (downloadErr) {
-            await sock.sendMessage(chatId, { delete: processMsg.key });
-            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-            return sock.sendMessage(chatId, { 
-                text: `❌ *Download failed*\n\n${downloadErr.message}\n\n` +
-                      '💡 Please try:\n' +
-                      '• Using a direct YouTube URL\n' +
-                      '• Trying again later\n' +
-                      '• Using a different song' 
-            });
-        }
+        let infoCaption = `🎵 *${songTitle}*\n\n`;
+        infoCaption += `👤 *Artist:* ${artistName}\n`;
+        infoCaption += `⏱️ *Duration:* Loading...\n`;
+        infoCaption += `📦 *Size:* Loading...\n\n`;
+        infoCaption += `⏳ *Processing download...*`;
 
-        await sock.sendMessage(chatId, { delete: processMsg.key });
-
-        // ─── 1. SEND SONG INFO WITH THUMBNAIL ───────────────────────────
-        const thumb = audioData.thumbnail || thumbnailUrl || '';
-        const title = audioData.title || searchTitle || 'Unknown Title';
-        const duration = audioData.duration ? formatDuration(audioData.duration) : 
-                        audioData.duration_string || 'Unknown';
-        const size = audioData.filesize ? formatSize(audioData.filesize) : 'Unknown';
-        const author = audioData.author ? cleanString(audioData.author) : 'Unknown Artist';
-        const source = audioData.source || 'Unknown Source';
-        const quality = audioData.quality || 'Medium';
-
-        // Clean and truncate title
-        const cleanTitle = truncateString(title, 50);
-        const cleanAuthor = truncateString(author, 30);
-
-        // Build info caption - Clean version without forwarded feature
-        let infoCaption = `🎵 *${cleanTitle}*\n\n`;
-        infoCaption += `👤 *Artist:* ${cleanAuthor}\n`;
-        infoCaption += `⏱️ *Duration:* ${duration}\n`;
-        infoCaption += `📦 *Size:* ${size}\n`;
-        infoCaption += `📡 *Source:* ${source}\n`;
-        infoCaption += `🎚️ *Quality:* ${quality}\n\n`;
-        infoCaption += `✅ *Download complete!*`;
-
-        // Send thumbnail and info (without forwarded feature)
         if (thumb) {
             await sock.sendMessage(chatId, {
                 image: { url: thumb },
@@ -572,38 +524,36 @@ async function playCommand(sock, chatId, message) {
             }, { quoted: message });
         }
 
-        // ─── SUCCESS REACTION ──────────────────────────────────────────
-        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+        // ─── DOWNLOAD AUDIO ──────────────────────────────────────────────
+        let audioData;
+        try {
+            audioData = await getYoutubeAudio(videoUrl);
+        } catch (downloadErr) {
+            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+            return sock.sendMessage(chatId, { 
+                text: `❌ *Download failed*\n\n${downloadErr.message}\n\n` +
+                      '💡 Please try:\n' +
+                      '• Using a direct YouTube URL\n' +
+                      '• Trying again later\n' +
+                      '• Using a different song' 
+            });
+        }
 
-        // ─── 2. SEND AUDIO FILE ──────────────────────────────────────────
-        const audioFileName = `${cleanTitle.substring(0, 40)}.mp4`;
-        
+        // ─── SEND AUDIO ONLY (NO EXTRA MESSAGES) ────────────────────────
+        const finalTitle = audioData.title || searchTitle || 'Unknown Title';
+        const cleanTitle = truncateString(finalTitle, 40);
+
         const audioMessage = {
             audio: audioData.buffer,
             mimetype: 'audio/mp4',
             ptt: false,
-            fileName: audioFileName
+            fileName: `${cleanTitle}.mp4`
         };
 
         await sock.sendMessage(chatId, audioMessage);
 
-        // ─── 3. SEND COMPACT BUTTON MESSAGE ──────────────────────────────
-        const buttonMessage = {
-            text: `🎵 *${cleanTitle}*\n\n` +
-                  `📥 Downloaded successfully!\n` +
-                  `🎚️ Source: ${source}\n` +
-                  `⏱️ Duration: ${duration}\n` +
-                  `📦 Size: ${size}`,
-            footer: '🎵 Music Downloader',
-            buttons: [
-                { buttonId: 'play_again', buttonText: { displayText: '🎵 Search Again' }, type: 1 },
-                { buttonId: 'help_play', buttonText: { displayText: '❓ Help' }, type: 1 }
-            ],
-            headerType: 1,
-            viewOnce: true
-        };
-
-        await sock.sendMessage(chatId, buttonMessage);
+        // ─── SUCCESS REACTION ──────────────────────────────────────────
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
         console.error('[PLAY] Fatal error:', err);
