@@ -1,5 +1,5 @@
 // plugins/buy.js
-const createPanel = require('../createPanel');
+const createPanel = require('../lib/createPanel');
 const config = require('../config');
 
 module.exports = {
@@ -34,38 +34,49 @@ module.exports = {
                       `🔧 *Status:* Initializing...`
             }, { quoted: msg });
 
-            // Call createPanel function
-            const result = await createPanel({
+            // Create context object for createPanel
+            const ctx = {
                 sock,
                 msg,
-                args: {
-                    plan,
-                    username: userName,
-                    sender,
-                    senderName
+                args: rawArgs,
+                senderId: sender,
+                senderName: senderName,
+                reply: async (text) => {
+                    return await sock.sendMessage(jid, { text }, { quoted: msg });
+                },
+                tools: {
+                    cmd: {
+                        handleError: async (ctx, error, show) => {
+                            console.error('[BUY ERROR]', error);
+                            if (show) {
+                                await sock.sendMessage(jid, {
+                                    text: `❌ Error: ${error.message}`
+                                }, { quoted: msg });
+                            }
+                        }
+                    }
                 }
+            };
+
+            // Call createPanel from lib folder
+            await createPanel(ctx, {
+                plan: plan,
+                username: userName,
             });
 
-            // Success response
-            if (result && result.success) {
-                await sock.sendMessage(jid, { 
-                    text: `✅ *Panel Created Successfully!*\n\n` +
-                          `📌 *Plan:* ${plan}\n` +
-                          `👤 *Username:* ${userName}\n` +
-                          `🔑 *Panel ID:* ${result.panelId || 'N/A'}\n` +
-                          `📧 *Email:* ${result.email || 'N/A'}\n` +
-                          `🔗 *Login Link:* ${result.loginLink || 'N/A'}\n\n` +
-                          `_Check your email for login details._`,
-                    edit: processingMsg.key
-                });
-            } else {
-                throw new Error(result?.error || 'Panel creation failed');
-            }
+            // Success message (createPanel should handle its own success message)
+            await sock.sendMessage(jid, {
+                text: `✅ *Panel Creation Initiated!*\n\n` +
+                      `📌 *Plan:* ${plan}\n` +
+                      `👤 *Username:* ${userName}\n` +
+                      `📧 *Check your email for login details.*\n\n` +
+                      `_Processing may take a few moments..._`,
+                edit: processingMsg.key
+            });
 
         } catch (error) {
             console.error('[BUY COMMAND ERROR]', error);
             
-            // Error response
             const errorMsg = `❌ *Panel Creation Failed*\n\n` +
                            `📌 *Error:* ${error.message || 'Unknown error'}\n` +
                            `🔄 *Tip:* Try again or contact support.`;
