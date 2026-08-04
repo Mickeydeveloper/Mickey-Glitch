@@ -1,4 +1,3 @@
-require('dotenv').config();
 const { decrypt } = require('./lib/encryption');
 
 global.APIs = {
@@ -24,16 +23,18 @@ global.APIKeys = {
     'https://api-fgmods.ddns.net': 'fg-dylux'
 };
 
+// Configuration ya Pterodactyl Panel (Keys Zimewekwa Direct)
 global.PTERODACTYL = {
-    domain: process.env.PTERODACTYL_DOMAIN || 'https://panel.example.com',
-    apiKey: process.env.PTERODACTYL_API_KEY || 'your_panel_api_key',
-    nestId: process.env.PTERODACTYL_NEST_ID || '1',
-    eggId: process.env.PTERODACTYL_EGG_ID || '5',
-    locationId: process.env.PTERODACTYL_LOCATION_ID || '1',
-    nodeId: process.env.PTERODACTYL_NODE_ID || '1',
-    timezone: process.env.TIMEZONE || 'Africa/Nairobi',
+    domain: 'https://panel.mickeypannel.dpdns.org', // Weka domain yako hapa kama tofauti
+    apiKey: 'ptla_Lkp1S3qISOERsFvYfmu4k3G7efrkY8vffL6854NcJ0k',
+    nestId: '5',
+    eggId: '15',
+    locationId: '1',
+    nodeId: '1',
+    timezone: 'Africa/Tanzania',
 };
 
+// Dynamic Global Variables kwa ajili ya createPanel.js
 global.domain = global.PTERODACTYL.domain;
 global.plta = global.PTERODACTYL.apiKey;
 global.nestId = global.PTERODACTYL.nestId;
@@ -42,15 +43,12 @@ global.locc = global.PTERODACTYL.locationId;
 global.pteroNode = global.PTERODACTYL.nodeId;
 global.TIMEZONE = global.PTERODACTYL.timezone;
 
-// OpenAI Configuration (encrypted API key)
-// TO GENERATE ENCRYPTED KEY: Run node -e "const e=require('./lib/encryption'); console.log(e.encrypt('YOUR_API_KEY_HERE'))"
-// Then replace the encryptedKey value below
+// OpenAI Configuration
 global.OPENAI_CONFIG = {
     encryptedKey: '8f7a3e5c2b1d4f9a6e8c2d5f7a9b1c3e:a4f8b2c9d6e1f7a3b8c4d9e2f5a7b6c8e1d3f9a2c5b8e6f9a2d4c7b1e3f8a',
     model: 'gpt-3.5-turbo',
     systemPrompt: 'You are Mickdady a helpful WhatsApp chatbot assistant. Be concise and friendly.',
-    
-    // Getter to decrypt key on demand
+
     get apiKey() {
         try {
             return decrypt(this.encryptedKey);
