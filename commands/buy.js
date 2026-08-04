@@ -25,6 +25,31 @@ const CONFIG = {
     thumbnail: "https://files.catbox.moe/54sbu9.png"
 };
 
+function formatPanelError(error, context = 'PTERODACTYL') {
+    const responseData = error?.response?.data;
+    const responseText = typeof responseData === 'string' ? responseData : JSON.stringify(responseData, null, 2);
+    const message = responseData?.errors?.map((item) => item?.detail || JSON.stringify(item)).join('\n')
+        || responseData?.message
+        || error?.message
+        || 'Unknown panel error';
+
+    return {
+        context,
+        message,
+        status: error?.response?.status || null,
+        url: error?.config?.url || null,
+        method: error?.config?.method || null,
+        requestData: error?.config?.data || null,
+        responseData: responseData || null,
+        responseText,
+        stack: error?.stack || null,
+    };
+}
+
+function logPanelEvent(stage, details) {
+    console.log(`[PTERODACTYL][${stage}]`, JSON.stringify(details, null, 2));
+}
+
 // ─── PLANS ──────────────────────────────────────────────────────────────────
 const PLANS = {
     '1gb': { memo: 1024, cpu: 100, disk: 5120, price: "TSh 5,000", label: "1GB" },
@@ -284,29 +309,41 @@ async function sendSuperButtons(ctx, targetJid, username, password, domain) {
 
 async function createPterodactylUser(domain, apiKey, username, password) {
     const email = `${username}@gmail.com`;
-    const response = await axios.post(
-        `${domain}/api/application/users`,
-        {
-            email,
-            username,
-            first_name: username,
-            last_name: username,
-            language: "en",
-            password: String(password)
-        },
-        {
-            headers: {
-                Accept: "application/json",
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`
-            },
-            timeout: CONFIG.timeout
+    const payload = {
+        email,
+        username,
+        first_name: username,
+        last_name: username,
+        language: "en",
+        password: String(password)
+    };
+
+    try {
+        const response = await axios.post(
+            `${domain}/api/application/users`,
+            payload,
+            {
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${apiKey}`
+                },
+                timeout: CONFIG.timeout
+            }
+        );
+
+        if (response?.data?.errors) {
+            const message = response.data.errors.map((item) => item?.detail || JSON.stringify(item)).join("\n");
+            throw new Error(message);
         }
-    );
-    if (response.data.errors) {
-        throw new Error(response.data.errors.map(e => e.detail || JSON.stringify(e)).join("\n"));
+
+        logPanelEvent('USER_CREATED', { username, email, domain });
+        return response.data.attributes;
+    } catch (error) {
+        const formatted = formatPanelError(error, 'CREATE_USER');
+        console.error('[PTERODACTYL][CREATE_USER_FAILED]', JSON.stringify(formatted, null, 2));
+        throw error;
     }
-    return response.data.attributes;
 }
 
 async function getExistingUser(domain, apiKey, username) {
@@ -342,54 +379,67 @@ async function fetchEggData(domain, apiKey, nestId, eggId) {
 }
 
 async function createPterodactylServer(domain, apiKey, userId, username, eggId, locationId, startupCmd, memo, cpu, disk, description) {
-    const response = await axios.post(
-        `${domain}/api/application/servers`,
-        {
-            name: username,
-            description: description,
-            user: userId,
-            egg: parseInt(eggId),
-            docker_image: "ghcr.io/parkervcp/yolks:nodejs_18",
-            startup: startupCmd,
-            environment: {
-                INST: "npm",
-                USER_UPLOAD: "0",
-                AUTO_UPDATE: "0",
-                CMD_RUN: "npm start",
-                JS_FILE: "index.js",
-                MAIN_FILE: "index.js"
-            },
-            limits: {
-                memory: memo || CONFIG.defaultMemo,
-                swap: 0,
-                disk: disk || CONFIG.defaultDisk,
-                io: 500,
-                cpu: cpu || CONFIG.defaultCpu
-            },
-            feature_limits: {
-                databases: 0,
-                backups: 0,
-                allocations: 0
-            },
-            deploy: {
-                locations: [parseInt(locationId)],
-                dedicated_ip: false,
-                port_range: []
-            }
+    const payload = {
+        name: username,
+        description: description || '',
+        user: userId,
+        egg: parseInt(eggId, 10),
+        pack: null,
+        image: "ghcr.io/parkervcp/yolks:nodejs_18",
+        startup: startupCmd,
+        environment: {
+            INST: "npm",
+            USER_UPLOAD: "0",
+            AUTO_UPDATE: "0",
+            CMD_RUN: "npm start",
+            JS_FILE: "index.js",
+            MAIN_FILE: "index.js"
         },
-        {
-            headers: {
-                Accept: "application/json",
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`
-            },
-            timeout: CONFIG.timeout
+        limits: {
+            memory: memo || CONFIG.defaultMemo,
+            swap: 0,
+            disk: disk || CONFIG.defaultDisk,
+            io: 500,
+            cpu: cpu || CONFIG.defaultCpu
+        },
+        feature_limits: {
+            databases: 0,
+            backups: 0,
+            allocations: 0
+        },
+        deploy: {
+            locations: [parseInt(locationId, 10)],
+            dedicated_ip: false,
+            port_range: []
         }
-    );
-    if (response.data.errors) {
-        throw new Error(response.data.errors.map(e => e.detail || JSON.stringify(e)).join("\n"));
+    };
+
+    try {
+        const response = await axios.post(
+            `${domain}/api/application/servers`,
+            payload,
+            {
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${apiKey}`
+                },
+                timeout: CONFIG.timeout
+            }
+        );
+
+        if (response?.data?.errors) {
+            const message = response.data.errors.map((item) => item?.detail || JSON.stringify(item)).join("\n");
+            throw new Error(message);
+        }
+
+        logPanelEvent('SERVER_CREATED', { username, userId, domain, serverId: response?.data?.attributes?.id || null });
+        return response.data.attributes;
+    } catch (error) {
+        const formatted = formatPanelError(error, 'CREATE_SERVER');
+        console.error('[PTERODACTYL][CREATE_SERVER_FAILED]', JSON.stringify(formatted, null, 2));
+        throw error;
     }
-    return response.data.attributes;
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
@@ -563,12 +613,13 @@ async function createPanel(ctx) {
         return result;
         
     } catch (error) {
-        console.error("[CREATEPANEL ERROR]", error.message);
+        const formatted = formatPanelError(error, 'CREATE_PANEL');
+        console.error('[CREATEPANEL ERROR]', JSON.stringify(formatted, null, 2));
         await sendStyledCard(ctx, {
             title: '❌ Panel Creation Failed',
-            body: `❌ *Panel Creation Failed*\n\n${error.message}`,
+            body: `❌ *Panel Creation Failed*\n\n${formatted.message}`,
             footer: '⚡ Mickey Glitch Sub',
-            fallbackText: `❌ *Panel Creation Failed*\n\n${error.message}`,
+            fallbackText: `❌ *Panel Creation Failed*\n\n${formatted.message}`,
         });
         return null;
     }
