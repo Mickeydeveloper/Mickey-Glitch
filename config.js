@@ -24,6 +24,24 @@ global.APIKeys = {
     'https://api-fgmods.ddns.net': 'fg-dylux'
 };
 
+global.PTERODACTYL = {
+    domain: process.env.PTERODACTYL_DOMAIN || 'https://panel.example.com',
+    apiKey: process.env.PTERODACTYL_API_KEY || 'your_panel_api_key',
+    nestId: process.env.PTERODACTYL_NEST_ID || '1',
+    eggId: process.env.PTERODACTYL_EGG_ID || '5',
+    locationId: process.env.PTERODACTYL_LOCATION_ID || '1',
+    nodeId: process.env.PTERODACTYL_NODE_ID || '1',
+    timezone: process.env.TIMEZONE || 'Africa/Nairobi',
+};
+
+global.domain = global.PTERODACTYL.domain;
+global.plta = global.PTERODACTYL.apiKey;
+global.nestId = global.PTERODACTYL.nestId;
+global.eggs = global.PTERODACTYL.eggId;
+global.locc = global.PTERODACTYL.locationId;
+global.pteroNode = global.PTERODACTYL.nodeId;
+global.TIMEZONE = global.PTERODACTYL.timezone;
+
 // OpenAI Configuration (encrypted API key)
 // TO GENERATE ENCRYPTED KEY: Run node -e "const e=require('./lib/encryption'); console.log(e.encrypt('YOUR_API_KEY_HERE'))"
 // Then replace the encryptedKey value below
