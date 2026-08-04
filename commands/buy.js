@@ -55,23 +55,34 @@ const getBotName = () => {
  * Main Panel Command Handler
  */
 const panelCommand = async (sock, chatId, message, args = [], commandName = '') => {
-    const startTime = performance.now();
     const sender = message.key?.participant || message.key?.remoteJid;
     const botName = getBotName();
     const footer = '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲™';
     const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
 
-    // Safe handling za args na commandName ili zisilete error
+    // Extract text yote kutoka kwenye message ili kupata exact command kama commandName haijapita
+    const bodyText = message.message?.conversation || 
+                     message.message?.extendedTextMessage?.text || 
+                     message.message?.buttonsResponseMessage?.selectedButtonId || '';
+
+    // Dondoo la Kwanza: Soma command iliyoandikwa (e.g. .mypanel -> mypanel)
+    const extractedCmd = bodyText ? bodyText.trim().split(/\s+/)[0].replace(/^[./#!]/, '') : '';
+
+    // Baini subCommand halisi: tumia commandName -> extractedCmd -> args[0]
+    let subCommand = '';
+    if (typeof commandName === 'string' && commandName.trim().length > 0) {
+        subCommand = commandName.trim().toLowerCase();
+    } else if (extractedCmd) {
+        subCommand = extractedCmd.trim().toLowerCase();
+    } else if (Array.isArray(args) && typeof args[0] === 'string') {
+        subCommand = args[0].trim().toLowerCase();
+    } else {
+        subCommand = 'mypanel';
+    }
+
     const safeArgs = Array.isArray(args) ? args : [];
 
-    // FIX HAPA: Hakikisha tunapata String badil ya undefined/object
-    const rawCmd = typeof commandName === 'string' && commandName.length > 0 
-        ? commandName 
-        : (typeof safeArgs[0] === 'string' ? safeArgs[0] : '');
-
-    const subCommand = rawCmd.trim().toLowerCase() || 'mypanel';
-
-    console.log(`[panelCommand] Invoked '${subCommand}' by`, sender);
+    console.log(`[panelCommand] Detected SubCommand: '${subCommand}' from user:`, sender);
 
     // Helper function to send interactive native buttons
     const sendInteractiveMessage = async (text, buttons = []) => {
@@ -348,7 +359,7 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
 
             default: {
                 return await sendInteractiveMessage(
-                    `❓ *Command Haijulikani!*\n\n` +
+                    `❓ *Command Haijulikani! (${subCommand})*\n\n` +
                     `Tumia moja ya hizi:\n` +
                     `• \`.buy 1gb <username>\`\n` +
                     `• \`.mypanel\`\n` +
