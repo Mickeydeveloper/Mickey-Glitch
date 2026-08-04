@@ -17,7 +17,7 @@ const CONFIG = {
     retryDelay: 2000,
     defaultMemo: 1024,
     defaultCpu: 100,
-    defaultDisk: 5120,
+    defaultDisk: 5120, 
     defaultEgg: "5",
     defaultLocation: "1",
     defaultNest: "1",
@@ -188,6 +188,57 @@ async function superReply(ctx, text) {
     return null;
 }
 
+function resolveChatId(ctx) {
+    return ctx?.chatId || ctx?.chat || ctx?.from || ctx?._msg?.key?.remoteJid || ctx?.senderId || null;
+}
+
+function resolveClient(ctx) {
+    return ctx?.core || ctx?.sock || ctx?.client || ctx || null;
+}
+
+async function sendStyledCard(ctx, {
+    body,
+    title = '📦 Mickey Glitch',
+    footer = '⚡ Mickey Glitch Sub',
+    buttons = [],
+    targetJid,
+    thumbnail = CONFIG.thumbnail,
+    fallbackText,
+    quoted = true,
+} = {}) {
+    const recipient = targetJid || resolveChatId(ctx);
+    const client = resolveClient(ctx);
+    const text = fallbackText || body || '⚠️ Message unavailable.';
+
+    if (!recipient || !client) {
+        return superReply(ctx, text);
+    }
+
+    try {
+        if (buttons.length > 0) {
+            const builder = new ButtonV2(client)
+                .setTitle(title)
+                .setBody(body)
+                .setFooter(footer)
+                .setThumbnail(thumbnail);
+
+            buttons.forEach((button) => builder.addButton(button.label, button.id));
+            return await builder.send(recipient, { quoted: quoted ? ctx?._msg : undefined, fallbackText: text });
+        }
+
+        const builder = new Button(client)
+            .setTitle(title)
+            .setBody(body)
+            .setFooter(footer)
+            .setImage(thumbnail);
+
+        return await builder.send(recipient, { quoted: quoted ? ctx?._msg : undefined, fallbackText: text });
+    } catch (error) {
+        console.error('[STYLED CARD ERROR]', error.message || error);
+        return superReply(ctx, text);
+    }
+}
+
 // ─── ──────────────────────────────────────────────────────────────────────
 // 3. SUPER BUTTON BUILDER
 // ─── ──────────────────────────────────────────────────────────────────────
@@ -200,62 +251,30 @@ async function sendSuperButtons(ctx, targetJid, username, password, domain) {
         `🌐 *Server URL:* ${domain}\n\n` +
         `_Hifadhi taarifa hizi kwa usalama._`;
 
-    try {
-        // ─── Try ButtonV2 first ──────────────────────────────────────────
-        const button = new ButtonV2(ctx.core || ctx.sock || ctx)
-            .setTitle("🎯 Panel Credentials")
-            .setBody(panelBody)
-            .setFooter("© MICKEY GLITCH TECH")
-            .setThumbnail(CONFIG.thumbnail)
-            .addButton({
-                name: 'cta_copy',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '📋 Copy Username',
-                    copy_code: username,
-                    id: 'copy_user'
-                })
-            })
-            .addButton({
-                name: 'cta_copy',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '🔑 Copy Password',
-                    copy_code: String(password),
-                    id: 'copy_pass'
-                })
-            })
-            .addButton({
-                name: 'cta_url',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '🌐 Open Panel',
-                    url: domain,
-                    webview_interaction: false
-                })
-            });
-        
-        await button.send(targetJid);
+    const recipient = targetJid || resolveChatId(ctx);
+    const client = resolveClient(ctx);
+
+    if (!recipient || !client) {
+        await superReply(ctx, panelBody);
         return true;
-        
+    }
+
+    try {
+        const button = new Button(client)
+            .setTitle('🎯 Panel Credentials')
+            .setBody(panelBody)
+            .setImage(CONFIG.thumbnail)
+            .setFooter('© MICKEY GLITCH TECH')
+            .addCopy('📋 Copy Username', username)
+            .addCopy('🔑 Copy Password', String(password))
+            .addUrl('🌐 Open Panel', domain, false);
+
+        await button.send(recipient, { quoted: ctx?._msg, fallbackText: panelBody });
+        return true;
     } catch (error) {
-        console.log("[BUTTON] Failed, trying fallback...");
-        try {
-            // ─── Try Button (V1) ──────────────────────────────────────────
-            const buttonV1 = new Button(ctx.core || ctx.sock || ctx)
-                .setTitle("Panel Credentials")
-                .setBody(panelBody)
-                .setImage(CONFIG.thumbnail)
-                .setFooter("© MICKEY GLITCH TECH")
-                .addCopy("📋 Copy Username", username)
-                .addCopy("🔑 Copy Password", String(password))
-                .addUrl("🌐 Open Panel", domain, false);
-            
-            await buttonV1.send(targetJid);
-            return true;
-            
-        } catch (error2) {
-            console.log("[BUTTON V1] Failed, sending plain text...");
-            await superSend(ctx, targetJid, { text: panelBody });
-            return true;
-        }
+        console.log('[BUTTON] Failed, sending plain text...', error.message || error);
+        await superSend(ctx, recipient, { text: panelBody });
+        return true;
     }
 }
 
@@ -384,12 +403,22 @@ async function createPanel(ctx) {
         const { username, targetJid, plan } = userData;
         
         if (!username || username.length < 1) {
-            await superReply(ctx, "❌ *Tafadhali andika username!*\n\n📌 Example: `.buy 1gb mickey`");
+            await sendStyledCard(ctx, {
+                title: '⚠️ Missing Username',
+                body: '❌ *Tafadhali andika username!*\n\n📌 Example: `.buy 1gb mickey`',
+                footer: '⚡ Mickey Glitch Sub',
+                fallbackText: '❌ *Tafadhali andika username!*\n\n📌 Example: `.buy 1gb mickey`',
+            });
             return null;
         }
         
         if (!targetJid) {
-            await superReply(ctx, "❌ *Imeshindwa kupata namba!*\n\n📌 Reply ujumbe wa mtu au weka namba: `.buy 1gb mickey-255712345678`");
+            await sendStyledCard(ctx, {
+                title: '⚠️ Missing Target',
+                body: '❌ *Imeshindwa kupata namba!*\n\n📌 Reply ujumbe wa mtu au weka namba: `.buy 1gb mickey-255712345678`',
+                footer: '⚡ Mickey Glitch Sub',
+                fallbackText: '❌ *Imeshindwa kupata namba!*\n\n📌 Reply ujumbe wa mtu au weka namba: `.buy 1gb mickey-255712345678`',
+            });
             return null;
         }
         
@@ -405,7 +434,12 @@ async function createPanel(ctx) {
         const timezone = global.PTERODACTYL?.timezone || global.TIMEZONE || CONFIG.timezone;
         
         if (!domain || !apiKey) {
-            await superReply(ctx, "❌ *Panel configuration missing!*\n\nContact admin to set up PTERODACTYL config.");
+            await sendStyledCard(ctx, {
+                title: '⚠️ Panel Setup Missing',
+                body: '❌ *Panel configuration missing!*\n\nContact admin to set up PTERODACTYL config.',
+                footer: '⚡ Mickey Glitch Sub',
+                fallbackText: '❌ *Panel configuration missing!*\n\nContact admin to set up PTERODACTYL config.',
+            });
             return null;
         }
         
@@ -414,7 +448,12 @@ async function createPanel(ctx) {
         const description = moment().tz(timezone).format("dddd, D MMMM - YYYY");
         
         // ─── Send processing ────────────────────────────────────────────
-        await superReply(ctx, `⏳ *Creating ${plan} (${planSpecs.memo}MB) panel for ${username}...*`);
+        await sendStyledCard(ctx, {
+            title: '⏳ Creating Panel',
+            body: `⏳ *Creating ${plan} (${planSpecs.memo}MB) panel for ${username}...*`,
+            footer: '⚡ Mickey Glitch Sub',
+            fallbackText: `⏳ *Creating ${plan} (${planSpecs.memo}MB) panel for ${username}...*`,
+        });
         
         // ─── Create or get user ─────────────────────────────────────────
         let user;
@@ -424,11 +463,21 @@ async function createPanel(ctx) {
             if (error.message.includes("email has already been taken")) {
                 user = await getExistingUser(domain, apiKey, username);
                 if (!user) {
-                    await superReply(ctx, `❌ *User exists but cannot retrieve!*\n\nTry a different username.`);
+                    await sendStyledCard(ctx, {
+                        title: '⚠️ Username Conflict',
+                        body: '❌ *User exists but cannot retrieve!*\n\nTry a different username.',
+                        footer: '⚡ Mickey Glitch Sub',
+                        fallbackText: '❌ *User exists but cannot retrieve!*\n\nTry a different username.',
+                    });
                     return null;
                 }
             } else {
-                await superReply(ctx, `❌ *User Creation Failed*\n\n${error.message}`);
+                await sendStyledCard(ctx, {
+                    title: '❌ Creation Failed',
+                    body: `❌ *User Creation Failed*\n\n${error.message}`,
+                    footer: '⚡ Mickey Glitch Sub',
+                    fallbackText: `❌ *User Creation Failed*\n\n${error.message}`,
+                });
                 return null;
             }
         }
@@ -438,7 +487,12 @@ async function createPanel(ctx) {
         try {
             eggData = await fetchEggData(domain, apiKey, nestId, eggId);
         } catch (error) {
-            await superReply(ctx, `❌ *Egg Fetch Failed*\n\n${error.message}`);
+            await sendStyledCard(ctx, {
+                title: '❌ Egg Fetch Failed',
+                body: `❌ *Egg Fetch Failed*\n\n${error.message}`,
+                footer: '⚡ Mickey Glitch Sub',
+                fallbackText: `❌ *Egg Fetch Failed*\n\n${error.message}`,
+            });
             return null;
         }
         
@@ -455,7 +509,12 @@ async function createPanel(ctx) {
                 startupCmd, planSpecs.memo, planSpecs.cpu, planSpecs.disk, description
             );
         } catch (error) {
-            await superReply(ctx, `❌ *Server Creation Failed*\n\n${error.message}`);
+            await sendStyledCard(ctx, {
+                title: '❌ Server Creation Failed',
+                body: `❌ *Server Creation Failed*\n\n${error.message}`,
+                footer: '⚡ Mickey Glitch Sub',
+                fallbackText: `❌ *Server Creation Failed*\n\n${error.message}`,
+            });
             return null;
         }
         
@@ -468,27 +527,49 @@ async function createPanel(ctx) {
             specs: { plan, memo: planSpecs.memo, cpu: planSpecs.cpu, disk: planSpecs.disk, price: planSpecs.price }
         };
         
-        await superReply(ctx,
-            `🚀 *Panel Created Successfully!*\n\n` +
-            `📋 *Details:*\n` +
-            `├ Plan: ${plan}\n` +
-            `├ Username: ${username}\n` +
-            `├ User ID: ${user.id}\n` +
-            `├ Server ID: ${server.id}\n` +
-            `├ RAM: ${planSpecs.memo} MB\n` +
-            `├ CPU: ${planSpecs.cpu}%\n` +
-            `├ Disk: ${planSpecs.disk} MB\n` +
-            `└ Price: ${planSpecs.price}\n\n` +
-            `📌 *Panel URL:* ${domain}/server/${server.identifier}\n\n` +
-            `✅ Credentials sent to ${targetJid}\n\n` +
-            `> ⚡ Mickey Glitch Sub`
-        );
+        await sendStyledCard(ctx, {
+            title: '🚀 Panel Ready',
+            body:
+                `🚀 *Panel Created Successfully!*\n\n` +
+                `📋 *Details:*\n` +
+                `├ Plan: ${plan}\n` +
+                `├ Username: ${username}\n` +
+                `├ User ID: ${user.id}\n` +
+                `├ Server ID: ${server.id}\n` +
+                `├ RAM: ${planSpecs.memo} MB\n` +
+                `├ CPU: ${planSpecs.cpu}%\n` +
+                `├ Disk: ${planSpecs.disk} MB\n` +
+                `└ Price: ${planSpecs.price}\n\n` +
+                `📌 *Panel URL:* ${domain}/server/${server.identifier}\n\n` +
+                `✅ Credentials sent to ${targetJid}\n\n` +
+                `> ⚡ Mickey Glitch Sub`,
+            footer: '⚡ Mickey Glitch Sub',
+            fallbackText:
+                `🚀 *Panel Created Successfully!*\n\n` +
+                `📋 *Details:*\n` +
+                `├ Plan: ${plan}\n` +
+                `├ Username: ${username}\n` +
+                `├ User ID: ${user.id}\n` +
+                `├ Server ID: ${server.id}\n` +
+                `├ RAM: ${planSpecs.memo} MB\n` +
+                `├ CPU: ${planSpecs.cpu}%\n` +
+                `├ Disk: ${planSpecs.disk} MB\n` +
+                `└ Price: ${planSpecs.price}\n\n` +
+                `📌 *Panel URL:* ${domain}/server/${server.identifier}\n\n` +
+                `✅ Credentials sent to ${targetJid}\n\n` +
+                `> ⚡ Mickey Glitch Sub`,
+        });
         
         return result;
         
     } catch (error) {
         console.error("[CREATEPANEL ERROR]", error.message);
-        await superReply(ctx, `❌ *Panel Creation Failed*\n\n${error.message}`);
+        await sendStyledCard(ctx, {
+            title: '❌ Panel Creation Failed',
+            body: `❌ *Panel Creation Failed*\n\n${error.message}`,
+            footer: '⚡ Mickey Glitch Sub',
+            fallbackText: `❌ *Panel Creation Failed*\n\n${error.message}`,
+        });
         return null;
     }
 }
@@ -542,36 +623,65 @@ module.exports = {
                     .addButton('📦 10GB', '.buy 10gb')
                     .addButton('🚀 Unlimited', '.buy unlimited');
 
-                return await helpButton.send(ctx.chatId || ctx.chat || ctx.from, { quoted: ctx._msg });
+                return await helpButton.send(ctx.chatId || ctx.chat || ctx.from, { quoted: ctx._msg, fallbackText: '🛒 Panel Purchase System' });
             }
 
             // ─── CREATE PANEL ────────────────────────────────────────────
-            await superReply(ctx, `🟢 *Creating panel...*`);
+            await sendStyledCard(ctx, {
+                title: '🟢 Creating Panel',
+                body: '🟢 *Creating panel...*',
+                footer: '⚡ Mickey Glitch Sub',
+                fallbackText: '🟢 *Creating panel...*',
+            });
             
             const result = await createPanel(ctx);
 
             if (result && result.status === true) {
-                await superReply(ctx,
-                    `✅ *Panel Created Successfully!*\n\n` +
-                    `👤 Username: ${result.credentials.username}\n` +
-                    `🆔 User ID: ${result.user.id}\n` +
-                    `🖥️ Server: ${result.server.id}\n` +
-                    `📦 Plan: ${result.specs.plan}\n` +
-                    `🧠 RAM: ${result.specs.memo} MB\n` +
-                    `📌 Panel: ${result.credentials.panel_url}\n\n` +
-                    `> ⚡ Mickey Glitch Sub`
-                );
+                await sendStyledCard(ctx, {
+                    title: '✅ Panel Created',
+                    body:
+                        `✅ *Panel Created Successfully!*\n\n` +
+                        `👤 Username: ${result.credentials.username}\n` +
+                        `🆔 User ID: ${result.user.id}\n` +
+                        `🖥️ Server: ${result.server.id}\n` +
+                        `📦 Plan: ${result.specs.plan}\n` +
+                        `🧠 RAM: ${result.specs.memo} MB\n` +
+                        `📌 Panel: ${result.credentials.panel_url}\n\n` +
+                        `> ⚡ Mickey Glitch Sub`,
+                    footer: '⚡ Mickey Glitch Sub',
+                    fallbackText:
+                        `✅ *Panel Created Successfully!*\n\n` +
+                        `👤 Username: ${result.credentials.username}\n` +
+                        `🆔 User ID: ${result.user.id}\n` +
+                        `🖥️ Server: ${result.server.id}\n` +
+                        `📦 Plan: ${result.specs.plan}\n` +
+                        `🧠 RAM: ${result.specs.memo} MB\n` +
+                        `📌 Panel: ${result.credentials.panel_url}\n\n` +
+                        `> ⚡ Mickey Glitch Sub`,
+                });
             } else {
-                await superReply(ctx,
-                    `❌ *Failed to Create Panel*\n\n` +
-                    `📌 ${result?.message || 'Unknown error'}\n\n` +
-                    `💡 Please try again later.`
-                );
+                await sendStyledCard(ctx, {
+                    title: '❌ Panel Failed',
+                    body:
+                        `❌ *Failed to Create Panel*\n\n` +
+                        `📌 ${result?.message || 'Unknown error'}\n\n` +
+                        `💡 Please try again later.`,
+                    footer: '⚡ Mickey Glitch Sub',
+                    fallbackText:
+                        `❌ *Failed to Create Panel*\n\n` +
+                        `📌 ${result?.message || 'Unknown error'}\n\n` +
+                        `💡 Please try again later.`,
+                });
             }
 
         } catch (error) {
             console.error('[BUY ERROR]', error);
-            await superReply(ctx, `❌ *Command Failed*\n\n${error.message || 'Unknown error'}`);
+            await sendStyledCard(ctx, {
+                title: '❌ Command Failed',
+                body: `❌ *Command Failed*\n\n${error.message || 'Unknown error'}`,
+                footer: '⚡ Mickey Glitch Sub',
+                fallbackText: `❌ *Command Failed*\n\n${error.message || 'Unknown error'}`,
+            });
         }
     }
 };
