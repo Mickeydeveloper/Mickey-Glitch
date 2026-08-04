@@ -1,363 +1,309 @@
-const os = require('os');
-const { performance } = require('perf_hooks');
-const fs = require('fs');
-const path = require('path');
-const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
-const axios = require('axios');
+const moment = require("moment-timezone");
+const axios = require("axios");
+const path = require("path");
+const fs = require("fs");
 
-// Web Base URL & Pterodactyl Admin Credentials
-const BASE_URL = process.env.PTERODACTYL_BASE_URL || 'https://mickey-pterodacty.vercel.app';
-const ADMIN_EMAIL = 'mickidadyhamza@gmail.com';
-const ADMIN_PASSWORD = 'MICKEY24@';
-const API_KEY = process.env.EXTERNAL_API_KEY || process.env.PTERODACTYL_APP_API_KEY || 'MICKEY24@';
-
-// Pterodactyl Specific Settings (Badilisha kulingana na Node/Egg za Panel yako kama inahitajika)
-const DEFAULT_LOCATION_ID = 1;
-const DEFAULT_EGG_ID = 15; // Standard Node.js / Generic Egg ID
-const DEFAULT_NEST_ID = 5;
-
-// Memory DB kusevu sessions za watumiaji
-const userSessions = new Map();
-
-/**
- * Helper: Fetch Image Buffer
- */
-const fetchBuffer = async (url) => {
-    try {
-        const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
-        return Buffer.from(res.data);
-    } catch {
-        return null;
-    }
-};
-
-/**
- * Helper: Resize Image
- */
-async function resizeImg(buffer, width = 300, height = 300) {
-    if (!buffer) return null;
-    try {
-        const sharp = require('sharp');
-        return await sharp(buffer).resize(width, height, { fit: 'cover' }).toBuffer();
-    } catch {
-        return buffer;
-    }
+// Soma taarifa kutoka config.json
+let config = {};
+try {
+  const configPath = path.join(__dirname, "..", "config", "config.json");
+  if (fs.existsSync(configPath)) {
+    config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  }
+} catch (e) {
+  console.error("Imeshindwa kusoma config.json:", e.message);
 }
 
-/**
- * Helper: Admin Login Token Fetcher
- */
-const getAdminToken = async () => {
-    try {
-        const res = await axios.post(`${BASE_URL}/auth/login`, {
-            email: ADMIN_EMAIL,
-            password: ADMIN_PASSWORD
-        }, { timeout: 10000 });
-
-        return res.data?.token || res.data?.accessToken || res.data?.data?.token || null;
-    } catch (e) {
-        console.error('[ADMIN LOGIN FAILED]:', e?.response?.data || e.message);
-        return null;
-    }
-};
+// Map variables kutoka config.json
+const domain = config.pterodactyl?.domain || global.domain;
+const plta = config.pterodactyl?.plta || global.plta;
+const eggs = config.pterodactyl?.eggs || global.eggs || "15";
+const locc = config.pterodactyl?.locc || global.locc || "1";
+const nestId = config.pterodactyl?.nestId || "5";
 
 /**
- * Main Panel Command Handler
+ * Pterodactyl Panel & Server Creator
  */
-const panelCommand = async (sock, chatId, message, args = [], commandName = '') => {
-    const sender = message.key?.participant || message.key?.remoteJid;
-    const botName = '𝐌𝐈𝐂𝐊𝐄𝐘-𝐕𝟑';
-    const footer = '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲™';
-    const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
+async function createPanel(ctx, { memo, cpu, disk }) {
+  const text = ctx.text || "";
+  const t = text.split("-");
 
-    // Parse command name
-    const bodyText = message.message?.conversation || 
-                     message.message?.extendedTextMessage?.text || 
-                     message.message?.buttonsResponseMessage?.selectedButtonId || '';
+  if (t.length < 2) {
+    return await ctx.reply(
+      `❌ *Muundo Sio Sahihi!*\n\nMfano: \`${ctx.used?.prefix || "."}${ctx.used?.command || "buy"} username-255712345678\``
+    );
+  }
 
-    const extractedCmd = bodyText ? bodyText.trim().split(/\s+/)[0].replace(/^[./#!]/, '') : '';
+  const username = t[0].trim().toLowerCase();
+  const targetJid = ctx.quoted
+    ? ctx.quoted.sender
+    : t[1]
+    ? t[1].replace(/[^0-9]/g, "") + "@s.whatsapp.net"
+    : ctx.mentionedJid?.[0];
 
-    let subCommand = '';
-    if (typeof commandName === 'string' && commandName.trim().length > 0) {
-        subCommand = commandName.trim().toLowerCase();
-    } else if (extractedCmd) {
-        subCommand = extractedCmd.trim().toLowerCase();
-    } else if (Array.isArray(args) && typeof args[0] === 'string') {
-        subCommand = args[0].trim().toLowerCase();
-    } else {
-        subCommand = 'mypanel';
+  if (!targetJid) {
+    return await ctx.reply("❌ Namba ya mlengwa haijapatikana. Weka namba sahihi.");
+  }
+
+  const email = `${username}@gmail.com`;
+  const deskripsi = moment()
+    .tz(config.system?.timeZone || "Africa/Nairobi")
+    .format("dddd, D MMMM - YYYY");
+  
+  const password = "@datManj@9";
+
+  // -----------------------------------------------------------------
+  // 1. CREATE USER KWENYE PTERODACTYL APPLICATION API
+  // -----------------------------------------------------------------
+  let user;
+  try {
+    const resUser = await axios.post(
+      `${domain}/api/application/users`,
+      {
+        email,
+        username,
+        first_name: username,
+        last_name: username,
+        language: "en",
+        password: String(password)
+      },
+      {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${plta}`
+        },
+        timeout: 10000
+      }
+    );
+
+    const data = resUser.data;
+    if (data.errors) {
+      const errMsg = data.errors.map((e) => e.detail || JSON.stringify(e)).join("\n");
+      return await ctx.reply(`❌ *User Creation Failed*\n\n\`\`\`\n${errMsg}\n\`\`\``);
     }
+    user = data.attributes;
+  } catch (error) {
+    console.error("[createPanel] User creation error:", error.response?.data || error.message);
+    const status = error.response?.status || "N/A";
+    const detail = error.response?.data?.errors?.[0]?.detail || error.message || "Unknown error";
+    return await ctx.reply(`❌ *User Creation Error*\n\nStatus: ${status}\nDetail: ${detail}`);
+  }
 
-    const safeArgs = Array.isArray(args) ? args : [];
+  // -----------------------------------------------------------------
+  // 2. FETCH EGG CONFIGURATION
+  // -----------------------------------------------------------------
+  let eggData;
+  try {
+    const eggRes = await axios.get(
+      `${domain}/api/application/nests/${nestId}/eggs/${eggs}`,
+      {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${plta}`
+        },
+        timeout: 10000
+      }
+    );
+    eggData = eggRes.data.attributes;
+  } catch (error) {
+    console.error("[createPanel] Egg fetch error:", error.response?.data || error.message);
+    const status = error.response?.status || "N/A";
+    const detail = error.response?.data?.errors?.[0]?.detail || error.message || "Unknown error";
+    return await ctx.reply(`❌ *Egg Fetch Error*\n\nStatus: ${status}\nDetail: ${detail}`);
+  }
 
-    // Function ya kutuma Native Flow CTA Buttons (URL & Copy Buttons)
-    const sendCtaMessage = async (text, copyUsername = '', copyPassword = '') => {
-        try {
-            let thumbnailBuffer = null;
-            if (imageUrl) {
-                const buf = await fetchBuffer(imageUrl);
-                thumbnailBuffer = await resizeImg(buf, 300, 300);
-            }
+  await ctx.reply("⏳ *Inatengeneza Server kwenye Pterodactyl...*");
+  const startupCmd = eggData.startup;
 
-            const buttons = [];
+  // -----------------------------------------------------------------
+  // 3. TUMA PANEL DATA NA CTA BUTTONS (COPY USER, COPY PASS, OPEN URL)
+  // -----------------------------------------------------------------
+  const rThumbnail = "https://files.catbox.moe/54sbu9.png";
+  const panelBody = 
+    `📌 *PTERODACTYL PANEL DATA*\n\n` +
+    `👤 Username: ${user.username}\n` +
+    `🔑 Password: ${password}\n` +
+    `🌐 Domain: ${domain}\n\n` +
+    `_Hifadhi taarifa hizi kwa usalama._`;
 
-            // 1. CTA Open Domain / Web Button
-            buttons.push({
-                name: 'cta_url',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '🌐 Fungua Panel Web',
-                    url: BASE_URL,
-                    merchant_url: BASE_URL
-                })
-            });
+  try {
+    await new Button(ctx.core)
+      .setTitle("Panel Credentials")
+      .setBody(panelBody)
+      .setImage(rThumbnail)
+      .setFooter(config.msg?.footer || `© ${config?.bot?.name || "MICKEY-V3"}`)
+      .addCopy("📋 Copy Username", user.username)
+      .addCopy("🔑 Copy Password", String(password))
+      .addUrl("🌐 Open Panel", domain, false)
+      .send(targetJid, { quoted: null });
+  } catch (error) {
+    console.error("[createPanel] Button error, sending plain text:", error.message);
+    await ctx.reply(panelBody);
+  }
 
-            // 2. CTA Copy Username Button (kama ipo)
-            if (copyUsername) {
-                buttons.push({
-                    name: 'cta_copy',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '📋 Copy Username',
-                        id: 'copy_user',
-                        copy_code: copyUsername
-                    })
-                });
-            }
-
-            // 3. CTA Copy Password Button (kama ipo)
-            if (copyPassword) {
-                buttons.push({
-                    name: 'cta_copy',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '🔑 Copy Password',
-                        id: 'copy_pass',
-                        copy_code: copyPassword
-                    })
-                });
-            }
-
-            const contextInfo = {
-                forwardingScore: 999,
-                isForwarded: true,
-                mentionedJid: [sender]
-            };
-
-            const msg = generateWAMessageFromContent(chatId, {
-                viewOnceMessage: {
-                    message: {
-                        interactiveMessage: {
-                            header: {
-                                title: botName,
-                                hasMediaAttachment: true,
-                                locationMessage: {
-                                    degreesLatitude: 0,
-                                    degreesLongitude: 0,
-                                    name: 'Pterodactyl Panel Server',
-                                    jpegThumbnail: thumbnailBuffer
-                                }
-                            },
-                            body: { text: text },
-                            footer: { text: footer },
-                            nativeFlowMessage: {
-                                buttons: buttons
-                            },
-                            contextInfo
-                        }
-                    }
-                }
-            }, { userJid: (sock && sock.user && sock.user.id) || '' });
-
-            await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
-
-        } catch (e) {
-            console.error('[CTA Send Error, Falling back to text]:', e?.message || e);
-            await sock.sendMessage(chatId, { text: text }, { quoted: message });
+  // -----------------------------------------------------------------
+  // 4. CREATE SERVER KWENYE PTERODACTYL
+  // -----------------------------------------------------------------
+  let server;
+  try {
+    const resServer = await axios.post(
+      `${domain}/api/application/servers`,
+      {
+        name: username,
+        description: deskripsi,
+        user: user.id,
+        egg: parseInt(eggs),
+        docker_image: "ghcr.io/parkervcp/yolks:nodejs_18",
+        startup: startupCmd,
+        environment: {
+          INST: "npm",
+          USER_UPLOAD: "0",
+          AUTO_UPDATE: "0",
+          CMD_RUN: "npm start",
+          JS_FILE: "index.js",
+          MAIN_FILE: "index.js"
+        },
+        limits: {
+          memory: memo || 1024,
+          swap: 0,
+          disk: disk || 5120,
+          io: 500,
+          cpu: cpu || 100
+        },
+        feature_limits: {
+          databases: 0,
+          backups: 0,
+          allocations: 0
+        },
+        deploy: {
+          locations: [parseInt(locc)],
+          dedicated_ip: false,
+          port_range: []
         }
-    };
+      },
+      {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${plta}`
+        },
+        timeout: 15000
+      }
+    );
 
-    try {
-        switch (subCommand) {
-
-            // -----------------------------------------------------------------
-            // 1. BUY / KUTENGENEZA USER NA SERVER MPYA HALISI
-            // -----------------------------------------------------------------
-            case 'buy': {
-                const plan = safeArgs[0]?.toLowerCase();
-                const username = safeArgs[1];
-
-                if (!plan || !username) {
-                    return await sendCtaMessage(
-                        `❌ *Muundo Sio Sahihi!*\n\n` +
-                        `Tafadhali tumia muundo huu:\n` +
-                        `\`.buy 1gb <username>\`\n\n` +
-                        `*Mfano:* \`.buy 1gb mickey\``
-                    );
-                }
-
-                await sock.sendMessage(chatId, { text: `⏳ *Inaingia Admin Account & Inatengeneza Server Halisi kwenye Pterodactyl...*` }, { quoted: message });
-
-                // Step A: Login kama Admin ili kupata Admin Access Token
-                const adminToken = await getAdminToken();
-
-                const userPassword = `Mickey@${Math.floor(100000 + Math.random() * 900000)}`;
-                const userEmail = `${username.toLowerCase()}@mickey.tech`;
-
-                // Set Specs kulingana na Plan
-                let ramMB = 1024;
-                let diskMB = 25600;
-                let cpuLimit = 100;
-
-                if (plan === '2gb') { ramMB = 2048; diskMB = 51200; cpuLimit = 150; }
-                else if (plan === '4gb') { ramMB = 4096; diskMB = 102400; cpuLimit = 200; }
-
-                let createdUser = null;
-                let createdServer = null;
-
-                // Step B: Tengeneza User Mpya Web/Pterodactyl
-                try {
-                    const regRes = await axios.post(`${BASE_URL}/auth/register`, {
-                        username: username,
-                        email: userEmail,
-                        password: userPassword
-                    }, {
-                        headers: adminToken ? { 'Authorization': `Bearer ${adminToken}` } : { 'x-api-key': API_KEY },
-                        timeout: 12000
-                    });
-                    createdUser = regRes.data?.user || regRes.data;
-                } catch (err) {
-                    console.log('[User Reg Warning]: User inaweza kuwa ipo au API imetumia fallback', err?.message);
-                }
-
-                // Step C: Tengeneza Server Halisi Pterodactyl
-                try {
-                    const serverRes = await axios.post(`${BASE_URL}/api/external/servers`, {
-                        name: `${username}-server`,
-                        user_email: userEmail,
-                        username: username,
-                        password: userPassword,
-                        limits: {
-                            memory: ramMB,
-                            swap: 0,
-                            disk: diskMB,
-                            io: 500,
-                            cpu: cpuLimit
-                        }
-                    }, {
-                        headers: { 'x-api-key': API_KEY },
-                        timeout: 15000
-                    });
-
-                    createdServer = serverRes.data?.server || serverRes.data;
-                } catch (err) {
-                    console.error('[Server Creation Error]:', err?.response?.data || err.message);
-                }
-
-                // Hifadhi session
-                userSessions.set(sender, {
-                    username: username,
-                    email: userEmail,
-                    password: userPassword,
-                    plan: plan.toUpperCase(),
-                    createdAt: new Date().toLocaleDateString()
-                });
-
-                const successMessage = 
-                    `🎉 *PTERODACTYL SERVER IMEFANIKIWA KUTENGENEZWA!*\n\n` +
-                    `👤 *Username:* \`${username}\`\n` +
-                    `📧 *Email:* \`${userEmail}\`\n` +
-                    `🔑 *Password:* \`${userPassword}\`\n` +
-                    `📌 *Plan:* ${plan.toUpperCase()} (${ramMB}MB RAM)\n` +
-                    `🌐 *Panel Domain:* ${BASE_URL}\n\n` +
-                    `⚡ *Status:* Active & Live 🟢\n\n` +
-                    `_Bonyeza button hapo chini kufungua Panel au ku-copy credentials zako._`;
-
-                // Tuma ikiwa na CTA Buttons (Domain Link & Copy Username/Password)
-                return await sendCtaMessage(successMessage, username, userPassword);
-            }
-
-            // -----------------------------------------------------------------
-            // 2. MYPANEL / SERVER INFO (.mypanel)
-            // -----------------------------------------------------------------
-            case 'mypanel':
-            case 'panelinfo': {
-                const session = userSessions.get(sender);
-
-                if (!session) {
-                    return await sendCtaMessage(
-                        `❌ *Akaunti Haijapatikana!*\n\n` +
-                        `Hujaingia au huna panel active.\n` +
-                        `Tumia \`.buy 1gb <username>\` kutengeneza Server mpya.`
-                    );
-                }
-
-                const response = await axios.get(`${BASE_URL}/api/external/servers/${session.username}`, {
-                    headers: { 'x-api-key': API_KEY },
-                    timeout: 10000
-                }).catch(() => null);
-
-                let serverInfoText = '';
-
-                if (response && response.data && response.data.success) {
-                    const s = response.data.server;
-                    serverInfoText = 
-                        `📊 *TAARIFA ZA SERVER YAKO (PTERODACTYL)*\n\n` +
-                        `📌 *Server Name:* ${s.name}\n` +
-                        `🆔 *Server ID:* \`${s.id}\`\n` +
-                        `📊 *Status:* 🟢 ${s.status.toUpperCase()}\n\n` +
-                        `🌐 *CONNECTION DETAILS*\n` +
-                        `📍 *IP Address:* \`${s.ipAddress}\`\n` +
-                        `🔌 *Port:* \`${s.port}\`\n` +
-                        `📁 *SFTP Host:* \`${s.sftpHost}\`\n\n` +
-                        `👤 *USER DETAILS*\n` +
-                        `👤 *Username:* \`${session.username}\`\n` +
-                        `🔑 *Password:* \`${session.password}\``;
-                } else {
-                    serverInfoText = 
-                        `📊 *TAARIFA ZA PANEL YAKO*\n\n` +
-                        `👤 *Username:* \`${session.username}\`\n` +
-                        `📧 *Email:* \`${session.email}\`\n` +
-                        `🔑 *Password:* \`${session.password}\`\n` +
-                        `📌 *Plan:* ${session.plan}\n` +
-                        `📅 *Created:* ${session.createdAt}\n` +
-                        `🌐 *Domain:* ${BASE_URL}`;
-                }
-
-                return await sendCtaMessage(serverInfoText, session.username, session.password);
-            }
-
-            // -----------------------------------------------------------------
-            // 3. PACKAGES (.packages)
-            // -----------------------------------------------------------------
-            case 'packages':
-            case 'plans': {
-                const packageText = 
-                    `📦 *MICKEY PTERODACTYL PACKAGES*\n\n` +
-                    `1️⃣ *1GB RAM Plan*\n` +
-                    `   🧠 RAM: 1024 MB | 💾 Disk: 25GB\n` +
-                    `   ⚡ Command: \`.buy 1gb <username>\`\n\n` +
-                    `2️⃣ *2GB RAM Plan*\n` +
-                    `   🧠 RAM: 2048 MB | 💾 Disk: 50GB\n` +
-                    `   ⚡ Command: \`.buy 2gb <username>\`\n\n` +
-                    `3️⃣ *4GB RAM Plan*\n` +
-                    `   🧠 RAM: 4096 MB | 💾 Disk: 100GB\n` +
-                    `   ⚡ Command: \`.buy 4gb <username>\``;
-
-                return await sendCtaMessage(packageText);
-            }
-
-            default: {
-                return await sendCtaMessage(
-                    `❓ *Command Haijulikani!*\n\n` +
-                    `• \`.buy 1gb <username>\`\n` +
-                    `• \`.mypanel\`\n` +
-                    `• \`.packages\``
-                );
-            }
-        }
-
-    } catch (error) {
-        console.error('[Critical Error]:', error);
-        await sock.sendMessage(chatId, { text: `❌ *Error:* ${error.message || error}` }, { quoted: message });
+    const res = resServer.data;
+    if (res.errors) {
+      const errMsg = res.errors.map((e) => e.detail || JSON.stringify(e)).join("\n");
+      return await ctx.reply(`❌ *Server Creation Failed*\n\n\`\`\`\n${errMsg}\n\`\`\``);
     }
-};
+    server = res.attributes;
+  } catch (error) {
+    console.error("[createPanel] Server creation error:", error.response?.data || error.message);
+    const status = error.response?.status || "N/A";
+    const detail = error.response?.data?.errors?.[0]?.detail || error.message || "Unknown error";
+    return await ctx.reply(`❌ *Server Creation Error*\n\nStatus: ${status}\nDetail: ${detail}`);
+  }
 
-module.exports = panelCommand;
+  // -----------------------------------------------------------------
+  // 5. PING2 STYLE CONFIRMATION (BOOKING CARD NATIVE FLOW)
+  // -----------------------------------------------------------------
+  const ownerNumber = config?.owner?.id || "255777580820";
+  const phoneFormatted = ownerNumber.replace(/[^0-9]/g, "");
+  const groupLink = config?.bot?.groupLink || "https://chat.whatsapp.com";
+  const footerText = config?.msg?.footer || `© ${config?.bot?.name || "MICKEY-V3"}`;
+
+  const bookingDescription =
+    `🚀 *Server Created Successfully!*\n\n` +
+    `› User ID: ${user.id}\n` +
+    `› Server ID: ${server.id}\n` +
+    `› RAM: ${memo || 1024} MB\n` +
+    `› Disk: ${disk || 5120} MB\n` +
+    `› CPU: ${cpu || 100}%\n\n` +
+    `_Taarifa za login zimetumwa kwa mtumiaji._`;
+
+  const outerBody =
+    `🚀 *Server Created!*\n\n` +
+    `› Name: ${username}\n` +
+    `› RAM: ${memo || 1024} MB\n` +
+    `› Disk: ${disk || 5120} MB\n` +
+    `› CPU: ${cpu || 100}%\n\n` +
+    `_Bonyeza button hapo chini kuangalia taarifa kamili._`;
+
+  await ctx.core.relayMessage(
+    ctx._msg.key.remoteJid,
+    {
+      messageContextInfo: {
+        threadId: [],
+        deviceListMetadata: { senderKeyIndexes: [], recipientKeyIndexes: [] },
+        deviceListMetadataVersion: 2
+      },
+      interactiveMessage: {
+        header: { title: "Server Created", hasMediaAttachment: false },
+        body: { text: outerBody },
+        footer: { text: footerText },
+        nativeFlowMessage: {
+          buttons: [
+            {
+              name: "booking_confirmation",
+              buttonParamsJson: JSON.stringify({
+                start_datetime: new Date().toISOString(),
+                end_datetime: new Date(Date.now() + 600000).toISOString(),
+                location: "Pterodactyl Panel",
+                booking_url: groupLink,
+                phone_number: phoneFormatted,
+                booking_management_url: `https://wa.me/${phoneFormatted}`,
+                description: bookingDescription,
+                email: "",
+                display_text: "View Server Details",
+                display_content: {
+                  display_language: "en",
+                  display_meeting_type: "Server Information",
+                  display_bottom_sheet_header: "Server Details",
+                  display_add_to_calendar_cta_text: "SERVER",
+                  display_view_on_maps_cta_text: "View Panel",
+                  display_manage_booking_cta_text: "Contact",
+                  display_manage_booking_not_supported_text: "Server Info",
+                  display_read_more: "View Details"
+                }
+              })
+            }
+          ],
+          messageParamsJson: "{}"
+        },
+        contextInfo: {
+          mentionedJid: [],
+          groupMentions: [],
+          statusAttributions: [],
+          stanzaId: "StatusBiz",
+          participant: "0@s.whatsapp.net",
+          quotedMessage: {
+            contactMessage: {
+              displayName: config?.bot?.name || "MICKEY-V3",
+              vcard: `BEGIN:VCARD\nVERSION:3.0\nN:${config?.bot?.name || "MICKEY-V3"}\nFN:${config?.bot?.name || "MICKEY-V3"}\nORG:${config?.bot?.name || "MICKEY-V3"};\nTEL;type=CELL;type=VOICE;waid=${phoneFormatted}:${phoneFormatted}\nEND:VCARD`
+            }
+          },
+          remoteJid: "status@broadcast"
+        }
+      }
+    },
+    {
+      additionalNodes: [
+        {
+          tag: "biz",
+          attrs: {},
+          content: [
+            {
+              tag: "interactive",
+              attrs: { type: "native_flow", v: "1" },
+              content: [{ tag: "native_flow", attrs: { v: "9", name: "mixed" } }]
+            }
+          ]
+        }
+      ]
+    }
+  );
+}
+
+module.exports = createPanel;
