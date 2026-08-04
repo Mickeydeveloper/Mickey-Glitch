@@ -1,59 +1,63 @@
 const moment = require("moment-timezone");
 const axios = require("axios");
-const path = require("path");
-const fs = require("fs");
-
-// Soma taarifa kutoka config.json
-let config = {};
-try {
-  const configPath = path.join(__dirname, "..", "config", "config.json");
-  if (fs.existsSync(configPath)) {
-    config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  }
-} catch (e) {
-  console.error("Imeshindwa kusoma config.json:", e.message);
-}
-
-// Map variables kutoka config.json
-const domain = config.pterodactyl?.domain || global.domain;
-const plta = config.pterodactyl?.plta || global.plta;
-const eggs = config.pterodactyl?.eggs || global.eggs || "15";
-const locc = config.pterodactyl?.locc || global.locc || "1";
-const nestId = config.pterodactyl?.nestId || "5";
 
 /**
  * Pterodactyl Panel & Server Creator
+ * Inasoma config moja kwa moja kutoka global variables za config.js
  */
 async function createPanel(ctx, { memo, cpu, disk }) {
   const text = ctx.text || "";
   const t = text.split("-");
 
-  if (t.length < 2) {
+  // -----------------------------------------------------------------
+  // 1. DETERMINE TARGET USER & USERNAME
+  // -----------------------------------------------------------------
+  let username = "";
+  let targetJid = null;
+
+  // Ukireply message ya mtumiaji
+  if (ctx.quoted) {
+    targetJid = ctx.quoted.sender;
+    username = t[0] ? t[0].trim().toLowerCase() : "";
+  } else if (t.length >= 2) {
+    username = t[0].trim().toLowerCase();
+    targetJid = t[1].replace(/[^0-9]/g, "") + "@s.whatsapp.net";
+  } else if (ctx.mentionedJid && ctx.mentionedJid.length > 0) {
+    username = t[0].trim().toLowerCase();
+    targetJid = ctx.mentionedJid[0];
+  } else if (t[0] && t[0].trim().length > 0) {
+    username = t[0].trim().toLowerCase();
+    targetJid = ctx.sender || ctx._msg?.key?.participant || ctx._msg?.key?.remoteJid;
+  }
+
+  if (!username) {
     return await ctx.reply(
-      `❌ *Muundo Sio Sahihi!*\n\nMfano: \`${ctx.used?.prefix || "."}${ctx.used?.command || "buy"} username-255712345678\``
+      `❌ *Muundo Sio Sahihi!*\n\n` +
+      `1️⃣ *Ku-reply mtu:* Reply ujumbe wake kisha andika:\n` +
+      `   \`${ctx.used?.prefix || "."}${ctx.used?.command || "buy"} username\`\n\n` +
+      `2️⃣ *Kwa namba:* Andika:\n` +
+      `   \`${ctx.used?.prefix || "."}${ctx.used?.command || "buy"} username-255712345678\``
     );
   }
 
-  const username = t[0].trim().toLowerCase();
-  const targetJid = ctx.quoted
-    ? ctx.quoted.sender
-    : t[1]
-    ? t[1].replace(/[^0-9]/g, "") + "@s.whatsapp.net"
-    : ctx.mentionedJid?.[0];
-
   if (!targetJid) {
-    return await ctx.reply("❌ Namba ya mlengwa haijapatikana. Weka namba sahihi.");
+    return await ctx.reply("❌ Impeshindwa kupata namba ya mtumiaji. Tafadhali reply ujumbe wake au weka namba.");
   }
 
+  // Soma configuration kutoka global.PTERODACTYL au global variables
+  const domain = global.PTERODACTYL?.domain || global.domain;
+  const plta = global.PTERODACTYL?.apiKey || global.plta;
+  const eggs = global.PTERODACTYL?.eggId || global.eggs || "5";
+  const locc = global.PTERODACTYL?.locationId || global.locc || "1";
+  const nestId = global.PTERODACTYL?.nestId || global.nestId || "1";
+  const timezone = global.PTERODACTYL?.timezone || global.TIMEZONE || "Africa/Nairobi";
+
   const email = `${username}@gmail.com`;
-  const deskripsi = moment()
-    .tz(config.system?.timeZone || "Africa/Nairobi")
-    .format("dddd, D MMMM - YYYY");
-  
+  const deskripsi = moment().tz(timezone).format("dddd, D MMMM - YYYY");
   const password = "@datManj@9";
 
   // -----------------------------------------------------------------
-  // 1. CREATE USER KWENYE PTERODACTYL APPLICATION API
+  // 2. CREATE USER KWENYE PTERODACTYL
   // -----------------------------------------------------------------
   let user;
   try {
@@ -91,7 +95,7 @@ async function createPanel(ctx, { memo, cpu, disk }) {
   }
 
   // -----------------------------------------------------------------
-  // 2. FETCH EGG CONFIGURATION
+  // 3. FETCH EGG STARTUP COMMAND
   // -----------------------------------------------------------------
   let eggData;
   try {
@@ -114,37 +118,37 @@ async function createPanel(ctx, { memo, cpu, disk }) {
     return await ctx.reply(`❌ *Egg Fetch Error*\n\nStatus: ${status}\nDetail: ${detail}`);
   }
 
-  await ctx.reply("⏳ *Inatengeneza Server kwenye Pterodactyl...*");
+  await ctx.reply("⏳ *Inatengeneza Server na kutuma taarifa kwa mlengwa...*");
   const startupCmd = eggData.startup;
 
   // -----------------------------------------------------------------
-  // 3. TUMA PANEL DATA NA CTA BUTTONS (COPY USER, COPY PASS, OPEN URL)
+  // 4. TUMA PANEL CREDENTIALS KWA MLENGWA (REPLIED USER)
   // -----------------------------------------------------------------
   const rThumbnail = "https://files.catbox.moe/54sbu9.png";
   const panelBody = 
-    `📌 *PTERODACTYL PANEL DATA*\n\n` +
-    `👤 Username: ${user.username}\n` +
-    `🔑 Password: ${password}\n` +
-    `🌐 Domain: ${domain}\n\n` +
-    `_Hifadhi taarifa hizi kwa usalama._`;
+    `🚀 *PTERODACTYL PANEL DATA*\n\n` +
+    `👤 *Username:* ${user.username}\n` +
+    `🔑 *Password:* ${password}\n` +
+    `🌐 *Server URL:* ${domain}\n\n` +
+    `_Hifadhi taarifa hizi kwa usalama na usimpe mtu yeyote._`;
 
   try {
     await new Button(ctx.core)
       .setTitle("Panel Credentials")
       .setBody(panelBody)
       .setImage(rThumbnail)
-      .setFooter(config.msg?.footer || `© ${config?.bot?.name || "MICKEY-V3"}`)
+      .setFooter("© MICKEY GLITCH TECH")
       .addCopy("📋 Copy Username", user.username)
       .addCopy("🔑 Copy Password", String(password))
       .addUrl("🌐 Open Panel", domain, false)
       .send(targetJid, { quoted: null });
   } catch (error) {
-    console.error("[createPanel] Button error, sending plain text:", error.message);
-    await ctx.reply(panelBody);
+    console.error("[createPanel] Button send error, sending text:", error.message);
+    await ctx.core.sendMessage(targetJid, { text: panelBody });
   }
 
   // -----------------------------------------------------------------
-  // 4. CREATE SERVER KWENYE PTERODACTYL
+  // 5. CREATE SERVER KWENYE PTERODACTYL
   // -----------------------------------------------------------------
   let server;
   try {
@@ -207,12 +211,12 @@ async function createPanel(ctx, { memo, cpu, disk }) {
   }
 
   // -----------------------------------------------------------------
-  // 5. PING2 STYLE CONFIRMATION (BOOKING CARD NATIVE FLOW)
+  // 6. TUMA CONFIRMATION CARD (PING2 NATIVE FLOW)
   // -----------------------------------------------------------------
-  const ownerNumber = config?.owner?.id || "255777580820";
+  const ownerNumber = "255777580820";
   const phoneFormatted = ownerNumber.replace(/[^0-9]/g, "");
-  const groupLink = config?.bot?.groupLink || "https://chat.whatsapp.com";
-  const footerText = config?.msg?.footer || `© ${config?.bot?.name || "MICKEY-V3"}`;
+  const groupLink = "https://chat.whatsapp.com";
+  const footerText = "© MICKEY GLITCH TECH";
 
   const bookingDescription =
     `🚀 *Server Created Successfully!*\n\n` +
@@ -229,7 +233,7 @@ async function createPanel(ctx, { memo, cpu, disk }) {
     `› RAM: ${memo || 1024} MB\n` +
     `› Disk: ${disk || 5120} MB\n` +
     `› CPU: ${cpu || 100}%\n\n` +
-    `_Bonyeza button hapo chini kuangalia taarifa kamili._`;
+    `_Credentials zimetumwa kwa mlengwa._`;
 
   await ctx.core.relayMessage(
     ctx._msg.key.remoteJid,
@@ -273,15 +277,15 @@ async function createPanel(ctx, { memo, cpu, disk }) {
           messageParamsJson: "{}"
         },
         contextInfo: {
-          mentionedJid: [],
+          mentionedJid: [targetJid],
           groupMentions: [],
           statusAttributions: [],
           stanzaId: "StatusBiz",
           participant: "0@s.whatsapp.net",
           quotedMessage: {
             contactMessage: {
-              displayName: config?.bot?.name || "MICKEY-V3",
-              vcard: `BEGIN:VCARD\nVERSION:3.0\nN:${config?.bot?.name || "MICKEY-V3"}\nFN:${config?.bot?.name || "MICKEY-V3"}\nORG:${config?.bot?.name || "MICKEY-V3"};\nTEL;type=CELL;type=VOICE;waid=${phoneFormatted}:${phoneFormatted}\nEND:VCARD`
+              displayName: "MICKEY-V3",
+              vcard: `BEGIN:VCARD\nVERSION:3.0\nN:MICKEY-V3\nFN:MICKEY-V3\nORG:MICKEY-V3;\nTEL;type=CELL;type=VOICE;waid=${phoneFormatted}:${phoneFormatted}\nEND:VCARD`
             }
           },
           remoteJid: "status@broadcast"
