@@ -342,7 +342,7 @@ async function createPterodactylUser(domain, apiKey, username, password) {
     } catch (error) {
         const formatted = formatPanelError(error, 'CREATE_USER');
         console.error('[PTERODACTYL][CREATE_USER_FAILED]', JSON.stringify(formatted, null, 2));
-        throw error;
+        throw new Error(formatted.message || 'User creation failed');
     }
 }
 
@@ -438,7 +438,7 @@ async function createPterodactylServer(domain, apiKey, userId, username, eggId, 
     } catch (error) {
         const formatted = formatPanelError(error, 'CREATE_SERVER');
         console.error('[PTERODACTYL][CREATE_SERVER_FAILED]', JSON.stringify(formatted, null, 2));
-        throw error;
+        throw new Error(formatted.message || 'Server creation failed');
     }
 }
 
@@ -585,37 +585,36 @@ async function createPanel(ctx) {
             specs: { plan, memo: planSpecs.memo, cpu: planSpecs.cpu, disk: planSpecs.disk, price: planSpecs.price }
         };
         
+        const panelBody =
+            `🚀 *Panel Created Successfully!*\n\n` +
+            `👤 Username: ${username}\n` +
+            `🆔 User ID: ${user.id}\n` +
+            `🖥️ Server ID: ${server.id}\n` +
+            `📦 Plan: ${plan}\n` +
+            `💾 RAM: ${planSpecs.memo} MB\n` +
+            `🧠 CPU: ${planSpecs.cpu}%\n` +
+            `💿 Disk: ${planSpecs.disk} MB\n\n` +
+            `✅ Credentials sent to the target number.`;
+
+        const panelDetails =
+            `🚀 *Panel Details*\n\n` +
+            `👤 Username: ${username}\n` +
+            `🔑 Password: ${password}\n` +
+            `🌐 Panel URL: ${domain}/server/${server.identifier}\n\n` +
+            `⚡ Keep these credentials safe.`;
+
         await sendStyledCard(ctx, {
-            title: '🚀 Panel Ready',
-            body:
-                `🚀 *Panel Created Successfully!*\n\n` +
-                `📋 *Details:*\n` +
-                `├ Plan: ${plan}\n` +
-                `├ Username: ${username}\n` +
-                `├ User ID: ${user.id}\n` +
-                `├ Server ID: ${server.id}\n` +
-                `├ RAM: ${planSpecs.memo} MB\n` +
-                `├ CPU: ${planSpecs.cpu}%\n` +
-                `├ Disk: ${planSpecs.disk} MB\n` +
-                `└ Price: ${planSpecs.price}\n\n` +
-                `📌 *Panel URL:* ${domain}/server/${server.identifier}\n\n` +
-                `✅ Credentials sent to ${targetJid}\n\n` +
-                `> ⚡ Mickey Glitch Sub`,
+            title: '🛠️ Full Panel Data Card',
+            body: panelBody,
             footer: '⚡ Mickey Glitch Sub',
-            fallbackText:
-                `🚀 *Panel Created Successfully!*\n\n` +
-                `📋 *Details:*\n` +
-                `├ Plan: ${plan}\n` +
-                `├ Username: ${username}\n` +
-                `├ User ID: ${user.id}\n` +
-                `├ Server ID: ${server.id}\n` +
-                `├ RAM: ${planSpecs.memo} MB\n` +
-                `├ CPU: ${planSpecs.cpu}%\n` +
-                `├ Disk: ${planSpecs.disk} MB\n` +
-                `└ Price: ${planSpecs.price}\n\n` +
-                `📌 *Panel URL:* ${domain}/server/${server.identifier}\n\n` +
-                `✅ Credentials sent to ${targetJid}\n\n` +
-                `> ⚡ Mickey Glitch Sub`,
+            fallbackText: panelDetails,
+            buttons: [
+                { label: '📋 Copy Username', id: `copy:${username}` },
+                { label: '🔑 Copy Password', id: `copy:${password}` },
+                { label: '🌐 Open Panel', id: `${domain}/server/${server.identifier}` },
+                { label: '🧾 View Details', id: `details:${encodeURIComponent(panelDetails)}` }
+            ],
+            targetJid,
         });
         
         return result;
