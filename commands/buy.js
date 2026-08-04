@@ -486,9 +486,13 @@ async function createPanel(ctx) {
         if (!domain || !apiKey) {
             await sendStyledCard(ctx, {
                 title: '⚠️ Panel Setup Missing',
-                body: '❌ *Panel configuration missing!*\n\nContact admin to set up PTERODACTYL config.',
+                body: '❌ *Panel configuration missing!*\n\nPlease contact the admin to configure the Pterodactyl panel credentials first.',
                 footer: '⚡ Mickey Glitch Sub',
-                fallbackText: '❌ *Panel configuration missing!*\n\nContact admin to set up PTERODACTYL config.',
+                fallbackText: '❌ *Panel configuration missing!*\n\nPlease contact the admin to configure the Pterodactyl panel credentials first.',
+                buttons: [
+                    { label: '📞 Contact Admin', id: '.owner' },
+                    { label: '🛠️ Check Setup', id: '.menu' }
+                ],
             });
             return null;
         }
@@ -500,9 +504,13 @@ async function createPanel(ctx) {
         // ─── Send processing ────────────────────────────────────────────
         await sendStyledCard(ctx, {
             title: '⏳ Creating Panel',
-            body: `⏳ *Creating ${plan} (${planSpecs.memo}MB) panel for ${username}...*`,
+            body: `⏳ *Creating ${plan} (${planSpecs.memo}MB) panel for ${username}...*\n\nPlease wait while the panel is being prepared.`,
             footer: '⚡ Mickey Glitch Sub',
-            fallbackText: `⏳ *Creating ${plan} (${planSpecs.memo}MB) panel for ${username}...*`,
+            fallbackText: `⏳ *Creating ${plan} (${planSpecs.memo}MB) panel for ${username}...*\n\nPlease wait while the panel is being prepared.`,
+            buttons: [
+                { label: '⏳ In Progress', id: '.buy' },
+                { label: '📖 Help', id: '.buy help' }
+            ],
         });
         
         // ─── Create or get user ─────────────────────────────────────────
@@ -617,9 +625,13 @@ async function createPanel(ctx) {
         console.error('[CREATEPANEL ERROR]', JSON.stringify(formatted, null, 2));
         await sendStyledCard(ctx, {
             title: '❌ Panel Creation Failed',
-            body: `❌ *Panel Creation Failed*\n\n${formatted.message}`,
+            body: `❌ *Failed to create panel.*\n\n${formatted.message || 'Unknown error occurred while creating the server.'}`,
             footer: '⚡ Mickey Glitch Sub',
-            fallbackText: `❌ *Panel Creation Failed*\n\n${formatted.message}`,
+            fallbackText: `❌ *Failed to create panel.*\n\n${formatted.message || 'Unknown error occurred while creating the server.'}`,
+            buttons: [
+                { label: '🔁 Try Again', id: '.buy' },
+                { label: '📞 Contact Admin', id: '.owner' }
+            ],
         });
         return null;
     }
