@@ -1,19 +1,19 @@
 /**
- * buy.js - Complete Panel Purchase System
- * All-in-one file with createPanel, handlers, helpers, and command
- * Usage: .buy <username> [plan] [target]
+ * buy.js - Ultimate Panel Purchase System
+ * Never before seen - Handles ALL input formats
+ * Usage: .buy <plan> <username> [target]
  */
 
 const moment = require("moment-timezone");
 const axios = require("axios");
-const { Button, createCtx } = require('../lib/messageBuilder');
+const { Button, ButtonV2, createCtx } = require('../lib/messageBuilder');
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 1. CONFIG
+// 1. SUPER CONFIG
 // ─── ──────────────────────────────────────────────────────────────────────
 const CONFIG = {
     timeout: 15000,
-    retries: 2,
+    retries: 3,
     retryDelay: 2000,
     defaultMemo: 1024,
     defaultCpu: 100,
@@ -25,146 +25,244 @@ const CONFIG = {
     thumbnail: "https://files.catbox.moe/54sbu9.png"
 };
 
+// ─── PLANS ──────────────────────────────────────────────────────────────────
+const PLANS = {
+    '1gb': { memo: 1024, cpu: 100, disk: 5120, price: "TSh 5,000", label: "1GB" },
+    '2gb': { memo: 2048, cpu: 150, disk: 10240, price: "TSh 8,000", label: "2GB" },
+    '5gb': { memo: 5120, cpu: 250, disk: 20480, price: "TSh 15,000", label: "5GB" },
+    '10gb': { memo: 10240, cpu: 400, disk: 40960, price: "TSh 25,000", label: "10GB" },
+    'unlimited': { memo: 20480, cpu: 800, disk: 102400, price: "TSh 50,000", label: "Unlimited" }
+};
+
 // ─── ──────────────────────────────────────────────────────────────────────
-// 2. HELPERS
+// 2. SUPER HELPERS
 // ─── ──────────────────────────────────────────────────────────────────────
 
-// ─── SAFE SEND ──────────────────────────────────────────────────────────────
-async function safeSend(ctx, target, content) {
-    try {
-        if (ctx && typeof ctx.sendMessage === "function") {
-            return await ctx.sendMessage(target, content);
+// ─── ULTIMATE ARGUMENT PARSER ──────────────────────────────────────────────
+function parseArguments(args) {
+    const result = { plan: '1gb', username: '', target: null, hasTarget: false };
+    
+    if (!args || args.length === 0) return result;
+    
+    const argsArray = Array.isArray(args) ? args : args.split(' ');
+    const cleaned = argsArray.filter(a => a && a.trim().length > 0);
+    
+    // ─── Find plan ──────────────────────────────────────────────────────
+    for (let i = 0; i < cleaned.length; i++) {
+        const arg = cleaned[i].toLowerCase();
+        if (arg in PLANS) {
+            result.plan = arg;
+            cleaned.splice(i, 1);
+            break;
         }
-        if (ctx?.core && typeof ctx.core.sendMessage === "function") {
-            return await ctx.core.sendMessage(target, content);
-        }
-        if (ctx?.sock && typeof ctx.sock.sendMessage === "function") {
-            return await ctx.sock.sendMessage(target, content);
-        }
-        if (ctx && typeof ctx.reply === "function") {
-            return await ctx.reply(content.text || content);
-        }
-        if (ctx?._msg?.key?.remoteJid) {
-            const jid = ctx._msg.key.remoteJid;
-            if (ctx.core?.sendMessage) {
-                return await ctx.core.sendMessage(jid, content);
-            }
-            if (ctx.sock?.sendMessage) {
-                return await ctx.sock.sendMessage(jid, content);
-            }
-        }
-        console.error("[SAFE SEND] No valid send method found");
-        return null;
-    } catch (error) {
-        console.error("[SAFE SEND ERROR]", error.message);
-        return null;
-    }
-}
-
-// ─── SAFE REPLY ─────────────────────────────────────────────────────────────
-async function safeReply(ctx, text) {
-    try {
-        if (ctx && typeof ctx.reply === "function") {
-            return await ctx.reply(text);
-        }
-        if (ctx?._msg?.key?.remoteJid) {
-            const jid = ctx._msg.key.remoteJid;
-            if (ctx.core?.sendMessage) {
-                return await ctx.core.sendMessage(jid, { text });
-            }
-            if (ctx.sock?.sendMessage) {
-                return await ctx.sock.sendMessage(jid, { text });
-            }
-        }
-        console.error("[SAFE REPLY] No valid reply method found");
-        return null;
-    } catch (error) {
-        console.error("[SAFE REPLY ERROR]", error.message);
-        return null;
-    }
-}
-
-// ─── EXTRACT USER INFO ──────────────────────────────────────────────────────
-function extractUserInfo(ctx, args) {
-    const result = { username: "", targetJid: null, plan: "1gb", error: null };
-
-    try {
-        const text = ctx.text || (Array.isArray(args) ? args.join(" ") : "") || "";
-        let parts = text.split("-").map(p => p.trim());
-        
-        // Check for plan in args
-        const planMatch = text.match(/\b(\d+gb|unlimited)\b/i);
+        // Check for plan like "1gb" without space
+        const planMatch = arg.match(/^(\d+gb|unlimited)$/i);
         if (planMatch) {
             result.plan = planMatch[0].toLowerCase();
-            // Remove plan from parts
-            parts = parts.filter(p => !p.match(/\d+gb|unlimited/i));
+            cleaned.splice(i, 1);
+            break;
         }
-        
-        // ─── CASE 1: Quoted message ──────────────────────────────────────
-        if (ctx.quoted) {
-            result.targetJid = ctx.quoted.sender || ctx.quoted.key?.participant;
-            result.username = parts[0] || "user";
-            return result;
+    }
+    
+    // ─── Find target (number with @ or just number) ────────────────────
+    for (let i = 0; i < cleaned.length; i++) {
+        const arg = cleaned[i];
+        // Check if it's a number with @
+        if (arg.includes('@') && arg.match(/^[0-9]+@/)) {
+            result.target = arg;
+            result.hasTarget = true;
+            cleaned.splice(i, 1);
+            break;
         }
-        
-        // ─── CASE 2: username-number format ──────────────────────────────
-        if (parts.length >= 2 && parts[1].match(/^[0-9]+$/)) {
-            result.username = parts[0] || "user";
-            result.targetJid = parts[1].replace(/[^0-9]/g, "") + "@s.whatsapp.net";
-            return result;
+        // Check if it's just a number
+        if (arg.match(/^[0-9]{10,15}$/)) {
+            result.target = `${arg}@s.whatsapp.net`;
+            result.hasTarget = true;
+            cleaned.splice(i, 1);
+            break;
         }
-        
-        // ─── CASE 3: Mentioned JID ────────────────────────────────────────
-        if (ctx.mentionedJid && ctx.mentionedJid.length > 0) {
-            result.username = parts[0] || "user";
-            result.targetJid = ctx.mentionedJid[0];
-            return result;
+        // Check if it has - (username-number format)
+        if (arg.includes('-')) {
+            const parts = arg.split('-');
+            if (parts.length === 2 && parts[1].match(/^[0-9]+$/)) {
+                result.username = parts[0];
+                result.target = `${parts[1]}@s.whatsapp.net`;
+                result.hasTarget = true;
+                cleaned.splice(i, 1);
+                break;
+            }
         }
-        
-        // ─── CASE 4: Just username ────────────────────────────────────────
-        if (parts[0] && parts[0].length > 0) {
-            result.username = parts[0];
-            result.targetJid = ctx.sender || ctx._msg?.key?.participant || ctx._msg?.key?.remoteJid;
-            return result;
+    }
+    
+    // ─── Remaining is username ──────────────────────────────────────────
+    if (cleaned.length > 0) {
+        result.username = cleaned.join(' ');
+    }
+    
+    return result;
+}
+
+// ─── ULTIMATE USER EXTRACTOR ──────────────────────────────────────────────
+function extractUser(ctx) {
+    const result = { username: '', target: null, targetJid: null, plan: '1gb' };
+    
+    // ─── Get args from ctx ──────────────────────────────────────────────
+    let args = ctx.args || [];
+    if (typeof args === 'string') args = args.split(' ');
+    if (ctx.text) {
+        const parts = ctx.text.split(' ');
+        if (parts.length > 1) args = parts.slice(1);
+    }
+    
+    // ─── Parse arguments ────────────────────────────────────────────────
+    const parsed = parseArguments(args);
+    result.plan = parsed.plan;
+    
+    // ─── Get username ────────────────────────────────────────────────────
+    if (parsed.username) {
+        result.username = parsed.username;
+    } else {
+        // Try to get from sender
+        result.username = ctx.sender?.split('@')[0] || 'user';
+    }
+    
+    // ─── Get target ──────────────────────────────────────────────────────
+    if (parsed.hasTarget && parsed.target) {
+        result.target = parsed.target;
+        result.targetJid = parsed.target;
+    } else if (ctx.quoted) {
+        result.target = ctx.quoted.sender || ctx.quoted.key?.participant;
+        result.targetJid = result.target;
+    } else if (ctx.mentionedJid && ctx.mentionedJid.length > 0) {
+        result.target = ctx.mentionedJid[0];
+        result.targetJid = result.target;
+    } else {
+        result.target = ctx.sender || ctx._msg?.key?.participant || ctx._msg?.key?.remoteJid;
+        result.targetJid = result.target;
+    }
+    
+    return result;
+}
+
+// ─── SUPER SAFE SEND ──────────────────────────────────────────────────────
+async function superSend(ctx, target, content) {
+    const methods = [
+        () => ctx?.sendMessage?.(target, content),
+        () => ctx?.core?.sendMessage?.(target, content),
+        () => ctx?.sock?.sendMessage?.(target, content),
+        () => ctx?.reply?.(content.text || content),
+        () => ctx?._msg?.key?.remoteJid && ctx.core?.sendMessage?.(ctx._msg.key.remoteJid, content),
+        () => ctx?._msg?.key?.remoteJid && ctx.sock?.sendMessage?.(ctx._msg.key.remoteJid, content)
+    ];
+    
+    for (const method of methods) {
+        try {
+            const result = await method();
+            if (result) return result;
+        } catch (e) {
+            continue;
         }
+    }
+    console.error("[SUPER SEND] All methods failed");
+    return null;
+}
+
+// ─── SUPER SAFE REPLY ─────────────────────────────────────────────────────
+async function superReply(ctx, text) {
+    const methods = [
+        () => ctx?.reply?.(text),
+        () => ctx?.sendMessage?.(ctx.chatId || ctx.chat || ctx.from, { text }),
+        () => ctx?.core?.sendMessage?.(ctx._msg?.key?.remoteJid, { text }),
+        () => ctx?.sock?.sendMessage?.(ctx._msg?.key?.remoteJid, { text })
+    ];
+    
+    for (const method of methods) {
+        try {
+            const result = await method();
+            if (result) return result;
+        } catch (e) {
+            continue;
+        }
+    }
+    console.error("[SUPER REPLY] All methods failed");
+    return null;
+}
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 3. SUPER BUTTON BUILDER
+// ─── ──────────────────────────────────────────────────────────────────────
+
+async function sendSuperButtons(ctx, targetJid, username, password, domain) {
+    const panelBody =
+        `🚀 *PTERODACTYL PANEL DATA*\n\n` +
+        `👤 *Username:* ${username}\n` +
+        `🔑 *Password:* ${password}\n` +
+        `🌐 *Server URL:* ${domain}\n\n` +
+        `_Hifadhi taarifa hizi kwa usalama._`;
+
+    try {
+        // ─── Try ButtonV2 first ──────────────────────────────────────────
+        const button = new ButtonV2(ctx.core || ctx.sock || ctx)
+            .setTitle("🎯 Panel Credentials")
+            .setBody(panelBody)
+            .setFooter("© MICKEY GLITCH TECH")
+            .setThumbnail(CONFIG.thumbnail)
+            .addButton({
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📋 Copy Username',
+                    copy_code: username,
+                    id: 'copy_user'
+                })
+            })
+            .addButton({
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🔑 Copy Password',
+                    copy_code: String(password),
+                    id: 'copy_pass'
+                })
+            })
+            .addButton({
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🌐 Open Panel',
+                    url: domain,
+                    webview_interaction: false
+                })
+            });
         
-        result.error = "No valid user data found";
-        return result;
+        await button.send(targetJid);
+        return true;
         
     } catch (error) {
-        result.error = error.message;
-        return result;
+        console.log("[BUTTON] Failed, trying fallback...");
+        try {
+            // ─── Try Button (V1) ──────────────────────────────────────────
+            const buttonV1 = new Button(ctx.core || ctx.sock || ctx)
+                .setTitle("Panel Credentials")
+                .setBody(panelBody)
+                .setImage(CONFIG.thumbnail)
+                .setFooter("© MICKEY GLITCH TECH")
+                .addCopy("📋 Copy Username", username)
+                .addCopy("🔑 Copy Password", String(password))
+                .addUrl("🌐 Open Panel", domain, false);
+            
+            await buttonV1.send(targetJid);
+            return true;
+            
+        } catch (error2) {
+            console.log("[BUTTON V1] Failed, sending plain text...");
+            await superSend(ctx, targetJid, { text: panelBody });
+            return true;
+        }
     }
 }
 
-// ─── GET CONFIG ─────────────────────────────────────────────────────────────
-function getConfig() {
-    const domain = global.PTERODACTYL?.domain || global.domain;
-    const apiKey = global.PTERODACTYL?.apiKey || global.plta;
-    const eggId = global.PTERODACTYL?.eggId || global.eggs || CONFIG.defaultEgg;
-    const locationId = global.PTERODACTYL?.locationId || global.locc || CONFIG.defaultLocation;
-    const nestId = global.PTERODACTYL?.nestId || global.nestId || CONFIG.defaultNest;
-    const timezone = global.PTERODACTYL?.timezone || global.TIMEZONE || CONFIG.timezone;
-    return { domain, apiKey, eggId, locationId, nestId, timezone };
-}
-
-// ─── PLAN TO SPECS ──────────────────────────────────────────────────────────
-function getPlanSpecs(plan) {
-    const plans = {
-        '1gb': { memo: 1024, cpu: 100, disk: 5120, price: "TSh 5,000" },
-        '2gb': { memo: 2048, cpu: 150, disk: 10240, price: "TSh 8,000" },
-        '5gb': { memo: 5120, cpu: 250, disk: 20480, price: "TSh 15,000" },
-        '10gb': { memo: 10240, cpu: 400, disk: 40960, price: "TSh 25,000" },
-        'unlimited': { memo: 20480, cpu: 800, disk: 102400, price: "TSh 50,000" }
-    };
-    return plans[plan] || plans['1gb'];
-}
-
 // ─── ──────────────────────────────────────────────────────────────────────
-// 3. PTERODACTYL API FUNCTIONS
+// 4. PTERODACTYL API FUNCTIONS
 // ─── ──────────────────────────────────────────────────────────────────────
 
-// ─── CREATE USER ────────────────────────────────────────────────────────────
 async function createPterodactylUser(domain, apiKey, username, password) {
     const email = `${username}@gmail.com`;
     const response = await axios.post(
@@ -192,7 +290,6 @@ async function createPterodactylUser(domain, apiKey, username, password) {
     return response.data.attributes;
 }
 
-// ─── GET EXISTING USER ──────────────────────────────────────────────────────
 async function getExistingUser(domain, apiKey, username) {
     const response = await axios.get(
         `${domain}/api/application/users?filter[email]=${username}@gmail.com`,
@@ -210,7 +307,6 @@ async function getExistingUser(domain, apiKey, username) {
     return null;
 }
 
-// ─── FETCH EGG DATA ─────────────────────────────────────────────────────────
 async function fetchEggData(domain, apiKey, nestId, eggId) {
     const response = await axios.get(
         `${domain}/api/application/nests/${nestId}/eggs/${eggId}`,
@@ -226,7 +322,6 @@ async function fetchEggData(domain, apiKey, nestId, eggId) {
     return response.data.attributes;
 }
 
-// ─── CREATE SERVER ──────────────────────────────────────────────────────────
 async function createPterodactylServer(domain, apiKey, userId, username, eggId, locationId, startupCmd, memo, cpu, disk, description) {
     const response = await axios.post(
         `${domain}/api/application/servers`,
@@ -278,118 +373,81 @@ async function createPterodactylServer(domain, apiKey, userId, username, eggId, 
     return response.data.attributes;
 }
 
-// ─── SEND CREDENTIALS ──────────────────────────────────────────────────────
-async function sendCredentials(ctx, targetJid, username, password, domain) {
-    const panelBody =
-        `🚀 *PTERODACTYL PANEL DATA*\n\n` +
-        `👤 *Username:* ${username}\n` +
-        `🔑 *Password:* ${password}\n` +
-        `🌐 *Server URL:* ${domain}\n\n` +
-        `_Hifadhi taarifa hizi kwa usalama._`;
-
-    try {
-        if (typeof Button !== 'undefined') {
-            const button = new Button(ctx.core || ctx.sock || ctx)
-                .setTitle("Panel Credentials")
-                .setBody(panelBody)
-                .setImage(CONFIG.thumbnail)
-                .setFooter("© MICKEY GLITCH TECH")
-                .addCopy("📋 Copy Username", username)
-                .addCopy("🔑 Copy Password", String(password))
-                .addUrl("🌐 Open Panel", domain, false);
-            await button.send(targetJid);
-            return true;
-        }
-    } catch (error) {
-        console.log("[CREDENTIALS] Button failed, sending plain text...");
-    }
-    try {
-        await safeSend(ctx, targetJid, { text: panelBody });
-        return true;
-    } catch (error) {
-        console.error("[CREDENTIALS] Failed to send:", error.message);
-        return false;
-    }
-}
-
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. MAIN CREATE PANEL FUNCTION
+// 5. MAIN CREATE PANEL
 // ─── ──────────────────────────────────────────────────────────────────────
 
-async function createPanel(ctx, options = {}) {
+async function createPanel(ctx) {
     try {
-        const context = ctx._msg ? ctx : createCtx(ctx.core || ctx.sock, ctx.chatId, ctx._msg);
-        const args = ctx.args || options.args || [];
-        const userInfo = extractUserInfo(ctx, args);
+        // ─── Extract user info ──────────────────────────────────────────
+        const userData = extractUser(ctx);
+        const { username, targetJid, plan } = userData;
         
-        if (userInfo.error) {
-            await safeReply(ctx,
-                `❌ *Muundo Sio Sahihi!*\n\n` +
-                `1️⃣ Ku-reply mtu: Reply ujumbe wake kisha andika:\n` +
-                `   \`.buy username\`\n\n` +
-                `2️⃣ Kwa namba: Andika:\n` +
-                `   \`.buy username-255712345678\``
-            );
+        if (!username || username.length < 1) {
+            await superReply(ctx, "❌ *Tafadhali andika username!*\n\n📌 Example: `.buy 1gb mickey`");
             return null;
         }
         
-        const { username, targetJid, plan } = userInfo;
-        if (!username) {
-            await safeReply(ctx, "❌ Tafadhali andika username.");
-            return null;
-        }
         if (!targetJid) {
-            await safeReply(ctx, "❌ Imeshindwa kupata namba ya mtumiaji.");
+            await superReply(ctx, "❌ *Imeshindwa kupata namba!*\n\n📌 Reply ujumbe wa mtu au weka namba: `.buy 1gb mickey-255712345678`");
             return null;
         }
         
-        const planSpecs = getPlanSpecs(plan);
-        const { domain, apiKey, eggId, locationId, nestId, timezone } = getConfig();
+        // ─── Get plan specs ─────────────────────────────────────────────
+        const planSpecs = PLANS[plan] || PLANS['1gb'];
+        
+        // ─── Get config ──────────────────────────────────────────────────
+        const domain = global.PTERODACTYL?.domain || global.domain;
+        const apiKey = global.PTERODACTYL?.apiKey || global.plta;
+        const eggId = global.PTERODACTYL?.eggId || global.eggs || CONFIG.defaultEgg;
+        const locationId = global.PTERODACTYL?.locationId || global.locc || CONFIG.defaultLocation;
+        const nestId = global.PTERODACTYL?.nestId || global.nestId || CONFIG.defaultNest;
+        const timezone = global.PTERODACTYL?.timezone || global.TIMEZONE || CONFIG.timezone;
         
         if (!domain || !apiKey) {
-            await safeReply(ctx, "❌ Panel configuration missing. Contact admin.");
+            await superReply(ctx, "❌ *Panel configuration missing!*\n\nContact admin to set up PTERODACTYL config.");
             return null;
         }
         
-        const password = `@${username}${Math.floor(Math.random() * 1000)}@`;
+        // ─── Generate password ──────────────────────────────────────────
+        const password = `@${username}${Math.floor(Math.random() * 9999)}@`;
         const description = moment().tz(timezone).format("dddd, D MMMM - YYYY");
         
-        await safeReply(ctx, `⏳ *Creating ${plan} (${planSpecs.memo}MB) panel for ${username}...*`);
+        // ─── Send processing ────────────────────────────────────────────
+        await superReply(ctx, `⏳ *Creating ${plan} (${planSpecs.memo}MB) panel for ${username}...*`);
         
-        // ─── CREATE USER ──────────────────────────────────────────────────
+        // ─── Create or get user ─────────────────────────────────────────
         let user;
         try {
             user = await createPterodactylUser(domain, apiKey, username, password);
         } catch (error) {
-            console.error("[CREATE USER ERROR]", error.message);
-            if (error.message.includes("The email has already been taken")) {
+            if (error.message.includes("email has already been taken")) {
                 user = await getExistingUser(domain, apiKey, username);
                 if (!user) {
-                    await safeReply(ctx, `❌ User "${username}" already exists but cannot retrieve.`);
+                    await superReply(ctx, `❌ *User exists but cannot retrieve!*\n\nTry a different username.`);
                     return null;
                 }
             } else {
-                await safeReply(ctx, `❌ *User Creation Failed*\n\n${error.message}`);
+                await superReply(ctx, `❌ *User Creation Failed*\n\n${error.message}`);
                 return null;
             }
         }
         
-        // ─── FETCH EGG ────────────────────────────────────────────────────
+        // ─── Fetch egg ──────────────────────────────────────────────────
         let eggData;
         try {
             eggData = await fetchEggData(domain, apiKey, nestId, eggId);
         } catch (error) {
-            console.error("[EGG FETCH ERROR]", error.message);
-            await safeReply(ctx, `❌ *Egg Fetch Failed*\n\n${error.message}`);
+            await superReply(ctx, `❌ *Egg Fetch Failed*\n\n${error.message}`);
             return null;
         }
         
         const startupCmd = eggData.startup || "npm start";
         
-        // ─── SEND CREDENTIALS ────────────────────────────────────────────
-        await sendCredentials(ctx, targetJid, username, password, domain);
+        // ─── Send credentials ──────────────────────────────────────────
+        await sendSuperButtons(ctx, targetJid, username, password, domain);
         
-        // ─── CREATE SERVER ────────────────────────────────────────────────
+        // ─── Create server ──────────────────────────────────────────────
         let server;
         try {
             server = await createPterodactylServer(
@@ -397,21 +455,20 @@ async function createPanel(ctx, options = {}) {
                 startupCmd, planSpecs.memo, planSpecs.cpu, planSpecs.disk, description
             );
         } catch (error) {
-            console.error("[SERVER CREATION ERROR]", error.message);
-            await safeReply(ctx, `❌ *Server Creation Failed*\n\n${error.message}`);
+            await superReply(ctx, `❌ *Server Creation Failed*\n\n${error.message}`);
             return null;
         }
         
+        // ─── Success ────────────────────────────────────────────────────
         const result = {
             status: true,
-            message: "Panel created successfully",
-            user: { id: user.id, username: user.username, email: user.email },
+            user: { id: user.id, username: user.username },
             server: { id: server.id, name: server.name, identifier: server.identifier },
             credentials: { username, password, domain, panel_url: `${domain}/server/${server.identifier}` },
             specs: { plan, memo: planSpecs.memo, cpu: planSpecs.cpu, disk: planSpecs.disk, price: planSpecs.price }
         };
         
-        await safeReply(ctx,
+        await superReply(ctx,
             `🚀 *Panel Created Successfully!*\n\n` +
             `📋 *Details:*\n` +
             `├ Plan: ${plan}\n` +
@@ -431,13 +488,13 @@ async function createPanel(ctx, options = {}) {
         
     } catch (error) {
         console.error("[CREATEPANEL ERROR]", error.message);
-        await safeReply(ctx, `❌ *Panel Creation Failed*\n\n${error.message}`);
+        await superReply(ctx, `❌ *Panel Creation Failed*\n\n${error.message}`);
         return null;
     }
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 5. COMMAND EXPORT
+// 6. COMMAND EXPORT
 // ─── ──────────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -454,32 +511,47 @@ module.exports = {
 
             // ─── SHOW HELP ──────────────────────────────────────────────
             if (!raw || raw === 'help' || raw === 'menu') {
-                return await ctx.reply(
-                    `🛒 *Buy Panel*\n\n` +
-                    `📌 *Usage:*\n` +
-                    `.buy <username> [plan] [target]\n\n` +
-                    `📌 *Examples:*\n` +
-                    `.buy mickey\n` +
-                    `.buy mickey-255612130873\n` +
-                    `.buy mickey 2gb\n` +
-                    `.buy mickey-255612130873 5gb\n\n` +
-                    `📌 *Plans:*\n` +
-                    `• 1gb - TSh 5,000 (Default)\n` +
-                    `• 2gb - TSh 8,000\n` +
-                    `• 5gb - TSh 15,000\n` +
-                    `• 10gb - TSh 25,000\n` +
-                    `• unlimited - TSh 50,000\n\n` +
-                    `💡 Reply to a message to target that user.`
-                );
+                const helpButton = new ButtonV2(ctx.core || ctx.sock || ctx)
+                    .setTitle('🛒 Panel Purchase System')
+                    .setBody(
+                        `*Commands:*\n\n` +
+                        `📌 *Basic:*\n` +
+                        `.buy <username>\n` +
+                        `.buy <plan> <username>\n\n` +
+                        `📌 *With Target:*\n` +
+                        `.buy <username> <number>\n` +
+                        `.buy <plan> <username> <number>\n\n` +
+                        `📌 *Examples:*\n` +
+                        `.buy mickey\n` +
+                        `.buy 1gb mickey\n` +
+                        `.buy mickey 255612130873\n` +
+                        `.buy 2gb mickey 255612130873\n\n` +
+                        `📌 *Plans:*\n` +
+                        `• 1gb - TSh 5,000\n` +
+                        `• 2gb - TSh 8,000\n` +
+                        `• 5gb - TSh 15,000\n` +
+                        `• 10gb - TSh 25,000\n` +
+                        `• unlimited - TSh 50,000\n\n` +
+                        `💡 Reply to a user's message to target them.`
+                    )
+                    .setFooter('⚡ Mickey Glitch Sub')
+                    .setThumbnail(CONFIG.thumbnail)
+                    .addButton('📦 1GB', '.buy 1gb')
+                    .addButton('📦 2GB', '.buy 2gb')
+                    .addButton('📦 5GB', '.buy 5gb')
+                    .addButton('📦 10GB', '.buy 10gb')
+                    .addButton('🚀 Unlimited', '.buy unlimited');
+
+                return await helpButton.send(ctx.chatId || ctx.chat || ctx.from, { quoted: ctx._msg });
             }
 
             // ─── CREATE PANEL ────────────────────────────────────────────
-            await ctx.reply(`⏳ _Creating panel..._`);
+            await superReply(ctx, `🟢 *Creating panel...*`);
             
             const result = await createPanel(ctx);
 
             if (result && result.status === true) {
-                await ctx.reply(
+                await superReply(ctx,
                     `✅ *Panel Created Successfully!*\n\n` +
                     `👤 Username: ${result.credentials.username}\n` +
                     `🆔 User ID: ${result.user.id}\n` +
@@ -490,7 +562,7 @@ module.exports = {
                     `> ⚡ Mickey Glitch Sub`
                 );
             } else {
-                await ctx.reply(
+                await superReply(ctx,
                     `❌ *Failed to Create Panel*\n\n` +
                     `📌 ${result?.message || 'Unknown error'}\n\n` +
                     `💡 Please try again later.`
@@ -498,20 +570,11 @@ module.exports = {
             }
 
         } catch (error) {
-            console.error('[BUY COMMAND ERROR]', error);
-            
-            if (ctx.tools?.cmd?.handleError) {
-                await ctx.tools.cmd.handleError(ctx, error, true);
-            } else {
-                await ctx.reply(
-                    `❌ *Command Failed*\n\n` +
-                    `📌 ${error.message || 'Unknown error'}\n\n` +
-                    `💡 Please try again later.`
-                );
-            }
+            console.error('[BUY ERROR]', error);
+            await superReply(ctx, `❌ *Command Failed*\n\n${error.message || 'Unknown error'}`);
         }
     }
 };
 
-// ─── EXPOSE CREATE PANEL FOR OTHER COMMANDS ──────────────────────────────
+// ─── EXPOSE CREATE PANEL ──────────────────────────────────────────────────
 module.exports.createPanel = createPanel;
