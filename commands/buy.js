@@ -61,7 +61,17 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
     const footer = '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲™';
     const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
 
-    console.log(`[panelCommand] Invoked '${commandName}' by`, sender);
+    // Safe handling za args na commandName ili zisilete error
+    const safeArgs = Array.isArray(args) ? args : [];
+
+    // FIX HAPA: Hakikisha tunapata String badil ya undefined/object
+    const rawCmd = typeof commandName === 'string' && commandName.length > 0 
+        ? commandName 
+        : (typeof safeArgs[0] === 'string' ? safeArgs[0] : '');
+
+    const subCommand = rawCmd.trim().toLowerCase() || 'mypanel';
+
+    console.log(`[panelCommand] Invoked '${subCommand}' by`, sender);
 
     // Helper function to send interactive native buttons
     const sendInteractiveMessage = async (text, buttons = []) => {
@@ -127,16 +137,14 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
     };
 
     try {
-        const subCommand = commandName ? commandName.toLowerCase() : (args[0]?.toLowerCase() || 'mypanel');
-
         switch (subCommand) {
 
             // -----------------------------------------------------------------
             // 1. BUY / CREATE USER & SERVER (.buy 1gb <username>)
             // -----------------------------------------------------------------
             case 'buy': {
-                const plan = args[0]?.toLowerCase();
-                const username = args[1];
+                const plan = safeArgs[0]?.toLowerCase();
+                const username = safeArgs[1];
 
                 if (!plan || !username) {
                     return await sendInteractiveMessage(
@@ -149,11 +157,9 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
 
                 await sock.sendMessage(chatId, { text: `⏳ *Inatengeneza User na Server mpya kwenye Pterodactyl...*` }, { quoted: message });
 
-                // Kutengeneza password ya nasibu kwa ajili ya user mpya
                 const generatedPassword = `Mickey@${Math.floor(100000 + Math.random() * 900000)}`;
                 const generatedEmail = `${username.toLowerCase()}@mickey.tech`;
 
-                // Subiri API i-create User na Panel Server
                 const response = await axios.post(`${BASE_URL}/auth/register`, {
                     username: username,
                     email: generatedEmail,
@@ -164,11 +170,9 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
                     timeout: 15000
                 }).catch(err => err.response || null);
 
-                // Hata kama auth API ipo offline, tunatengeneza Session ya mtumiaji
                 const userData = response?.data || {};
                 const token = userData.token || `token_${Date.now()}_${username}`;
 
-                // Hifadhi Taarifa za User kwenye Session
                 userSessions.set(sender, {
                     username: username,
                     email: generatedEmail,
@@ -197,7 +201,7 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
             case 'mypanel':
             case 'panelinfo':
             case 'serverinfo': {
-                const serverId = args[0];
+                const serverId = safeArgs[0];
                 const session = userSessions.get(sender);
 
                 if (!serverId && !session) {
@@ -211,7 +215,6 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
 
                 const targetId = serverId || session?.username || '123';
 
-                // Call External Server API
                 const response = await axios.get(`${BASE_URL}/api/external/servers/${targetId}`, {
                     headers: { 'x-api-key': API_KEY },
                     timeout: 10000
@@ -238,7 +241,6 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
                     return await sendInteractiveMessage(panelText);
                 }
 
-                // Fallback ikiwa mtumiaji ana local session pekee
                 if (session) {
                     const localText = 
                         `📊 *TAARIFA ZA PANEL YAKO*\n\n` +
@@ -292,8 +294,8 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
             // 4. LOGIN (.login <email> <password>)
             // -----------------------------------------------------------------
             case 'login': {
-                const email = args[0];
-                const password = args[1];
+                const email = safeArgs[0];
+                const password = safeArgs[1];
 
                 if (!email || !password) {
                     return await sendInteractiveMessage(`❌ *Muundo Sio Sahihi!*\n\nTumia: \`.login <email> <password>\``);
