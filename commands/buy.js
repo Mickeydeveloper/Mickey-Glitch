@@ -5,15 +5,22 @@ const path = require('path');
 const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 const axios = require('axios');
 
-// Configuration & Endpoints
+// Web Base URL & Pterodactyl Admin Credentials
 const BASE_URL = process.env.PTERODACTYL_BASE_URL || 'https://mickey-pterodacty.vercel.app';
-const API_KEY = process.env.EXTERNAL_API_KEY || process.env.PTERODACTYL_APP_API_KEY || 'default_secret_key';
+const ADMIN_EMAIL = 'mickidadyhamza@gmail.com';
+const ADMIN_PASSWORD = 'MICKEY24@';
+const API_KEY = process.env.EXTERNAL_API_KEY || process.env.PTERODACTYL_APP_API_KEY || 'MICKEY24@';
 
-// Database ya ku-store tokens na user credentials (In-Memory)
+// Pterodactyl Specific Settings (Badilisha kulingana na Node/Egg za Panel yako kama inahitajika)
+const DEFAULT_LOCATION_ID = 1;
+const DEFAULT_EGG_ID = 15; // Standard Node.js / Generic Egg ID
+const DEFAULT_NEST_ID = 5;
+
+// Memory DB kusevu sessions za watumiaji
 const userSessions = new Map();
 
 /**
- * Helper to fetch image buffer safely
+ * Helper: Fetch Image Buffer
  */
 const fetchBuffer = async (url) => {
     try {
@@ -25,7 +32,7 @@ const fetchBuffer = async (url) => {
 };
 
 /**
- * Resize image thumbnail
+ * Helper: Resize Image
  */
 async function resizeImg(buffer, width = 300, height = 300) {
     if (!buffer) return null;
@@ -38,17 +45,20 @@ async function resizeImg(buffer, width = 300, height = 300) {
 }
 
 /**
- * Get bot name from config safely
+ * Helper: Admin Login Token Fetcher
  */
-const getBotName = () => {
+const getAdminToken = async () => {
     try {
-        const configPath = path.join(__dirname, '..', 'config', 'config.json');
-        if (fs.existsSync(configPath)) {
-            const config = JSON.parse(fs.readFileSync(configPath));
-            return config.botName || '𝐌𝐈𝐂𝐊𝐄𝐘-𝐕𝟑';
-        }
-    } catch (e) {}
-    return '𝐌𝐈𝐂𝐊𝐄𝐘-𝐕𝟑';
+        const res = await axios.post(`${BASE_URL}/auth/login`, {
+            email: ADMIN_EMAIL,
+            password: ADMIN_PASSWORD
+        }, { timeout: 10000 });
+
+        return res.data?.token || res.data?.accessToken || res.data?.data?.token || null;
+    } catch (e) {
+        console.error('[ADMIN LOGIN FAILED]:', e?.response?.data || e.message);
+        return null;
+    }
 };
 
 /**
@@ -56,19 +66,17 @@ const getBotName = () => {
  */
 const panelCommand = async (sock, chatId, message, args = [], commandName = '') => {
     const sender = message.key?.participant || message.key?.remoteJid;
-    const botName = getBotName();
+    const botName = '𝐌𝐈𝐂𝐊𝐄𝐘-𝐕𝟑';
     const footer = '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲™';
     const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
 
-    // Extract text yote kutoka kwenye message ili kupata exact command kama commandName haijapita
+    // Parse command name
     const bodyText = message.message?.conversation || 
                      message.message?.extendedTextMessage?.text || 
                      message.message?.buttonsResponseMessage?.selectedButtonId || '';
 
-    // Dondoo la Kwanza: Soma command iliyoandikwa (e.g. .mypanel -> mypanel)
     const extractedCmd = bodyText ? bodyText.trim().split(/\s+/)[0].replace(/^[./#!]/, '') : '';
 
-    // Baini subCommand halisi: tumia commandName -> extractedCmd -> args[0]
     let subCommand = '';
     if (typeof commandName === 'string' && commandName.trim().length > 0) {
         subCommand = commandName.trim().toLowerCase();
@@ -82,10 +90,8 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
 
     const safeArgs = Array.isArray(args) ? args : [];
 
-    console.log(`[panelCommand] Detected SubCommand: '${subCommand}' from user:`, sender);
-
-    // Helper function to send interactive native buttons
-    const sendInteractiveMessage = async (text, buttons = []) => {
+    // Function ya kutuma Native Flow CTA Buttons (URL & Copy Buttons)
+    const sendCtaMessage = async (text, copyUsername = '', copyPassword = '') => {
         try {
             let thumbnailBuffer = null;
             if (imageUrl) {
@@ -93,13 +99,41 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
                 thumbnailBuffer = await resizeImg(buf, 300, 300);
             }
 
-            const defaultButtons = [
-                { buttonId: '.packages', buttonText: { displayText: '📦 Packages' }, type: 1 },
-                { buttonId: '.mypanel', buttonText: { displayText: '🖥️ My Panel' }, type: 1 },
-                { buttonId: '.menu', buttonText: { displayText: '⦂ Menu' }, type: 1 }
-            ];
+            const buttons = [];
 
-            const finalButtons = buttons.length > 0 ? buttons : defaultButtons;
+            // 1. CTA Open Domain / Web Button
+            buttons.push({
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🌐 Fungua Panel Web',
+                    url: BASE_URL,
+                    merchant_url: BASE_URL
+                })
+            });
+
+            // 2. CTA Copy Username Button (kama ipo)
+            if (copyUsername) {
+                buttons.push({
+                    name: 'cta_copy',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: '📋 Copy Username',
+                        id: 'copy_user',
+                        copy_code: copyUsername
+                    })
+                });
+            }
+
+            // 3. CTA Copy Password Button (kama ipo)
+            if (copyPassword) {
+                buttons.push({
+                    name: 'cta_copy',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: '🔑 Copy Password',
+                        id: 'copy_pass',
+                        copy_code: copyPassword
+                    })
+                });
+            }
 
             const contextInfo = {
                 forwardingScore: 999,
@@ -108,41 +142,34 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
             };
 
             const msg = generateWAMessageFromContent(chatId, {
-                buttonsMessage: {
-                    contentText: text,
-                    footerText: footer,
-                    headerType: 6,
-                    locationMessage: {
-                        degreesLatitude: 0,
-                        degreesLongitude: 0,
-                        name: botName,
-                        address: 'Pterodactyl Panel',
-                        jpegThumbnail: thumbnailBuffer
-                    },
-                    viewOnce: true,
-                    contextInfo,
-                    buttons: finalButtons
+                viewOnceMessage: {
+                    message: {
+                        interactiveMessage: {
+                            header: {
+                                title: botName,
+                                hasMediaAttachment: true,
+                                locationMessage: {
+                                    degreesLatitude: 0,
+                                    degreesLongitude: 0,
+                                    name: 'Pterodactyl Panel Server',
+                                    jpegThumbnail: thumbnailBuffer
+                                }
+                            },
+                            body: { text: text },
+                            footer: { text: footer },
+                            nativeFlowMessage: {
+                                buttons: buttons
+                            },
+                            contextInfo
+                        }
+                    }
                 }
             }, { userJid: (sock && sock.user && sock.user.id) || '' });
 
-            await sock.relayMessage(chatId, msg.message, {
-                messageId: msg.key.id,
-                additionalNodes: [
-                    {
-                        tag: 'biz',
-                        attrs: {},
-                        content: [
-                            {
-                                tag: 'interactive',
-                                attrs: { type: 'native_flow', v: '1' },
-                                content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
-                            }
-                        ]
-                    }
-                ]
-            });
+            await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
+
         } catch (e) {
-            console.error('[panelCommand] Interactive button failed, falling back to simple message:', e?.message || e);
+            console.error('[CTA Send Error, Falling back to text]:', e?.message || e);
             await sock.sendMessage(chatId, { text: text }, { quoted: message });
         }
     };
@@ -151,14 +178,14 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
         switch (subCommand) {
 
             // -----------------------------------------------------------------
-            // 1. BUY / CREATE USER & SERVER (.buy 1gb <username>)
+            // 1. BUY / KUTENGENEZA USER NA SERVER MPYA HALISI
             // -----------------------------------------------------------------
             case 'buy': {
                 const plan = safeArgs[0]?.toLowerCase();
                 const username = safeArgs[1];
 
                 if (!plan || !username) {
-                    return await sendInteractiveMessage(
+                    return await sendCtaMessage(
                         `❌ *Muundo Sio Sahihi!*\n\n` +
                         `Tafadhali tumia muundo huu:\n` +
                         `\`.buy 1gb <username>\`\n\n` +
@@ -166,107 +193,135 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
                     );
                 }
 
-                await sock.sendMessage(chatId, { text: `⏳ *Inatengeneza User na Server mpya kwenye Pterodactyl...*` }, { quoted: message });
+                await sock.sendMessage(chatId, { text: `⏳ *Inaingia Admin Account & Inatengeneza Server Halisi kwenye Pterodactyl...*` }, { quoted: message });
 
-                const generatedPassword = `Mickey@${Math.floor(100000 + Math.random() * 900000)}`;
-                const generatedEmail = `${username.toLowerCase()}@mickey.tech`;
+                // Step A: Login kama Admin ili kupata Admin Access Token
+                const adminToken = await getAdminToken();
 
-                const response = await axios.post(`${BASE_URL}/auth/register`, {
-                    username: username,
-                    email: generatedEmail,
-                    password: generatedPassword,
-                    plan: plan
-                }, {
-                    headers: { 'x-api-key': API_KEY },
-                    timeout: 15000
-                }).catch(err => err.response || null);
+                const userPassword = `Mickey@${Math.floor(100000 + Math.random() * 900000)}`;
+                const userEmail = `${username.toLowerCase()}@mickey.tech`;
 
-                const userData = response?.data || {};
-                const token = userData.token || `token_${Date.now()}_${username}`;
+                // Set Specs kulingana na Plan
+                let ramMB = 1024;
+                let diskMB = 25600;
+                let cpuLimit = 100;
 
+                if (plan === '2gb') { ramMB = 2048; diskMB = 51200; cpuLimit = 150; }
+                else if (plan === '4gb') { ramMB = 4096; diskMB = 102400; cpuLimit = 200; }
+
+                let createdUser = null;
+                let createdServer = null;
+
+                // Step B: Tengeneza User Mpya Web/Pterodactyl
+                try {
+                    const regRes = await axios.post(`${BASE_URL}/auth/register`, {
+                        username: username,
+                        email: userEmail,
+                        password: userPassword
+                    }, {
+                        headers: adminToken ? { 'Authorization': `Bearer ${adminToken}` } : { 'x-api-key': API_KEY },
+                        timeout: 12000
+                    });
+                    createdUser = regRes.data?.user || regRes.data;
+                } catch (err) {
+                    console.log('[User Reg Warning]: User inaweza kuwa ipo au API imetumia fallback', err?.message);
+                }
+
+                // Step C: Tengeneza Server Halisi Pterodactyl
+                try {
+                    const serverRes = await axios.post(`${BASE_URL}/api/external/servers`, {
+                        name: `${username}-server`,
+                        user_email: userEmail,
+                        username: username,
+                        password: userPassword,
+                        limits: {
+                            memory: ramMB,
+                            swap: 0,
+                            disk: diskMB,
+                            io: 500,
+                            cpu: cpuLimit
+                        }
+                    }, {
+                        headers: { 'x-api-key': API_KEY },
+                        timeout: 15000
+                    });
+
+                    createdServer = serverRes.data?.server || serverRes.data;
+                } catch (err) {
+                    console.error('[Server Creation Error]:', err?.response?.data || err.message);
+                }
+
+                // Hifadhi session
                 userSessions.set(sender, {
                     username: username,
-                    email: generatedEmail,
-                    password: generatedPassword,
-                    token: token,
+                    email: userEmail,
+                    password: userPassword,
                     plan: plan.toUpperCase(),
                     createdAt: new Date().toLocaleDateString()
                 });
 
-                const successText = 
-                    `🎉 *PANEL YAKO IMEFANIKIWA KUTENGENEZWA!*\n\n` +
+                const successMessage = 
+                    `🎉 *PTERODACTYL SERVER IMEFANIKIWA KUTENGENEZWA!*\n\n` +
                     `👤 *Username:* \`${username}\`\n` +
-                    `📧 *Email:* \`${generatedEmail}\`\n` +
-                    `🔑 *Password:* \`${generatedPassword}\`\n` +
-                    `📌 *Plan:* ${plan.toUpperCase()}\n` +
-                    `🌐 *URL:* ${BASE_URL}\n\n` +
-                    `⚡ *Status:* Active ✅\n\n` +
-                    `_Ingia kwenye panel kwa kutumia taarifa hizi au tumia \`.mypanel\` kuangalia taarifa zako._`;
+                    `📧 *Email:* \`${userEmail}\`\n` +
+                    `🔑 *Password:* \`${userPassword}\`\n` +
+                    `📌 *Plan:* ${plan.toUpperCase()} (${ramMB}MB RAM)\n` +
+                    `🌐 *Panel Domain:* ${BASE_URL}\n\n` +
+                    `⚡ *Status:* Active & Live 🟢\n\n` +
+                    `_Bonyeza button hapo chini kufungua Panel au ku-copy credentials zako._`;
 
-                return await sendInteractiveMessage(successText);
+                // Tuma ikiwa na CTA Buttons (Domain Link & Copy Username/Password)
+                return await sendCtaMessage(successMessage, username, userPassword);
             }
 
             // -----------------------------------------------------------------
-            // 2. MYPANEL / SERVER INFO (.mypanel <server_id>)
+            // 2. MYPANEL / SERVER INFO (.mypanel)
             // -----------------------------------------------------------------
             case 'mypanel':
-            case 'panelinfo':
-            case 'serverinfo': {
-                const serverId = safeArgs[0];
+            case 'panelinfo': {
                 const session = userSessions.get(sender);
 
-                if (!serverId && !session) {
-                    return await sendInteractiveMessage(
+                if (!session) {
+                    return await sendCtaMessage(
                         `❌ *Akaunti Haijapatikana!*\n\n` +
                         `Hujaingia au huna panel active.\n` +
-                        `Tumia \`.buy 1gb <username>\` au ingiza Server ID:\n` +
-                        `\`.mypanel 123\``
+                        `Tumia \`.buy 1gb <username>\` kutengeneza Server mpya.`
                     );
                 }
 
-                const targetId = serverId || session?.username || '123';
-
-                const response = await axios.get(`${BASE_URL}/api/external/servers/${targetId}`, {
+                const response = await axios.get(`${BASE_URL}/api/external/servers/${session.username}`, {
                     headers: { 'x-api-key': API_KEY },
                     timeout: 10000
-                }).catch(err => err.response || null);
+                }).catch(() => null);
+
+                let serverInfoText = '';
 
                 if (response && response.data && response.data.success) {
                     const s = response.data.server;
-                    const statusEmoji = s.status === 'online' ? '🟢' : '🔴';
-
-                    const panelText = 
-                        `📊 *TAARIFA ZA SERVER YAKO*\n\n` +
-                        `📌 *Name:* ${s.name}\n` +
-                        `🆔 *ID:* \`${s.id}\`\n` +
-                        `📊 *Status:* ${statusEmoji} ${s.status.toUpperCase()}\n\n` +
+                    serverInfoText = 
+                        `📊 *TAARIFA ZA SERVER YAKO (PTERODACTYL)*\n\n` +
+                        `📌 *Server Name:* ${s.name}\n` +
+                        `🆔 *Server ID:* \`${s.id}\`\n` +
+                        `📊 *Status:* 🟢 ${s.status.toUpperCase()}\n\n` +
                         `🌐 *CONNECTION DETAILS*\n` +
                         `📍 *IP Address:* \`${s.ipAddress}\`\n` +
                         `🔌 *Port:* \`${s.port}\`\n` +
                         `📁 *SFTP Host:* \`${s.sftpHost}\`\n\n` +
-                        `⚙️ *RESOURCES*\n` +
-                        `🧠 *RAM:* ${s.limits.memory} MB\n` +
-                        `💾 *Disk:* ${s.limits.disk} MB\n` +
-                        `⚡ *CPU:* ${s.limits.cpu}%`;
-
-                    return await sendInteractiveMessage(panelText);
-                }
-
-                if (session) {
-                    const localText = 
+                        `👤 *USER DETAILS*\n` +
+                        `👤 *Username:* \`${session.username}\`\n` +
+                        `🔑 *Password:* \`${session.password}\``;
+                } else {
+                    serverInfoText = 
                         `📊 *TAARIFA ZA PANEL YAKO*\n\n` +
-                        `👤 *Username:* ${session.username}\n` +
-                        `📧 *Email:* ${session.email}\n` +
+                        `👤 *Username:* \`${session.username}\`\n` +
+                        `📧 *Email:* \`${session.email}\`\n` +
                         `🔑 *Password:* \`${session.password}\`\n` +
                         `📌 *Plan:* ${session.plan}\n` +
                         `📅 *Created:* ${session.createdAt}\n` +
-                        `📊 *Status:* ✅ ACTIVE\n\n` +
-                        `🌐 *URL:* ${BASE_URL}`;
-
-                    return await sendInteractiveMessage(localText);
+                        `🌐 *Domain:* ${BASE_URL}`;
                 }
 
-                return await sendInteractiveMessage(`❌ Imeshindwa kupata taarifa za server ID: \`${targetId}\`. Hakikisha ID ni sahihi.`);
+                return await sendCtaMessage(serverInfoText, session.username, session.password);
             }
 
             // -----------------------------------------------------------------
@@ -274,109 +329,34 @@ const panelCommand = async (sock, chatId, message, args = [], commandName = '') 
             // -----------------------------------------------------------------
             case 'packages':
             case 'plans': {
-                const response = await axios.get(`${BASE_URL}/api/packages`, { timeout: 8000 }).catch(() => null);
-                const packages = response?.data?.packages || response?.data || null;
+                const packageText = 
+                    `📦 *MICKEY PTERODACTYL PACKAGES*\n\n` +
+                    `1️⃣ *1GB RAM Plan*\n` +
+                    `   🧠 RAM: 1024 MB | 💾 Disk: 25GB\n` +
+                    `   ⚡ Command: \`.buy 1gb <username>\`\n\n` +
+                    `2️⃣ *2GB RAM Plan*\n` +
+                    `   🧠 RAM: 2048 MB | 💾 Disk: 50GB\n` +
+                    `   ⚡ Command: \`.buy 2gb <username>\`\n\n` +
+                    `3️⃣ *4GB RAM Plan*\n` +
+                    `   🧠 RAM: 4096 MB | 💾 Disk: 100GB\n` +
+                    `   ⚡ Command: \`.buy 4gb <username>\``;
 
-                let packageText = `📦 *MICKEY PTERODACTYL PACKAGES*\n\n`;
-
-                if (packages && Array.isArray(packages) && packages.length > 0) {
-                    packages.forEach((pkg, index) => {
-                        packageText += `${index + 1}️⃣ *${pkg.name}*\n`;
-                        packageText += `   💰 Price: ${pkg.price} Coins\n`;
-                        packageText += `   🧠 RAM: ${pkg.ram}MB | 💾 Disk: ${pkg.disk}MB\n\n`;
-                    });
-                } else {
-                    packageText += 
-                        `1️⃣ *1GB RAM Plan*\n` +
-                        `   🧠 RAM: 1024 MB | 💾 Disk: 25600 MB\n` +
-                        `   ⚡ Command: \`.buy 1gb <username>\`\n\n` +
-                        `2️⃣ *2GB RAM Plan*\n` +
-                        `   🧠 RAM: 2048 MB | 💾 Disk: 51200 MB\n` +
-                        `   ⚡ Command: \`.buy 2gb <username>\`\n\n` +
-                        `3️⃣ *4GB RAM Plan*\n` +
-                        `   🧠 RAM: 4096 MB | 💾 Disk: 102400 MB\n` +
-                        `   ⚡ Command: \`.buy 4gb <username>\``;
-                }
-
-                return await sendInteractiveMessage(packageText);
-            }
-
-            // -----------------------------------------------------------------
-            // 4. LOGIN (.login <email> <password>)
-            // -----------------------------------------------------------------
-            case 'login': {
-                const email = safeArgs[0];
-                const password = safeArgs[1];
-
-                if (!email || !password) {
-                    return await sendInteractiveMessage(`❌ *Muundo Sio Sahihi!*\n\nTumia: \`.login <email> <password>\``);
-                }
-
-                await sock.sendMessage(chatId, { text: '⏳ *Inahakiki taarifa...*' }, { quoted: message });
-
-                const res = await axios.post(`${BASE_URL}/auth/login`, { email, password }, { timeout: 10000 }).catch(err => err.response || null);
-                const token = res?.data?.token || res?.data?.accessToken || `manual_token_${Date.now()}`;
-
-                userSessions.set(sender, {
-                    email,
-                    password,
-                    username: email.split('@')[0],
-                    token,
-                    createdAt: new Date().toLocaleDateString()
-                });
-
-                return await sendInteractiveMessage(`🔓 *Login Success!*\n\nUmeingia kama: \`${email}\`\nTumia \`.mypanel\` kuangalia server yako.`);
-            }
-
-            // -----------------------------------------------------------------
-            // 5. PROFILE (.profile)
-            // -----------------------------------------------------------------
-            case 'profile': {
-                const session = userSessions.get(sender);
-
-                if (!session) {
-                    return await sendInteractiveMessage(`🔒 *Hujaingia kwenye Akaunti!*\n\nTafadhali tumia \`.buy 1gb <username>\` au \`.login <email> <pass>\``);
-                }
-
-                const profileText = 
-                    `👤 *TAARIFA ZAKO NA PROFILE*\n\n` +
-                    `👤 *Username:* ${session.username}\n` +
-                    `📧 *Email:* ${session.email}\n` +
-                    `🔑 *Password:* \`${session.password}\`\n` +
-                    `📌 *Plan:* ${session.plan || 'Standard'}\n` +
-                    `📅 *Joined:* ${session.createdAt}`;
-
-                return await sendInteractiveMessage(profileText);
-            }
-
-            // -----------------------------------------------------------------
-            // 6. LOGOUT (.logout)
-            // -----------------------------------------------------------------
-            case 'logout': {
-                userSessions.delete(sender);
-                return await sendInteractiveMessage(`🚪 *Umetoka kwenye akaunti kikamilifu.*`);
+                return await sendCtaMessage(packageText);
             }
 
             default: {
-                return await sendInteractiveMessage(
-                    `❓ *Command Haijulikani! (${subCommand})*\n\n` +
-                    `Tumia moja ya hizi:\n` +
+                return await sendCtaMessage(
+                    `❓ *Command Haijulikani!*\n\n` +
                     `• \`.buy 1gb <username>\`\n` +
                     `• \`.mypanel\`\n` +
-                    `• \`.packages\`\n` +
-                    `• \`.login <email> <pass>\`\n` +
-                    `• \`.profile\``
+                    `• \`.packages\``
                 );
             }
         }
 
     } catch (error) {
-        console.error('[Critical Error in Panel Command]:', error);
-        try {
-            await sock.sendMessage(chatId, { 
-                text: `❌ *System Error:* Hitilafu imetokea.\n\`\`\`${error.message || error}\`\`\`` 
-            }, { quoted: message });
-        } catch (ee) {}
+        console.error('[Critical Error]:', error);
+        await sock.sendMessage(chatId, { text: `❌ *Error:* ${error.message || error}` }, { quoted: message });
     }
 };
 
