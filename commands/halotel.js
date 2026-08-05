@@ -1,114 +1,356 @@
-const { createCtx, Carousel, AIRich, Button, Toolkit } = require('../lib/messageBuilder');
+/**
+ * halotel.js - Halotel Internet Bundles with Carousel
+ * Usage: .halotel
+ */
 
-// ─── PRODUCTS ──────────────────────────────────────────────────────────────
+const { createCtx, Carousel, AIRich, Button, Toolkit, ButtonV2 } = require('../lib/messageBuilder');
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 1. PRODUCTS DATABASE (With Raw Images)
+// ─── ──────────────────────────────────────────────────────────────────────
+
 const PRODUCTS = [
+    {
+        id: 'basic_10gb',
+        title: "🌐 Halo Kasi 10GB",
+        brand: "Halotel Internet",
+        description: "Internet ya kasi ya 10GB kwa siku 1",
+        price: "TSH 10,500",
+        sale_price: "TSH 10,000",
+        validity: "Siku 1",
+        data: "10GB",
+        image: "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg",
+        features: ["✅ 10GB Data", "✅ 4G/5G Speed", "✅ 24 Hours Validity", "✅ Social Media Access"],
+        ussd: "*150*01*1#"
+    },
+    {
+        id: 'basic_20gb',
+        title: "🌐 Halo Kasi 20GB",
+        brand: "Halotel Internet",
+        description: "Internet ya kasi ya 20GB kwa siku 3",
+        price: "TSH 21,000",
+        sale_price: "TSH 20,000",
+        validity: "Siku 3",
+        data: "20GB",
+        image: "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg",
+        features: ["✅ 20GB Data", "✅ 4G/5G Speed", "✅ 72 Hours Validity", "✅ All Apps Access"],
+        ussd: "*150*01*2#"
+    },
+    {
+        id: 'basic_25gb',
+        title: "🌐 Halo Kasi 25GB",
+        brand: "Halotel Internet",
+        description: "Internet ya kasi ya 25GB kwa wiki 1",
+        price: "TSH 26,000",
+        sale_price: "TSH 25,000",
+        validity: "Wiki 1",
+        data: "25GB",
+        image: "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg",
+        features: ["✅ 25GB Data", "✅ 4G/5G Speed", "✅ 7 Days Validity", "✅ Unlimited Streaming"],
+        ussd: "*150*01*3#"
+    },
     {
         id: 'basic_30gb',
         title: "🌐 Halo Kasi 30GB",
-        brand: "Halotel",
+        brand: "Halotel Internet",
         description: "Internet ya kasi ya 30GB kwa mwezi 1",
         price: "TSH 31,000",
         sale_price: "TSH 30,000",
         validity: "Mwezi 1",
         data: "30GB",
-        image: "https://files.catbox.moe/lp9pn9.png",
-        features: ["✅ 30GB Data", "✅ 4G/5G Speed", "✅ 30 Days Validity"]
+        image: "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg",
+        features: ["✅ 30GB Data", "✅ 4G/5G Speed", "✅ 30 Days Validity", "✅ Best Value Package"],
+        ussd: "*150*01*4#"
+    },
+    {
+        id: 'unlimited',
+        title: "🚀 Halo Kasi Unlimited",
+        brand: "Halotel Internet",
+        description: "Internet unlimited kwa mwezi 1",
+        price: "TSH 77,000",
+        sale_price: "TSH 75,000",
+        validity: "Mwezi 1",
+        data: "Unlimited",
+        image: "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg",
+        features: ["✅ Unlimited Data", "✅ 4G/5G Speed", "✅ 30 Days Validity", "✅ No Fair Usage Policy"],
+        ussd: "*150*01*5#"
     },
     {
         id: 'social_bundle',
         title: "📱 Halo Social Bundle",
-        brand: "Halotel",
+        brand: "Halotel Internet",
         description: "Social media unlimited kwa siku 3",
         price: "TSH 5,000",
         sale_price: "TSH 4,500",
         validity: "Siku 3",
         data: "Unlimited Social",
-        image: "https://files.catbox.moe/xmy96l.png",
-        features: ["✅ WhatsApp", "✅ Instagram", "✅ Facebook"]
+        image: "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg",
+        features: ["✅ WhatsApp Unlimited", "✅ Instagram Unlimited", "✅ Facebook Unlimited", "✅ TikTok Unlimited", "✅ 72 Hours Validity"],
+        ussd: "*150*01*6#"
+    },
+    {
+        id: 'night_bundle',
+        title: "🌙 Halo Night Bundle",
+        brand: "Halotel Internet",
+        description: "Internet night unlimited (12AM - 6AM)",
+        price: "TSH 3,000",
+        sale_price: "TSH 2,500",
+        validity: "Siku 1",
+        data: "Night Unlimited",
+        image: "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg",
+        features: ["✅ Night Data 12AM-6AM", "✅ Unlimited Usage", "✅ 24 Hours Validity", "✅ Perfect for Downloads"],
+        ussd: "*150*01*7#"
+    },
+    {
+        id: 'weekly_bundle',
+        title: "📅 Halo Weekly Bundle",
+        brand: "Halotel Internet",
+        description: "Internet 15GB kwa wiki 1",
+        price: "TSH 15,000",
+        sale_price: "TSH 14,000",
+        validity: "Wiki 1",
+        data: "15GB",
+        image: "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/halotel.jpg",
+        features: ["✅ 15GB Data", "✅ 4G/5G Speed", "✅ 7 Days Validity", "✅ Weekend Special"],
+        ussd: "*150*01*8#"
     }
 ];
 
-// ─── MAIN FUNCTION ──────────────────────────────────────────────────────
-async function halotelCommand(sock, chatId, message, args) {
-    try {
-        console.log('[HALOTEL] Command executed!');
-        console.log('[HALOTEL] Args:', args);
-        console.log('[HALOTEL] ChatId:', chatId);
+// ─── ──────────────────────────────────────────────────────────────────────
+// 2. HELPER FUNCTIONS
+// ─── ──────────────────────────────────────────────────────────────────────
 
-        const ctx = createCtx(sock, chatId, message, { args });
-        
-        console.log('[HALOTEL] Command is working; building carousel...');
-        
-        // ─── GET PRODUCT (Card 4 - Halo Kasi 30GB) ─────────────────────
-        const product = PRODUCTS[0]; // Index 0 = Halo Kasi 30GB
-        
-        // ─── TRY CAROUSEL ──────────────────────────────────────────────
-        try {
-            console.log('[HALOTEL] Creating Carousel...');
-            
-            if (typeof Carousel !== 'function') {
-                console.log('[HALOTEL] Carousel not available!');
-                await ctx.sendMessage(chatId, { 
-                    text: `⚠️ Carousel not available.\n\nProduct: ${product.title}\nPrice: ${product.price}` 
-                });
-                return;
+function createProductCard(product) {
+    const price = product.sale_price 
+        ? `${product.price} ➜ ${product.sale_price}` 
+        : product.price;
+
+    return {
+        header: {
+            title: product.title,
+            hasMediaAttachment: true,
+            imageMessage: {
+                url: product.image,
+                mimetype: 'image/png'
             }
-            
-            const carousel = new Carousel(sock);
-            
-            // Create two cards to improve WhatsApp rendering
-            const productCards = [product, PRODUCTS[1]].filter(Boolean).map((p) => ({
-                header: {
-                    title: p.title,
-                    hasMediaAttachment: true,
-                    imageMessage: {
-                        url: p.image,
-                        mimetype: 'image/png'
-                    }
-                },
-                body: { text: `📦 ${p.data}\n💰 ${p.price}\n\n${p.description}` },
-                footer: { text: `⚡ ${p.brand}` },
-            }));
-
-            carousel
-                .setTitle("📶 Halotel Bundle")
-                .setBody("Choose your bundle")
-                .setFooter("Powered by Mickey")
-                .addCard(productCards);
-            
-            console.log('[HALOTEL] Sending carousel...');
-            
-            await carousel.send(chatId, {
-                quoted: message,
-                fallbackText: `📶 ${product.title}\n💰 ${product.price}`
-            });
-            
-            console.log('[HALOTEL] Carousel sent!');
-            
-        } catch (carouselError) {
-            console.error('[HALOTEL] Carousel error:', carouselError.message);
-            
-            // Fallback: Send plain text with image
-            await ctx.sendMessage(chatId, {
-                image: { url: product.image },
-                caption: `📶 *${product.title}*\n💰 ${product.price}\n📦 ${product.data}\n\n${product.description}`
-            });
+        },
+        body: {
+            text: 
+                `📦 *${product.data}*\n` +
+                `⏱️ ${product.validity}\n` +
+                `💰 ${price}\n\n` +
+                `${product.features.slice(0, 3).join('\n')}\n\n` +
+                `📌 *Order:* ${product.ussd || '*150*01#'}\n` +
+                `🆔 ID: \`${product.id}\``
+        },
+        footer: {
+            text: `⚡ ${product.brand} | ${new Date().toLocaleDateString()}`
         }
-        
-    } catch (error) {
-        console.error('[HALOTEL] Fatal error:', error.message);
-        
-        // Ultimate fallback
-        await sock.sendMessage(chatId, { 
-            text: `❌ Error: ${error.message}` 
+    };
+}
+
+function getProductById(id) {
+    return PRODUCTS.find(p => p.id === id || p.id.includes(id));
+}
+
+function searchProducts(query) {
+    const q = query.toLowerCase();
+    return PRODUCTS.filter(p => 
+        p.title.toLowerCase().includes(q) ||
+        p.brand.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        p.data.toLowerCase().includes(q)
+    );
+}
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 3. SEND FUNCTIONS
+// ─── ──────────────────────────────────────────────────────────────────────
+
+async function sendCarousel(ctx, products) {
+    const sock = ctx.sock || ctx.core;
+    const chatId = ctx.chatId || ctx.chat || ctx.from;
+    const message = ctx._msg;
+
+    try {
+        if (typeof Carousel !== 'function') {
+            throw new Error('Carousel not available');
+        }
+
+        const carousel = new Carousel(sock);
+        const cards = products.map(p => createProductCard(p));
+
+        if (cards.length === 0) {
+            await ctx.reply('❌ No products found.');
+            return;
+        }
+
+        carousel
+            .setTitle(`📶 Halotel Bundles (${cards.length})`)
+            .setBody(`👆 *Swipe to browse all packages*\n\n📌 Type .halotel <id> for details`)
+            .setFooter(`⚡ Mickey Glitch Sub | ${new Date().toLocaleDateString()}`)
+            .addCard(cards);
+
+        await carousel.send(chatId, {
+            quoted: message,
+            fallbackText: `📶 ${products.length} bundles available\n\nSend .halotel list for details`
         });
+
+        console.log('[HALOTEL] Carousel sent with', cards.length, 'cards');
+        return true;
+
+    } catch (error) {
+        console.error('[HALOTEL] Carousel error:', error.message);
+        return false;
     }
 }
 
-// ─── EXPORT CORRECTLY ────────────────────────────────────────────────────
-// Support both import styles:
-// - require('./commands/halotel')(...) 
-// - const { halotelCommand } = require('./commands/halotel')
+async function sendProductDetails(ctx, product) {
+    const price = product.sale_price 
+        ? `~~${product.price}~~ ➜ *${product.sale_price}*` 
+        : `*${product.price}*`;
+
+    const features = product.features.join('\n');
+
+    const detailText = 
+        `📶 *${product.title}*\n\n` +
+        `🏷️ *Brand:* ${product.brand}\n` +
+        `📦 *Data:* ${product.data}\n` +
+        `⏱️ *Validity:* ${product.validity}\n` +
+        `💰 *Price:* ${price}\n\n` +
+        `📋 *Features:*\n${features}\n\n` +
+        `📝 *Description:*\n${product.description}\n\n` +
+        `🆔 *ID:* \`${product.id}\`\n\n` +
+        `📞 *Order Now:*\n` +
+        `• USSD: \`${product.ussd || '*150*01#'}\`\n` +
+        `• WhatsApp: https://wa.me/255612130873?text=Hello%2C%20I%20want%20to%20order%20${encodeURIComponent(product.title)}%20bundle\n\n` +
+        `> ⚡ Mickey Glitch Sub`;
+
+    try {
+        await ctx.sendMessage(ctx.chatId, {
+            image: { url: product.image },
+            caption: detailText
+        });
+    } catch (_) {
+        await ctx.reply(detailText);
+    }
+}
+
+async function sendProductList(ctx) {
+    let text = `📶 *HALOTEL BUNDLE CATALOG*\n\n`;
+    text += `🎯 *All Bundles:*\n\n`;
+
+    PRODUCTS.forEach((p, i) => {
+        const price = p.sale_price 
+            ? `${p.price} ➜ ${p.sale_price}` 
+            : p.price;
+        text += `${i + 1}. *${p.title}*\n`;
+        text += `   📦 ${p.data} | ⏱️ ${p.validity}\n`;
+        text += `   💰 ${price}\n`;
+        text += `   🆔 \`${p.id}\`\n\n`;
+    });
+
+    text += `📌 *Commands:*\n` +
+        `• .halotel <id> - View details\n` +
+        `• .halotel order <id> - Order\n\n` +
+        `> ⚡ Mickey Glitch Sub`;
+
+    await ctx.reply(text);
+}
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 4. MAIN COMMAND
+// ─── ──────────────────────────────────────────────────────────────────────
+
+async function halotelCommand(sock, chatId, message, args) {
+    try {
+        const ctx = createCtx(sock, chatId, message, { args });
+        const subCommand = args[0]?.toLowerCase() || '';
+
+        console.log('[HALOTEL] Command executed with args:', args);
+
+        // ─── HELP / MENU ──────────────────────────────────────────────────
+        if (subCommand === 'help' || subCommand === 'menu') {
+            await ctx.reply(
+                `📶 *HALOTEL COMMANDS*\n\n` +
+                `• .halotel - Show all bundles (Carousel)\n` +
+                `• .halotel list - List all products\n` +
+                `• .halotel <id> - Product details\n` +
+                `• .halotel search <query> - Search bundles\n` +
+                `• .halotel order <id> - Order now\n` +
+                `• .halotel help - This menu\n\n` +
+                `> ⚡ Mickey Glitch Sub`
+            );
+            return;
+        }
+
+        // ─── LIST ──────────────────────────────────────────────────────────
+        if (subCommand === 'list' || subCommand === 'all') {
+            await sendProductList(ctx);
+            return;
+        }
+
+        // ─── SEARCH ────────────────────────────────────────────────────────
+        if (subCommand === 'search' && args[1]) {
+            const query = args.slice(1).join(' ');
+            const results = searchProducts(query);
+            
+            if (results.length === 0) {
+                await ctx.reply(`❌ No bundles found for "${query}"`);
+                return;
+            }
+
+            if (results.length === 1) {
+                await sendProductDetails(ctx, results[0]);
+                return;
+            }
+
+            await sendCarousel(ctx, results);
+            return;
+        }
+
+        // ─── ORDER ─────────────────────────────────────────────────────────
+        if (subCommand === 'order' && args[1]) {
+            const product = getProductById(args[1]);
+            if (!product) {
+                await ctx.reply(`❌ Product "${args[1]}" not found.\n\nAvailable IDs:\n${PRODUCTS.map(p => `• ${p.id}`).join('\n')}`);
+                return;
+            }
+            await sendProductDetails(ctx, product);
+            return;
+        }
+
+        // ─── PRODUCT DETAILS BY ID ────────────────────────────────────────
+        const product = getProductById(subCommand);
+        if (product) {
+            await sendProductDetails(ctx, product);
+            return;
+        }
+
+        // ─── DEFAULT: SEND CAROUSEL WITH ALL PRODUCTS ─────────────────────
+        console.log('[HALOTEL] Sending carousel with all products...');
+        const success = await sendCarousel(ctx, PRODUCTS);
+
+        if (!success) {
+            console.log('[HALOTEL] Carousel failed, sending fallback...');
+            await sendProductList(ctx);
+        }
+
+    } catch (error) {
+        console.error('[HALOTEL] Fatal error:', error.message);
+        try {
+            await sock.sendMessage(chatId, { 
+                text: `❌ Error: ${error.message}\n\nPlease try again later.` 
+            }, { quoted: message });
+        } catch (_) {}
+    }
+}
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 5. EXPORTS
+// ─── ──────────────────────────────────────────────────────────────────────
+
 module.exports = halotelCommand;
 module.exports.halotelCommand = halotelCommand;
 module.exports.default = halotelCommand;
+module.exports.PRODUCTS = PRODUCTS;
