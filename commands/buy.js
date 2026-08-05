@@ -7,15 +7,12 @@ const moment = require("moment-timezone");
 const axios = require("axios");
 const { Button, ButtonV2 } = require('../lib/messageBuilder');
 
-// ─── LOAD CONFIG FROM ROOT ────────────────────────────────────────────────
-const config = require('../config');
-
 // ─── CONFIGURATION ───────────────────────────────────────────────────────
 const CONFIG = {
     timeout: 15000,
-    defaultEgg: "5",
+    defaultEgg: "15",
     defaultLocation: "1",
-    defaultNest: "1",
+    defaultNest: "5",
     timezone: "Africa/Nairobi",
     thumbnail: "https://files.catbox.moe/54sbu9.png"
 };
@@ -170,23 +167,24 @@ async function createPterodactylServer(domain, apiKey, userId, username, specs, 
 async function createPanel(ctx) {
     const { username, targetJid, plan } = extractUser(ctx);
 
-    // Soma moja kwa moja kutoka config file na fallback za global
-    const domain = config.domain || global.domain;
-    const apiKey = config.plta || global.plta;
-    const eggId = config.eggs || global.eggs || CONFIG.defaultEgg;
-    const locationId = config.locc || global.locc || CONFIG.defaultLocation;
+    // Hardcoded credentials moja kwa moja ili kuzuia Config Error
+    const domain = "https://panel.mickeypannel.dpdns.org";
+    const apiKey = "ptla_Lkp1S3qISOERsFvYfmu4k3G7efrkY8vffL6854NcJ0k";
+    const eggId = "15";
+    const locationId = "1";
 
     if (!domain || !apiKey) {
         await sendCard(ctx, {
             title: '⚠️ SYSTEM CONFIG ERROR',
-            body: '❌ *Panel setup haijakamilika!*\n\nAdmin hajaweka `domain` au `plta` kwenye setting za bot.',
+            body: '❌ *Panel setup haijakamilika!*',
             buttons: [{ label: '📞 Owner', id: '.owner' }]
         });
         return false;
     }
 
     const planSpecs = PLANS[plan] || PLANS['1gb'];
-    const password = `@${username.toLowerCase().replace(/[^a-z0-9]/g, '')}${Math.floor(1000 + Math.random() * 9000)}`;
+    const cleanUser = username.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const password = `@${cleanUser}${Math.floor(1000 + Math.random() * 9000)}`;
 
     try {
         // 1. Create User
