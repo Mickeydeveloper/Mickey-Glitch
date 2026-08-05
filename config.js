@@ -2,11 +2,11 @@ require('dotenv').config();
 const { decrypt } = require('./lib/encryption');
 
 // ─── PTERODACTYL PANEL CONFIG ──────────────────────────────────────────────
-global.domain = process.env.PANEL_DOMAIN || 'https://panel.example.com'; // Weka link ya panel yako
-global.plta = process.env.PANEL_KEY || 'ptla_YOUR_API_KEY_HERE';         // Weka Application API Key (PTLA)
-global.eggs = process.env.PANEL_EGG || '5';                             // Egg ID ya Node.js
+global.domain = process.env.PANEL_DOMAIN || 'https://panel.mickeypannel.dpdns.org'; // Weka link ya panel yako
+global.plta = process.env.PANEL_KEY || 'ptla_Lkp1S3qISOERsFvYfmu4k3G7efrkY8vffL6854NcJ0k';         // Weka Application API Key (PTLA)
+global.eggs = process.env.PANEL_EGG || '15';                             // Egg ID ya Node.js
 global.locc = process.env.PANEL_LOCATION || '1';                        // Location ID
-global.nestId = process.env.PANEL_NEST || '1';                          // Nest ID
+global.nestId = process.env.PANEL_NEST || '5';                          // Nest ID
 
 global.APIs = {
     xteam: 'https://api.xteam.xyz',
