@@ -1,5 +1,5 @@
 /**
- * addcmd.js - Powerful Command Manager
+ * addcmd.js - Powerful Command Manager (Fixed)
  * Features: Add, Run, List, Delete custom commands
  * Usage: .cmdadd <name> <code> | .run <name>
  */
@@ -21,7 +21,29 @@ if (!fs.existsSync(COMMANDS_DIR)) fs.mkdirSync(COMMANDS_DIR, { recursive: true }
 if (!fs.existsSync(CUSTOM_DIR)) fs.mkdirSync(CUSTOM_DIR, { recursive: true });
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 2. HELPER FUNCTIONS
+// 2. MESSAGEBUILDER PATH RESOLVER
+// ─── ──────────────────────────────────────────────────────────────────────
+
+function resolveMessageBuilderPath() {
+    const possiblePaths = [
+        path.join(process.cwd(), 'lib', 'messageBuilder.js'),
+        path.join(process.cwd(), 'lib', 'messagebuilder.js'),
+        path.join(process.cwd(), 'lib', 'messageBuilder'),
+        path.join(process.cwd(), 'lib', 'messagebuilder'),
+        path.join(process.cwd(), 'src', 'lib', 'messageBuilder.js'),
+        path.join(process.cwd(), 'src', 'lib', 'messagebuilder.js'),
+    ];
+    
+    for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+            return p;
+        }
+    }
+    return null;
+}
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 3. HELPER FUNCTIONS
 // ─── ──────────────────────────────────────────────────────────────────────
 
 function resolveCommandPath(commandName) {
@@ -94,12 +116,36 @@ function saveCustomCommand(commandName, sourceCode) {
         throw new Error('Command source is empty');
     }
     
+    // ─── FIX: Automatically correct messageBuilder path ──────────────────
+    // Replace incorrect paths with correct ones
+    cleaned = cleaned.replace(
+        /require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi,
+        "require('../lib/messageBuilder')"
+    );
+    cleaned = cleaned.replace(
+        /require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi,
+        "require('../lib/messageBuilder')"
+    );
+    cleaned = cleaned.replace(
+        /require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi,
+        "require('../lib/messageBuilder')"
+    );
+    
+    // ─── Add fallback requires if missing ─────────────────────────────────
+    if (!cleaned.includes('require') || !cleaned.includes('messageBuilder')) {
+        // If no requires, add them at the top
+        const header = `const { createCtx, Carousel, AIRich, Button, Toolkit, ButtonV2 } = require('../lib/messageBuilder');\n\n`;
+        cleaned = header + cleaned;
+    }
+    
     // Ensure proper structure
     if (!cleaned.includes('module.exports')) {
         if (cleaned.startsWith('async (')) {
             cleaned = `module.exports = ${cleaned};`;
         } else if (cleaned.startsWith('function')) {
             cleaned = `module.exports = ${cleaned};`;
+        } else if (cleaned.startsWith('module.exports')) {
+            // Already good
         } else {
             cleaned = `module.exports = {\n    code: async (ctx) => {\n        ${cleaned}\n    },\n    name: '${commandName}'\n};`;
         }
@@ -110,7 +156,7 @@ function saveCustomCommand(commandName, sourceCode) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 3. SANDBOX EXECUTION
+// 4. SANDBOX EXECUTION
 // ─── ──────────────────────────────────────────────────────────────────────
 
 function createSandbox(sock, chatId, message, args, senderId, commandName = '') {
@@ -122,13 +168,6 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
         senderId,
         commandName,
         prefix: '.',
-        // MessageBuilder helpers
-        Button: null,
-        ButtonV2: null,
-        Carousel: null,
-        AIRich: null,
-        Toolkit: null,
-        createCtx: null,
         console: {
             log: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
             error: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
@@ -160,7 +199,6 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
         RegExp,
         Map,
         Set,
-        // WhatsApp helpers
         sendMessage: async (content, options = {}) => {
             const msgContent = typeof content === 'string' ? { text: content } : content;
             const result = await sock.sendMessage(chatId, msgContent, { quoted: message, ...options });
@@ -183,17 +221,30 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
     sandbox.__sent = false;
     sandbox.__sentMessages = [];
     
-    // Load MessageBuilder modules
+    // ─── Load MessageBuilder modules with path detection ────────────────
     try {
-        const mb = require('../lib/messageBuilder');
-        sandbox.Button = mb.Button;
-        sandbox.ButtonV2 = mb.ButtonV2;
-        sandbox.Carousel = mb.Carousel;
-        sandbox.AIRich = mb.AIRich;
-        sandbox.Toolkit = mb.Toolkit;
-        sandbox.createCtx = mb.createCtx;
+        const mbPath = resolveMessageBuilderPath();
+        if (mbPath) {
+            const mb = require(mbPath);
+            sandbox.Button = mb.Button;
+            sandbox.ButtonV2 = mb.ButtonV2;
+            sandbox.Carousel = mb.Carousel;
+            sandbox.AIRich = mb.AIRich;
+            sandbox.Toolkit = mb.Toolkit;
+            sandbox.createCtx = mb.createCtx;
+        } else {
+            // Try relative path as fallback
+            const mb = require('../lib/messageBuilder');
+            sandbox.Button = mb.Button;
+            sandbox.ButtonV2 = mb.ButtonV2;
+            sandbox.Carousel = mb.Carousel;
+            sandbox.AIRich = mb.AIRich;
+            sandbox.Toolkit = mb.Toolkit;
+            sandbox.createCtx = mb.createCtx;
+        }
     } catch (_) {
         // MessageBuilder not available
+        console.log('[SANDBOX] MessageBuilder not loaded');
     }
     
     return sandbox;
@@ -231,7 +282,7 @@ async function executeInSandbox(codeText, sandbox, timeout = 10000) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. RUN COMMAND
+// 5. RUN COMMAND
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function runCommand(sock, chatId, senderId, rawText, message, fullText = '') {
@@ -413,7 +464,7 @@ Examples:
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 5. ADD COMMAND (CMDADD)
+// 6. ADD COMMAND (CMDADD)
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText = '') {
@@ -511,7 +562,7 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 6. EXPORTS
+// 7. EXPORTS
 // ─── ──────────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -525,5 +576,6 @@ module.exports = {
     saveCustomCommand,
     deleteCustomCommand,
     listCustomCommands,
+    resolveMessageBuilderPath,
     CUSTOM_DIR
 };
