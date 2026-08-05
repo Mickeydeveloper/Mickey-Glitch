@@ -1,15 +1,12 @@
 /**
- * buy.js - Modern Pterodactyl Automation System
- * Direct Credentials Architecture
- * 
- * FIX: Added MAIN_FILE and other environment variables to support modern eggs.
+ * buy.js - Modern Pterodactyl System with Native Buttons & Custom UI
  */
 
 const axios = require('axios');
 const moment = require('moment-timezone');
 const { Button, ButtonV2 } = require('../lib/messageBuilder');
 
-// ─── 1. CORE SYSTEM CONFIG ──────────────────────────────────────────────────
+// ─── 1. CORE CONFIG ────────────────────────────────────────────────────────
 const PANEL_CONFIG = {
     baseUrl: "https://panel.mickeypannel.dpdns.org",
     apiKey: "ptla_Lkp1S3qISOERsFvYfmu4k3G7efrkY8vffL6854NcJ0k",
@@ -28,7 +25,7 @@ const PLAN_SPECS = {
     'unlimited': { ram: 20480, cpu: 800, disk: 102400, price: 'TSh 50,000' }
 };
 
-// ─── 2. AXIOS INSTANCE FOR API CALLS ──────────────────────────────────────
+// ─── 2. AXIOS CLIENT ───────────────────────────────────────────────────────
 const panelApi = axios.create({
     baseURL: `${PANEL_CONFIG.baseUrl}/api/application`,
     headers: {
@@ -39,7 +36,9 @@ const panelApi = axios.create({
     timeout: 15000
 });
 
-// ─── 3. UI RESPONSE HELPER ──────────────────────────────────────────────────
+// ─── 3. UI HELPERS ─────────────────────────────────────────────────────────
+
+// Display kawaida inayotumia MessageBuilder kwa Menus/Errors
 async function dispatchCard(ctx, { title, body, buttons = [] }) {
     const client = ctx.core || ctx.sock || ctx.client || ctx;
     const chatJid = ctx.chatId || ctx.chat || ctx.from || ctx._msg?.key?.remoteJid || ctx.sender;
@@ -65,11 +64,37 @@ async function dispatchCard(ctx, { title, body, buttons = [] }) {
 
         return await btnV1.send(chatJid, { quoted: msgQuote });
     } catch (err) {
-        return await client?.sendMessage?.(chatJid, { text: `${title}\n\n${body}` });
+        return await client?.sendMessage?.(chatJid, { text: `*${title}*\n\n${body}` });
     }
 }
 
-// ─── 4. UTILS & PARSERS ─────────────────────────────────────────────────────
+// Helper ya kutuma NATIVE BUTTONS pekee kwa taarifa za Server
+async function sendNativeCard(ctx, { text, footer, buttons = [] }) {
+    const client = ctx.core || ctx.sock || ctx.client || ctx;
+    const chatJid = ctx.chatId || ctx.chat || ctx.from || ctx._msg?.key?.remoteJid || ctx.sender;
+    const msgQuote = ctx._msg;
+
+    // Baileys Native Button Structure
+    const buttonMessage = {
+        text: text,
+        footer: footer || '⚡ MICKEY GLITCH TECH',
+        buttons: buttons.map((b, i) => ({
+            buttonId: b.id || `btn_${i}`,
+            buttonText: { displayText: b.label },
+            type: 1
+        })),
+        headerType: 1
+    };
+
+    try {
+        return await client.sendMessage(chatJid, buttonMessage, { quoted: msgQuote });
+    } catch (e) {
+        // Fallback kama Native Buttons hazi-support-wi kwenye toleo la WhatsApp la mpokeaji
+        return await client.sendMessage(chatJid, { text: `${text}\n\n_${footer}_` }, { quoted: msgQuote });
+    }
+}
+
+// ─── 4. PARSER & USER MANAGER ──────────────────────────────────────────────
 function parseInput(ctx) {
     let rawArgs = ctx.args || [];
     if (typeof rawArgs === 'string') rawArgs = rawArgs.split(' ');
@@ -102,73 +127,92 @@ function parseInput(ctx) {
     return { plan, username, targetJid };
 }
 
-// ─── 5. PTERODACTYL ENGINE ──────────────────────────────────────────────────
-async function createPanel(ctx) {
-    const { plan, username, targetJid } = parseInput(ctx);
-    const spec = PLAN_SPECS[plan];
-    const userPass = `@${username}${Math.floor(1000 + Math.random() * 9000)}`;
-    const createDate = moment().tz(PANEL_CONFIG.timezone).format("DD-MM-YYYY HH:mm");
-
+async function getOrCreateUser(username, userPass) {
+    const email = `${username}@gmail.com`;
+    
     try {
-        // Step A: Create User
         const userRes = await panelApi.post('/users', {
-            email: `${username}@gmail.com`,
+            email: email,
             username: username,
             first_name: username,
             last_name: "Client",
             language: "en",
             password: String(userPass)
         });
-        const createdUser = userRes.data.attributes;
+        return userRes.data.attributes;
+    } catch (error) {
+        const errorDetail = error?.response?.data?.errors?.[0]?.detail || error.message || '';
+        
+        if (errorDetail.includes('email has already been taken') || errorDetail.includes('username has already been taken')) {
+            const searchRes = await panelApi.get(`/users?filter[email]=${email}`);
+            if (searchRes.data.data && searchRes.data.data.length > 0) {
+                return searchRes.data.data[0].attributes;
+            }
+        }
+        throw error;
+    }
+}
 
-        // Step B: Create Server with Fix for MAIN_FILE and environment
-        const serverRes = await panelApi.post('/servers', {
+// ─── 5. MAIN ENGINE ────────────────────────────────────────────────────────
+async function createPanel(ctx) {
+    const { plan, username } = parseInput(ctx);
+    const spec = PLAN_SPECS[plan];
+    const userPass = `@${username}${Math.floor(1000 + Math.random() * 9000)}`;
+    const createDate = moment().tz(PANEL_CONFIG.timezone).format("DD-MM-YYYY HH:mm");
+
+    try {
+        // A. Process User
+        const createdUser = await getOrCreateUser(username, userPass);
+
+        // B. Process Server
+        await panelApi.post('/servers', {
             name: `${username}-srv`,
             user: createdUser.id,
             egg: PANEL_CONFIG.eggId,
-            // Hii picha inatumika kwa Node.js eggs nyingi
             docker_image: "ghcr.io/parkervcp/yolks:nodejs_18", 
             startup: "npm start",
-            // FIX: Nimeongeza environment variables zinazohitajika na Egg
             environment: { 
                 INST: "npm", 
                 USER_UPLOAD: "0", 
                 AUTO_UPDATE: "0", 
                 CMD_RUN: "npm start",
-                // HAPA NDIO FIX YA ERROR YAKO: Tunaweka variable ya MAIN_FILE
                 MAIN_FILE: "index.js", 
-                // Tunaongeza na JS_FILE kwa usalama zaidi
                 JS_FILE: "index.js" 
             },
             limits: { memory: spec.ram, swap: 0, disk: spec.disk, io: 500, cpu: spec.cpu },
             feature_limits: { databases: 0, backups: 0, allocations: 0 },
             deploy: { locations: [PANEL_CONFIG.locationId], dedicated_ip: false, port_range: [] }
         });
-        const createdServer = serverRes.data.attributes;
 
-        // Step C: Format Output Message
-        const messageBody = 
-            `🎉 *PANEL CREATED SUCCESSFULLY!*\n\n` +
-            `👤 *User:* \`${createdUser.username}\`\n` +
-            `🔑 *Pass:* \`${userPass}\`\n` +
-            `📦 *Plan:* ${plan.toUpperCase()} (${spec.ram}MB RAM)\n` +
-            `🧠 *CPU:* ${spec.cpu}%\n` +
-            `💿 *Disk:* ${spec.disk}MB\n` +
-            `🌐 *URL:* ${PANEL_CONFIG.baseUrl}\n` +
-            `📅 *Date:* ${createDate}\n\n` +
-            `> *Hifadhi taarifa hizi vizuri!*`;
+        // C. Taarifa za Server kwa kutumia NATIVE BUTTONS
+        const credsText = 
+            `╭─────────────━┈-🎯\n` +
+            `│ 🚀 *PTERODACTYL PANEL READY*\n` +
+            `╭─────────────━┈-🎯\n` +
+            `│ 👤 *Username:* \`${createdUser.username}\`\n` +
+            `│ 🔑 *Password:* \`${userPass}\`\n` +
+            `│ 📦 *Plan:* ${plan.toUpperCase()} (${spec.ram}MB)\n` +
+            `│ 🧠 *CPU Limit:* ${spec.cpu}%\n` +
+            `│ 💿 *Disk Space:* ${spec.disk}MB\n` +
+            `│ 🌐 *Link:* ${PANEL_CONFIG.baseUrl}\n` +
+            `│ 📅 *Created:* ${createDate}\n` +
+            `╰─────────────━┈-🎯\n\n` +
+            `> *⚠️ Hifadhi maelezo haya mahali salama!*`;
 
-        await dispatchCard(ctx, {
-            title: '🚀 PTERODACTYL CREDENTIALS',
-            body: messageBody,
+        await sendNativeCard(ctx, {
+            text: credsText,
+            footer: '⚡ Powered by Mickey Glitch Tech',
             buttons: [
-                { label: '🌐 Open Panel', id: PANEL_CONFIG.baseUrl }
+                { label: '📋 Menu', id: '.menu' },
+                { label: '📞 Owner Support', id: '.owner' }
             ]
         });
 
         return true;
     } catch (error) {
         const errorDetail = error?.response?.data?.errors?.[0]?.detail || error.message || 'API Connection Failed';
+        
+        // Error response inatumia MessageBuilder
         await dispatchCard(ctx, {
             title: '❌ CREATION FAILURE',
             body: `Imeshindwa kutengeneza server.\n\n*Sababu:* ${errorDetail}`
@@ -191,16 +235,17 @@ module.exports = {
             const menuBody = 
                 `📌 *Jinsi ya Kutumia:*\n` +
                 `\`.buy <plan> <username>\`\n\n` +
-                `📋 *Mipango Iliyopo:*\n` +
-                `• 1gb  - TSh 5,000\n` +
-                `• 2gb  - TSh 8,000\n` +
-                `• 5gb  - TSh 15,000\n` +
-                `• 10gb - TSh 25,000\n` +
-                `• unlimited - TSh 50,000`;
+                `📋 *Mipango Iliyopo (Plans):*\n` +
+                `• *1gb*  - TSh 5,000\n` +
+                `• *2gb*  - TSh 8,000\n` +
+                `• *5gb*  - TSh 15,000\n` +
+                `• *10gb* - TSh 25,000\n` +
+                `• *unlimited* - TSh 50,000`;
 
             return await dispatchCard(ctx, {
-                title: '🛒 PANEL MENU',
-                body: menuBody
+                title: '🛒 PANEL PURCHASE MENU',
+                body: menuBody,
+                buttons: [{ label: '📞 Help / Owner', id: '.owner' }]
             });
         }
 
