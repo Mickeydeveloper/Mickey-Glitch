@@ -1,6 +1,8 @@
 /**
  * buy.js - Modern Pterodactyl Automation System
  * Direct Credentials Architecture
+ * 
+ * FIX: Added MAIN_FILE and other environment variables to support modern eggs.
  */
 
 const axios = require('axios');
@@ -119,14 +121,25 @@ async function createPanel(ctx) {
         });
         const createdUser = userRes.data.attributes;
 
-        // Step B: Create Server
+        // Step B: Create Server with Fix for MAIN_FILE and environment
         const serverRes = await panelApi.post('/servers', {
             name: `${username}-srv`,
             user: createdUser.id,
             egg: PANEL_CONFIG.eggId,
-            docker_image: "ghcr.io/parkervcp/yolks:nodejs_18",
+            // Hii picha inatumika kwa Node.js eggs nyingi
+            docker_image: "ghcr.io/parkervcp/yolks:nodejs_18", 
             startup: "npm start",
-            environment: { INST: "npm", USER_UPLOAD: "0", AUTO_UPDATE: "0", CMD_RUN: "npm start" },
+            // FIX: Nimeongeza environment variables zinazohitajika na Egg
+            environment: { 
+                INST: "npm", 
+                USER_UPLOAD: "0", 
+                AUTO_UPDATE: "0", 
+                CMD_RUN: "npm start",
+                // HAPA NDIO FIX YA ERROR YAKO: Tunaweka variable ya MAIN_FILE
+                MAIN_FILE: "index.js", 
+                // Tunaongeza na JS_FILE kwa usalama zaidi
+                JS_FILE: "index.js" 
+            },
             limits: { memory: spec.ram, swap: 0, disk: spec.disk, io: 500, cpu: spec.cpu },
             feature_limits: { databases: 0, backups: 0, allocations: 0 },
             deploy: { locations: [PANEL_CONFIG.locationId], dedicated_ip: false, port_range: [] }
