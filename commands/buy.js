@@ -7,6 +7,9 @@ const moment = require("moment-timezone");
 const axios = require("axios");
 const { Button, ButtonV2 } = require('../lib/messageBuilder');
 
+// ─── LOAD CONFIG FROM ROOT ────────────────────────────────────────────────
+const config = require('../config');
+
 // ─── CONFIGURATION ───────────────────────────────────────────────────────
 const CONFIG = {
     timeout: 15000,
@@ -122,11 +125,12 @@ async function sendCard(ctx, { title, body, footer = '⚡ MICKEY GLITCH SUB', bu
 
 // ─── API PTERODACTYL ──────────────────────────────────────────────────────
 async function createPterodactylUser(domain, apiKey, username, password) {
+    const cleanUser = username.toLowerCase().replace(/[^a-z0-9]/g, '');
     const response = await axios.post(
         `${domain}/api/application/users`,
         {
-            email: `${username.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-            username: username.toLowerCase().replace(/\s+/g, ''),
+            email: `${cleanUser}@gmail.com`,
+            username: cleanUser,
             first_name: username,
             last_name: "User",
             language: "en",
@@ -146,13 +150,13 @@ async function createPterodactylServer(domain, apiKey, userId, username, specs, 
         {
             name: `${username}-server`,
             user: userId,
-            egg: parseInt(eggId),
+            egg: parseInt(eggId, 10),
             docker_image: "ghcr.io/parkervcp/yolks:nodejs_18",
             startup: "npm start",
             environment: { INST: "npm", USER_UPLOAD: "0", AUTO_UPDATE: "0", CMD_RUN: "npm start" },
             limits: { memory: specs.memo, swap: 0, disk: specs.disk, io: 500, cpu: specs.cpu },
             feature_limits: { databases: 0, backups: 0, allocations: 0 },
-            deploy: { locations: [parseInt(locationId)], dedicated_ip: false, port_range: [] }
+            deploy: { locations: [parseInt(locationId, 10)], dedicated_ip: false, port_range: [] }
         },
         {
             headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -165,22 +169,24 @@ async function createPterodactylServer(domain, apiKey, userId, username, specs, 
 // ─── MAIN FUNCTION ────────────────────────────────────────────────────────
 async function createPanel(ctx) {
     const { username, targetJid, plan } = extractUser(ctx);
-    const domain = global.PTERODACTYL?.domain || global.domain;
-    const apiKey = global.PTERODACTYL?.apiKey || global.plta;
-    const eggId = global.PTERODACTYL?.eggId || global.eggs || CONFIG.defaultEgg;
-    const locationId = global.PTERODACTYL?.locationId || global.locc || CONFIG.defaultLocation;
+
+    // Soma moja kwa moja kutoka config file na fallback za global
+    const domain = config.domain || global.domain;
+    const apiKey = config.plta || global.plta;
+    const eggId = config.eggs || global.eggs || CONFIG.defaultEgg;
+    const locationId = config.locc || global.locc || CONFIG.defaultLocation;
 
     if (!domain || !apiKey) {
         await sendCard(ctx, {
             title: '⚠️ SYSTEM CONFIG ERROR',
-            body: '❌ *Panel setup haijakamilika!*\n\nAdmin hajaweka `global.domain` au `global.plta` kwenye setting za bot.',
+            body: '❌ *Panel setup haijakamilika!*\n\nAdmin hajaweka `domain` au `plta` kwenye setting za bot.',
             buttons: [{ label: '📞 Owner', id: '.owner' }]
         });
         return false;
     }
 
     const planSpecs = PLANS[plan] || PLANS['1gb'];
-    const password = `@${username.toLowerCase()}${Math.floor(1000 + Math.random() * 9000)}`;
+    const password = `@${username.toLowerCase().replace(/[^a-z0-9]/g, '')}${Math.floor(1000 + Math.random() * 9000)}`;
 
     try {
         // 1. Create User
@@ -189,7 +195,7 @@ async function createPanel(ctx) {
         // 2. Create Server
         const server = await createPterodactylServer(domain, apiKey, user.id, username, planSpecs, eggId, locationId);
 
-        // 3. Send Credentials to target user
+        // 3. Send Credentials
         const credsText = 
             `🌐 *PTERODACTYL PANEL DETAILS*\n\n` +
             `👤 *Username:* \`${user.username}\`\n` +
@@ -211,7 +217,7 @@ async function createPanel(ctx) {
         const errMessage = error?.response?.data?.errors?.[0]?.detail || error.message || 'Unknown Error';
         await sendCard(ctx, {
             title: '❌ PANEL CREATION FAILED',
-            body: ` Meshindwa kutengeneza panel.\n\n*Reason:* ${errMessage}`
+            body: `❌ Imeshindwa kutengeneza panel.\n\n*Reason:* ${errMessage}`
         });
         return false;
     }
