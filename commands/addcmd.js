@@ -1,18 +1,33 @@
+/**
+ * addcmd.js - Powerful Command Manager
+ * Features: Add, Run, List, Delete custom commands
+ * Usage: .cmdadd <name> <code> | .run <name>
+ */
+
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const util = require('util');
-const { 
-    saveCustomCommand, 
-    loadCustomCommands, 
-    getCustomCommandNames,
-    listCustomCommands,
-    deleteCustomCommand 
-} = require('../lib/customCommands');
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 1. PATHS & CONFIG
+// ─── ──────────────────────────────────────────────────────────────────────
+
+const COMMANDS_DIR = path.join(process.cwd(), 'commands');
+const CUSTOM_DIR = path.join(COMMANDS_DIR, 'custom');
+
+// Ensure directories exist
+if (!fs.existsSync(COMMANDS_DIR)) fs.mkdirSync(COMMANDS_DIR, { recursive: true });
+if (!fs.existsSync(CUSTOM_DIR)) fs.mkdirSync(CUSTOM_DIR, { recursive: true });
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 2. HELPER FUNCTIONS
+// ─── ──────────────────────────────────────────────────────────────────────
 
 function resolveCommandPath(commandName) {
-    const customPath = path.join(process.cwd(), 'commands', 'custom', `${commandName}.js`);
-    const normalPath = path.join(process.cwd(), 'commands', `${commandName}.js`);
+    const customPath = path.join(CUSTOM_DIR, `${commandName}.js`);
+    const normalPath = path.join(COMMANDS_DIR, `${commandName}.js`);
+    
     if (fs.existsSync(customPath)) return customPath;
     if (fs.existsSync(normalPath)) return normalPath;
     return null;
@@ -20,8 +35,10 @@ function resolveCommandPath(commandName) {
 
 function loadCommandModule(commandPath) {
     try {
+        // Clear cache to reload fresh
         delete require.cache[require.resolve(commandPath)];
-        return require(commandPath);
+        const module = require(commandPath);
+        return module;
     } catch (error) {
         throw new Error(`Failed to load module: ${error.message}`);
     }
@@ -34,11 +51,68 @@ function findHandler(commandModule) {
         if (typeof commandModule.handler === 'function') return commandModule.handler;
         if (typeof commandModule.default === 'function') return commandModule.default;
         if (typeof commandModule.run === 'function') return commandModule.run;
+        if (typeof commandModule.execute === 'function') return commandModule.execute;
     }
     return null;
 }
 
-// Helper to create sandbox environment
+function listCustomCommands() {
+    try {
+        const files = fs.readdirSync(CUSTOM_DIR);
+        return files
+            .filter(f => f.endsWith('.js'))
+            .map(f => f.replace('.js', ''));
+    } catch {
+        return [];
+    }
+}
+
+function deleteCustomCommand(commandName) {
+    const filePath = path.join(CUSTOM_DIR, `${commandName}.js`);
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`Command "${commandName}" not found`);
+    }
+    fs.unlinkSync(filePath);
+    return true;
+}
+
+function saveCustomCommand(commandName, sourceCode) {
+    const filePath = path.join(CUSTOM_DIR, `${commandName}.js`);
+    
+    // Validate command name
+    if (!/^[a-z0-9_\-]+$/i.test(commandName)) {
+        throw new Error('Invalid command name. Use only letters, numbers, underscore, and hyphen.');
+    }
+    
+    // Clean source code
+    let cleaned = sourceCode
+        .replace(/^```(?:js|javascript)?\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+    
+    if (!cleaned) {
+        throw new Error('Command source is empty');
+    }
+    
+    // Ensure proper structure
+    if (!cleaned.includes('module.exports')) {
+        if (cleaned.startsWith('async (')) {
+            cleaned = `module.exports = ${cleaned};`;
+        } else if (cleaned.startsWith('function')) {
+            cleaned = `module.exports = ${cleaned};`;
+        } else {
+            cleaned = `module.exports = {\n    code: async (ctx) => {\n        ${cleaned}\n    },\n    name: '${commandName}'\n};`;
+        }
+    }
+    
+    fs.writeFileSync(filePath, cleaned, 'utf8');
+    return filePath;
+}
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 3. SANDBOX EXECUTION
+// ─── ──────────────────────────────────────────────────────────────────────
+
 function createSandbox(sock, chatId, message, args, senderId, commandName = '') {
     const sandbox = {
         sock,
@@ -48,6 +122,13 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
         senderId,
         commandName,
         prefix: '.',
+        // MessageBuilder helpers
+        Button: null,
+        ButtonV2: null,
+        Carousel: null,
+        AIRich: null,
+        Toolkit: null,
+        createCtx: null,
         console: {
             log: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
             error: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
@@ -79,17 +160,17 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
         RegExp,
         Map,
         Set,
-        // WhatsApp specific helpers
+        // WhatsApp helpers
         sendMessage: async (content, options = {}) => {
-            const messageContent = typeof content === 'string' ? { text: content } : content;
-            const result = await sock.sendMessage(chatId, messageContent, { quoted: message, ...options });
+            const msgContent = typeof content === 'string' ? { text: content } : content;
+            const result = await sock.sendMessage(chatId, msgContent, { quoted: message, ...options });
             sandbox.__sent = true;
             sandbox.__sentMessages.push(result);
             return result;
         },
         reply: async (content, options = {}) => {
-            const messageContent = typeof content === 'string' ? { text: content } : content;
-            const result = await sock.sendMessage(chatId, messageContent, { quoted: message, ...options });
+            const msgContent = typeof content === 'string' ? { text: content } : content;
+            const result = await sock.sendMessage(chatId, msgContent, { quoted: message, ...options });
             sandbox.__sent = true;
             sandbox.__sentMessages.push(result);
             return result;
@@ -101,11 +182,24 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
     sandbox.__logs = [];
     sandbox.__sent = false;
     sandbox.__sentMessages = [];
+    
+    // Load MessageBuilder modules
+    try {
+        const mb = require('../lib/messageBuilder');
+        sandbox.Button = mb.Button;
+        sandbox.ButtonV2 = mb.ButtonV2;
+        sandbox.Carousel = mb.Carousel;
+        sandbox.AIRich = mb.AIRich;
+        sandbox.Toolkit = mb.Toolkit;
+        sandbox.createCtx = mb.createCtx;
+    } catch (_) {
+        // MessageBuilder not available
+    }
+    
     return sandbox;
 }
 
-// Execute code in sandbox
-async function executeInSandbox(codeText, sandbox, timeout = 5000) {
+async function executeInSandbox(codeText, sandbox, timeout = 10000) {
     try {
         const script = new vm.Script(codeText, { 
             filename: 'runCommand.js',
@@ -113,11 +207,11 @@ async function executeInSandbox(codeText, sandbox, timeout = 5000) {
         });
         const context = vm.createContext(sandbox);
         let result = script.runInContext(context, { timeout });
-        
+
         if (result && typeof result.then === 'function') {
             result = await result;
         }
-        
+
         if (result === undefined && typeof sandbox.module?.exports === 'function') {
             result = await sandbox.module.exports(sandbox.sock, sandbox.chatId, sandbox.message, sandbox.args, { senderId: sandbox.senderId });
         }
@@ -136,6 +230,10 @@ async function executeInSandbox(codeText, sandbox, timeout = 5000) {
     }
 }
 
+// ─── ──────────────────────────────────────────────────────────────────────
+// 4. RUN COMMAND
+// ─── ──────────────────────────────────────────────────────────────────────
+
 async function runCommand(sock, chatId, senderId, rawText, message, fullText = '') {
     try {
         const isOwner = message?.key?.fromMe || senderId?.toString()?.endsWith('@s.whatsapp.net') || false;
@@ -152,7 +250,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
                           quotedMessage?.imageMessage?.caption || 
                           quotedMessage?.videoMessage?.caption || '';
 
-        // Check if it's a command management request
+        // ─── List commands ──────────────────────────────────────────────
         if (body.match(/^list$/i)) {
             const commands = listCustomCommands();
             if (commands.length === 0) {
@@ -166,11 +264,12 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
+        // ─── Delete command ─────────────────────────────────────────────
         if (body.match(/^delete\s+(\S+)/i)) {
             const match = body.match(/^delete\s+(\S+)/i);
             const cmdName = match[1];
             try {
-                const result = deleteCustomCommand(cmdName);
+                deleteCustomCommand(cmdName);
                 await sock.sendMessage(chatId, { 
                     text: `✅ Command .${cmdName} deleted successfully.` 
                 }, { quoted: message });
@@ -182,6 +281,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
+        // ─── Help ────────────────────────────────────────────────────────
         if (body.match(/^help$/i)) {
             await sock.sendMessage(chatId, {
                 text: `🛠️ Run Command Help:
@@ -213,31 +313,31 @@ Examples:
             return;
         }
 
-        // Execute quoted code
+        // ─── Execute quoted code ────────────────────────────────────────
         if (quotedCode) {
             const codeText = quotedCode.toString().trim();
             const args = body ? body.split(/\s+/) : [];
             const sandbox = createSandbox(sock, chatId, message, args, senderId);
-            
+
             const result = await executeInSandbox(codeText, sandbox);
-            
+
             let response = result.success 
                 ? `✅ Code executed successfully.\nResult:\n${util.inspect(result.result, { depth: 2, colors: false })}`
                 : `❌ Code execution error:\n${result.error?.stack || result.error?.message || result.error}`;
-            
+
             if (result.logs.length) {
                 response += `\n\n📋 Logs:\n${result.logs.join('\n')}`;
             }
-            
+
             await sock.sendMessage(chatId, { text: response }, { quoted: message });
             return;
         }
 
-        // Handle command file execution
+        // ─── Execute command file ──────────────────────────────────────
         const parts = body.split(/\s+/);
         const commandName = parts[0];
         const commandPath = resolveCommandPath(commandName);
-        
+
         if (commandPath) {
             const args = parts.slice(1);
             let commandModule;
@@ -287,23 +387,23 @@ Examples:
             return;
         }
 
-        // Execute inline code
+        // ─── Execute inline code ────────────────────────────────────────
         const codeText = body;
         const args = [];
         const sandbox = createSandbox(sock, chatId, message, args, senderId);
-        
+
         const result = await executeInSandbox(codeText, sandbox);
-        
+
         let response = result.success 
             ? `✅ Code executed successfully.\nResult:\n${util.inspect(result.result, { depth: 2, colors: false })}`
             : `❌ Code execution error:\n${result.error?.stack || result.error?.message || result.error}`;
-        
+
         if (result.logs.length) {
             response += `\n\n📋 Logs:\n${result.logs.join('\n')}`;
         }
-        
+
         await sock.sendMessage(chatId, { text: response }, { quoted: message });
-        
+
     } catch (error) {
         console.error('runCommand error:', error);
         await sock.sendMessage(chatId, { 
@@ -311,6 +411,10 @@ Examples:
         }, { quoted: message });
     }
 }
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 5. ADD COMMAND (CMDADD)
+// ─── ──────────────────────────────────────────────────────────────────────
 
 async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText = '') {
     try {
@@ -321,7 +425,7 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
         }
 
         const input = (rawText || fullText || '').toString();
-        
+
         // Check for quoted message with code
         const quotedMessage = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
         const quotedCode = quotedMessage?.conversation || 
@@ -331,9 +435,8 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
 
         let commandName, sourceCode;
 
-        // If there's a quoted message with code, use it
+        // If there's a quoted message with code
         if (quotedCode && !input.includes('module.exports')) {
-            // Try to extract command name from input
             const nameMatch = input.match(/^\.cmdadd\s+([a-z0-9_\-]+)/i);
             if (!nameMatch) {
                 await sock.sendMessage(chatId, {
@@ -363,44 +466,42 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
             return;
         }
 
-        // Clean the source code
-        let cleaned = sourceCode
-            .replace(/^```(?:js|javascript)?\s*/i, '')
-            .replace(/```\s*$/i, '')
-            .trim();
-
-        if (!cleaned) {
-            await sock.sendMessage(chatId, { text: '❌ Command source is empty.' }, { quoted: message });
-            return;
-        }
-
-        // Ensure the code has proper structure
-        if (!cleaned.includes('module.exports') && !cleaned.includes('exports.')) {
-            // If it's a simple function, wrap it
-            if (cleaned.startsWith('async (')) {
-                cleaned = `module.exports = ${cleaned};`;
-            } else if (cleaned.startsWith('function')) {
-                cleaned = `module.exports = ${cleaned};`;
-            } else {
-                // Try to determine if it's already a valid module
-                cleaned = `module.exports = {\n    handler: async (ctx) => {\n        ${cleaned}\n    },\n    name: '${commandName}'\n};`;
-            }
-        }
-
-        // Save the command
+        // ─── Save command ──────────────────────────────────────────────
         try {
-            const result = await saveCustomCommand(commandName, cleaned);
+            const filePath = saveCustomCommand(commandName, sourceCode);
+            
+            // Try to load the command to verify it works
+            try {
+                const module = loadCommandModule(filePath);
+                const handler = findHandler(module);
+                if (!handler) {
+                    fs.unlinkSync(filePath);
+                    await sock.sendMessage(chatId, { 
+                        text: `❌ Command saved but no valid handler found. File deleted.` 
+                    }, { quoted: message });
+                    return;
+                }
+            } catch (loadError) {
+                fs.unlinkSync(filePath);
+                await sock.sendMessage(chatId, { 
+                    text: `❌ Command saved but failed to load:\n${loadError.message}\n\nFile deleted.` 
+                }, { quoted: message });
+                return;
+            }
+
             await sock.sendMessage(chatId, {
                 text: `✅ Custom command saved as .${commandName}\n\nFile: commands/custom/${commandName}.js\n\nRunning it now...`
             }, { quoted: message });
 
+            // Run the command
             await runCommand(sock, chatId, senderId, `.run ${commandName}`, message);
+
         } catch (saveError) {
             await sock.sendMessage(chatId, { 
                 text: `❌ Failed to save command: ${saveError?.message || saveError}` 
             }, { quoted: message });
         }
-        
+
     } catch (error) {
         console.error('cmdadd error:', error);
         await sock.sendMessage(chatId, { 
@@ -409,6 +510,10 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
     }
 }
 
+// ─── ──────────────────────────────────────────────────────────────────────
+// 6. EXPORTS
+// ─── ──────────────────────────────────────────────────────────────────────
+
 module.exports = {
     cmdaddCommand,
     runCommand,
@@ -416,5 +521,9 @@ module.exports = {
     executeInSandbox,
     resolveCommandPath,
     loadCommandModule,
-    findHandler
+    findHandler,
+    saveCustomCommand,
+    deleteCustomCommand,
+    listCustomCommands,
+    CUSTOM_DIR
 };
