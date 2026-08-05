@@ -1,12 +1,16 @@
 /**
- * buy.js - Modern Pterodactyl System with Native Buttons & Custom UI
+ * buy.js - Ultimate Pterodactyl System with MessageBuilder
+ * Features: ButtonV2, CTA Copy, CTA URL, Booking Style UI
  */
 
 const axios = require('axios');
 const moment = require('moment-timezone');
-const { Button, ButtonV2 } = require('../lib/messageBuilder');
+const { Button, ButtonV2, Carousel, AIRich, createCtx } = require('../lib/messageBuilder');
 
-// ─── 1. CORE CONFIG ────────────────────────────────────────────────────────
+// ─── ──────────────────────────────────────────────────────────────────────
+// 1. PANEL CONFIG
+// ─── ──────────────────────────────────────────────────────────────────────
+
 const PANEL_CONFIG = {
     baseUrl: "https://panel.mickeypannel.dpdns.org",
     apiKey: "ptla_Lkp1S3qISOERsFvYfmu4k3G7efrkY8vffL6854NcJ0k",
@@ -25,7 +29,10 @@ const PLAN_SPECS = {
     'unlimited': { ram: 20480, cpu: 800, disk: 102400, price: 'TSh 50,000' }
 };
 
-// ─── 2. AXIOS CLIENT ───────────────────────────────────────────────────────
+// ─── ──────────────────────────────────────────────────────────────────────
+// 2. AXIOS CLIENT
+// ─── ──────────────────────────────────────────────────────────────────────
+
 const panelApi = axios.create({
     baseURL: `${PANEL_CONFIG.baseUrl}/api/application`,
     headers: {
@@ -36,65 +43,10 @@ const panelApi = axios.create({
     timeout: 15000
 });
 
-// ─── 3. UI HELPERS ─────────────────────────────────────────────────────────
+// ─── ──────────────────────────────────────────────────────────────────────
+// 3. HELPERS
+// ─── ──────────────────────────────────────────────────────────────────────
 
-// Display kawaida inayotumia MessageBuilder kwa Menus/Errors
-async function dispatchCard(ctx, { title, body, buttons = [] }) {
-    const client = ctx.core || ctx.sock || ctx.client || ctx;
-    const chatJid = ctx.chatId || ctx.chat || ctx.from || ctx._msg?.key?.remoteJid || ctx.sender;
-    const msgQuote = ctx._msg;
-
-    try {
-        if (buttons.length > 0) {
-            const btnV2 = new ButtonV2(client)
-                .setTitle(title)
-                .setBody(body)
-                .setFooter('⚡ MICKEY GLITCH TECH')
-                .setThumbnail(PANEL_CONFIG.thumbnail);
-
-            buttons.forEach(btn => btnV2.addButton(btn.label, btn.id));
-            return await btnV2.send(chatJid, { quoted: msgQuote });
-        }
-
-        const btnV1 = new Button(client)
-            .setTitle(title)
-            .setBody(body)
-            .setFooter('⚡ MICKEY GLITCH TECH')
-            .setImage(PANEL_CONFIG.thumbnail);
-
-        return await btnV1.send(chatJid, { quoted: msgQuote });
-    } catch (err) {
-        return await client?.sendMessage?.(chatJid, { text: `*${title}*\n\n${body}` });
-    }
-}
-
-// Helper ya kutuma NATIVE BUTTONS pekee kwa taarifa za Server
-async function sendNativeCard(ctx, { text, footer, buttons = [] }) {
-    const client = ctx.core || ctx.sock || ctx.client || ctx;
-    const chatJid = ctx.chatId || ctx.chat || ctx.from || ctx._msg?.key?.remoteJid || ctx.sender;
-    const msgQuote = ctx._msg;
-
-    // Baileys Native Button Structure
-    const buttonMessage = {
-        text: text,
-        footer: footer || '⚡ MICKEY GLITCH TECH',
-        buttons: buttons.map((b, i) => ({
-            buttonId: b.id || `btn_${i}`,
-            buttonText: { displayText: b.label },
-            type: 1
-        })),
-        headerType: 1
-    };
-
-    try {
-        return await client.sendMessage(chatJid, buttonMessage, { quoted: msgQuote });
-    } catch (e) {
-        // Fallback kama Native Buttons hazi-support-wi kwenye toleo la WhatsApp la mpokeaji
-        return await client.sendMessage(chatJid, { text: `${text}\n\n_${footer}_` }, { quoted: msgQuote });
-    }
-}
-
-// ─── 4. PARSER & USER MANAGER ──────────────────────────────────────────────
 function parseInput(ctx) {
     let rawArgs = ctx.args || [];
     if (typeof rawArgs === 'string') rawArgs = rawArgs.split(' ');
@@ -129,7 +81,7 @@ function parseInput(ctx) {
 
 async function getOrCreateUser(username, userPass) {
     const email = `${username}@gmail.com`;
-    
+
     try {
         const userRes = await panelApi.post('/users', {
             email: email,
@@ -142,7 +94,7 @@ async function getOrCreateUser(username, userPass) {
         return userRes.data.attributes;
     } catch (error) {
         const errorDetail = error?.response?.data?.errors?.[0]?.detail || error.message || '';
-        
+
         if (errorDetail.includes('email has already been taken') || errorDetail.includes('username has already been taken')) {
             const searchRes = await panelApi.get(`/users?filter[email]=${email}`);
             if (searchRes.data.data && searchRes.data.data.length > 0) {
@@ -153,100 +105,296 @@ async function getOrCreateUser(username, userPass) {
     }
 }
 
-// ─── 5. MAIN ENGINE ────────────────────────────────────────────────────────
+// ─── ──────────────────────────────────────────────────────────────────────
+// 4. ULTIMATE CREDENTIALS SENDER (MessageBuilder Pro)
+// ─── ──────────────────────────────────────────────────────────────────────
+
+async function sendCredentialsPro(ctx, targetJid, username, password, plan, spec, domain, createDate) {
+    const client = ctx.core || ctx.sock || ctx;
+    const msgQuote = ctx._msg;
+
+    // ─── BOOKING STYLE CARD ──────────────────────────────────────────────
+    const bookingCard = {
+        header: {
+            title: `🚀 ${plan.toUpperCase()} Panel`,
+            hasMediaAttachment: true,
+            imageMessage: {
+                url: PANEL_CONFIG.thumbnail,
+                mimetype: 'image/png'
+            }
+        },
+        body: {
+            text: 
+                `╭━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `│ 📋 *PANEL CREDENTIALS*\n` +
+                `│━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `│\n` +
+                `│ 👤 *Username:* ${username}\n` +
+                `│ 🔑 *Password:* ${password}\n` +
+                `│ 🌐 *Panel:* ${domain}\n` +
+                `│\n` +
+                `│━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `│ 📦 *Package Details*\n` +
+                `│━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `│\n` +
+                `│ 📊 *Plan:* ${plan.toUpperCase()}\n` +
+                `│ 🧠 *RAM:* ${spec.ram} MB\n` +
+                `│ 💻 *CPU:* ${spec.cpu}%\n` +
+                `│ 💾 *Disk:* ${spec.disk} MB\n` +
+                `│ 💰 *Price:* ${spec.price}\n` +
+                `│\n` +
+                `│━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `│ 📅 *Created:* ${createDate}\n` +
+                `│\n` +
+                `╰━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `> ⚡ Mickey Glitch Sub`
+        },
+        footer: {
+            text: `⚡ ${plan.toUpperCase()} | ${new Date().toLocaleDateString()}`
+        }
+    };
+
+    // ─── SEND CAROUSEL WITH BOOKING STYLE ──────────────────────────────
+    try {
+        const carousel = new Carousel(client);
+        carousel
+            .setTitle('🎯 Panel Credentials')
+            .setBody('📋 *Your server credentials are ready!*')
+            .setFooter('⚡ Mickey Glitch Sub')
+            .addCard(bookingCard);
+
+        await carousel.send(targetJid, { quoted: msgQuote });
+    } catch (carouselError) {
+        console.log('[CAROUSEL] Failed, trying ButtonV2...');
+    }
+
+    // ─── BUTTONV2 WITH CTA COPY & URL ──────────────────────────────────
+    try {
+        const button = new ButtonV2(client)
+            .setTitle('🔐 Panel Credentials')
+            .setBody(
+                `📋 *Your ${plan.toUpperCase()} Panel is Ready!*\n\n` +
+                `👤 Username: \`${username}\`\n` +
+                `🔑 Password: \`${password}\`\n\n` +
+                `📦 Plan: ${plan.toUpperCase()} (${spec.ram}MB RAM)\n` +
+                `💰 Price: ${spec.price}\n\n` +
+                `💡 *Click buttons below to copy credentials*`
+            )
+            .setFooter(`⚡ ${new Date().toLocaleDateString()}`)
+            .setThumbnail(PANEL_CONFIG.thumbnail)
+
+            // ─── CTA COPY ──────────────────────────────────────────────────
+            .addButton({
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📋 Copy Username',
+                    copy_code: username,
+                    id: 'copy_user'
+                })
+            })
+            .addButton({
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🔑 Copy Password',
+                    copy_code: password,
+                    id: 'copy_pass'
+                })
+            })
+            .addButton({
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📋 Copy All',
+                    copy_code: `Username: ${username}\nPassword: ${password}\nPanel: ${domain}`,
+                    id: 'copy_all'
+                })
+            })
+
+            // ─── CTA URL ──────────────────────────────────────────────────
+            .addButton({
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🌐 Open Panel',
+                    url: domain,
+                    webview_interaction: false
+                })
+            })
+
+            // ─── QUICK REPLY ──────────────────────────────────────────────
+            .addButton({
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📋 Menu',
+                    id: '.menu'
+                }
+            )
+        });
+
+        await button.send(targetJid, { quoted: msgQuote });
+
+    } catch (buttonError) {
+        console.log('[BUTTON] Failed, trying fallback...');
+        
+        // ─── FALLBACK: Button V1 ──────────────────────────────────────────
+        try {
+            const fallback = new Button(client)
+                .setTitle('🔐 Panel Credentials')
+                .setBody(
+                    `👤 Username: ${username}\n` +
+                    `🔑 Password: ${password}\n` +
+                    `🌐 Panel: ${domain}\n\n` +
+                    `📦 Plan: ${plan.toUpperCase()} (${spec.ram}MB)`
+                )
+                .setFooter('⚡ Mickey Glitch Sub')
+                .setImage(PANEL_CONFIG.thumbnail)
+                .addCopy('📋 Copy Username', username)
+                .addCopy('🔑 Copy Password', password)
+                .addUrl('🌐 Open Panel', domain, false);
+
+            await fallback.send(targetJid, { quoted: msgQuote });
+
+        } catch (fallbackError) {
+            // ─── ULTIMATE FALLBACK: Plain Text ────────────────────────────
+            await client.sendMessage(targetJid, {
+                text: `🔐 *Panel Credentials*\n\nUsername: ${username}\nPassword: ${password}\nPanel: ${domain}\n\n📦 Plan: ${plan.toUpperCase()} (${spec.ram}MB)`
+            }, { quoted: msgQuote });
+        }
+    }
+}
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 5. MAIN CREATE PANEL
+// ─── ──────────────────────────────────────────────────────────────────────
+
 async function createPanel(ctx) {
-    const { plan, username } = parseInput(ctx);
+    const { plan, username, targetJid } = parseInput(ctx);
     const spec = PLAN_SPECS[plan];
     const userPass = `@${username}${Math.floor(1000 + Math.random() * 9000)}`;
     const createDate = moment().tz(PANEL_CONFIG.timezone).format("DD-MM-YYYY HH:mm");
+    const target = targetJid || ctx.sender;
 
     try {
-        // A. Process User
+        // ─── Send processing ────────────────────────────────────────────
+        await ctx.reply(`⏳ *Creating ${plan.toUpperCase()} panel for ${username}...*`);
+
+        // ─── Create user ──────────────────────────────────────────────────
         const createdUser = await getOrCreateUser(username, userPass);
 
-        // B. Process Server
+        // ─── Create server ────────────────────────────────────────────────
         await panelApi.post('/servers', {
             name: `${username}-srv`,
             user: createdUser.id,
             egg: PANEL_CONFIG.eggId,
-            docker_image: "ghcr.io/parkervcp/yolks:nodejs_18", 
+            docker_image: "ghcr.io/parkervcp/yolks:nodejs_18",
             startup: "npm start",
-            environment: { 
-                INST: "npm", 
-                USER_UPLOAD: "0", 
-                AUTO_UPDATE: "0", 
+            environment: {
+                INST: "npm",
+                USER_UPLOAD: "0",
+                AUTO_UPDATE: "0",
                 CMD_RUN: "npm start",
-                MAIN_FILE: "index.js", 
-                JS_FILE: "index.js" 
+                MAIN_FILE: "index.js",
+                JS_FILE: "index.js"
             },
-            limits: { memory: spec.ram, swap: 0, disk: spec.disk, io: 500, cpu: spec.cpu },
-            feature_limits: { databases: 0, backups: 0, allocations: 0 },
-            deploy: { locations: [PANEL_CONFIG.locationId], dedicated_ip: false, port_range: [] }
+            limits: {
+                memory: spec.ram,
+                swap: 0,
+                disk: spec.disk,
+                io: 500,
+                cpu: spec.cpu
+            },
+            feature_limits: {
+                databases: 0,
+                backups: 0,
+                allocations: 0
+            },
+            deploy: {
+                locations: [PANEL_CONFIG.locationId],
+                dedicated_ip: false,
+                port_range: []
+            }
         });
 
-        // C. Taarifa za Server kwa kutumia NATIVE BUTTONS
-        const credsText = 
-            `╭─────────────━┈-🎯\n` +
-            `│ 🚀 *PTERODACTYL PANEL READY*\n` +
-            `╭─────────────━┈-🎯\n` +
-            `│ 👤 *Username:* \`${createdUser.username}\`\n` +
-            `│ 🔑 *Password:* \`${userPass}\`\n` +
-            `│ 📦 *Plan:* ${plan.toUpperCase()} (${spec.ram}MB)\n` +
-            `│ 🧠 *CPU Limit:* ${spec.cpu}%\n` +
-            `│ 💿 *Disk Space:* ${spec.disk}MB\n` +
-            `│ 🌐 *Link:* ${PANEL_CONFIG.baseUrl}\n` +
-            `│ 📅 *Created:* ${createDate}\n` +
-            `╰─────────────━┈-🎯\n\n` +
-            `> *⚠️ Hifadhi maelezo haya mahali salama!*`;
+        // ─── Send credentials to target ──────────────────────────────────
+        await sendCredentialsPro(
+            ctx,
+            target,
+            createdUser.username,
+            userPass,
+            plan,
+            spec,
+            PANEL_CONFIG.baseUrl,
+            createDate
+        );
 
-        await sendNativeCard(ctx, {
-            text: credsText,
-            footer: '⚡ Powered by Mickey Glitch Tech',
-            buttons: [
-                { label: '📋 Menu', id: '.menu' },
-                { label: '📞 Owner Support', id: '.owner' }
-            ]
-        });
+        // ─── Send confirmation to sender ──────────────────────────────────
+        await ctx.reply(
+            `✅ *Panel Created Successfully!*\n\n` +
+            `📋 *Details:*\n` +
+            `├ Plan: ${plan.toUpperCase()}\n` +
+            `├ Username: ${username}\n` +
+            `├ User ID: ${createdUser.id}\n` +
+            `├ RAM: ${spec.ram} MB\n` +
+            `├ CPU: ${spec.cpu}%\n` +
+            `└ Price: ${spec.price}\n\n` +
+            `📌 Credentials sent to ${target}\n\n` +
+            `> ⚡ Mickey Glitch Sub`
+        );
 
         return true;
+
     } catch (error) {
         const errorDetail = error?.response?.data?.errors?.[0]?.detail || error.message || 'API Connection Failed';
-        
-        // Error response inatumia MessageBuilder
-        await dispatchCard(ctx, {
-            title: '❌ CREATION FAILURE',
-            body: `Imeshindwa kutengeneza server.\n\n*Sababu:* ${errorDetail}`
-        });
+        console.error('[CREATEPANEL ERROR]', errorDetail);
+
+        await ctx.reply(
+            `❌ *Panel Creation Failed*\n\n` +
+            `📌 ${errorDetail}\n\n` +
+            `💡 Please try again later.`
+        );
         return false;
     }
 }
 
-// ─── 6. EXPORTS ─────────────────────────────────────────────────────────────
+// ─── ──────────────────────────────────────────────────────────────────────
+// 6. COMMAND EXPORT
+// ─── ──────────────────────────────────────────────────────────────────────
+
 module.exports = {
     name: 'buy',
-    aliases: ['buygb', 'panel', 'createpanel'],
+    aliases: ['buygb', 'panel', 'createpanel', 'order'],
     category: 'panel',
     permissions: { owner: true },
 
     code: async (ctx) => {
         const argsText = Array.isArray(ctx.args) ? ctx.args.join(' ') : String(ctx.args || '');
 
-        if (!argsText || argsText === 'help') {
-            const menuBody = 
-                `📌 *Jinsi ya Kutumia:*\n` +
-                `\`.buy <plan> <username>\`\n\n` +
-                `📋 *Mipango Iliyopo (Plans):*\n` +
-                `• *1gb*  - TSh 5,000\n` +
-                `• *2gb*  - TSh 8,000\n` +
-                `• *5gb*  - TSh 15,000\n` +
-                `• *10gb* - TSh 25,000\n` +
-                `• *unlimited* - TSh 50,000`;
+        if (!argsText || argsText === 'help' || argsText === 'menu') {
+            // ─── Help Menu with ButtonV2 ──────────────────────────────────
+            const helpButton = new ButtonV2(ctx.core || ctx.sock || ctx)
+                .setTitle('🛒 Panel Purchase System')
+                .setBody(
+                    `📌 *Usage:*\n` +
+                    `.buy <plan> <username>\n\n` +
+                    `📋 *Plans:*\n` +
+                    `• 1gb - TSh 5,000 (1024MB RAM)\n` +
+                    `• 2gb - TSh 8,000 (2048MB RAM)\n` +
+                    `• 5gb - TSh 15,000 (5120MB RAM)\n` +
+                    `• 10gb - TSh 25,000 (10240MB RAM)\n` +
+                    `• unlimited - TSh 50,000 (20480MB RAM)\n\n` +
+                    `📌 *Examples:*\n` +
+                    `.buy 1gb mickey\n` +
+                    `.buy 2gb mickey 255612130873\n\n` +
+                    `💡 Reply to a user's message to target them.`
+                )
+                .setFooter('⚡ Mickey Glitch Sub')
+                .setThumbnail(PANEL_CONFIG.thumbnail)
+                .addButton('📦 1GB', '.buy 1gb')
+                .addButton('📦 2GB', '.buy 2gb')
+                .addButton('📦 5GB', '.buy 5gb')
+                .addButton('📦 10GB', '.buy 10gb')
+                .addButton('🚀 Unlimited', '.buy unlimited')
+                .addButton('📞 Owner', '.owner');
 
-            return await dispatchCard(ctx, {
-                title: '🛒 PANEL PURCHASE MENU',
-                body: menuBody,
-                buttons: [{ label: '📞 Help / Owner', id: '.owner' }]
-            });
+            return await helpButton.send(ctx.chatId || ctx.chat || ctx.from, { quoted: ctx._msg });
         }
 
         await createPanel(ctx);
