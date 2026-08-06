@@ -1,4 +1,4 @@
-// source.js - Full Fixed & Optimized Version 
+// source.js - Full Fixed & Optimized Version with Advanced Features
 const { Button, ButtonV2, Carousel, AIRich, createCtx } = require('../lib/messageBuilder');
 const baileys = require('@whiskeysockets/baileys');
 const axios = require('axios');
@@ -19,13 +19,12 @@ async function fetchNixellExamples() {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             },
-            timeout: 10000 // 10 second timeout
+            timeout: 10000
         });
 
         const $ = cheerio.load(response.data);
         const examples = [];
 
-        // Imeongezwa error handling kwa ajili ya selectors
         try {
             $('table.maintable tr').each((i, row) => {
                 if (i === 0) return;
@@ -83,7 +82,7 @@ async function fetchPasteContent(pasteId) {
 async function deletePreviousMessages(sock, chatId, messages) {
     try {
         if (!messages || messages.length === 0) return;
-        
+
         for (const msg of messages) {
             if (msg && msg.key) {
                 try {
@@ -92,7 +91,6 @@ async function deletePreviousMessages(sock, chatId, messages) {
                     });
                     await delay(200);
                 } catch (deleteError) {
-                    // Ignore individual deletion errors
                     console.log('Error deleting single message:', deleteError.message);
                 }
             }
@@ -122,11 +120,10 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
         if (content.includes('relayMessage') || content.includes('interactiveMessage') || 
             content.includes('documentMessage') || content.includes('stickerMessage')) {
             try {
-                // Imeongezwa safety check
                 const sanitizedContent = content
                     .replace(/sock\.sendMessage/g, 'sock?.sendMessage')
                     .replace(/sock\.relayMessage/g, 'sock?.relayMessage');
-                
+
                 const runTemplate = new Function('sock', 'chatId', 'msg', 'baileys', `
                     const conn = sock; 
                     const m = { chat: chatId };
@@ -148,7 +145,293 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
         // Hardcoded options kwa ajili ya usalama wa ziada
         const title = example.title.toLowerCase();
 
-        // THUMBNAIL EDIT (tmte) - ZENYE CONTENT HALISI
+        // ==============================================
+        // 🆕 SINGLE SELECT WITH BUTTONV2 (FEATURE KALI)
+        // ==============================================
+        if (title.includes('single select') || title.includes('select')) {
+            try {
+                // SINGLE SELECT USING BUTTONV2
+                const singleSelectBtn = await new ButtonV2(sock)
+                    .setBody('🔘 *Single Select Demo*\n\nChagua moja kati ya chaguzi zifuatazo:')
+                    .setFooter('⚡ Mickey Glitch Sub')
+                    .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg')
+                    .addRawButton({
+                        buttonText: { displayText: '📋 Chagua Option' },
+                        buttonId: 'single_select_demo',
+                        type: 1,
+                        nativeFlowInfo: {
+                            name: 'single_select',
+                            paramsJson: JSON.stringify({
+                                title: '🔘 Chagua Chaguo Lako',
+                                sections: [{
+                                    title: '📌 Main Options',
+                                    highlight_label: '⬇️ Chagua',
+                                    rows: [
+                                        {
+                                            header: '🔹',
+                                            title: 'Option 1 - Core',
+                                            description: 'Inaonyesha mifano ya msingi',
+                                            id: 'option_core'
+                                        },
+                                        {
+                                            header: '🔸',
+                                            title: 'Option 2 - Advanced',
+                                            description: 'Inaonyesha mifano ya hali ya juu',
+                                            id: 'option_advanced'
+                                        },
+                                        {
+                                            header: '🔹',
+                                            title: 'Option 3 - Premium',
+                                            description: 'Inaonyesha mifano ya premium',
+                                            id: 'option_premium'
+                                        }
+                                    ]
+                                },
+                                {
+                                    title: '🎯 Quick Actions',
+                                    highlight_label: '⚡',
+                                    rows: [
+                                        {
+                                            header: '📚',
+                                            title: 'View All Examples',
+                                            description: 'Ona mifano yote',
+                                            id: 'view_all'
+                                        },
+                                        {
+                                            header: '🔄',
+                                            title: 'Refresh Menu',
+                                            description: 'Pakua mifano mpya',
+                                            id: 'refresh_menu'
+                                        }
+                                    ]
+                                }]
+                            })
+                        }
+                    })
+                    .send(chatId, { quoted: msg });
+
+                userMessages[chatId].push(singleSelectBtn);
+                
+                // Tuma pia code example
+                const codeMsg = await sock.sendMessage(chatId, {
+                    text: '```javascript\n' +
+                          '// 🆕 SINGLE SELECT WITH BUTTONV2\n' +
+                          'await new ButtonV2(conn)\n' +
+                          '    .setBody("🔘 Chagua moja kati ya chaguzi:")\n' +
+                          '    .setFooter("⚡ Mickey Glitch Sub")\n' +
+                          '    .setThumbnail("https://example.com/image.jpg")\n' +
+                          '    .addRawButton({\n' +
+                          '        buttonText: { displayText: "📋 Chagua Option" },\n' +
+                          '        buttonId: "single_select_demo",\n' +
+                          '        type: 1,\n' +
+                          '        nativeFlowInfo: {\n' +
+                          '            name: "single_select",\n' +
+                          '            paramsJson: JSON.stringify({\n' +
+                          '                title: "🔘 Chagua Chaguo Lako",\n' +
+                          '                sections: [{\n' +
+                          '                    title: "📌 Main Options",\n' +
+                          '                    highlight_label: "⬇️ Chagua",\n' +
+                          '                    rows: [\n' +
+                          '                        { header: "🔹", title: "Option 1", description: "Maelezo", id: "opt1" },\n' +
+                          '                        { header: "🔸", title: "Option 2", description: "Maelezo", id: "opt2" }\n' +
+                          '                    ]\n' +
+                          '                }]\n' +
+                          '            })\n' +
+                          '        }\n' +
+                          '    })\n' +
+                          '    .send(chatId);\n' +
+                          '```'
+                }, { quoted: msg });
+                userMessages[chatId].push(codeMsg);
+                return true;
+            } catch (sampleError) {
+                console.error('❌ Single select sample failed:', sampleError.message);
+                return false;
+            }
+        }
+
+        // ==============================================
+        // 🆕 MULTI-SELECT WITH BUTTONV2
+        // ==============================================
+        if (title.includes('multi select')) {
+            try {
+                const multiSelectBtn = await new ButtonV2(sock)
+                    .setBody('☑️ *Multi-Select Demo*\n\nChagua chaguo nyingi:')
+                    .setFooter('⚡ Mickey Glitch Sub')
+                    .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg')
+                    .addRawButton({
+                        buttonText: { displayText: '☑️ Chagua Nyingi' },
+                        buttonId: 'multi_select_demo',
+                        type: 1,
+                        nativeFlowInfo: {
+                            name: 'multi_select',
+                            paramsJson: JSON.stringify({
+                                title: '☑️ Chagua Chaguo Nyingi',
+                                sections: [{
+                                    title: '📌 Features',
+                                    highlight_label: '✅',
+                                    rows: [
+                                        { header: '🚀', title: 'Feature 1 - Speed', description: 'Inaharakisha processing', id: 'feat_speed' },
+                                        { header: '🔒', title: 'Feature 2 - Security', description: 'Inalinda data zako', id: 'feat_security' },
+                                        { header: '🎨', title: 'Feature 3 - Design', description: 'Inaboresha UI/UX', id: 'feat_design' }
+                                    ]
+                                }]
+                            })
+                        }
+                    })
+                    .send(chatId, { quoted: msg });
+
+                userMessages[chatId].push(multiSelectBtn);
+                return true;
+            } catch (error) {
+                console.error('❌ Multi-select failed:', error.message);
+                return false;
+            }
+        }
+
+        // ==============================================
+        // 🆕 BUTTONV2 WITH CTA URL & COPY (FEATURE KALI)
+        // ==============================================
+        if (title.includes('buttonv2') || title.includes('cta')) {
+            try {
+                const advancedBtn = await new ButtonV2(sock)
+                    .setTitle('🚀 Advanced ButtonV2 Demo')
+                    .setBody('📋 *ButtonV2 with Multiple Features*\n\n' +
+                            '👤 Username: demo_user\n' +
+                            '🔑 Password: demo_pass123\n' +
+                            '🌐 Panel: https://panel.example.com\n\n' +
+                            '💡 *Click buttons below to interact*')
+                    .setFooter('⚡ Mickey Glitch Sub')
+                    .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg')
+                    
+                    // CTA COPY
+                    .addButton({
+                        name: 'cta_copy',
+                        buttonParamsJson: JSON.stringify({
+                            display_text: '📋 Copy Username',
+                            copy_code: 'demo_user',
+                            id: 'copy_user'
+                        })
+                    })
+                    .addButton({
+                        name: 'cta_copy',
+                        buttonParamsJson: JSON.stringify({
+                            display_text: '🔑 Copy Password',
+                            copy_code: 'demo_pass123',
+                            id: 'copy_pass'
+                        })
+                    })
+                    
+                    // CTA URL
+                    .addRawButton({
+                        name: 'cta_url',
+                        buttonParamsJson: JSON.stringify({
+                            display_text: '🌐 Open Panel',
+                            url: 'https://panel.example.com',
+                            webview_interaction: false
+                        })
+                    })
+                    
+                    // Quick Reply
+                    .addRawButton({
+                        name: 'quick_reply',
+                        buttonParamsJson: JSON.stringify({
+                            display_text: '📋 Menu',
+                            id: '.source'
+                        })
+                    })
+                    .send(chatId, { quoted: msg });
+
+                userMessages[chatId].push(advancedBtn);
+                return true;
+            } catch (error) {
+                console.error('❌ ButtonV2 advanced failed:', error.message);
+                return false;
+            }
+        }
+
+        // ==============================================
+        // 🆕 CAROUSEL WITH MULTIPLE CARDS
+        // ==============================================
+        if (title.includes('carousel')) {
+            try {
+                const carousel = new Carousel(sock);
+                carousel
+                    .setTitle('🎠 Carousel Demo')
+                    .setBody('📋 *Multiple Cards Display*')
+                    .setFooter('⚡ Mickey Glitch Sub')
+                    .addCard({
+                        header: {
+                            title: '📦 Package 1',
+                            hasMediaAttachment: true,
+                            imageMessage: {
+                                url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg',
+                                mimetype: 'image/png'
+                            }
+                        },
+                        body: {
+                            text: '🔹 *Basic Package*\nRAM: 1GB\nCPU: 100%\nPrice: TSh 5,000'
+                        },
+                        footer: {
+                            text: '⚡ Mickey Glitch Sub'
+                        }
+                    })
+                    .addCard({
+                        header: {
+                            title: '🚀 Package 2',
+                            hasMediaAttachment: true,
+                            imageMessage: {
+                                url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg',
+                                mimetype: 'image/png'
+                            }
+                        },
+                        body: {
+                            text: '🔸 *Premium Package*\nRAM: 4GB\nCPU: 300%\nPrice: TSh 15,000'
+                        },
+                        footer: {
+                            text: '⚡ Mickey Glitch Sub'
+                        }
+                    });
+
+                const sent = await carousel.send(chatId, { quoted: msg });
+                userMessages[chatId].push(sent);
+                return true;
+            } catch (error) {
+                console.error('❌ Carousel failed:', error.message);
+                return false;
+            }
+        }
+
+        // ==============================================
+        // 🆕 AIRICH WITH TEMPLATE
+        // ==============================================
+        if (title.includes('airich') || title.includes('rich')) {
+            try {
+                const rich = new AIRich(sock)
+                    .setTitle('💎 Rich Message Demo')
+                    .setBody(
+                        '📋 *Rich Message with Template*\n\n' +
+                        '👤 User: @Mickey\n' +
+                        '📅 Date: 25/07/2026\n' +
+                        '✅ Status: Active\n\n' +
+                        '📌 *Features:*\n' +
+                        '• Interactive UI\n' +
+                        '• Rich formatting\n' +
+                        '• Template support'
+                    )
+                    .setFooter('⚡ Mickey Glitch Sub')
+                    .setTemplate(1);
+
+                const sent = await rich.send(chatId, { quoted: msg });
+                userMessages[chatId].push(sent);
+                return true;
+            } catch (error) {
+                console.error('❌ AIRich failed:', error.message);
+                return false;
+            }
+        }
+
+        // THUMBNAIL EDIT (tmte)
         if (title.includes('thumbnail edit') || title.includes('tmte')) {
             const imgUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg";
             try {
@@ -173,7 +456,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             }
         }
 
-        // TO STICKERPACK (tspk) - ZENYE CONTENT HALISI
+        // TO STICKERPACK (tspk)
         else if (title.includes('stickerpack') || title.includes('tspk')) {
             const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg";
             try {
@@ -192,7 +475,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             }
         }
 
-        // GROUP ADD META AI - ZENYE CONTENT HALISI
+        // GROUP ADD META AI
         else if (title.includes('group') && title.includes('meta')) {
             const sentMsg = await sock.sendMessage(chatId, {
                 text: '👥 *Group Add Meta AI Live Sample*\n\nSimulizi ya kuongeza AI kwenye kikundi...\n\n📌 *Code Sample:*\n```javascript\nconst addMetaAI = async (groupId) => {\n  // Code ya kuongeza Meta AI\n  await sock.groupAdd(groupId, [metaAI]);\n};\n```'
@@ -201,7 +484,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             return true;
         }
 
-        // STICKER (SPREM) - ZENYE CONTENT HALISI
+        // STICKER (SPREM)
         else if (title.includes('sticker') && title.includes('sprem')) {
             const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg";
             try {
@@ -220,26 +503,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             }
         }
 
-        // STICKER (ANTI COLONG) - ZENYE CONTENT HALISI
-        else if (title.includes('sticker') && title.includes('anti colong')) {
-            const stickerUrl = "https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy3.jpg";
-            try {
-                const media = await baileys.prepareWAMessageMedia({ image: { url: stickerUrl } }, { 
-                    upload: sock.waUploadToServer 
-                });
-                const sentMsg = await sock.sendMessage(chatId, {
-                    sticker: media,
-                    contextInfo: { isStickerPack: false }
-                }, { quoted: msg });
-                userMessages[chatId].push(sentMsg);
-                return true;
-            } catch (mediaError) {
-                console.error('❌ Error preparing sticker media:', mediaError);
-                return false;
-            }
-        }
-
-        // LATEX - ZENYE CONTENT HALISI
+        // LATEX
         else if (title.includes('latex')) {
             const sentMsg = await sock.sendMessage(chatId, {
                 text: '📐 *LaTeX Live Sample*\n\n`E = mc²`\n`∫₀¹ x² dx = ⅓`\n`\\frac{-b ± √(b²-4ac)}{2a}`\n\n*Formulas:*\n`\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}`\n`\\lim_{x\\to\\infty} f(x)`\n\n📝 *Code:*\n```javascript\nconst latex = new LaTeX(sock)\n  .setFormula("E = mc^2")\n  .send(chatId);\n```'
@@ -248,26 +512,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             return true;
         }
 
-        // SINGLE SELECT - ZENYE CONTENT HALISI
-        else if (title.includes('single select')) {
-            try {
-                const btn = new Button(sock)
-                    .setTitle('🔘 Single Select Sample')
-                    .setBody('Chagua moja kati ya chaguzi zifuatazo:')
-                    .setFooter('Mickey Glitch');
-                btn.addReply('✅ Option 1', '.source nixell_selected');
-                btn.addReply('✅ Option 2', '.source nixell_selected');
-                btn.addReply('✅ Option 3', '.source nixell_selected');
-                const sentMsg = await btn.send(chatId, { quoted: msg, fallbackText: '🔘 Single Select Sample\nChagua moja kati ya chaguzi zifuatazo:' });
-                userMessages[chatId].push(sentMsg);
-                return true;
-            } catch (sampleError) {
-                console.error('❌ Single select sample failed:', sampleError.message);
-                return false;
-            }
-        }
-
-        // GALAXY MESSAGE - ZENYE CONTENT HALISI
+        // GALAXY MESSAGE
         else if (title.includes('galaxy')) {
             const sentMsg = await sock.sendMessage(chatId, {
                 text: '🌌 *Galaxy Message Live Sample*\n\n✨ Ujumbe wa kimajini!\n⭐ Nyota zinang\'aa\n🌟 Galaxy inakungoja...\n\n📝 *Code:*\n```javascript\nconst galaxy = new Galaxy(sock)\n  .setMessage("✨ Ujumbe wa kimajini!")\n  .send(chatId);\n```'
@@ -276,7 +521,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             return true;
         }
 
-        // REVIEW AND PAY - ZENYE CONTENT HALISI
+        // REVIEW AND PAY
         else if (title.includes('review') && title.includes('pay')) {
             const reviewBtn = new Button(sock)
                 .setTitle('💳 Review & Pay')
@@ -288,7 +533,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             return true;
         }
 
-        // INAPP SIGNUP - ZENYE CONTENT HALISI
+        // INAPP SIGNUP
         else if (title.includes('inapp signup')) {
             const sentMsg = await sock.sendMessage(chatId, {
                 text: '📝 *InApp Signup Live Sample*\n\nJisajili ndani ya app:\n👤 Jina lako\n📧 Barua pepe\n🔑 Nenosiri\n\n📝 *Code:*\n```javascript\nconst signup = new Signup(sock)\n  .setFields(["Jina", "Barua pepe", "Nenosiri"])\n  .send(chatId);\n```'
@@ -297,7 +542,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             return true;
         }
 
-        // BOOKING CONFIRMATION - ZENYE CONTENT HALISI
+        // BOOKING CONFIRMATION
         else if (title.includes('booking confirmation')) {
             const sentMsg = await sock.sendMessage(chatId, {
                 text: '✅ *Booking Confirmation Live Sample*\n\nBooking #12345 imethibitishwa!\n📅 Tarehe: 25 July 2026\n🕐 Saa: 14:30\n📍 Mahali: Dar es Salaam\n\n📝 *Code:*\n```javascript\nconst booking = new Booking(sock)\n  .setId("12345")\n  .setDate("25 July 2026")\n  .send(chatId);\n```'
@@ -306,7 +551,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
             return true;
         }
 
-        // PAYMENT KEY INFO - ZENYE CONTENT HALISI
+        // PAYMENT KEY INFO
         else if (title.includes('payment key')) {
             const sentMsg = await sock.sendMessage(chatId, {
                 text: '🔑 *Payment Key Info Live Sample*\n\nMaelezo ya malipo:\n💰 Kiasi: TSh 50,000\n🔢 Namba: 1234-5678-9012\n📅 Tarehe: 25/07/2026\n\n📝 *Code:*\n```javascript\nconst payment = new Payment(sock)\n  .setAmount("TSh 50,000")\n  .setKey("1234-5678-9012")\n  .send(chatId);\n```'
@@ -349,24 +594,85 @@ const sourceCommand = async (sock, chatId, msg, args) => {
 
             const nixellExamples = await fetchNixellExamples();
 
-            const mainMenus = new Button(sock)
-                .setTitle('🧩 Mickey Glitch Lab v4.9')
-                .setSubtitle('Core & Advanced Engine')
-                .setBody('Chagua sehemu unayotaka kuona mifano (Samples) na kodi (Source Codes) zake:')
-                .setFooter('MICKEY BOT');
+            // ==============================================
+            // 🆕 MENU KUU WITH BUTTONV2 SINGLE SELECT
+            // ==============================================
+            const mainMenu = await new ButtonV2(sock)
+                .setTitle('🧩 Mickey Glitch Lab v5.0')
+                .setBody('🌟 *Core & Advanced Engine*\n\n' +
+                        '📌 *Available Features:*\n' +
+                        '• Core: Buttons & Flow\n' +
+                        '• Advanced: Media Hacks\n' +
+                        `• Nixellv2: ${nixellExamples.length} examples\n\n` +
+                        '💡 *Select an option below:*')
+                .setFooter('⚡ MICKEY BOT v5.0')
+                .setThumbnail(img1)
+                
+                // SINGLE SELECT FOR MAIN MENU
+                .addRawButton({
+                    buttonText: { displayText: '📋 Open Menu' },
+                    buttonId: 'main_menu_select',
+                    type: 1,
+                    nativeFlowInfo: {
+                        name: 'single_select',
+                        paramsJson: JSON.stringify({
+                            title: '🧩 Mickey Glitch Lab Menu',
+                            sections: [
+                                {
+                                    title: '📁 Core Features',
+                                    highlight_label: '⬇️',
+                                    rows: [
+                                        {
+                                            header: '📁',
+                                            title: 'Core: Buttons & Flow',
+                                            description: 'Mifano ya buttons na flows',
+                                            id: 'kundi_core'
+                                        },
+                                        {
+                                            header: '🚀',
+                                            title: 'Advanced: Media Hacks',
+                                            description: 'Mifano ya media na hacks',
+                                            id: 'kundi_advanced'
+                                        }
+                                    ]
+                                },
+                                {
+                                    title: '📚 Nixellv2 Examples',
+                                    highlight_label: '🔥',
+                                    rows: (nixellExamples.length > 0 ? [
+                                        {
+                                            header: '📚',
+                                            title: `View ${nixellExamples.length} Examples`,
+                                            description: 'Ona mifano yote kutoka Nixellv2',
+                                            id: 'nixell_menu'
+                                        }
+                                    ] : [])
+                                },
+                                {
+                                    title: '⚡ Quick Actions',
+                                    highlight_label: '⚡',
+                                    rows: [
+                                        {
+                                            header: '🔄',
+                                            title: 'Refresh Examples',
+                                            description: 'Pakua mifano mpya',
+                                            id: 'refresh'
+                                        },
+                                        {
+                                            header: '❌',
+                                            title: 'Close Menu',
+                                            description: 'Funga menu hii',
+                                            id: 'close'
+                                        }
+                                    ]
+                                }
+                            ]
+                        })
+                    }
+                })
+                .send(chatId, { quoted: ctx._msg });
 
-            mainMenus.addReply('📁 Core: Buttons & Flow', '.source kundi_core');
-            mainMenus.addReply('🚀 Advanced: Media Hacks', '.source kundi_advanced');
-
-            if (nixellExamples.length > 0) {
-                mainMenus.addReply('📚 Nixellv2 Examples (Live)', '.source nixell_menu');
-            }
-
-            mainMenus.addReply('🔄 Refresh Examples', '.source refresh');
-            mainMenus.addReply('❌ Close Menu', '.source close');
-
-            const sentMsg = await mainMenus.send(ctx.chatId, { quoted: ctx._msg });
-            userMessages[chatId].push(sentMsg);
+            userMessages[chatId].push(mainMenu);
             return;
         } catch (e) {
             console.error('Error kwenye menu kuu:', e);
@@ -423,304 +729,180 @@ const sourceCommand = async (sock, chatId, msg, args) => {
         const interactiveExamples = examples.filter(ex => ex.title.toLowerCase().includes('interactive') || ex.title.toLowerCase().includes('message'));
         const otherExamples = examples.filter(ex => !stickerExamples.includes(ex) && !interactiveExamples.includes(ex));
 
-        const nixellMenu = new Button(sock)
+        // ==============================================
+        // 🆕 NIXELL MENU WITH SINGLE SELECT
+        // ==============================================
+        const nixellMenu = await new ButtonV2(sock)
             .setTitle('📚 Nixellv2 Live Samples')
-            .setBody(`🎯 *Mifano ${examples.length} zilizopatikana* kutoka Nixellv2's Pastebin:\n\n` +
-                `📌 *Stickers:* ${stickerExamples.length} mifano\n` +
-                `📌 *Interactive:* ${interactiveExamples.length} mifano\n` +
-                `📌 *Other:* ${otherExamples.length} mifano\n\n` +
-                `📝 Tuma .source nixell_[namba] kuona live sample + code`)
-            .setFooter('MICKEY BOT • Nixellv2 Collection');
+            .setBody(`🎯 *Mifano ${examples.length} zilizopatikana*\n\n` +
+                    `📌 *Stickers:* ${stickerExamples.length} mifano\n` +
+                    `📌 *Interactive:* ${interactiveExamples.length} mifano\n` +
+                    `📌 *Other:* ${otherExamples.length} mifano\n\n` +
+                    `📝 Select an example below to view live sample + code`)
+            .setFooter('⚡ MICKEY BOT • Nixellv2 Collection')
+            .setThumbnail(img2)
+            .addRawButton({
+                buttonText: { displayText: '📋 View Examples' },
+                buttonId: 'nixell_select',
+                type: 1,
+                nativeFlowInfo: {
+                    name: 'single_select',
+                    paramsJson: JSON.stringify({
+                        title: '📚 Nixellv2 Examples',
+                        sections: [
+                            {
+                                title: '🎨 Sticker Examples',
+                                highlight_label: '⬇️',
+                                rows: stickerExamples.slice(0, 5).map((ex, i) => ({
+                                    header: '🎨',
+                                    title: ex.title.substring(0, 30),
+                                    description: `Added: ${ex.added}`,
+                                    id: `nixell_${examples.indexOf(ex)}`
+                                }))
+                            },
+                            {
+                                title: '💬 Interactive Examples',
+                                highlight_label: '💬',
+                                rows: interactiveExamples.slice(0, 5).map((ex, i) => ({
+                                    header: '💬',
+                                    title: ex.title.substring(0, 30),
+                                    description: `Added: ${ex.added}`,
+                                    id: `nixell_${examples.indexOf(ex)}`
+                                }))
+                            },
+                            {
+                                title: '📄 Other Examples',
+                                highlight_label: '📄',
+                                rows: otherExamples.slice(0, 5).map((ex, i) => ({
+                                    header: '📄',
+                                    title: ex.title.substring(0, 30),
+                                    description: `Added: ${ex.added}`,
+                                    id: `nixell_${examples.indexOf(ex)}`
+                                }))
+                            }
+                        ]
+                    })
+                }
+            })
+            .send(chatId, { quoted: ctx._msg });
 
-        // Onyesha mifano 6 za kwanza
-        examples.slice(0, 6).forEach((ex, i) => {
-            const emoji = ex.title.toLowerCase().includes('sticker') ? '🎨' : 
-                          ex.title.toLowerCase().includes('interactive') ? '💬' : '📄';
-            nixellMenu.addReply(`${emoji} ${ex.title.substring(0, 25)}...`, `.source nixell_${i}`);
-        });
-
-        nixellMenu.addReply('⬅️ Rudi Nyuma', '.source');
-
-        const sentMsg = await nixellMenu.send(ctx.chatId, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg);
+        userMessages[chatId].push(nixellMenu);
         return;
     }
 
-    // ─── SHOW SPECIFIC NIXELL EXAMPLE (LIVE SAMPLE + CODE) ───
-    if (input.startsWith('nixell_')) {
-        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
-        userMessages[chatId] = [];
-
-        const index = parseInt(input.split('_')[1]);
-        const examples = await fetchNixellExamples();
-
-        if (isNaN(index) || index >= examples.length) {
-            const sentMsg = await sock.sendMessage(ctx.chatId, { 
-                text: '❌ Namba ya mfano haipo. Tumia .source nixell_menu kuona orodha.' 
-            }, { quoted: ctx._msg });
-            userMessages[chatId].push(sentMsg);
-            return;
-        }
-
-        const example = examples[index];
-        const sentMsg = await sock.sendMessage(ctx.chatId, { 
-            text: `🎬 Inapakua na kuandaa Live Sample ya: *${example.title}*...` 
-        }, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg);
-
-        // 1. VUTA KODI KWANZA KUTOKA KWENYE PASTEBIN
-        const content = await fetchPasteContent(example.id);
-
-        if (content) {
-            // 2. RUN NA UONYESHE MFANO (LIVE SAMPLE)
-            const isLiveRendered = await showNixellLiveSample(sock, chatId, msg, example, content);
-
-            if (!isLiveRendered) {
-                const sentMsg2 = await sock.sendMessage(ctx.chatId, { 
-                    text: '💡 _Mfano huu hauna muundo wa live render, unaonyeshwa kama kodi tu._' 
-                }, { quoted: ctx._msg });
-                userMessages[chatId].push(sentMsg2);
-            }
-
-            await delay(1500); // Mpe mtumiaji muda kuona Live Sample
-
-            // 3. TUMA SOURCE CODE YAKE
-            const codeMessage = `📌 *${example.title}*\n📅 Added: ${example.added}\n🔧 Syntax: ${example.syntax}\n🔗 Link: ${example.link}\n\n📝 *Source Code:*\n\`\`\`javascript\n${content.substring(0, 4000)}\n\`\`\``;
-
-            if (content.length > 4000) {
-                const sentMsg3 = await sock.sendMessage(ctx.chatId, { text: codeMessage }, { quoted: ctx._msg });
-                userMessages[chatId].push(sentMsg3);
-                const sentMsg4 = await sock.sendMessage(ctx.chatId, { 
-                    text: `📎 *Link kamili ya kodi:* ${example.link}` 
-                }, { quoted: ctx._msg });
-                userMessages[chatId].push(sentMsg4);
-            } else {
-                const sentMsg3 = await sock.sendMessage(ctx.chatId, { text: codeMessage }, { quoted: ctx._msg });
-                userMessages[chatId].push(sentMsg3);
-            }
-        } else {
-            const sentMsg2 = await sock.sendMessage(ctx.chatId, { 
-                text: `❌ Imeshindwa kupata kodi ya paste hii. Jaribu kuifungua moja kwa moja hapa: ${example.link}` 
-            }, { quoted: ctx._msg });
-            userMessages[chatId].push(sentMsg2);
-        }
-        return;
-    }
-
-    // ─── SUB-MENU 1: CORE ENGINE ───
+    // ─── KUNDI CORE ───
     if (input === 'kundi_core') {
         await deletePreviousMessages(sock, chatId, userMessages[chatId]);
         userMessages[chatId] = [];
 
-        const coreMenu = new Button(sock)
-            .setTitle('📁 Core Engine Features')
-            .setBody('Maumbo ya msingi ya messageBuilder yako:')
-            .setFooter('MICKEY BOT');
+        const coreMenu = await new ButtonV2(sock)
+            .setTitle('📁 Core Features')
+            .setBody('📌 *Basic & Advanced Buttons*\n\n' +
+                    '• Single Select Demo\n' +
+                    '• Multi-Select Demo\n' +
+                    '• ButtonV2 with CTA\n' +
+                    '• Quick Reply Buttons')
+            .setFooter('⚡ Mickey Glitch Sub')
+            .setThumbnail(img3)
+            .addRawButton({
+                buttonText: { displayText: '📋 Select Feature' },
+                buttonId: 'core_select',
+                type: 1,
+                nativeFlowInfo: {
+                    name: 'single_select',
+                    paramsJson: JSON.stringify({
+                        title: '📁 Core Features',
+                        sections: [{
+                            title: '📌 Available Features',
+                            highlight_label: '⬇️',
+                            rows: [
+                                { header: '🔘', title: 'Single Select Demo', description: 'Onesha single select', id: 'nixell_0' },
+                                { header: '☑️', title: 'Multi-Select Demo', description: 'Onesha multi select', id: 'nixell_1' },
+                                { header: '🚀', title: 'ButtonV2 Advanced', description: 'CTA Copy & URL', id: 'nixell_2' }
+                            ]
+                        }]
+                    })
+                }
+            })
+            .send(chatId, { quoted: ctx._msg });
 
-        coreMenu.addReply('📟 Button V2 (Quick Reply)', '.source test_v2');
-        coreMenu.addReply('🔄 Carousel (Slide Cards)', '.source test_carousel');
-        coreMenu.addReply('🧠 AIRich (AI Text & Badges)', '.source test_airich');
-        coreMenu.addReply('📊 AIRich (Tables/Meza)', '.source test_table');
-        coreMenu.addReply('⬅️ Rudi Nyuma', '.source');
-
-        const sentMsg = await coreMenu.send(ctx.chatId, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg);
+        userMessages[chatId].push(coreMenu);
         return;
     }
 
-    // ─── SUB-MENU 2: ADVANCED HACKS ───
+    // ─── KUNDI ADVANCED ───
     if (input === 'kundi_advanced') {
         await deletePreviousMessages(sock, chatId, userMessages[chatId]);
         userMessages[chatId] = [];
 
-        const advMenu = new Button(sock)
-            .setTitle('🚀 Advanced & Other Hacks')
-            .setBody('Mbinu mpya zinazoonyesha Sample na kodi zake:')
-            .setFooter('MICKEY BOT');
-
-        advMenu.addReply('🎞️ Paired Media (Split Message)', '.source test_paired');
-        advMenu.addReply('🔄 Animated Link Loop (Edit Key)', '.source test_linkloop');
-        advMenu.addReply('💬 AI Message with Icon', '.source test_ai_message');
-        advMenu.addReply('⬅️ Rudi Nyuma', '.source');
-
-        const sentMsg = await advMenu.send(ctx.chatId, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg);
-        return;
-    }
-
-    // ─── BUTTON V2 ───
-    if (input === 'test_v2') {
-        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
-        userMessages[chatId] = [];
-
-        const btnV2 = new ButtonV2(sock)
-            .setBody('Huu ni mfano wa muundo wa ButtonV2.')
-            .setFooter('MICKEY BOT')
-            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg');
-        btnV2.addButton('Menu 📦', '.menu');
-        const sentMsg = await btnV2.send(ctx.chatId, { quoted: ctx._msg, fallbackText: 'Huu ni mfano wa muundo wa ButtonV2.' });
-        userMessages[chatId].push(sentMsg);
-
-        const code = `// Muundo wa ButtonV2\nconst { ButtonV2 } = require('./lib/messageBuilder');\nconst btnV2 = new ButtonV2(sock)\n  .setTitle("Mickey ButtonV2")\n  .addButton("Menu 📦", ".menu");\nawait btnV2.send(chatId, { quoted: msg });`;
-        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg2);
-        return;
-    }
-
-    // ─── CAROUSEL ───
-    if (input === 'test_carousel') {
-        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
-        userMessages[chatId] = [];
-
-        try {
-            const waLink = "https://wa.me/255719632816";
-            const sampleCarousel = new Carousel(sock).setBody("🛒 *Mickey Store Preview*");
-
-            const cards = [
-                {
-                    header: { title: "Mickey Privacy", hasMediaAttachment: true, imageMessage: { url: img1 } },
-                    body: { text: "Brand: Mickey Bot\nFeature: Connection Secure" },
-                    footer: { text: "Mickey Bot" },
-                    nativeFlowMessage: { buttons: [{ name: "cta_url", buttonParamsJson: JSON.stringify({ display_text: "Support 🛍️", url: waLink }) }] }
+        const advancedMenu = await new ButtonV2(sock)
+            .setTitle('🚀 Advanced Features')
+            .setBody('📌 *Media & Rich Content*\n\n' +
+                    '• Carousel Demo\n' +
+                    '• AIRich Template\n' +
+                    '• Thumbnail Edit\n' +
+                    '• Sticker Pack')
+            .setFooter('⚡ Mickey Glitch Sub')
+            .setThumbnail(img4)
+            .addRawButton({
+                buttonText: { displayText: '📋 Select Feature' },
+                buttonId: 'advanced_select',
+                type: 1,
+                nativeFlowInfo: {
+                    name: 'single_select',
+                    paramsJson: JSON.stringify({
+                        title: '🚀 Advanced Features',
+                        sections: [{
+                            title: '📌 Available Features',
+                            highlight_label: '⬇️',
+                            rows: [
+                                { header: '🎠', title: 'Carousel Demo', description: 'Multiple cards display', id: 'nixell_3' },
+                                { header: '💎', title: 'AIRich Template', description: 'Rich message with template', id: 'nixell_4' },
+                                { header: '🖼️', title: 'Thumbnail Edit', description: 'Edit link thumbnails', id: 'nixell_5' }
+                            ]
+                        }]
+                    })
                 }
-            ];
+            })
+            .send(chatId, { quoted: ctx._msg });
 
-            cards.forEach(card => sampleCarousel.addCard(card));
-            const sentMsg = await sampleCarousel.send(ctx.chatId, { quoted: ctx._msg });
-            userMessages[chatId].push(sentMsg);
-
-            const code = `// Muundo wa Carousel\nconst crsl = new Carousel(sock);\n// ...addCard(card);\nawait crsl.send(chatId);`;
-            const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
-            userMessages[chatId].push(sentMsg2);
-        } catch (e) { 
-            const sentMsg = await sock.sendMessage(ctx.chatId, { text: "❌ Error: " + e.message }, { quoted: ctx._msg });
-            userMessages[chatId].push(sentMsg);
-        }
+        userMessages[chatId].push(advancedMenu);
         return;
     }
 
-    // ─── AIRICH TEXT ───
-    if (input === 'test_airich') {
-        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
-        userMessages[chatId] = [];
-
-        const rich = new AIRich(sock).setTitle('🧠 AI Engine').addText('Mfano wa AIRich Markdown Text.').addSuggest(['.menu']);
-        const sentMsg = await rich.send(ctx.chatId, { quoted: ctx._msg, forwarded: true, fallbackText: '🧠 AI Engine\nMfano wa AIRich Markdown Text.' });
-        userMessages[chatId].push(sentMsg);
-
-        const code = `const rich = new AIRich(sock).setTitle('🧠 AI Engine').addText('Text').send(chatId);`;
-        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg2);
-        return;
-    }
-
-    // ─── AIRICH TABLES ───
-    if (input === 'test_table') {
-        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
-        userMessages[chatId] = [];
-
-        const richTable = new AIRich(sock).setTitle('📊 Table').addTable([["Command", "Status"], [".fromai", "Online ✅"]]);
-        const sentMsg = await richTable.send(ctx.chatId, { quoted: ctx._msg, forwarded: true, fallbackText: '📊 Table\nCommand | Status\n.fromai | Online ✅' });
-        userMessages[chatId].push(sentMsg);
-
-        const code = `const rich = new AIRich(sock).addTable([["H1", "H2"], ["D1", "D2"]]);`;
-        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg2);
-        return;
-    }
-
-    // ─── ADVANCED: PAIRED MEDIA ───
-    if (input === 'test_paired') {
-        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
-        userMessages[chatId] = [];
-
-        try {
-            const sentMsg = await sock.sendMessage(ctx.chatId, { text: '⏳ _Inatengeneza muundo wa Paired Media Live..._' }, { quoted: ctx._msg });
-            userMessages[chatId].push(sentMsg);
-
-            const image = await baileys.prepareWAMessageMedia({ image: { url: img1 } }, { upload: sock.waUploadToServer });
-            const video = await baileys.prepareWAMessageMedia({ video: { url: sampleVideo } }, { upload: sock.waUploadToServer });
-
-            const msgMedia = baileys.generateWAMessageFromContent(ctx.chatId, { 
-                imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } 
-            }, {});
-            await sock.relayMessage(ctx.chatId, msgMedia.message, { messageId: msgMedia.key.id });
-
-            await sock.relayMessage(ctx.chatId, {
-                videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },
-                messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msgMedia.key } }
-            }, {});
-        } catch (e) {
-            console.error("Error kwenye Paired Media Sample:", e);
-            await sock.sendMessage(ctx.chatId, { text: `❌ Paired Media Error: ${e.message}` }, { quoted: ctx._msg });
+    // ─── NIXELLV2 LIVE SAMPLE ───
+    if (input.startsWith('nixell_')) {
+        const index = parseInt(input.split('_')[1]);
+        const examples = await fetchNixellExamples();
+        
+        if (isNaN(index) || index >= examples.length) {
+            await sock.sendMessage(ctx.chatId, { 
+                text: '❌ Sample haipatikani. Jaribu .source refresh' 
+            }, { quoted: ctx._msg });
+            return;
         }
 
-        const code = `// 🎞️ PAIRED MEDIA HACK\nconst image = await prepareWAMessageMedia({ image: { url: '${img1}' } }, { upload: sock.waUploadToServer });\nconst video = await prepareWAMessageMedia({ video: { url: '${sampleVideo}' } }, { upload: sock.waUploadToServer });\n\nconst msg = generateWAMessageFromContent(chatId, { imageMessage: { ...image.imageMessage, contextInfo: { pairedMediaType: 5, statusSourceType: 0 } } }, {});\nawait sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });\n\nawait sock.relayMessage(chatId, {\n  videoMessage: { ...video.videoMessage, contextInfo: { pairedMediaType: 6, statusSourceType: 0 } },\n  messageContextInfo: { messageAssociation: { associationType: 12, parentMessageKey: msg.key } }\n}, {});`;
-        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "💡 *Paired Media Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg2);
-        return;
-    }
-
-    // ─── ADVANCED: ANIMATED LINK LOOP ───
-    if (input === 'test_linkloop') {
-        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
-        userMessages[chatId] = [];
-
-        try {
-            const { key } = await sock.sendMessage(ctx.chatId, { text: '🎬 PRIVACY SLIDESHOW LOADING...' }, { quoted: ctx._msg });
-
-            const demoUrls = [img2, img3, img4];
-            const medias = await Promise.all(demoUrls.map(async url => {
-                const { imageMessage } = await baileys.prepareWAMessageMedia({ image: { url } }, { 
-                    upload: sock.waUploadToServer, 
-                    mediaTypeOverride: 'thumbnail-link' 
-                });
-                return imageMessage;
-            }));
-
-            for(let i = 0; i < 2; i++) {
-                for (const image of medias) {
-                    await sock.sendMessage(ctx.chatId, {
-                        edit: key,
-                        text: "https://nixel.dev\n🎬 PRIVACY SLIDESHOW PLAYING...",
-                        linkPreview: {
-                            'matched-text': "https://nixel.dev",
-                            title: "Mickey Privacy Loop",
-                            jpegThumbnail: image.jpegThumbnail,
-                            highQualityThumbnail: image
-                        }
-                    });
-                    await delay(1500);
-                }
-            }
-        } catch (e) {
-            console.error("Error kwenye Link Loop Sample:", e);
-            await sock.sendMessage(ctx.chatId, { text: `❌ Link Loop Error: ${e.message}` }, { quoted: ctx._msg });
-        }
-
-        const code = `// 🔄 ANIMATED LINK LOOP HACK\nconst urls = ["${img2}", "${img3}", "${img4}"];\nconst medias = await Promise.all(urls.map(async url => {\n  const { imageMessage } = await prepareWAMessageMedia({ image: { url } }, { upload: conn.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });\n  return imageMessage;\n}));\n\nfor(let i = 0; i < 3; i++) {\n  for (const image of medias) {\n    await conn.sendMessage(chatId, {\n      edit: key,\n      text: "https://nixel.dev\\n🎬 PRIVACY SLIDESHOW PLAYING...",\n      linkPreview: {\n        'matched-text': "https://nixel.dev",\n        title: "Mickey Privacy Loop",\n        jpegThumbnail: image.jpegThumbnail,\n        highQualityThumbnail: image\n      }\n    });\n    await delay(1500);\n  }\n}`;
-        const sentMsg2 = await sock.sendMessage(ctx.chatId, { text: "💡 *Link Loop Source Code*:\n```javascript\n" + code + "\n```" }, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg2);
-        return;
-    }
-
-    // ─── AI MESSAGE WITH ICON ───
-    if (input === 'test_ai_message') {
-        await deletePreviousMessages(sock, chatId, userMessages[chatId]);
-        userMessages[chatId] = [];
-
-        const sentMsg = await sock.sendMessage(ctx.chatId, { 
-            text: '🤖 *AI Message with Icon*\n\nHii ni message yenye icon ya AI.\n\n📌 *Sample Code:*\n```javascript\nconst aiMsg = new AIMessage(sock)\n  .setIcon("🤖")\n  .setTitle("AI Assistant")\n  .setBody("How can I help you today?")\n  .send(chatId);\n```'
+        const example = examples[index];
+        await sock.sendMessage(ctx.chatId, { 
+            text: `📥 Inapakua: ${example.title}...` 
         }, { quoted: ctx._msg });
-        userMessages[chatId].push(sentMsg);
+
+        const content = await fetchPasteContent(example.id);
+        if (!content) {
+            await sock.sendMessage(ctx.chatId, { 
+                text: `❌ Imeshindwa kupata content ya ${example.title}` 
+            }, { quoted: ctx._msg });
+            return;
+        }
+
+        await showNixellLiveSample(sock, chatId, msg, example, content);
         return;
     }
 
-    // ─── DEFAULT: UNKNOWN COMMAND ───
-    const sentMsg = await sock.sendMessage(ctx.chatId, { 
-        text: '❓ Amri haijulikani. Tuma .source kuona menyu.' 
+    // ─── DEFAULT ───
+    await sock.sendMessage(ctx.chatId, { 
+        text: '❌ Amri haijulikani. Tuma .source kuona menu.' 
     }, { quoted: ctx._msg });
-    userMessages[chatId].push(sentMsg);
 };
 
-module.exports =  sourceCommand ;
+module.exports = sourceCommand;
