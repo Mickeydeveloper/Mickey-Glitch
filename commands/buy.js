@@ -1,6 +1,7 @@
 /**
- * buy.js - Ultimate Pterodactyl System with MessageBuilder
- * Features: ButtonV2, CTA Copy, CTA URL, Booking Style UI
+ * buy.js - Ultimate Pterodactyl System with Advanced Features
+ * Features: ButtonV2, CTA Copy, CTA URL, Booking Style UI, Error Handling
+ * Fixed: jidDecode error, user extraction, robust error handling
  */
 
 const axios = require('axios');
@@ -44,12 +45,46 @@ const panelApi = axios.create({
 });
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 3. HELPERS
+// 3. IMPROVED HELPERS - FIXED jidDecode ERROR
 // ─── ──────────────────────────────────────────────────────────────────────
+
+function extractTargetJid(ctx) {
+    // SAFE extraction - no jidDecode dependency
+    let targetJid = ctx.sender;
+    
+    // Check for quoted message
+    if (ctx.quoted) {
+        if (typeof ctx.quoted === 'object') {
+            // Try different ways to get sender from quoted message
+            targetJid = ctx.quoted.sender || 
+                       ctx.quoted.participant || 
+                       ctx.quoted.key?.participant ||
+                       ctx.quoted.key?.remoteJid ||
+                       ctx.quoted.from ||
+                       ctx.sender;
+        } else if (typeof ctx.quoted === 'string') {
+            targetJid = ctx.quoted;
+        }
+    }
+    
+    // Check for mentioned JID
+    if (ctx.mentionedJid && Array.isArray(ctx.mentionedJid) && ctx.mentionedJid.length > 0) {
+        targetJid = ctx.mentionedJid[0];
+    }
+    
+    // Ensure JID has @s.whatsapp.net suffix
+    if (!targetJid.includes('@')) {
+        targetJid = `${targetJid}@s.whatsapp.net`;
+    }
+    
+    return targetJid;
+}
 
 function parseInput(ctx) {
     let rawArgs = ctx.args || [];
     if (typeof rawArgs === 'string') rawArgs = rawArgs.split(' ');
+    
+    // Handle text-based args
     if (ctx.text && rawArgs.length === 0) {
         const parts = ctx.text.trim().split(/\s+/);
         rawArgs = parts.slice(1);
@@ -57,7 +92,7 @@ function parseInput(ctx) {
 
     let plan = '1gb';
     let username = '';
-    let targetJid = ctx.quoted?.sender || ctx.mentionedJid?.[0] || ctx.sender;
+    let targetJid = extractTargetJid(ctx);
 
     const filteredArgs = [];
     for (const item of rawArgs) {
@@ -96,9 +131,13 @@ async function getOrCreateUser(username, userPass) {
         const errorDetail = error?.response?.data?.errors?.[0]?.detail || error.message || '';
 
         if (errorDetail.includes('email has already been taken') || errorDetail.includes('username has already been taken')) {
-            const searchRes = await panelApi.get(`/users?filter[email]=${email}`);
-            if (searchRes.data.data && searchRes.data.data.length > 0) {
-                return searchRes.data.data[0].attributes;
+            try {
+                const searchRes = await panelApi.get(`/users?filter[email]=${email}`);
+                if (searchRes.data.data && searchRes.data.data.length > 0) {
+                    return searchRes.data.data[0].attributes;
+                }
+            } catch (searchError) {
+                console.log('[SEARCH ERROR]', searchError.message);
             }
         }
         throw error;
@@ -106,84 +145,44 @@ async function getOrCreateUser(username, userPass) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. ULTIMATE CREDENTIALS SENDER (MessageBuilder Pro)
+// 4. ENHANCED CREDENTIALS SENDER WITH MULTIPLE FALLBACKS
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function sendCredentialsPro(ctx, targetJid, username, password, plan, spec, domain, createDate) {
     const client = ctx.core || ctx.sock || ctx;
     const msgQuote = ctx._msg;
 
-    // ─── BOOKING STYLE CARD ──────────────────────────────────────────────
-    const bookingCard = {
-        header: {
-            title: `🚀 ${plan.toUpperCase()} Panel`,
-            hasMediaAttachment: true,
-            imageMessage: {
-                url: PANEL_CONFIG.thumbnail,
-                mimetype: 'image/png'
-            }
-        },
-        body: {
-            text: 
-                `╭━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `│ 📋 *PANEL CREDENTIALS*\n` +
-                `│━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `│\n` +
-                `│ 👤 *Username:* ${username}\n` +
-                `│ 🔑 *Password:* ${password}\n` +
-                `│ 🌐 *Panel:* ${domain}\n` +
-                `│\n` +
-                `│━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `│ 📦 *Package Details*\n` +
-                `│━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `│\n` +
-                `│ 📊 *Plan:* ${plan.toUpperCase()}\n` +
-                `│ 🧠 *RAM:* ${spec.ram} MB\n` +
-                `│ 💻 *CPU:* ${spec.cpu}%\n` +
-                `│ 💾 *Disk:* ${spec.disk} MB\n` +
-                `│ 💰 *Price:* ${spec.price}\n` +
-                `│\n` +
-                `│━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `│ 📅 *Created:* ${createDate}\n` +
-                `│\n` +
-                `╰━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `> ⚡ Mickey Glitch Sub`
-        },
-        footer: {
-            text: `⚡ ${plan.toUpperCase()} | ${new Date().toLocaleDateString()}`
-        }
-    };
-
-    // ─── SEND CAROUSEL WITH BOOKING STYLE ──────────────────────────────
-    try {
-        const carousel = new Carousel(client);
-        carousel
-            .setTitle('🎯 Panel Credentials')
-            .setBody('📋 *Your server credentials are ready!*')
-            .setFooter('⚡ Mickey Glitch Sub')
-            .addCard(bookingCard);
-
-        await carousel.send(targetJid, { quoted: msgQuote });
-    } catch (carouselError) {
-        console.log('[CAROUSEL] Failed, trying ButtonV2...');
+    // Ensure targetJid is valid
+    if (!targetJid || targetJid === 'undefined' || !targetJid.includes('@')) {
+        targetJid = ctx.sender;
+        if (!targetJid.includes('@')) targetJid = `${targetJid}@s.whatsapp.net`;
     }
 
-    // ─── BUTTONV2 WITH CTA COPY & URL ──────────────────────────────────
+    // ─── CREATE CREDENTIALS MESSAGE ──────────────────────────────
+    const credentialsText = 
+        `🔐 *PANEL CREDENTIALS*\n\n` +
+        `👤 *Username:* ${username}\n` +
+        `🔑 *Password:* ${password}\n` +
+        `🌐 *Panel:* ${domain}\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📦 *Package Details*\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📊 *Plan:* ${plan.toUpperCase()}\n` +
+        `🧠 *RAM:* ${spec.ram} MB\n` +
+        `💻 *CPU:* ${spec.cpu}%\n` +
+        `💾 *Disk:* ${spec.disk} MB\n` +
+        `💰 *Price:* ${spec.price}\n` +
+        `📅 *Created:* ${createDate}\n\n` +
+        `⚡ *Mickey Glitch Sub*`;
+
+    // ─── TRY BUTTONV2 FIRST ──────────────────────────────────────
     try {
         const button = new ButtonV2(client)
             .setTitle('🔐 Panel Credentials')
-            .setBody(
-                `📋 *Your ${plan.toUpperCase()} Panel is Ready!*\n\n` +
-                `👤 Username: \`${username}\`\n` +
-                `🔑 Password: \`${password}\`\n\n` +
-                `📦 Plan: ${plan.toUpperCase()} (${spec.ram}MB RAM)\n` +
-                `💰 Price: ${spec.price}\n\n` +
-                `💡 *Click buttons below to copy credentials*`
-            )
+            .setBody(credentialsText)
             .setFooter(`⚡ ${new Date().toLocaleDateString()}`)
             .setThumbnail(PANEL_CONFIG.thumbnail)
 
-            // ─── CTA COPY ──────────────────────────────────────────────────
             .addButton({
                 name: 'cta_copy',
                 buttonParamsJson: JSON.stringify({
@@ -208,8 +207,6 @@ async function sendCredentialsPro(ctx, targetJid, username, password, plan, spec
                     id: 'copy_all'
                 })
             })
-
-            // ─── CTA URL ──────────────────────────────────────────────────
             .addRawButton({
                 name: 'cta_url',
                 buttonParamsJson: JSON.stringify({
@@ -218,8 +215,6 @@ async function sendCredentialsPro(ctx, targetJid, username, password, plan, spec
                     webview_interaction: false
                 })
             })
-
-            // ─── QUICK REPLY ──────────────────────────────────────────────────
             .addRawButton({
                 name: 'quick_reply',
                 buttonParamsJson: JSON.stringify({
@@ -229,49 +224,65 @@ async function sendCredentialsPro(ctx, targetJid, username, password, plan, spec
             });
 
         await button.send(targetJid, { quoted: msgQuote });
+        return true;
 
     } catch (buttonError) {
-        console.log('[BUTTON] Failed, trying fallback...');
+        console.log('[BUTTONV2] Failed, trying Button V1...');
+    }
+
+    // ─── TRY BUTTON V1 ──────────────────────────────────────────────
+    try {
+        const fallback = new Button(client)
+            .setTitle('🔐 Panel Credentials')
+            .setBody(credentialsText)
+            .setFooter('⚡ Mickey Glitch Sub')
+            .setImage(PANEL_CONFIG.thumbnail)
+            .addCopy('📋 Copy Username', username)
+            .addCopy('🔑 Copy Password', password)
+            .addUrl('🌐 Open Panel', domain, false);
+
+        await fallback.send(targetJid, { quoted: msgQuote });
+        return true;
+
+    } catch (fallbackError) {
+        console.log('[BUTTON] Failed, sending plain text...');
+    }
+
+    // ─── ULTIMATE FALLBACK: Plain Text ──────────────────────────────
+    try {
+        await client.sendMessage(targetJid, {
+            text: credentialsText
+        }, { quoted: msgQuote });
+        return true;
+    } catch (finalError) {
+        console.log('[FINAL FALLBACK] Failed:', finalError.message);
         
-        // ─── FALLBACK: Button V1 ──────────────────────────────────────────
-        try {
-            const fallback = new Button(client)
-                .setTitle('🔐 Panel Credentials')
-                .setBody(
-                    `👤 Username: ${username}\n` +
-                    `🔑 Password: ${password}\n` +
-                    `🌐 Panel: ${domain}\n\n` +
-                    `📦 Plan: ${plan.toUpperCase()} (${spec.ram}MB)`
-                )
-                .setFooter('⚡ Mickey Glitch Sub')
-                .setImage(PANEL_CONFIG.thumbnail)
-                .addCopy('📋 Copy Username', username)
-                .addCopy('🔑 Copy Password', password)
-                .addUrl('🌐 Open Panel', domain, false);
-
-            await fallback.send(targetJid, { quoted: msgQuote });
-
-        } catch (fallbackError) {
-            // ─── ULTIMATE FALLBACK: Plain Text ────────────────────────────
-            await client.sendMessage(targetJid, {
-                text: `🔐 *Panel Credentials*\n\nUsername: ${username}\nPassword: ${password}\nPanel: ${domain}\n\n📦 Plan: ${plan.toUpperCase()} (${spec.ram}MB)`
-            }, { quoted: msgQuote });
-        }
+        // Last resort - send to sender
+        await ctx.reply(credentialsText);
+        return false;
     }
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 5. MAIN CREATE PANEL
+// 5. MAIN CREATE PANEL WITH IMPROVED ERROR HANDLING
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function createPanel(ctx, { memo, cpu, disk } = {}) {
-    const { plan, username, targetJid } = parseInput(ctx);
-    const spec = PLAN_SPECS[plan];
-    const userPass = `@${username}${Math.floor(1000 + Math.random() * 9000)}`;
-    const createDate = moment().tz(PANEL_CONFIG.timezone).format("DD-MM-YYYY HH:mm");
-    const target = targetJid || ctx.sender;
-
     try {
+        const { plan, username, targetJid } = parseInput(ctx);
+        const spec = PLAN_SPECS[plan];
+        const userPass = `@${username}${Math.floor(1000 + Math.random() * 9000)}`;
+        const createDate = moment().tz(PANEL_CONFIG.timezone).format("DD-MM-YYYY HH:mm");
+        
+        // Ensure targetJid is valid
+        let target = targetJid || ctx.sender;
+        if (!target || target === 'undefined') {
+            target = ctx.sender;
+        }
+        if (!target.includes('@')) {
+            target = `${target}@s.whatsapp.net`;
+        }
+
         // ─── Send processing ────────────────────────────────────────────
         await ctx.reply(`⏳ *Creating ${plan.toUpperCase()} panel for ${username}...*`);
 
@@ -344,59 +355,70 @@ async function createPanel(ctx, { memo, cpu, disk } = {}) {
         const errorDetail = error?.response?.data?.errors?.[0]?.detail || error.message || 'API Connection Failed';
         console.error('[CREATEPANEL ERROR]', errorDetail);
 
+        // Send user-friendly error
         await ctx.reply(
             `❌ *Panel Creation Failed*\n\n` +
             `📌 ${errorDetail}\n\n` +
-            `💡 Please try again later.`
+            `💡 Please try again later or contact support.`
         );
         return false;
     }
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 6. COMMAND EXPORT
+// 6. COMMAND EXPORT WITH ENHANCED HELP
 // ─── ──────────────────────────────────────────────────────────────────────
 
 module.exports = {
     name: 'buy',
-    aliases: ['buygb', 'panel', 'createpanel', 'order'],
+    aliases: ['buygb', 'panel', 'createpanel', 'order', 'purchase'],
     category: 'panel',
     permissions: { owner: true },
 
     code: async (ctx) => {
-        const argsText = Array.isArray(ctx.args) ? ctx.args.join(' ') : String(ctx.args || '');
+        try {
+            const argsText = Array.isArray(ctx.args) ? ctx.args.join(' ') : String(ctx.args || '');
 
-        if (!argsText || argsText === 'help' || argsText === 'menu') {
-            // ─── Help Menu with ButtonV2 ──────────────────────────────────
-            const helpButton = new ButtonV2(ctx.core || ctx.sock || ctx)
-                .setTitle('🛒 Panel Purchase System')
-                .setBody(
-                    `📌 *Usage:*\n` +
-                    `.buy <plan> <username>\n\n` +
-                    `📋 *Plans:*\n` +
-                    `• 1gb - TSh 5,000 (1024MB RAM)\n` +
-                    `• 2gb - TSh 8,000 (2048MB RAM)\n` +
-                    `• 5gb - TSh 15,000 (5120MB RAM)\n` +
-                    `• 10gb - TSh 25,000 (10240MB RAM)\n` +
-                    `• unlimited - TSh 50,000 (20480MB RAM)\n\n` +
-                    `📌 *Examples:*\n` +
-                    `.buy 1gb mickey\n` +
-                    `.buy 2gb mickey 255612130873\n\n` +
-                    `💡 Reply to a user's message to target them.`
-                )
-                .setFooter('⚡ Mickey Glitch Sub')
-                .setThumbnail(PANEL_CONFIG.thumbnail)
-                .addButton('📦 1GB', '.buy 1gb')
-                .addButton('📦 2GB', '.buy 2gb')
-                .addButton('📦 5GB', '.buy 5gb')
-                .addButton('📦 10GB', '.buy 10gb')
-                .addButton('🚀 Unlimited', '.buy unlimited')
-                .addButton('📞 Owner', '.owner');
+            if (!argsText || argsText === 'help' || argsText === 'menu') {
+                // ─── Enhanced Help Menu ──────────────────────────────────
+                const helpButton = new ButtonV2(ctx.core || ctx.sock || ctx)
+                    .setTitle('🛒 Panel Purchase System')
+                    .setBody(
+                        `📌 *Usage:*\n` +
+                        `.buy <plan> <username>\n\n` +
+                        `📋 *Available Plans:*\n` +
+                        `• 1gb - TSh 5,000 (1024MB RAM)\n` +
+                        `• 2gb - TSh 8,000 (2048MB RAM)\n` +
+                        `• 5gb - TSh 15,000 (5120MB RAM)\n` +
+                        `• 10gb - TSh 25,000 (10240MB RAM)\n` +
+                        `• unlimited - TSh 50,000 (20480MB RAM)\n\n` +
+                        `📌 *Examples:*\n` +
+                        `.buy 1gb mickey\n` +
+                        `.buy 2gb mickey 255612130873\n\n` +
+                        `💡 Reply to a user's message to target them.`
+                    )
+                    .setFooter('⚡ Mickey Glitch Sub')
+                    .setThumbnail(PANEL_CONFIG.thumbnail)
+                    .addButton('📦 1GB', '.buy 1gb')
+                    .addButton('📦 2GB', '.buy 2gb')
+                    .addButton('📦 5GB', '.buy 5gb')
+                    .addButton('📦 10GB', '.buy 10gb')
+                    .addButton('🚀 Unlimited', '.buy unlimited')
+                    .addButton('📞 Owner', '.owner');
 
-            return await helpButton.send(ctx.chatId || ctx.chat || ctx.from, { quoted: ctx._msg });
+                return await helpButton.send(ctx.chatId || ctx.chat || ctx.from, { quoted: ctx._msg });
+            }
+
+            await createPanel(ctx);
+            
+        } catch (error) {
+            console.error('[COMMAND ERROR]', error);
+            await ctx.reply(
+                `❌ *Command Error*\n\n` +
+                `📌 ${error.message || 'An unexpected error occurred'}\n\n` +
+                `💡 Please try again later.`
+            );
         }
-
-        await createPanel(ctx);
     }
 };
 
