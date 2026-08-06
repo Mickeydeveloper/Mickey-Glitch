@@ -10,12 +10,7 @@ const CONFIG = {
     OWNER: {
         NAME: 'Mickdady',
         TITLE: 'Base Developer & Founder',
-        LOCATION: 'Tanzania 🇹🇿',
-        PHONE_1: '255615944741',
-        PHONE_2: '255612130873',
-        EMAIL: 'mickey@example.com',
-        GITHUB: 'https://github.com/Mickeydeveloper',
-        WEBSITE: 'https://mickey-glitch.vercel.app'
+  
     },
     IMAGES: [
         'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg',
@@ -87,15 +82,15 @@ async function ownerCommand(sock, chatId, message) {
         // ─── PRIMARY: BUTTON V1 WITH ACTIONS ───────────────────────────────
         try {
             const button = new Button(sock)
-                .setTitle('👑 Owner Profile')
+                .setTitle('👑 Owner')
                 .setBody(profileText)
                 .setFooter(`⚡ ${CONFIG.OWNER.NAME}`)
                 .setImage(randomImage)
-                .addCall(`📞 ${CONFIG.OWNER.PHONE_1}`, `call_${CONFIG.OWNER.PHONE_1}`)
-                .addCall(`📞 ${CONFIG.OWNER.PHONE_2}`, `call_${CONFIG.OWNER.PHONE_2}`)
-                .addUrl('🌐 Website', CONFIG.OWNER.WEBSITE)
-                .addUrl('🐙 GitHub', CONFIG.OWNER.GITHUB)
-                .addCopy('📧 Email', CONFIG.OWNER.EMAIL);
+                .addCall('Call 1', `call_${CONFIG.OWNER.PHONE_1}`)
+                .addCall('Call 2', `call_${CONFIG.OWNER.PHONE_2}`)
+                .addUrl('Website', CONFIG.OWNER.WEBSITE)
+                .addUrl('GitHub', CONFIG.OWNER.GITHUB)
+                .addCopy('Email', CONFIG.OWNER.EMAIL);
 
             await button.send(chatId, {
                 quoted: message,
