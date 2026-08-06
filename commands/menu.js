@@ -107,6 +107,14 @@ const getCommandMeta = (cmdModule, fallbackName) => {
         return { commandId: fallback, description: `Cmd: ${fallbackName}` };
     }
 
+    const getModuleProp = (module, prop) => {
+        if (typeof module !== 'object' && typeof module !== 'function') return undefined;
+        if (typeof module === 'function' && !Object.prototype.hasOwnProperty.call(module, prop)) {
+            return undefined;
+        }
+        return module[prop];
+    };
+
     const candidates = [];
     const pushCandidate = (value) => {
         if (typeof value === 'string' && value.trim() && isLikelyRealCommandName(value)) {
@@ -114,16 +122,16 @@ const getCommandMeta = (cmdModule, fallbackName) => {
         }
     };
 
-    pushCandidate(cmdModule.commandName);
-    pushCandidate(cmdModule.command);
-    pushCandidate(cmdModule.name);
+    pushCandidate(getModuleProp(cmdModule, 'commandName'));
+    pushCandidate(getModuleProp(cmdModule, 'command'));
+    pushCandidate(getModuleProp(cmdModule, 'name'));
 
-    if (Array.isArray(cmdModule.aliases)) {
-        cmdModule.aliases.forEach(alias => pushCandidate(alias));
+    if (Array.isArray(getModuleProp(cmdModule, 'aliases'))) {
+        getModuleProp(cmdModule, 'aliases').forEach(alias => pushCandidate(alias));
     }
 
     const commandId = candidates.find(Boolean) || fallback;
-    const description = cmdModule.description || `Cmd: ${fallbackName}`;
+    const description = getModuleProp(cmdModule, 'description') || `Cmd: ${fallbackName}`;
 
     return { commandId, description };
 };
