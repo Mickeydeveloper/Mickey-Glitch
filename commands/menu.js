@@ -1,13 +1,13 @@
 /**
  * @project: MICKEY GLITCH V3.0.5
  * @author: Quantum Base Developer (TZ)
- * @version: 3.0.5
+ * @version: 3.0.6
  */
 
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { ButtonV2 } = require('../lib/messageBuilder');
+const { ButtonV2, Button } = require('../lib/messageBuilder');
 const os = require('os');
 const chalk = require('chalk');
 
@@ -230,20 +230,8 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
-const buildSections = (menuData) => {
-    return menuData.map(cat => ({
-        title: `${cat.icon} ${cat.title}`,
-        highlight_label: `${cat.items.length} cmd`,
-        rows: cat.items.map(item => ({
-            title: item.cmd,
-            description: item.desc ? item.desc.substring(0, 20) : '',
-            id: item.cmd 
-        }))
-    }));
-};
-
 // ==============================================
-// 🚀 MAIN MENU COMMAND - BUTTONS ZIWE KWA ULALO
+// 🚀 MAIN MENU COMMAND - FIXED VERSION
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
@@ -256,67 +244,131 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const date = now.format('DD MMMM YYYY'); 
         const time = now.format('HH:mm:ss');
 
-        const menuText = `✨ *MICKEY GLITCH V3.0.5*
+        // ==============================================
+        // 📤 SEND MENU USING BUTTON (NOT BUTTONV2)
+        // ==============================================
+        const menuText = `✨ *MICKEY GLITCH V3.0.6*
 👋 *Habari za ${greeting.text}* ${greeting.emoji}
 👤 *User:* ${userName}
 📅 *Date:* ${date} | 🕒 *Time:* ${time}
+📊 *Commands:* ${menuData.reduce((acc, cat) => acc + cat.items.length, 0)}
 
-👇 _Bonyeza "Menu 📂" kuona command zote_
-❤️ _i love mom_`;
+📂 *Select category below:*`;
 
-        // ==============================================
-        // 📤 SEND INTERACTIVE MENU - BUTTONS KWA ULALO
-        // ==============================================
-        const buttonBuilder = new ButtonV2(sock)
+        // Tumia Button (si ButtonV2) kwa ajili ya quick replies
+        const menuButtons = new Button(sock)
+            .setTitle('🧩 MICKEY GLITCH MENU')
             .setBody(menuText)
-            .setFooter(`MICKEY BOT`)
-            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png');
+            .setFooter('💡 Bonyeza button kuona commands');
 
-        // BUTTON YA KWANZA: MENU - INAFUNGUA LIST
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '📂 Menu' },
-            buttonId: 'mickey_list_menu',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'single_select',
-                paramsJson: JSON.stringify({
-                    title: '📂 Fungua Orodha',
-                    sections: buildSections(menuData)
-                })
-            }
+        // Ongeza buttons kwa kila category
+        menuData.slice(0, 4).forEach(cat => {
+            const label = `${cat.icon} ${cat.title} (${cat.items.length})`;
+            menuButtons.addReply(label, `.menu_cat_${cat.title}`);
         });
 
-        // BUTTON ZA HARAKA ZILIZO NA COMMAND HALISI
-        [
-            { label: '🟢 Alive', id: '.alive' },
-            { label: '📡 Ping', id: '.ping' },
-            { label: '👑 Owner', id: '.owner' }
-        ].forEach(button => {
-            buttonBuilder.addRawButton({
-                buttonText: { displayText: button.label },
-                buttonId: button.id,
-                type: 1,
-                nativeFlowInfo: {
-                    name: 'quick_reply',
-                    paramsJson: JSON.stringify({
-                        display_text: button.label,
-                        id: button.id
-                    })
-                }
-            });
-        });
+        // Ongeza button ya kuona commands zote
+        menuButtons.addReply('📋 ALL COMMANDS', '.menu_all');
+        menuButtons.addReply('❌ Close', '.menu_close');
 
-        // Tuma ujumbe
-        await buttonBuilder.send(chatId, { quoted: m });
+        // Tuma menu
+        await menuButtons.send(chatId, { quoted: m });
+
+        // Weka state kwa ajili ya navigation
+        if (!global.menuStates) global.menuStates = {};
+        global.menuStates[chatId] = {
+            current: 'main',
+            data: menuData
+        };
 
     } catch (e) {
         console.error('Menu Error:', e);
         try {
-            await sock.sendMessage(chatId, { text: `❌ *Menu Error!*` }, { quoted: m });
+            await sock.sendMessage(chatId, { text: `❌ *Menu Error:* ${e.message}` }, { quoted: m });
         } catch (err) {}
     }
 };
 
+// ==============================================
+// 📂 MENU NAVIGATION HANDLER
+// ==============================================
+const handleMenuNavigation = async (sock, chatId, m, text) => {
+    try {
+        if (!global.menuStates) global.menuStates = {};
+        const state = global.menuStates[chatId];
+        
+        // Kama ni close
+        if (text === '.menu_close') {
+            delete global.menuStates[chatId];
+            await sock.sendMessage(chatId, { 
+                text: '✅ Menu imefungwa. Tuma .menu tena kufungua.' 
+            }, { quoted: m });
+            return true;
+        }
+
+        // Kama ni kuona commands zote
+        if (text === '.menu_all') {
+            const allCommands = [];
+            state?.data?.forEach(cat => {
+                cat.items.forEach(item => {
+                    allCommands.push(`${item.cmd} - ${item.desc || ''}`);
+                });
+            });
+
+            const chunks = [];
+            let chunk = '';
+            allCommands.forEach(cmd => {
+                if ((chunk + cmd).length > 4000) {
+                    chunks.push(chunk);
+                    chunk = '';
+                }
+                chunk += cmd + '\n';
+            });
+            if (chunk) chunks.push(chunk);
+
+            await sock.sendMessage(chatId, { 
+                text: `📋 *ALL COMMANDS (${allCommands.length})*\n\n${chunks[0]}` 
+            }, { quoted: m });
+
+            if (chunks.length > 1) {
+                for (let i = 1; i < chunks.length; i++) {
+                    await sock.sendMessage(chatId, { text: chunks[i] }, { quoted: m });
+                }
+            }
+            return true;
+        }
+
+        // Kama ni category selection
+        if (text.startsWith('.menu_cat_')) {
+            const categoryName = text.replace('.menu_cat_', '');
+            const category = state?.data?.find(cat => cat.title === categoryName);
+            
+            if (category) {
+                const commandsList = category.items.map(item => 
+                    `• ${item.cmd} - ${item.desc || ''}`
+                ).join('\n');
+
+                const catMenu = new Button(sock)
+                    .setTitle(`${category.icon} ${category.title}`)
+                    .setBody(`📋 *Commands (${category.items.length})*\n\n${commandsList}`)
+                    .setFooter('🔙 Bonyeza back kurudi');
+                
+                catMenu.addReply('🔙 Back to Menu', '.menu');
+                await catMenu.send(chatId, { quoted: m });
+                return true;
+            }
+        }
+
+        return false;
+    } catch (e) {
+        console.error('Menu Navigation Error:', e);
+        return false;
+    }
+};
+
+// ==============================================
+// 📊 UTILITY FUNCTIONS
+// ==============================================
 const getAllCommands = () => {
     const menuData = loadDynamicMenu();
     return menuData.flatMap(cat => cat.items.map(item => item.cmd.replace(/^[.]/, '').trim()));
@@ -331,17 +383,26 @@ const getCategories = () => {
     }));
 };
 
+// ==============================================
+// 📤 EXPORTS
+// ==============================================
 module.exports = menuCommand;
 module.exports.loadDynamicMenu = loadDynamicMenu;
 module.exports.getSystemStats = getSystemStats;
 module.exports.getAllCommands = getAllCommands;
 module.exports.getCategories = getCategories;
+module.exports.handleMenuNavigation = handleMenuNavigation;
 
+// Initialize global menu state
 if (typeof global !== 'undefined') {
+    if (!global.menuStates) global.menuStates = {};
+    
     setInterval(() => {
-        try { if (global.botStats) botStats = { ...botStats, ...global.botStats }; } catch (e) {}
+        try { 
+            if (global.botStats) botStats = { ...botStats, ...global.botStats }; 
+        } catch (e) {}
     }, 60000);
 }
 
-console.log(chalk.green('✓ Menu System Loaded Successfully'));
-console.log(chalk.cyan('✓ Buttons Arranged Horizontally'));
+console.log(chalk.green('✓ Menu System Loaded Successfully v3.0.6'));
+console.log(chalk.cyan('✓ Fixed Menu Display Issues'));
