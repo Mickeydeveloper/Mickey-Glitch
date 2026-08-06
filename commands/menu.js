@@ -95,10 +95,15 @@ const isLikelyRealCommandName = (value) => {
     return /^[a-z0-9._-]+$/i.test(noPrefix);
 };
 
+const isCommandModule = (mod) => {
+    return mod && (typeof mod === 'object' || typeof mod === 'function');
+};
+
 const getCommandMeta = (cmdModule, fallbackName) => {
     const fallback = normalizeCommandName(fallbackName, `.${fallbackName}`);
+    const moduleValue = isCommandModule(cmdModule) ? cmdModule : null;
 
-    if (!cmdModule || typeof cmdModule !== 'object') {
+    if (!moduleValue) {
         return { commandId: fallback, description: `Cmd: ${fallbackName}` };
     }
 
@@ -144,17 +149,33 @@ const loadDynamicMenu = (showAll = true) => {
         'play': 'AUDIO/VIDEO', 'ai': 'AI/BOT', 'gpt': 'AI/BOT'
     };
 
-    if (fs.existsSync(commandsDir)) {
-        const files = fs.readdirSync(commandsDir)
-            .filter(f => f.endsWith('.js'))
-            .sort();
+    const collectCommandFiles = (dir) => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        const files = [];
 
-        files.forEach(file => {
-            const baseName = file.replace(/\.js$/i, '');
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                if (entry.name.toLowerCase() === 'lib' || entry.name.startsWith('.')) continue;
+                files.push(...collectCommandFiles(fullPath));
+            } else if (entry.isFile() && entry.name.endsWith('.js')) {
+                files.push(fullPath);
+            }
+        }
+
+        return files;
+    };
+
+    if (fs.existsSync(commandsDir)) {
+        const commandFiles = collectCommandFiles(commandsDir).sort();
+
+        commandFiles.forEach(fullPath => {
+            const fileName = path.basename(fullPath);
+            const baseName = fileName.replace(/\.js$/i, '');
             if (baseName === 'menu') return;
 
             try {
-                const fullPath = path.join(commandsDir, file);
+                delete require.cache[require.resolve(fullPath)];
                 const cmdModule = require(fullPath);
                 const meta = getCommandMeta(cmdModule, baseName);
                 const category = (cmdModule && (cmdModule.category || fileMapping[baseName] || fileMapping[meta.commandId.replace(/^\./, '')])) || 'OTHER';

@@ -210,7 +210,7 @@ async function sendCredentialsPro(ctx, targetJid, username, password, plan, spec
             })
 
             // ─── CTA URL ──────────────────────────────────────────────────
-            .addButton({
+            .addRawButton({
                 name: 'cta_url',
                 buttonParamsJson: JSON.stringify({
                     display_text: '🌐 Open Panel',
@@ -219,15 +219,14 @@ async function sendCredentialsPro(ctx, targetJid, username, password, plan, spec
                 })
             })
 
-            // ─── QUICK REPLY ──────────────────────────────────────────────
-            .addButton({
+            // ─── QUICK REPLY ──────────────────────────────────────────────────
+            .addRawButton({
                 name: 'quick_reply',
                 buttonParamsJson: JSON.stringify({
                     display_text: '📋 Menu',
                     id: '.menu'
-                }
-            )
-        });
+                })
+            });
 
         await button.send(targetJid, { quoted: msgQuote });
 
@@ -265,7 +264,7 @@ async function sendCredentialsPro(ctx, targetJid, username, password, plan, spec
 // 5. MAIN CREATE PANEL
 // ─── ──────────────────────────────────────────────────────────────────────
 
-async function createPanel(ctx) {
+async function createPanel(ctx, { memo, cpu, disk } = {}) {
     const { plan, username, targetJid } = parseInput(ctx);
     const spec = PLAN_SPECS[plan];
     const userPass = `@${username}${Math.floor(1000 + Math.random() * 9000)}`;
