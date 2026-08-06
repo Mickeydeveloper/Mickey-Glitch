@@ -287,74 +287,19 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
             }
         });
 
-        // ─── BUTTON 2: ALIVE (Vertical) ──────────────────────────────────
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '🟢 Alive' },
-            buttonId: '.alive',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '🟢 Alive',
-                    id: '.alive'
-                })
-            }
-        });
-
-        // ─── BUTTON 3: PING (Vertical) ──────────────────────────────────
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '📡 Ping' },
-            buttonId: '.ping',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '📡 Ping',
-                    id: '.ping'
-                })
-            }
-        });
-
-        // ─── BUTTON 4: OWNER (Vertical) ──────────────────────────────────
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '👑 Owner' },
-            buttonId: '.owner',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '👑 Owner',
-                    id: '.owner'
-                })
-            }
-        });
-
-        // ─── BUTTON 5: STATS (Vertical) ──────────────────────────────────
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '📊 Stats' },
-            buttonId: '.stats',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '📊 Stats',
-                    id: '.stats'
-                })
-            }
-        });
-
-        // ─── BUTTON 6: HELP (Vertical) ──────────────────────────────────
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '❓ Help' },
-            buttonId: '.help',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'quick_reply',
-                paramsJson: JSON.stringify({
-                    display_text: '❓ Help',
-                    id: '.help'
-                })
-            }
+        // ─── QUICK ACTIONS (native buttons) ─────────────────────────────
+        [
+            { label: 'Alive', id: '.alive' },
+            { label: 'Ping', id: '.ping' },
+            { label: 'Owner', id: '.owner' },
+            { label: 'Stats', id: '.stats' },
+            { label: 'Help', id: '.help' }
+        ].forEach(btn => {
+            buttonBuilder.addRawButton({
+                buttonText: { displayText: btn.label },
+                buttonId: btn.id,
+                type: 1
+            });
         });
 
         // Tuma ujumbe

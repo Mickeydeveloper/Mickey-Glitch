@@ -29,11 +29,12 @@ async function ownerCommand(sock, chatId, message) {
         const randomImage = IMAGES[Math.floor(Math.random() * IMAGES.length)];
         const isPrivate = String(chatId || '').endsWith('@s.whatsapp.net');
 
-        // Maelezo machache (picha + maelezo ya msingi pekee)
-        const profileText = 
+        // Concise professional profile (contact via buttons)
+        const profileText =
             `👑 *OWNER PROFILE*\n\n` +
-            `👤 *Name:* ${ownerData.get('NAME')}\n` +
-            `💼 *Role:* ${ownerData.get('TITLE')}`;
+            `*Name:* ${ownerData.get('NAME')}\n` +
+            `*Role:* ${ownerData.get('TITLE')}\n\n` +
+            `_Use the buttons below to contact or visit links._`;
 
         const buildVCard = () => {
             return [
@@ -66,15 +67,14 @@ async function ownerCommand(sock, chatId, message) {
         // ─── PRIMARY: BUTTON V1 WITH ACTIONS ───────────────────────────────
         try {
             const button = new Button(sock)
-                .setTitle('👑 Bot Owner')
+                .setTitle('👑 Owner')
                 .setBody(profileText)
                 .setFooter(`⚡ ${ownerData.get('NAME')}`)
                 .setImage(randomImage)
-                .addCall('Call 1', ownerData.get('PHONE_1'))
-                .addCall('Call 2', ownerData.get('PHONE_2'))
+                .addCall('Call', `call_${ownerData.get('PHONE_1')}`)
                 .addUrl('Website', ownerData.get('WEBSITE'))
-                .addUrl('GitHub', ownerData.get('GITHUB'))
-                .addCopy('Email', ownerData.get('EMAIL'));
+                .addCopy('Email', ownerData.get('EMAIL'))
+                .addUrl('GitHub', ownerData.get('GITHUB'));
 
             await button.send(chatId, {
                 quoted: message,
@@ -88,15 +88,14 @@ async function ownerCommand(sock, chatId, message) {
         // ─── FALLBACK 1: BUTTONV2 ──────────────────────────────────────────
         try {
             const button = new ButtonV2(sock)
-                .setTitle('👑 Bot Owner')
+                .setTitle('👑 Owner')
                 .setSubtitle(ownerData.get('NAME'))
                 .setBody(profileText)
                 .setFooter(`⚡ ${ownerData.get('NAME')}`)
                 .setThumbnail(randomImage)
-                .addButton('📞 Call 1', `call_${ownerData.get('PHONE_1')}`)
-                .addButton('📞 Call 2', `call_${ownerData.get('PHONE_2')}`)
-                .addButton('🌐 Website', 'visit_website')
-                .addButton('🐙 GitHub', 'visit_github');
+                .addButton('Call', `call_${ownerData.get('PHONE_1')}`)
+                .addButton('Website', 'visit_website')
+                .addButton('Email', 'copy_email');
 
             await button.send(chatId, {
                 quoted: message,
