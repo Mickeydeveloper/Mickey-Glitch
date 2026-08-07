@@ -354,16 +354,25 @@ function getPendingRequest() {
     return null;
 }
 
-module.exports = Object.assign(halotelCommand, {
-    halotelCommand,
-    code: halotelCommand,
-    default: halotelCommand,
-    name: 'halotel',
-    aliases: ['halotel'],
-    description: 'Show Halotel bundles and internet offers as a carousel',
-    category: 'utility',
-    PRODUCTS,
-    getPendingRequest,
-});
+function halotelHandler(sock, chatId, message, args) {
+    return halotelCommand(sock, chatId, message, args);
+}
 
+halotelHandler.halotelCommand = halotelCommand;
+halotelHandler.code = halotelCommand;
+halotelHandler.default = halotelCommand;
+halotelHandler.aliases = ['halotel'];
+halotelHandler.description = 'Show Halotel bundles and internet offers as a carousel';
+halotelHandler.category = 'utility';
+halotelHandler.PRODUCTS = PRODUCTS;
+halotelHandler.getPendingRequest = getPendingRequest;
+
+module.exports = halotelHandler;
+module.exports.halotelCommand = halotelCommand;
+module.exports.code = halotelCommand;
+module.exports.default = halotelCommand;
+module.exports.aliases = ['halotel'];
+module.exports.description = 'Show Halotel bundles and internet offers as a carousel';
+module.exports.category = 'utility';
+module.exports.PRODUCTS = PRODUCTS;
 module.exports.getPendingRequest = getPendingRequest;
