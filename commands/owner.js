@@ -1,8 +1,12 @@
 /**
- * owner.js - Optimized Owner Profile (Map implementation & Clean UI)
+ * owner.js - Optimized Owner Profile with Lice Photo Implementation
  */
 
 const { Carousel, ButtonV2, Button, createCtx } = require('../lib/messageBuilder');
+const {
+    prepareWAMessageMedia,
+    generateWAMessageFromContent
+} = require('baileys');
 
 // ─── CONFIGURATION USING MAP ─────────────────────────────────────────────
 const ownerData = new Map([
@@ -15,42 +19,85 @@ const ownerData = new Map([
     ['GITHUB', 'https://github.com/Mickeymozy']
 ]);
 
-const IMAGES = [
+// ─── IMAGE CONFIGURATION ────────────────────────────────────────────────
+const IMAGE_URLS = [
     'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg',
     'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy2.jpg',
     'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy3.jpg',
     'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy4.jpg'
 ];
 
+// ─── HELPER: SEND IMAGE WITH LICE PHOTO ────────────────────────────────
+async function sendLicePhoto(sock, chatId, imageUrl, caption, quoted) {
+    try {
+        // Prepare image message
+        const image = await prepareWAMessageMedia(
+            { image: { url: imageUrl } },
+            { upload: sock.waUploadToServer }
+        );
+
+        // Generate message with context info
+        const msg = generateWAMessageFromContent(
+            chatId,
+            {
+                imageMessage: {
+                    ...image.imageMessage,
+                    caption: caption,
+                    contextInfo: {
+                        pairedMediaType: 5,
+                        statusSourceType: 0
+                    }
+                }
+            },
+            { quoted }
+        );
+
+        await sock.relayMessage(chatId, msg.message, {
+            messageId: msg.key.id
+        });
+
+        return msg;
+    } catch (error) {
+        console.error('[LICE PHOTO ERROR]', error?.message || error);
+        return null;
+    }
+}
+
+// ─── HELPER: SEND VCARD ──────────────────────────────────────────────────
+function buildVCard() {
+    return [
+        'BEGIN:VCARD',
+        'VERSION:3.0',
+        `FN:${ownerData.get('NAME')}`,
+        `ORG:${ownerData.get('TITLE')}`,
+        `TEL;type=CELL;type=VOICE;waid=${ownerData.get('PHONE_1')}:${ownerData.get('PHONE_1')}`,
+        `TEL;type=CELL;type=VOICE;waid=${ownerData.get('PHONE_2')}:${ownerData.get('PHONE_2')}`,
+        `EMAIL:${ownerData.get('EMAIL')}`,
+        `URL:${ownerData.get('WEBSITE')}`,
+        `NOTE:${ownerData.get('GITHUB')}`,
+        'END:VCARD',
+    ].join('\n');
+}
+
+// ─── BUILD PROFILE TEXT ──────────────────────────────────────────────────
+function getProfileText() {
+    return (
+        `👑 *OWNER PROFILE*\n\n` +
+        `*Name:* ${ownerData.get('NAME')}\n` +
+        `*Role:* ${ownerData.get('TITLE')}\n\n` +
+        `_Use the buttons below to contact or visit links._`
+    );
+}
+
 // ─── MAIN OWNER COMMAND ──────────────────────────────────────────────────
 async function ownerCommand(sock, chatId, message) {
     try {
         const ctx = createCtx(sock, chatId, message);
-        const randomImage = IMAGES[Math.floor(Math.random() * IMAGES.length)];
+        const randomImage = IMAGE_URLS[Math.floor(Math.random() * IMAGE_URLS.length)];
         const isPrivate = String(chatId || '').endsWith('@s.whatsapp.net');
+        const profileText = getProfileText();
 
-        // Concise professional profile (contact via buttons)
-        const profileText =
-            `👑 *OWNER PROFILE*\n\n` +
-            `*Name:* ${ownerData.get('NAME')}\n` +
-            `*Role:* ${ownerData.get('TITLE')}\n\n` +
-            `_Use the buttons below to contact or visit links._`;
-
-        const buildVCard = () => {
-            return [
-                'BEGIN:VCARD',
-                'VERSION:3.0',
-                `FN:${ownerData.get('NAME')}`,
-                `ORG:${ownerData.get('TITLE')}`,
-                `TEL;type=CELL;type=VOICE;waid=${ownerData.get('PHONE_1')}:${ownerData.get('PHONE_1')}`,
-                `TEL;type=CELL;type=VOICE;waid=${ownerData.get('PHONE_2')}:${ownerData.get('PHONE_2')}`,
-                `EMAIL:${ownerData.get('EMAIL')}`,
-                `URL:${ownerData.get('WEBSITE')}`,
-                `NOTE:${ownerData.get('GITHUB')}`,
-                'END:VCARD',
-            ].join('\n');
-        };
-
+        // ─── SEND VCARD IN PRIVATE CHAT ────────────────────────────────────
         if (isPrivate) {
             try {
                 await sock.sendMessage(chatId, {
@@ -60,29 +107,40 @@ async function ownerCommand(sock, chatId, message) {
                     },
                 }, { quoted: message });
             } catch (contactError) {
-                console.error('[OWNER CONTACT ERROR]', contactError?.message || contactError);
+                console.error('[VCARD ERROR]', contactError?.message || contactError);
             }
         }
 
-        // ─── PRIMARY: BUTTON V1 WITH ACTIONS ───────────────────────────────
+        // ─── PRIMARY: SEND LICE PHOTO WITH BUTTONS ────────────────────────
         try {
-            const button = new Button(sock)
-                .setTitle('👑 Owner')
-                .setBody(profileText)
-                .setFooter(`⚡ ${ownerData.get('NAME')}`)
-                .setImage(randomImage)
-                .addCall('Call', `call_${ownerData.get('PHONE_1')}`)
-                .addUrl('Website', ownerData.get('WEBSITE'))
-                .addCopy('Email', ownerData.get('EMAIL'))
-                .addUrl('GitHub', ownerData.get('GITHUB'));
+            // Send image with lice photo implementation
+            const imageMsg = await sendLicePhoto(
+                sock,
+                chatId,
+                randomImage,
+                profileText,
+                message
+            );
 
-            await button.send(chatId, {
-                quoted: message,
-                fallbackText: profileText,
-            });
-            return;
-        } catch (buttonError) {
-            console.error('[OWNER BUTTON ERROR]', buttonError?.message || buttonError);
+            if (imageMsg) {
+                // Build button message separately or use Button class
+                const button = new Button(sock)
+                    .setTitle('👑 Owner')
+                    .setBody(profileText)
+                    .setFooter(`⚡ ${ownerData.get('NAME')}`)
+                    .addCall('Call', `call_${ownerData.get('PHONE_1')}`)
+                    .addUrl('Website', ownerData.get('WEBSITE'))
+                    .addCopy('Email', ownerData.get('EMAIL'))
+                    .addUrl('GitHub', ownerData.get('GITHUB'));
+
+                await button.send(chatId, {
+                    quoted: message,
+                    fallbackText: profileText,
+                });
+                return;
+            }
+        } catch (liceError) {
+            console.error('[LICE PHOTO ERROR]', liceError?.message || liceError);
         }
 
         // ─── FALLBACK 1: BUTTONV2 ──────────────────────────────────────────
@@ -120,6 +178,7 @@ async function ownerCommand(sock, chatId, message) {
     }
 }
 
+// ─── EXPORTS ─────────────────────────────────────────────────────────────
 module.exports = ownerCommand;
 module.exports.name = 'owner';
 module.exports.aliases = ['creator', 'dev', 'mickdady', 'about'];
