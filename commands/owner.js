@@ -1,28 +1,25 @@
 /**
- * owner.js - Optimized Owner Profile with Multiple Fallbacks
+ * owner.js - Complete Owner Profile with Buttons & Media
  */
 
-// ─── FIX: Use try-catch for all requires ─────────────────────────────
-let Button, createCtx, prepareWAMessageMedia, generateWAMessageFromContent;
+// ─── REQUIRE MODULES SAFELY ──────────────────────────────────────────
+let Button, ButtonV2, createCtx, prepareWAMessageMedia, generateWAMessageFromContent;
 
 try {
-    const messageBuilder = require('../lib/messageBuilder');
-    Button = messageBuilder.Button;
-    createCtx = messageBuilder.createCtx;
+    const mb = require('../lib/messageBuilder');
+    Button = mb.Button;
+    ButtonV2 = mb.ButtonV2;
+    createCtx = mb.createCtx;
 } catch (e) {
-    console.log('[OWNER] messageBuilder not found, using fallback');
-    Button = null;
-    createCtx = null;
+    console.log('[OWNER] messageBuilder not found');
 }
 
 try {
-    const baileys = require('baileys');
-    prepareWAMessageMedia = baileys.prepareWAMessageMedia;
-    generateWAMessageFromContent = baileys.generateWAMessageFromContent;
+    const b = require('baileys');
+    prepareWAMessageMedia = b.prepareWAMessageMedia;
+    generateWAMessageFromContent = b.generateWAMessageFromContent;
 } catch (e) {
     console.log('[OWNER] baileys functions not found');
-    prepareWAMessageMedia = null;
-    generateWAMessageFromContent = null;
 }
 
 // ─── CONFIGURATION ─────────────────────────────────────────────────────
@@ -52,6 +49,10 @@ const additionalNodes = [
     {
         name: 'contact_owner',
         description: 'Contact the bot owner directly'
+    },
+    {
+        name: 'developer_info',
+        description: 'Information about the bot developer'
     }
 ];
 
@@ -71,19 +72,32 @@ function buildVCard() {
     ].join('\n');
 }
 
-// ─── SEND IMAGE WITH LICE PHOTO ──────────────────────────────────────
-async function sendImageWithLice(sock, chatId, imageUrl, caption, quoted) {
+// ─── SEND LICE PHOTO WITH BUTTONS ────────────────────────────────────
+async function sendLicePhotoWithButtons(sock, chatId, imageUrl, quoted) {
     if (!prepareWAMessageMedia || !generateWAMessageFromContent) {
         console.log('[LICE] Functions not available');
         return false;
     }
 
     try {
+        // 1. Prepare image
         const image = await prepareWAMessageMedia(
             { image: { url: imageUrl } },
             { upload: sock.waUploadToServer }
         );
 
+        // 2. Create caption with owner info
+        const caption =
+            `👑 *OWNER PROFILE*\n\n` +
+            `*Name:* ${ownerData.get('NAME')}\n` +
+            `*Role:* ${ownerData.get('TITLE')}\n` +
+            `*Phone:* ${ownerData.get('PHONE_1')}\n` +
+            `*Email:* ${ownerData.get('EMAIL')}\n` +
+            `*Website:* ${ownerData.get('WEBSITE')}\n` +
+            `*GitHub:* ${ownerData.get('GITHUB')}\n\n` +
+            `_Tap buttons below to interact._`;
+
+        // 3. Generate message with buttons
         const msg = generateWAMessageFromContent(
             chatId,
             {
@@ -93,13 +107,18 @@ async function sendImageWithLice(sock, chatId, imageUrl, caption, quoted) {
                     contextInfo: {
                         pairedMediaType: 5,
                         statusSourceType: 0,
-                        additionalNodes: additionalNodes // ← ADDITIONAL NODES
+                        additionalNodes: additionalNodes,
+                        // Buttons in context info
+                        forwardingContext: {
+                            forwardingSource: 1
+                        }
                     }
                 }
             },
             { quoted }
         );
 
+        // 4. Send the message
         await sock.relayMessage(chatId, msg.message, {
             messageId: msg.key.id
         });
@@ -111,17 +130,22 @@ async function sendImageWithLice(sock, chatId, imageUrl, caption, quoted) {
     }
 }
 
-// ─── SEND BUTTONS ──────────────────────────────────────────────────────
-async function sendButtons(sock, chatId, text, imageUrl, quoted) {
+// ─── SEND BUTTONS VIA MESSAGEBUILDER ─────────────────────────────────
+async function sendButtonsViaBuilder(sock, chatId, imageUrl, quoted) {
     if (!Button) {
         console.log('[BUTTONS] Button class not available');
         return false;
     }
 
     try {
+        const profileText =
+            `👑 *Owner: ${ownerData.get('NAME')}*\n` +
+            `📱 *Phone:* ${ownerData.get('PHONE_1')}\n` +
+            `📧 *Email:* ${ownerData.get('EMAIL')}`;
+
         const button = new Button(sock)
             .setTitle('👑 Owner')
-            .setBody(text)
+            .setBody(profileText)
             .setFooter(`⚡ ${ownerData.get('NAME')}`)
             .setImage(imageUrl)
             .addCall('📞 Call', `call_${ownerData.get('PHONE_1')}`)
@@ -131,7 +155,7 @@ async function sendButtons(sock, chatId, text, imageUrl, quoted) {
 
         await button.send(chatId, {
             quoted: quoted,
-            fallbackText: text,
+            fallbackText: profileText,
         });
         return true;
     } catch (error) {
@@ -140,7 +164,7 @@ async function sendButtons(sock, chatId, text, imageUrl, quoted) {
     }
 }
 
-// ─── SEND SIMPLE VCARD ────────────────────────────────────────────────
+// ─── SEND VCARD ────────────────────────────────────────────────────────
 async function sendVCard(sock, chatId, quoted) {
     try {
         await sock.sendMessage(chatId, {
@@ -156,7 +180,7 @@ async function sendVCard(sock, chatId, quoted) {
     }
 }
 
-// ─── SEND PLAIN TEXT WITH FORMATTING ─────────────────────────────────
+// ─── SEND PLAIN TEXT ──────────────────────────────────────────────────
 async function sendPlainText(sock, chatId, quoted) {
     try {
         const text =
@@ -180,61 +204,49 @@ async function sendPlainText(sock, chatId, quoted) {
 // ─── MAIN COMMAND ──────────────────────────────────────────────────────
 async function ownerCommand(sock, chatId, message) {
     try {
-        console.log('[OWNER] Command executed for:', chatId);
+        console.log('[OWNER] Executing for:', chatId);
         
         const isPrivate = chatId.endsWith('@s.whatsapp.net');
         const randomImage = IMAGE_URLS[Math.floor(Math.random() * IMAGE_URLS.length)];
-        
-        // Get profile text
-        const profileText =
-            `👑 *OWNER PROFILE*\n\n` +
-            `*Name:* ${ownerData.get('NAME')}\n` +
-            `*Role:* ${ownerData.get('TITLE')}\n\n` +
-            `_Use buttons below to contact me._`;
 
-        // ─── STEP 1: Send VCard (Private Chat Only) ──────────────────────
+        // ─── STEP 1: Send VCard (Private only) ────────────────────────────
         if (isPrivate) {
             await sendVCard(sock, chatId, message);
         }
 
-        // ─── STEP 2: Try Lice Photo ──────────────────────────────────────
-        const imageSent = await sendImageWithLice(
-            sock,
-            chatId,
-            randomImage,
-            profileText,
+        // ─── STEP 2: Try Lice Photo with Buttons ──────────────────────────
+        const liceSent = await sendLicePhotoWithButtons(
+            sock, 
+            chatId, 
+            randomImage, 
             message
         );
 
-        // ─── STEP 3: Try Buttons ──────────────────────────────────────────
-        if (imageSent) {
-            await sendButtons(sock, chatId, profileText, randomImage, message);
-        } else {
-            // Try buttons without image
-            await sendButtons(sock, chatId, profileText, null, message);
+        // ─── STEP 3: If Lice fails, try Buttons via Builder ──────────────
+        if (!liceSent) {
+            console.log('[OWNER] Lice failed, trying buttons...');
+            await sendButtonsViaBuilder(sock, chatId, randomImage, message);
         }
 
-        // ─── STEP 4: Final Fallback - Plain Text ─────────────────────────
-        // If nothing worked, send plain text (this will always work)
+        // ─── STEP 4: Always send text as backup ──────────────────────────
+        // Send plain text after 2 seconds as backup
         setTimeout(async () => {
             await sendPlainText(sock, chatId, message);
-        }, 1000);
+        }, 2000);
 
-        // Log success
-        console.log('[OWNER] Command completed successfully');
+        console.log('[OWNER] Command completed');
 
     } catch (error) {
         console.error('[OWNER ERROR]', error?.message || error);
         
-        // Ultimate fallback - try to send plain text
+        // Ultimate fallback
         try {
             await sendPlainText(sock, chatId, message);
         } catch (e) {
             console.error('[FATAL]', e.message);
-            // Try one more time with simple text
             try {
                 await sock.sendMessage(chatId, { 
-                    text: `👑 Owner: ${ownerData.get('NAME')}\nPhone: ${ownerData.get('PHONE_1')}` 
+                    text: `👑 Owner: ${ownerData.get('NAME')}\n📱 Phone: ${ownerData.get('PHONE_1')}` 
                 });
             } catch (final) {
                 console.error('[FINAL ERROR]', final.message);
@@ -246,8 +258,8 @@ async function ownerCommand(sock, chatId, message) {
 // ─── EXPORTS ────────────────────────────────────────────────────────────
 module.exports = ownerCommand;
 module.exports.name = 'owner';
-module.exports.aliases = ['creator', 'dev', 'mickdady', 'about', 'developer'];
+module.exports.aliases = ['creator', 'dev', 'mickdady', 'about', 'developer', 'admin'];
 module.exports.category = 'info';
 module.exports.default = ownerCommand;
 module.exports.handler = ownerCommand;
-module.exports.additionalNodes = additionalNodes; // ← Export additional nodes
+module.exports.additionalNodes = additionalNodes;
