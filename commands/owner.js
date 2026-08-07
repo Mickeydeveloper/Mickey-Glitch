@@ -27,129 +27,130 @@ const IMAGE_URLS = [
     'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy4.jpg'
 ];
 
-// ─── BUILD VCARD ──────────────────────────────────────────────────────
-function buildVCard() {
-    return [
-        'BEGIN:VCARD',
-        'VERSION:3.0',
-        `FN:${ownerData.get('NAME')}`,
-        `ORG:${ownerData.get('TITLE')}`,
-        `TEL;type=CELL;type=VOICE;waid=${ownerData.get('PHONE_1')}:${ownerData.get('PHONE_1')}`,
-        `TEL;type=CELL;type=VOICE;waid=${ownerData.get('PHONE_2')}:${ownerData.get('PHONE_2')}`,
-        `EMAIL:${ownerData.get('EMAIL')}`,
-        `URL:${ownerData.get('WEBSITE')}`,
-        `NOTE:${ownerData.get('GITHUB')}`,
-        'END:VCARD',
-    ].join('\n');
-}
-
 // ─── BUILD GENAI WIDGET ──────────────────────────────────────────────
-function buildGenAIWidget() {
-    const widgetData = {
-        view_model: {
-            primitives: [
-                // Header Widget - Script
+function buildGenAIWidget(imageUrl) {
+    // Widget 1: Header with title
+    const widget1 = {
+        "__typename": "GenAI3PExtWidgetPrimitive",
+        "header": {
+            "__typename": "GenAI3PExtWidgetStandardHeader",
+            "title": "LIST-X"
+        },
+        "body": {
+            "__typename": "GenAI3PExtWidgetCTA",
+            "label": "menu",
+            "state": "PENDING",
+            "kind": "OTHER",
+            "tool_call_id": "01",
+            "toast": {
+                "__typename": "GenAI3PExtWidgetToast",
+                "label": "NIX"
+            }
+        }
+    };
+
+    // Widget 2: Header with title NX-T
+    const widget2 = {
+        "__typename": "GenAI3PExtWidgetPrimitive",
+        "header": {
+            "__typename": "GenAI3PExtWidgetStandardHeader",
+            "title": "NX-T"
+        },
+        "body": {
+            "__typename": "GenAI3PExtCalendarEventList",
+            "sections": [],
+            "ctas": [
                 {
-                    __typename: "GenAI3PExtWidgetPrimitive",
-                    header: {
-                        __typename: "GenAI3PExtWidgetStandardHeader",
-                        title: "NX-T"
-                    },
-                    body: {
-                        __typename: "GenAI3PExtWidgetCTA",
-                        label: "script",
-                        state: "PENDING",
-                        kind: "OTHER",
-                        tool_call_id: "02",
-                        toast: {
-                            __typename: "GenAI3PExtWidgetToast",
-                            label: "NIX"
-                        }
+                    "__typename": "GenAI3PExtWidgetCTA",
+                    "label": "NIXCODE",
+                    "state": "PENDING",
+                    "kind": "OTHER",
+                    "tool_call_id": "10",
+                    "toast": {
+                        "__typename": "GenAI3PExtWidgetToast",
+                        "label": "NIX"
                     }
                 },
-                // Body Widget - Calendar with CTAs
                 {
-                    __typename: "GenAI3PExtWidgetPrimitive",
-                    header: {
-                        __typename: "GenAI3PExtWidgetStandardHeader",
-                        title: "NX-T"
-                    },
-                    body: {
-                        __typename: "GenAI3PExtCalendarEventList",
-                        sections: [],
-                        ctas: [
-                            {
-                                __typename: "GenAI3PExtWidgetCTA",
-                                label: "NIXCODE",
-                                state: "PENDING",
-                                kind: "OTHER",
-                                tool_call_id: "10",
-                                toast: {
-                                    __typename: "GenAI3PExtWidgetToast",
-                                    label: "NIX"
-                                }
-                            },
-                            {
-                                __typename: "GenAI3PExtWidgetCTA",
-                                label: "NIXEL",
-                                state: "PENDING",
-                                kind: "OTHER",
-                                tool_call_id: "11",
-                                toast: {
-                                    __typename: "GenAI3PExtWidgetToast",
-                                    label: "NIX"
-                                }
-                            },
-                            {
-                                __typename: "GenAI3PExtWidgetCTA",
-                                label: "FIORA",
-                                state: "PENDING",
-                                kind: "OTHER",
-                                tool_call_id: "12",
-                                toast: {
-                                    __typename: "GenAI3PExtWidgetToast",
-                                    label: "NIX"
-                                }
-                            }
-                        ]
+                    "__typename": "GenAI3PExtWidgetCTA",
+                    "label": "NIXEL",
+                    "state": "PENDING",
+                    "kind": "OTHER",
+                    "tool_call_id": "11",
+                    "toast": {
+                        "__typename": "GenAI3PExtWidgetToast",
+                        "label": "NIX"
+                    }
+                },
+                {
+                    "__typename": "GenAI3PExtWidgetCTA",
+                    "label": "FIORA",
+                    "state": "PENDING",
+                    "kind": "OTHER",
+                    "tool_call_id": "12",
+                    "toast": {
+                        "__typename": "GenAI3PExtWidgetToast",
+                        "label": "NIX"
                     }
                 }
-            ],
-            __typename: "GenAIHScrollLayoutViewModel"
+            ]
+        }
+    };
+
+    // Widget 3: Profile info
+    const widget3 = {
+        "__typename": "GenAI3PExtWidgetPrimitive",
+        "header": {
+            "__typename": "GenAI3PExtWidgetStandardHeader",
+            "title": "👑 OWNER"
+        },
+        "body": {
+            "__typename": "GenAI3PExtWidgetCTA",
+            "label": `👤 ${ownerData.get('NAME')}`,
+            "state": "PENDING",
+            "kind": "OTHER",
+            "tool_call_id": "03",
+            "toast": {
+                "__typename": "GenAI3PExtWidgetToast",
+                "label": "NIX"
+            }
         }
     };
 
     // Footer Widget - WhatsApp Links
     const footerWidget = {
-        view_model: {
-            primitives: [
+        "view_model": {
+            "primitives": [
                 {
-                    __typename: "GenAIFooterActionPrimitive",
-                    cta_text: "WhatsApp Group",
-                    cta_type: "OPEN_URL",
-                    cta_url: "https://chat.whatsapp.com/J7OzqKB7Bl2AGIcNEYsdch?s=cl&p=a&ilr=0"
+                    "__typename": "GenAIFooterActionPrimitive",
+                    "cta_text": "WhatsApp Group",
+                    "cta_type": "OPEN_URL",
+                    "cta_url": "https://chat.whatsapp.com/J7OzqKB7Bl2AGIcNEYsdch?s=cl&p=a&ilr=0"
                 },
                 {
-                    __typename: "GenAIFooterActionPrimitive",
-                    cta_text: "WhatsApp Channel",
-                    cta_type: "OPEN_URL",
-                    cta_url: "https://whatsapp.com/channel/0029VbCV1ck8fewpdNb2TY2k"
+                    "__typename": "GenAIFooterActionPrimitive",
+                    "cta_text": "WhatsApp Channel",
+                    "cta_type": "OPEN_URL",
+                    "cta_url": "https://whatsapp.com/channel/0029VbCV1ck8fewpdNb2TY2k"
                 }
             ],
-            __typename: "GenAIHScrollLayoutViewModel"
+            "__typename": "GenAIHScrollLayoutViewModel"
         }
     };
 
-    return {
-        widgetData: widgetData,
-        footerWidget: footerWidget
-    };
+    // Combine all widgets
+    const allWidgets = [widget1, widget2, widget3, footerWidget];
+    
+    // Convert to base64
+    const widgetsBase64 = Buffer.from(JSON.stringify(allWidgets)).toString('base64');
+    
+    return widgetsBase64;
 }
 
 // ─── SEND GENAI MESSAGE ──────────────────────────────────────────────
 async function sendGenAIMessage(sock, chatId, imageUrl, quoted) {
     try {
-        console.log('[GENAI] Preparing GenAI Widget...');
+        console.log('[GENAI] Sending GenAI Widget...');
         
         // Prepare image
         const image = await prepareWAMessageMedia(
@@ -157,13 +158,10 @@ async function sendGenAIMessage(sock, chatId, imageUrl, quoted) {
             { upload: sock.waUploadToServer }
         );
 
-        // Build widgets
-        const { widgetData, footerWidget } = buildGenAIWidget();
+        // Build widget data
+        const widgetData = buildGenAIWidget(imageUrl);
 
-        // Convert widgets to base64
-        const widgetsBase64 = Buffer.from(JSON.stringify([widgetData, footerWidget])).toString('base64');
-
-        // Generate message
+        // Generate message with widget
         const msg = generateWAMessageFromContent(
             chatId,
             {
@@ -174,8 +172,7 @@ async function sendGenAIMessage(sock, chatId, imageUrl, quoted) {
                         forwardingScore: 1,
                         isForwarded: true,
                         forwardOrigin: 4,
-                        // GenAI Widget data
-                        widgetData: widgetsBase64
+                        widgetData: widgetData
                     }
                 }
             },
@@ -187,7 +184,7 @@ async function sendGenAIMessage(sock, chatId, imageUrl, quoted) {
             messageId: msg.key.id
         });
 
-        console.log('[GENAI] Message sent successfully!');
+        console.log('[GENAI] Widget sent successfully!');
         return true;
     } catch (error) {
         console.error('[GENAI ERROR]', error?.message || error);
@@ -198,10 +195,23 @@ async function sendGenAIMessage(sock, chatId, imageUrl, quoted) {
 // ─── SEND VCARD ────────────────────────────────────────────────────────
 async function sendVCard(sock, chatId, quoted) {
     try {
+        const vcard = [
+            'BEGIN:VCARD',
+            'VERSION:3.0',
+            `FN:${ownerData.get('NAME')}`,
+            `ORG:${ownerData.get('TITLE')}`,
+            `TEL;type=CELL;type=VOICE;waid=${ownerData.get('PHONE_1')}:${ownerData.get('PHONE_1')}`,
+            `TEL;type=CELL;type=VOICE;waid=${ownerData.get('PHONE_2')}:${ownerData.get('PHONE_2')}`,
+            `EMAIL:${ownerData.get('EMAIL')}`,
+            `URL:${ownerData.get('WEBSITE')}`,
+            `NOTE:${ownerData.get('GITHUB')}`,
+            'END:VCARD',
+        ].join('\n');
+
         await sock.sendMessage(chatId, {
             contacts: {
                 displayName: ownerData.get('NAME'),
-                contacts: [{ vcard: buildVCard() }],
+                contacts: [{ vcard: vcard }],
             },
         }, { quoted: quoted });
         return true;
@@ -222,7 +232,9 @@ async function sendPlainText(sock, chatId, quoted) {
             `*Email:* ${ownerData.get('EMAIL')}\n` +
             `*Website:* ${ownerData.get('WEBSITE')}\n` +
             `*GitHub:* ${ownerData.get('GITHUB')}\n\n` +
-            `_Contact me through any of the above channels._`;
+            `_Contact me through any of the above channels._\n\n` +
+            `📱 WhatsApp Group: https://chat.whatsapp.com/J7OzqKB7Bl2AGIcNEYsdch\n` +
+            `📢 WhatsApp Channel: https://whatsapp.com/channel/0029VbCV1ck8fewpdNb2TY2k`;
 
         await sock.sendMessage(chatId, { text: text }, { quoted: quoted });
         return true;
