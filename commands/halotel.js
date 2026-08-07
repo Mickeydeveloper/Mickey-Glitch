@@ -350,7 +350,20 @@ async function halotelCommand(sock, chatId, message, args) {
 // 5. EXPORTS
 // ─── ──────────────────────────────────────────────────────────────────────
 
-module.exports = halotelCommand;
-module.exports.halotelCommand = halotelCommand;
-module.exports.default = halotelCommand;
-module.exports.PRODUCTS = PRODUCTS;
+function getPendingRequest() {
+    return null;
+}
+
+module.exports = Object.assign(halotelCommand, {
+    halotelCommand,
+    code: halotelCommand,
+    default: halotelCommand,
+    name: 'halotel',
+    aliases: ['halotel'],
+    description: 'Show Halotel bundles and internet offers as a carousel',
+    category: 'utility',
+    PRODUCTS,
+    getPendingRequest,
+});
+
+module.exports.getPendingRequest = getPendingRequest;
