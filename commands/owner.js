@@ -1,5 +1,5 @@
 /**
- * owner.js - Owner Profile with Lice Photo & Buttons
+ * owner.js - Owner Profile with GenAI Widget
  * Using @whiskeysockets/baileys
  */
 
@@ -8,18 +8,6 @@ const {
     prepareWAMessageMedia, 
     generateWAMessageFromContent 
 } = require('@whiskeysockets/baileys');
-
-// Import messageBuilder features
-const messageBuilder = require('../lib/messageBuilder');
-const { 
-    Button, 
-    ButtonV2, 
-    Carousel, 
-    createCtx,
-    Template,
-    List,
-    Product
-} = messageBuilder;
 
 // ─── CONFIGURATION ─────────────────────────────────────────────────────
 const ownerData = new Map([
@@ -55,211 +43,154 @@ function buildVCard() {
     ].join('\n');
 }
 
-// ─── SEND LICE PHOTO ──────────────────────────────────────────────────
-async function sendLicePhoto(sock, chatId, imageUrl, quoted) {
+// ─── BUILD GENAI WIDGET ──────────────────────────────────────────────
+function buildGenAIWidget() {
+    const widgetData = {
+        view_model: {
+            primitives: [
+                // Header Widget - Script
+                {
+                    __typename: "GenAI3PExtWidgetPrimitive",
+                    header: {
+                        __typename: "GenAI3PExtWidgetStandardHeader",
+                        title: "NX-T"
+                    },
+                    body: {
+                        __typename: "GenAI3PExtWidgetCTA",
+                        label: "script",
+                        state: "PENDING",
+                        kind: "OTHER",
+                        tool_call_id: "02",
+                        toast: {
+                            __typename: "GenAI3PExtWidgetToast",
+                            label: "NIX"
+                        }
+                    }
+                },
+                // Body Widget - Calendar with CTAs
+                {
+                    __typename: "GenAI3PExtWidgetPrimitive",
+                    header: {
+                        __typename: "GenAI3PExtWidgetStandardHeader",
+                        title: "NX-T"
+                    },
+                    body: {
+                        __typename: "GenAI3PExtCalendarEventList",
+                        sections: [],
+                        ctas: [
+                            {
+                                __typename: "GenAI3PExtWidgetCTA",
+                                label: "NIXCODE",
+                                state: "PENDING",
+                                kind: "OTHER",
+                                tool_call_id: "10",
+                                toast: {
+                                    __typename: "GenAI3PExtWidgetToast",
+                                    label: "NIX"
+                                }
+                            },
+                            {
+                                __typename: "GenAI3PExtWidgetCTA",
+                                label: "NIXEL",
+                                state: "PENDING",
+                                kind: "OTHER",
+                                tool_call_id: "11",
+                                toast: {
+                                    __typename: "GenAI3PExtWidgetToast",
+                                    label: "NIX"
+                                }
+                            },
+                            {
+                                __typename: "GenAI3PExtWidgetCTA",
+                                label: "FIORA",
+                                state: "PENDING",
+                                kind: "OTHER",
+                                tool_call_id: "12",
+                                toast: {
+                                    __typename: "GenAI3PExtWidgetToast",
+                                    label: "NIX"
+                                }
+                            }
+                        ]
+                    }
+                }
+            ],
+            __typename: "GenAIHScrollLayoutViewModel"
+        }
+    };
+
+    // Footer Widget - WhatsApp Links
+    const footerWidget = {
+        view_model: {
+            primitives: [
+                {
+                    __typename: "GenAIFooterActionPrimitive",
+                    cta_text: "WhatsApp Group",
+                    cta_type: "OPEN_URL",
+                    cta_url: "https://chat.whatsapp.com/J7OzqKB7Bl2AGIcNEYsdch?s=cl&p=a&ilr=0"
+                },
+                {
+                    __typename: "GenAIFooterActionPrimitive",
+                    cta_text: "WhatsApp Channel",
+                    cta_type: "OPEN_URL",
+                    cta_url: "https://whatsapp.com/channel/0029VbCV1ck8fewpdNb2TY2k"
+                }
+            ],
+            __typename: "GenAIHScrollLayoutViewModel"
+        }
+    };
+
+    return {
+        widgetData: widgetData,
+        footerWidget: footerWidget
+    };
+}
+
+// ─── SEND GENAI MESSAGE ──────────────────────────────────────────────
+async function sendGenAIMessage(sock, chatId, imageUrl, quoted) {
     try {
-        console.log('[LICE] Preparing image...');
+        console.log('[GENAI] Preparing GenAI Widget...');
         
+        // Prepare image
         const image = await prepareWAMessageMedia(
             { image: { url: imageUrl } },
             { upload: sock.waUploadToServer }
         );
 
-        const caption = 
-            `👑 *${ownerData.get('NAME')}*\n` +
-            `📱 *${ownerData.get('PHONE_1')}*`;
+        // Build widgets
+        const { widgetData, footerWidget } = buildGenAIWidget();
 
+        // Convert widgets to base64
+        const widgetsBase64 = Buffer.from(JSON.stringify([widgetData, footerWidget])).toString('base64');
+
+        // Generate message
         const msg = generateWAMessageFromContent(
             chatId,
             {
                 imageMessage: {
                     ...image.imageMessage,
-                    caption: caption,
+                    caption: `👑 *${ownerData.get('NAME')}*\n📱 ${ownerData.get('PHONE_1')}`,
                     contextInfo: {
-                        pairedMediaType: 5,
-                        statusSourceType: 0
+                        forwardingScore: 1,
+                        isForwarded: true,
+                        forwardOrigin: 4,
+                        // GenAI Widget data
+                        widgetData: widgetsBase64
                     }
                 }
             },
             { quoted }
         );
 
+        // Send message
         await sock.relayMessage(chatId, msg.message, {
             messageId: msg.key.id
         });
 
-        console.log('[LICE] Photo sent successfully!');
-        return msg;
-    } catch (error) {
-        console.error('[LICE PHOTO ERROR]', error?.message || error);
-        return null;
-    }
-}
-
-// ─── SEND BUTTON V1 (Original) ──────────────────────────────────────
-async function sendButtonV1(sock, chatId, quoted) {
-    try {
-        console.log('[BUTTON V1] Sending...');
-        
-        const text = 
-            `👑 *OWNER PROFILE*\n\n` +
-            `*Name:* ${ownerData.get('NAME')}\n` +
-            `*Role:* ${ownerData.get('TITLE')}\n` +
-            `*Phone:* ${ownerData.get('PHONE_1')}\n` +
-            `*Email:* ${ownerData.get('EMAIL')}`;
-
-        const button = new Button(sock)
-            .setTitle('👑 Owner')
-            .setBody(text)
-            .setFooter(`⚡ ${ownerData.get('NAME')}`)
-            .setImage(IMAGE_URLS[Math.floor(Math.random() * IMAGE_URLS.length)])
-            .addCall('📞 Call', `call_${ownerData.get('PHONE_1')}`)
-            .addUrl('🌐 Website', ownerData.get('WEBSITE'))
-            .addCopy('📧 Email', ownerData.get('EMAIL'))
-            .addUrl('🐙 GitHub', ownerData.get('GITHUB'))
-            .addReply('💬 Chat', 'chat_owner');
-
-        await button.send(chatId, {
-            quoted: quoted,
-            fallbackText: text,
-        });
-        
-        console.log('[BUTTON V1] Sent successfully!');
+        console.log('[GENAI] Message sent successfully!');
         return true;
     } catch (error) {
-        console.error('[BUTTON V1 ERROR]', error?.message || error);
-        return false;
-    }
-}
-
-// ─── SEND BUTTON V2 (Modern) ────────────────────────────────────────
-async function sendButtonV2(sock, chatId, quoted) {
-    try {
-        console.log('[BUTTON V2] Sending...');
-        
-        const text = 
-            `👑 *${ownerData.get('NAME')}*\n` +
-            `📱 ${ownerData.get('PHONE_1')}\n` +
-            `📧 ${ownerData.get('EMAIL')}`;
-
-        const button = new ButtonV2(sock)
-            .setTitle('👑 Owner')
-            .setSubtitle(ownerData.get('TITLE'))
-            .setBody(text)
-            .setFooter(`⚡ ${ownerData.get('NAME')}`)
-            .setThumbnail(IMAGE_URLS[Math.floor(Math.random() * IMAGE_URLS.length)])
-            .addButton('📞 Call', `call_${ownerData.get('PHONE_1')}`)
-            .addButton('🌐 Website', 'visit_website')
-            .addButton('📧 Email', 'copy_email')
-            .addButton('🐙 GitHub', 'visit_github');
-
-        await button.send(chatId, {
-            quoted: quoted,
-            fallbackText: text,
-        });
-        
-        console.log('[BUTTON V2] Sent successfully!');
-        return true;
-    } catch (error) {
-        console.error('[BUTTON V2 ERROR]', error?.message || error);
-        return false;
-    }
-}
-
-// ─── SEND CAROUSEL ────────────────────────────────────────────────────
-async function sendCarousel(sock, chatId, quoted) {
-    try {
-        console.log('[CAROUSEL] Sending...');
-        
-        const carousel = new Carousel(sock)
-            .setTitle('👑 Owner Info')
-            .setFooter(`⚡ ${ownerData.get('NAME')}`)
-            .addCard(
-                '👤 Profile',
-                `Name: ${ownerData.get('NAME')}\nRole: ${ownerData.get('TITLE')}`,
-                IMAGE_URLS[0],
-                [
-                    { name: '📞 Call', url: `call_${ownerData.get('PHONE_1')}` },
-                    { name: '🌐 Website', url: ownerData.get('WEBSITE') }
-                ]
-            )
-            .addCard(
-                '📱 Contact',
-                `Phone: ${ownerData.get('PHONE_1')}\nEmail: ${ownerData.get('EMAIL')}`,
-                IMAGE_URLS[1],
-                [
-                    { name: '📧 Email', url: `mailto:${ownerData.get('EMAIL')}` },
-                    { name: '🐙 GitHub', url: ownerData.get('GITHUB') }
-                ]
-            );
-
-        await carousel.send(chatId, {
-            quoted: quoted,
-        });
-        
-        console.log('[CAROUSEL] Sent successfully!');
-        return true;
-    } catch (error) {
-        console.error('[CAROUSEL ERROR]', error?.message || error);
-        return false;
-    }
-}
-
-// ─── SEND TEMPLATE ────────────────────────────────────────────────────
-async function sendTemplate(sock, chatId, quoted) {
-    try {
-        console.log('[TEMPLATE] Sending...');
-        
-        const template = new Template(sock)
-            .setTitle('👑 Owner')
-            .setBody(
-                `Name: ${ownerData.get('NAME')}\n` +
-                `Phone: ${ownerData.get('PHONE_1')}\n` +
-                `Email: ${ownerData.get('EMAIL')}`
-            )
-            .setFooter(`⚡ ${ownerData.get('NAME')}`)
-            .addButton('📞 Call', `call_${ownerData.get('PHONE_1')}`)
-            .addButton('🌐 Website', ownerData.get('WEBSITE'));
-
-        await template.send(chatId, {
-            quoted: quoted,
-        });
-        
-        console.log('[TEMPLATE] Sent successfully!');
-        return true;
-    } catch (error) {
-        console.error('[TEMPLATE ERROR]', error?.message || error);
-        return false;
-    }
-}
-
-// ─── SEND LIST ────────────────────────────────────────────────────────
-async function sendList(sock, chatId, quoted) {
-    try {
-        console.log('[LIST] Sending...');
-        
-        const list = new List(sock)
-            .setTitle('👑 Owner Options')
-            .setBody('Choose an option to contact owner')
-            .setFooter(`⚡ ${ownerData.get('NAME')}`)
-            .setButtonText('📋 Options')
-            .addSection('📞 Contact', [
-                { title: 'Call Owner', description: `Call ${ownerData.get('NAME')}`, rowId: `call_${ownerData.get('PHONE_1')}` },
-                { title: 'Send Email', description: `Email ${ownerData.get('EMAIL')}`, rowId: `email_${ownerData.get('EMAIL')}` },
-            ])
-            .addSection('🌐 Links', [
-                { title: 'Website', description: ownerData.get('WEBSITE'), rowId: 'visit_website' },
-                { title: 'GitHub', description: ownerData.get('GITHUB'), rowId: 'visit_github' },
-            ]);
-
-        await list.send(chatId, {
-            quoted: quoted,
-        });
-        
-        console.log('[LIST] Sent successfully!');
-        return true;
-    } catch (error) {
-        console.error('[LIST ERROR]', error?.message || error);
+        console.error('[GENAI ERROR]', error?.message || error);
         return false;
     }
 }
@@ -267,16 +198,12 @@ async function sendList(sock, chatId, quoted) {
 // ─── SEND VCARD ────────────────────────────────────────────────────────
 async function sendVCard(sock, chatId, quoted) {
     try {
-        console.log('[VCARD] Sending...');
-        
         await sock.sendMessage(chatId, {
             contacts: {
                 displayName: ownerData.get('NAME'),
                 contacts: [{ vcard: buildVCard() }],
             },
         }, { quoted: quoted });
-        
-        console.log('[VCARD] Sent successfully!');
         return true;
     } catch (error) {
         console.error('[VCARD ERROR]', error?.message);
@@ -311,34 +238,17 @@ async function ownerCommand(sock, chatId, message) {
         console.log('[OWNER] Executing for:', chatId);
         
         const isPrivate = chatId ? chatId.endsWith('@s.whatsapp.net') : false;
+        const randomImage = IMAGE_URLS[Math.floor(Math.random() * IMAGE_URLS.length)];
 
         // ─── STEP 1: Send VCard (Private only) ────────────────────────────
         if (isPrivate) {
             await sendVCard(sock, chatId, message);
         }
 
-        // ─── STEP 2: Send Lice Photo ──────────────────────────────────────
-        const randomImage = IMAGE_URLS[Math.floor(Math.random() * IMAGE_URLS.length)];
-        await sendLicePhoto(sock, chatId, randomImage, message);
+        // ─── STEP 2: Send GenAI Widget Message ────────────────────────────
+        await sendGenAIMessage(sock, chatId, randomImage, message);
 
-        // ─── STEP 3: Try all button types (one will work) ─────────────────
-        const buttonTypes = [
-            sendButtonV1,
-            sendButtonV2,
-            sendCarousel,
-            sendTemplate,
-            sendList
-        ];
-
-        let sent = false;
-        for (const sendFn of buttonTypes) {
-            if (!sent) {
-                sent = await sendFn(sock, chatId, message);
-                if (sent) break;
-            }
-        }
-
-        // ─── STEP 4: Text Backup (after 2 seconds) ────────────────────────
+        // ─── STEP 3: Text Backup (after 2 seconds) ────────────────────────
         setTimeout(async () => {
             await sendPlainText(sock, chatId, message);
         }, 2000);
