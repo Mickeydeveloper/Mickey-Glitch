@@ -182,7 +182,7 @@ async function sendCarousel(ctx, products) {
 
         if (cards.length === 0) {
             await ctx.reply('❌ No products found.');
-            return;
+            return false;
         }
 
         carousel
@@ -191,13 +191,13 @@ async function sendCarousel(ctx, products) {
             .setFooter(`⚡ Mickey Glitch Sub | ${new Date().toLocaleDateString()}`)
             .addCard(cards);
 
-        await carousel.send(chatId, {
+        const sent = await carousel.send(chatId, {
             quoted: message,
             fallbackText: `📶 ${products.length} bundles available\n\nSend .halotel list for details`
         });
 
         console.log('[HALOTEL] Carousel sent with', cards.length, 'cards');
-        return true;
+        return !!sent || true;
 
     } catch (error) {
         console.error('[HALOTEL] Carousel error:', error.message);
@@ -256,6 +256,7 @@ async function sendProductList(ctx) {
         `> ⚡ Mickey Glitch Sub`;
 
     await ctx.reply(text);
+    return true;
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
@@ -327,13 +328,13 @@ async function halotelCommand(sock, chatId, message, args) {
             return;
         }
 
-        // ─── DEFAULT: SEND CAROUSEL WITH ALL PRODUCTS ─────────────────────
-        console.log('[HALOTEL] Sending carousel with all products...');
-        const success = await sendCarousel(ctx, PRODUCTS);
+        // ─── DEFAULT: SEND TEXT LIST FIRST, THEN TRY CAROUSEL ─────────────
+        console.log('[HALOTEL] Sending product list to WhatsApp...');
+        const listSent = await sendProductList(ctx);
 
-        if (!success) {
-            console.log('[HALOTEL] Carousel failed, sending fallback...');
-            await sendProductList(ctx);
+        if (!listSent) {
+            console.log('[HALOTEL] Text fallback failed, trying carousel...');
+            await sendCarousel(ctx, PRODUCTS);
         }
 
     } catch (error) {
