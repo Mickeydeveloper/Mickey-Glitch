@@ -37,22 +37,6 @@ const IMAGE_URLS = [
     'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy4.jpg'
 ];
 
-// ─── ADDITIONAL NODES ──────────────────────────────────────────────────
-const additionalNodes = [
-    {
-        name: 'owner_info',
-        description: 'Get owner information and contact details'
-    },
-    {
-        name: 'contact_owner', 
-        description: 'Contact the bot owner directly'
-    },
-    {
-        name: 'developer_info',
-        description: 'Information about the bot developer'
-    }
-];
-
 // ─── BUILD VCARD ──────────────────────────────────────────────────────
 function buildVCard() {
     return [
@@ -74,12 +58,9 @@ async function sendLicePhoto(sock, chatId, imageUrl, quoted) {
     try {
         console.log('[LICE] Preparing image...');
         
-        // Check if sock has waUploadToServer
-        const upload = sock.waUploadToServer || sock.updateMediaMessage || sock.upload;
-        
         const image = await prepareWAMessageMedia(
             { image: { url: imageUrl } },
-            { upload: upload || sock.waUploadToServer }
+            { upload: sock.waUploadToServer }
         );
 
         console.log('[LICE] Image prepared, generating message...');
@@ -91,8 +72,7 @@ async function sendLicePhoto(sock, chatId, imageUrl, quoted) {
                     ...image.imageMessage,
                     contextInfo: {
                         pairedMediaType: 5,
-                        statusSourceType: 0,
-                        additionalNodes: additionalNodes
+                        statusSourceType: 0
                     }
                 }
             },
@@ -194,34 +174,8 @@ async function sendPlainText(sock, chatId, quoted) {
     }
 }
 
-// ─── MAIN EXECUTION FUNCTION ──────────────────────────────────────────
-async function ownerCommand(sockOrCtx, chatIdParam, msgParam) {
-    let sock, chatId, message;
-
-    // Check Kama input ni Context object (ctx) au param za kawaida (sock, chatId, msg)
-    if (sockOrCtx && typeof sockOrCtx === 'object' && (sockOrCtx.sock || sockOrCtx.core || sockOrCtx.msg)) {
-        // Ikiwa ni ctx object
-        sock = sockOrCtx.sock || sockOrCtx.core || sockOrCtx.conn;
-        chatId = sockOrCtx.chatId || sockOrCtx.msg?.key?.remoteJid || sockOrCtx.from;
-        message = sockOrCtx.msg || sockOrCtx.message || sockOrCtx.quoted;
-    } else {
-        // Ikiwa ni params za kawaida
-        sock = sockOrCtx;
-        chatId = chatIdParam;
-        message = msgParam;
-    }
-
-    // Ensure we have valid parameters
-    if (!sock) {
-        console.error('[OWNER] No socket provided');
-        return;
-    }
-
-    if (!chatId) {
-        console.error('[OWNER] No chatId provided');
-        return;
-    }
-
+// ─── MAIN COMMAND ──────────────────────────────────────────────────────
+async function ownerCommand(sock, chatId, message) {
     try {
         console.log('[OWNER] Executing for:', chatId);
         
@@ -241,11 +195,7 @@ async function ownerCommand(sockOrCtx, chatIdParam, msgParam) {
 
         // ─── STEP 4: Text Backup (after 2 seconds) ────────────────────────
         setTimeout(async () => {
-            try {
-                await sendPlainText(sock, chatId, message);
-            } catch (e) {
-                console.error('[BACKUP TEXT ERROR]', e.message);
-            }
+            await sendPlainText(sock, chatId, message);
         }, 2000);
 
         console.log('[OWNER] Command completed successfully!');
@@ -262,18 +212,23 @@ async function ownerCommand(sockOrCtx, chatIdParam, msgParam) {
 }
 
 // ─── EXPORTS ────────────────────────────────────────────────────────────
-module.exports = {
-    name: 'owner',
-    aliases: ['creator', 'dev', 'mickdady', 'about', 'developer', 'admin'],
-    category: 'info',
-    desc: 'Onyesha taarifa za Owner na mawasiliano yake',
-    
-    // Njia kuu 3 za ku-execute command kulingana na Handler za tofauti za Bot:
-    execute: ownerCommand,
-    run: ownerCommand,
-    handler: ownerCommand,
-    
-    // Backup ikiwa bot inaita handler kama function ya moja kwa moja
-    ownerCommand: ownerCommand,
-    additionalNodes: additionalNodes
-};
+module.exports = ownerCommand;
+module.exports.name = 'owner';
+module.exports.aliases = ['creator', 'dev', 'mickdady', 'about', 'developer'];
+module.exports.category = 'info';
+module.exports.description = 'Onyesha taarifa za Owner na mawasiliano yake';
+module.exports.handler = ownerCommand;
+module.exports.additionalNodes = [
+    {
+        name: 'owner_info',
+        description: 'Get owner information and contact details'
+    },
+    {
+        name: 'contact_owner', 
+        description: 'Contact the bot owner directly'
+    },
+    {
+        name: 'developer_info',
+        description: 'Information about the bot developer'
+    }
+];
