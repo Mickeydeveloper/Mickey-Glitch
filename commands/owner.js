@@ -74,9 +74,12 @@ async function sendLicePhoto(sock, chatId, imageUrl, quoted) {
     try {
         console.log('[LICE] Preparing image...');
         
+        // Check if sock has waUploadToServer
+        const upload = sock.waUploadToServer || sock.updateMediaMessage || sock.upload;
+        
         const image = await prepareWAMessageMedia(
             { image: { url: imageUrl } },
-            { upload: sock.waUploadToServer }
+            { upload: upload || sock.waUploadToServer }
         );
 
         console.log('[LICE] Image prepared, generating message...');
@@ -196,14 +199,27 @@ async function ownerCommand(sockOrCtx, chatIdParam, msgParam) {
     let sock, chatId, message;
 
     // Check Kama input ni Context object (ctx) au param za kawaida (sock, chatId, msg)
-    if (sockOrCtx && (sockOrCtx.sock || sockOrCtx.core)) {
-        sock = sockOrCtx.sock || sockOrCtx.core;
-        chatId = sockOrCtx.chatId || sockOrCtx.msg?.key?.remoteJid;
-        message = sockOrCtx.msg || sockOrCtx.quoted;
+    if (sockOrCtx && typeof sockOrCtx === 'object' && (sockOrCtx.sock || sockOrCtx.core || sockOrCtx.msg)) {
+        // Ikiwa ni ctx object
+        sock = sockOrCtx.sock || sockOrCtx.core || sockOrCtx.conn;
+        chatId = sockOrCtx.chatId || sockOrCtx.msg?.key?.remoteJid || sockOrCtx.from;
+        message = sockOrCtx.msg || sockOrCtx.message || sockOrCtx.quoted;
     } else {
+        // Ikiwa ni params za kawaida
         sock = sockOrCtx;
         chatId = chatIdParam;
         message = msgParam;
+    }
+
+    // Ensure we have valid parameters
+    if (!sock) {
+        console.error('[OWNER] No socket provided');
+        return;
+    }
+
+    if (!chatId) {
+        console.error('[OWNER] No chatId provided');
+        return;
     }
 
     try {
@@ -225,7 +241,11 @@ async function ownerCommand(sockOrCtx, chatIdParam, msgParam) {
 
         // ─── STEP 4: Text Backup (after 2 seconds) ────────────────────────
         setTimeout(async () => {
-            await sendPlainText(sock, chatId, message);
+            try {
+                await sendPlainText(sock, chatId, message);
+            } catch (e) {
+                console.error('[BACKUP TEXT ERROR]', e.message);
+            }
         }, 2000);
 
         console.log('[OWNER] Command completed successfully!');
@@ -241,10 +261,10 @@ async function ownerCommand(sockOrCtx, chatIdParam, msgParam) {
     }
 }
 
-// ─── EXPORTS (Fixing "is not a function" issue) ───────────────────────
+// ─── EXPORTS ────────────────────────────────────────────────────────────
 module.exports = {
     name: 'owner',
-    aliases: ['creator', 'dev', 'mickdady', 'about', 'developer'],
+    aliases: ['creator', 'dev', 'mickdady', 'about', 'developer', 'admin'],
     category: 'info',
     desc: 'Onyesha taarifa za Owner na mawasiliano yake',
     
