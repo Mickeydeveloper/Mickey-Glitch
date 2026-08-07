@@ -78,20 +78,35 @@ const resolveCommandsDir = () => {
     return path.resolve(__dirname, '..', 'commands');
 };
 
+// FIXED: Remove "command" suffix and clean command names
 const normalizeCommandName = (value, fallback) => {
     if (!value) return fallback;
     const cleaned = String(value).trim();
     if (!cleaned) return fallback;
-    return cleaned.startsWith('.') ? cleaned.toLowerCase() : `.${cleaned.toLowerCase()}`;
+    
+    // Remove "command" suffix if present (case insensitive)
+    let withoutCommand = cleaned.replace(/command$/i, '').trim();
+    if (!withoutCommand) return fallback;
+    
+    // Ensure it starts with dot
+    return withoutCommand.startsWith('.') ? withoutCommand.toLowerCase() : `.${withoutCommand.toLowerCase()}`;
 };
 
+// FIXED: Better validation for command names
 const isLikelyRealCommandName = (value) => {
     if (typeof value !== 'string') return false;
     const cleaned = String(value).trim();
     if (!cleaned) return false;
+    
     const noPrefix = cleaned.startsWith('.') ? cleaned.slice(1) : cleaned;
     if (!noPrefix) return false;
+    
+    // Reject names ending with 'command'
     if (/command$/i.test(noPrefix)) return false;
+    
+    // Reject names that are too long or have invalid characters
+    if (noPrefix.length > 30) return false;
+    
     return /^[a-z0-9._-]+$/i.test(noPrefix);
 };
 
@@ -99,6 +114,7 @@ const isCommandModule = (mod) => {
     return mod && (typeof mod === 'object' || typeof mod === 'function');
 };
 
+// FIXED: Better command metadata extraction
 const getCommandMeta = (cmdModule, fallbackName) => {
     const fallback = normalizeCommandName(fallbackName, `.${fallbackName}`);
     const moduleValue = isCommandModule(cmdModule) ? cmdModule : null;
@@ -118,19 +134,33 @@ const getCommandMeta = (cmdModule, fallbackName) => {
     const candidates = [];
     const pushCandidate = (value) => {
         if (typeof value === 'string' && value.trim() && isLikelyRealCommandName(value)) {
-            candidates.push(normalizeCommandName(value, fallback));
+            const normalized = normalizeCommandName(value, fallback);
+            // Avoid duplicates in candidates
+            if (!candidates.includes(normalized)) {
+                candidates.push(normalized);
+            }
         }
     };
 
+    // Try different properties where command name might be stored
     pushCandidate(getModuleProp(cmdModule, 'commandName'));
     pushCandidate(getModuleProp(cmdModule, 'command'));
     pushCandidate(getModuleProp(cmdModule, 'name'));
 
+    // Handle aliases
     if (Array.isArray(getModuleProp(cmdModule, 'aliases'))) {
-        getModuleProp(cmdModule, 'aliases').forEach(alias => pushCandidate(alias));
+        getModuleProp(cmdModule, 'aliases').forEach(alias => {
+            if (isLikelyRealCommandName(alias)) {
+                const normalized = normalizeCommandName(alias, fallback);
+                if (!candidates.includes(normalized)) {
+                    candidates.push(normalized);
+                }
+            }
+        });
     }
 
-    const commandId = candidates.find(Boolean) || fallback;
+    // If no valid command name found, use fallback
+    const commandId = candidates.length > 0 ? candidates[0] : fallback;
     const description = getModuleProp(cmdModule, 'description') || `Cmd: ${fallbackName}`;
 
     return { commandId, description };
@@ -146,7 +176,10 @@ const loadDynamicMenu = (showAll = true) => {
     const addItem = (cat, item) => {
         const category = (cat || 'OTHER').toUpperCase();
         if (!dynamicMenu[category]) dynamicMenu[category] = [];
-        if (!dynamicMenu[category].find(i => i.cmd === item.cmd)) {
+        
+        // Check if command already exists in this category
+        const commandExists = dynamicMenu[category].some(i => i.cmd === item.cmd);
+        if (!commandExists) {
             dynamicMenu[category].push({ ...item, category });
         }
     };
@@ -175,6 +208,9 @@ const loadDynamicMenu = (showAll = true) => {
         return files;
     };
 
+    // Track all command names globally to avoid duplicates across categories
+    const usedCommandNames = new Set();
+
     if (fs.existsSync(commandsDir)) {
         const commandFiles = collectCommandFiles(commandsDir).sort();
 
@@ -187,26 +223,48 @@ const loadDynamicMenu = (showAll = true) => {
                 delete require.cache[require.resolve(fullPath)];
                 const cmdModule = require(fullPath);
                 const meta = getCommandMeta(cmdModule, baseName);
+                
+                // Skip if command name is already used
+                if (usedCommandNames.has(meta.commandId)) {
+                    return;
+                }
+                usedCommandNames.add(meta.commandId);
+                
                 const category = (cmdModule && (cmdModule.category || fileMapping[baseName] || fileMapping[meta.commandId.replace(/^\./, '')])) || 'OTHER';
                 addItem(category, {
                     cmd: meta.commandId,
                     desc: meta.description
                 });
             } catch (e) {
-                addItem(fileMapping[baseName] || 'OTHER', {
-                    cmd: normalizeCommandName(baseName, `.${baseName}`),
+                // Skip if command name is already used (error case)
+                const cmdId = normalizeCommandName(baseName, `.${baseName}`);
+                if (usedCommandNames.has(cmdId)) {
+                    return;
+                }
+                usedCommandNames.add(cmdId);
+                
+                const category = fileMapping[baseName] || 'OTHER';
+                addItem(category, {
+                    cmd: cmdId,
                     desc: `Cmd: ${baseName}`
                 });
             }
         });
     }
 
+    // Also check global commands
     if (global.commands && typeof global.commands === 'object') {
         Object.values(global.commands).forEach(cmd => {
             if (cmd.name) {
+                const cmdId = normalizeCommandName(cmd.name, `.${cmd.name}`);
+                if (usedCommandNames.has(cmdId)) {
+                    return;
+                }
+                usedCommandNames.add(cmdId);
+                
                 const category = cmd.category || fileMapping[cmd.name] || 'OTHER';
                 addItem(category, {
-                    cmd: normalizeCommandName(cmd.name, `.${cmd.name}`),
+                    cmd: cmdId,
                     desc: cmd.description || `Cmd: ${cmd.name}`
                 });
             }
@@ -288,6 +346,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         });
 
         // ─── QUICK ACTIONS (native buttons) ─────────────────────────────
+        // FIXED: Use clean command names without "command" suffix
         [
             { label: 'Alive', id: '.alive' },
             { label: 'Ping', id: '.ping' },
@@ -344,3 +403,4 @@ if (typeof global !== 'undefined') {
 
 console.log(chalk.green('✓ Menu System Loaded Successfully'));
 console.log(chalk.cyan('✓ Using Single Select with Vertical Buttons'));
+console.log(chalk.yellow('✓ Fixed: No duplicate commands with "command" suffix'));
