@@ -27,11 +27,11 @@ if (!fs.existsSync(CUSTOM_DIR)) fs.mkdirSync(CUSTOM_DIR, { recursive: true });
 function resolveMessageBuilderPath() {
     const possiblePaths = [
         path.join(process.cwd(), 'lib', 'messageBuilder.js'),
-        path.join(process.cwd(), 'lib', 'messagebuilder.js'),
+        path.join(process.cwd(), 'lib', 'messageBuilder.js'),
         path.join(process.cwd(), 'lib', 'messageBuilder'),
-        path.join(process.cwd(), 'lib', 'messagebuilder'),
+        path.join(process.cwd(), 'lib', 'messageBuilder'),
         path.join(process.cwd(), 'src', 'lib', 'messageBuilder.js'),
-        path.join(process.cwd(), 'src', 'lib', 'messagebuilder.js'),
+        path.join(process.cwd(), 'src', 'lib', 'messageBuilder.js'),
     ];
     
     for (const p of possiblePaths) {
