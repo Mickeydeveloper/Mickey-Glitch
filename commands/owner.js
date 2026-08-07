@@ -1,25 +1,22 @@
 /**
- * owner.js - Complete Owner Profile with Buttons & Media
+ * owner.js - Owner Profile with Lice Photo & Buttons
+ * Using @whiskeysockets/baileys
  */
 
-// ─── REQUIRE MODULES SAFELY ──────────────────────────────────────────
-let Button, ButtonV2, createCtx, prepareWAMessageMedia, generateWAMessageFromContent;
+// ─── REQUIRE MODULES ──────────────────────────────────────────────────
+const { 
+    prepareWAMessageMedia, 
+    generateWAMessageFromContent 
+} = require('@whiskeysockets/baileys'); // ← @whiskeysockets/baileys
+
+let Button, createCtx;
 
 try {
     const mb = require('../lib/messageBuilder');
     Button = mb.Button;
-    ButtonV2 = mb.ButtonV2;
     createCtx = mb.createCtx;
 } catch (e) {
     console.log('[OWNER] messageBuilder not found');
-}
-
-try {
-    const b = require('baileys');
-    prepareWAMessageMedia = b.prepareWAMessageMedia;
-    generateWAMessageFromContent = b.generateWAMessageFromContent;
-} catch (e) {
-    console.log('[OWNER] baileys functions not found');
 }
 
 // ─── CONFIGURATION ─────────────────────────────────────────────────────
@@ -47,7 +44,7 @@ const additionalNodes = [
         description: 'Get owner information and contact details'
     },
     {
-        name: 'contact_owner',
+        name: 'contact_owner', 
         description: 'Contact the bot owner directly'
     },
     {
@@ -72,82 +69,69 @@ function buildVCard() {
     ].join('\n');
 }
 
-// ─── SEND LICE PHOTO WITH BUTTONS ────────────────────────────────────
-async function sendLicePhotoWithButtons(sock, chatId, imageUrl, quoted) {
-    if (!prepareWAMessageMedia || !generateWAMessageFromContent) {
-        console.log('[LICE] Functions not available');
-        return false;
-    }
-
+// ─── SEND LICE PHOTO ──────────────────────────────────────────────────
+async function sendLicePhoto(sock, chatId, imageUrl, quoted) {
     try {
-        // 1. Prepare image
+        console.log('[LICE] Preparing image...');
+        
+        // 1. Prepare image using @whiskeysockets/baileys
         const image = await prepareWAMessageMedia(
             { image: { url: imageUrl } },
             { upload: sock.waUploadToServer }
         );
 
-        // 2. Create caption with owner info
-        const caption =
-            `👑 *OWNER PROFILE*\n\n` +
-            `*Name:* ${ownerData.get('NAME')}\n` +
-            `*Role:* ${ownerData.get('TITLE')}\n` +
-            `*Phone:* ${ownerData.get('PHONE_1')}\n` +
-            `*Email:* ${ownerData.get('EMAIL')}\n` +
-            `*Website:* ${ownerData.get('WEBSITE')}\n` +
-            `*GitHub:* ${ownerData.get('GITHUB')}\n\n` +
-            `_Tap buttons below to interact._`;
+        console.log('[LICE] Image prepared, generating message...');
 
-        // 3. Generate message with buttons
+        // 2. Generate message with context info
         const msg = generateWAMessageFromContent(
             chatId,
             {
                 imageMessage: {
                     ...image.imageMessage,
-                    caption: caption,
                     contextInfo: {
                         pairedMediaType: 5,
                         statusSourceType: 0,
-                        additionalNodes: additionalNodes,
-                        // Buttons in context info
-                        forwardingContext: {
-                            forwardingSource: 1
-                        }
+                        additionalNodes: additionalNodes
                     }
                 }
             },
             { quoted }
         );
 
-        // 4. Send the message
+        console.log('[LICE] Message generated, sending...');
+
+        // 3. Send the message
         await sock.relayMessage(chatId, msg.message, {
             messageId: msg.key.id
         });
 
-        return true;
+        console.log('[LICE] Photo sent successfully!');
+        return msg;
     } catch (error) {
         console.error('[LICE PHOTO ERROR]', error?.message || error);
-        return false;
+        return null;
     }
 }
 
-// ─── SEND BUTTONS VIA MESSAGEBUILDER ─────────────────────────────────
-async function sendButtonsViaBuilder(sock, chatId, imageUrl, quoted) {
+// ─── SEND BUTTONS ──────────────────────────────────────────────────────
+async function sendButtons(sock, chatId, quoted) {
     if (!Button) {
         console.log('[BUTTONS] Button class not available');
         return false;
     }
 
     try {
-        const profileText =
-            `👑 *Owner: ${ownerData.get('NAME')}*\n` +
-            `📱 *Phone:* ${ownerData.get('PHONE_1')}\n` +
-            `📧 *Email:* ${ownerData.get('EMAIL')}`;
+        console.log('[BUTTONS] Sending buttons...');
+        
+        // Short text for buttons
+        const text = 
+            `👑 *${ownerData.get('NAME')}*\n` +
+            `📱 *${ownerData.get('PHONE_1')}*`;
 
         const button = new Button(sock)
             .setTitle('👑 Owner')
-            .setBody(profileText)
+            .setBody(text)
             .setFooter(`⚡ ${ownerData.get('NAME')}`)
-            .setImage(imageUrl)
             .addCall('📞 Call', `call_${ownerData.get('PHONE_1')}`)
             .addUrl('🌐 Website', ownerData.get('WEBSITE'))
             .addCopy('📧 Email', ownerData.get('EMAIL'))
@@ -155,8 +139,10 @@ async function sendButtonsViaBuilder(sock, chatId, imageUrl, quoted) {
 
         await button.send(chatId, {
             quoted: quoted,
-            fallbackText: profileText,
+            fallbackText: text,
         });
+        
+        console.log('[BUTTONS] Buttons sent successfully!');
         return true;
     } catch (error) {
         console.error('[BUTTONS ERROR]', error?.message || error);
@@ -167,12 +153,16 @@ async function sendButtonsViaBuilder(sock, chatId, imageUrl, quoted) {
 // ─── SEND VCARD ────────────────────────────────────────────────────────
 async function sendVCard(sock, chatId, quoted) {
     try {
+        console.log('[VCARD] Sending vCard...');
+        
         await sock.sendMessage(chatId, {
             contacts: {
                 displayName: ownerData.get('NAME'),
                 contacts: [{ vcard: buildVCard() }],
             },
         }, { quoted: quoted });
+        
+        console.log('[VCARD] vCard sent successfully!');
         return true;
     } catch (error) {
         console.error('[VCARD ERROR]', error?.message);
@@ -180,9 +170,11 @@ async function sendVCard(sock, chatId, quoted) {
     }
 }
 
-// ─── SEND PLAIN TEXT ──────────────────────────────────────────────────
+// ─── SEND PLAIN TEXT (FALLBACK) ──────────────────────────────────────
 async function sendPlainText(sock, chatId, quoted) {
     try {
+        console.log('[TEXT] Sending plain text fallback...');
+        
         const text =
             `👑 *OWNER PROFILE*\n\n` +
             `*Name:* ${ownerData.get('NAME')}\n` +
@@ -194,6 +186,8 @@ async function sendPlainText(sock, chatId, quoted) {
             `_Contact me through any of the above channels._`;
 
         await sock.sendMessage(chatId, { text: text }, { quoted: quoted });
+        
+        console.log('[TEXT] Plain text sent successfully!');
         return true;
     } catch (error) {
         console.error('[TEXT ERROR]', error?.message);
@@ -214,27 +208,18 @@ async function ownerCommand(sock, chatId, message) {
             await sendVCard(sock, chatId, message);
         }
 
-        // ─── STEP 2: Try Lice Photo with Buttons ──────────────────────────
-        const liceSent = await sendLicePhotoWithButtons(
-            sock, 
-            chatId, 
-            randomImage, 
-            message
-        );
+        // ─── STEP 2: Send Lice Photo ──────────────────────────────────────
+        const msg = await sendLicePhoto(sock, chatId, randomImage, message);
 
-        // ─── STEP 3: If Lice fails, try Buttons via Builder ──────────────
-        if (!liceSent) {
-            console.log('[OWNER] Lice failed, trying buttons...');
-            await sendButtonsViaBuilder(sock, chatId, randomImage, message);
-        }
+        // ─── STEP 3: Send Buttons ──────────────────────────────────────────
+        await sendButtons(sock, chatId, message);
 
-        // ─── STEP 4: Always send text as backup ──────────────────────────
-        // Send plain text after 2 seconds as backup
+        // ─── STEP 4: Text Backup (after 2 seconds) ────────────────────────
         setTimeout(async () => {
             await sendPlainText(sock, chatId, message);
         }, 2000);
 
-        console.log('[OWNER] Command completed');
+        console.log('[OWNER] Command completed successfully!');
 
     } catch (error) {
         console.error('[OWNER ERROR]', error?.message || error);
@@ -244,13 +229,6 @@ async function ownerCommand(sock, chatId, message) {
             await sendPlainText(sock, chatId, message);
         } catch (e) {
             console.error('[FATAL]', e.message);
-            try {
-                await sock.sendMessage(chatId, { 
-                    text: `👑 Owner: ${ownerData.get('NAME')}\n📱 Phone: ${ownerData.get('PHONE_1')}` 
-                });
-            } catch (final) {
-                console.error('[FINAL ERROR]', final.message);
-            }
         }
     }
 }
@@ -258,7 +236,7 @@ async function ownerCommand(sock, chatId, message) {
 // ─── EXPORTS ────────────────────────────────────────────────────────────
 module.exports = ownerCommand;
 module.exports.name = 'owner';
-module.exports.aliases = ['creator', 'dev', 'mickdady', 'about', 'developer', 'admin'];
+module.exports.aliases = ['creator', 'dev', 'mickdady', 'about', 'developer'];
 module.exports.category = 'info';
 module.exports.default = ownerCommand;
 module.exports.handler = ownerCommand;
