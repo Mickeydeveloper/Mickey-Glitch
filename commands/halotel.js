@@ -3,7 +3,7 @@
  * Usage: .halotel
  */
 
-const { createCtx, Carousel, AIRich, Button, Toolkit, ButtonV2 } = require('../lib/messageBuilder');
+const { createCtx } = require('../lib/messageBuilder');
 
 // ─── ──────────────────────────────────────────────────────────────────────
 // 1. PRODUCTS DATABASE (With Raw Images)
@@ -168,39 +168,13 @@ function searchProducts(query) {
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function sendCarousel(ctx, products) {
-    const sock = ctx.sock || ctx.core;
-    const chatId = ctx.chatId || ctx.chat || ctx.from;
-    const message = ctx._msg;
-
     try {
-        if (typeof Carousel !== 'function') {
-            throw new Error('Carousel not available');
-        }
-
-        const carousel = new Carousel(sock);
-        const cards = products.map(p => createProductCard(p));
-
-        if (cards.length === 0) {
-            await ctx.reply('❌ No products found.');
-            return false;
-        }
-
-        carousel
-            .setTitle(`📶 Halotel Bundles (${cards.length})`)
-            .setBody(`👆 *Swipe to browse all packages*\n\n📌 Type .halotel <id> for details`)
-            .setFooter(`⚡ Mickey Glitch Sub | ${new Date().toLocaleDateString()}`)
-            .addCard(cards);
-
-        const sent = await carousel.send(chatId, {
-            quoted: message,
-            fallbackText: `📶 ${products.length} bundles available\n\nSend .halotel list for details`
-        });
-
-        console.log('[HALOTEL] Carousel sent with', cards.length, 'cards');
-        return !!sent || true;
-
+        const cards = products.map((p, i) => `${i + 1}. *${p.title}*\n📦 ${p.data} | ⏱️ ${p.validity}\n💰 ${p.sale_price || p.price}\n🆔 ${p.id}`).join('\n\n');
+        const text = `📶 *HALOTEL BUNDLES*\n\n${cards}\n\n📌 Send .halotel <id> for details`;
+        await ctx.reply(text);
+        return true;
     } catch (error) {
-        console.error('[HALOTEL] Carousel error:', error.message);
+        console.error('[HALOTEL] Carousel fallback error:', error.message);
         return false;
     }
 }
@@ -228,8 +202,7 @@ async function sendProductDetails(ctx, product) {
 
     try {
         await ctx.sendMessage(ctx.chatId, {
-            image: { url: product.image },
-            caption: detailText
+            text: detailText
         });
     } catch (_) {
         await ctx.reply(detailText);
