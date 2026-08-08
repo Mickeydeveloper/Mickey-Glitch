@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { ButtonV2 } = require('../lib/messageBuilder');
+const { ButtonV2, Button } = require('../lib/messageBuilder');
 const os = require('os');
 const chalk = require('chalk');
 
@@ -345,24 +345,20 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
             }
         });
 
-        // ─── QUICK ACTIONS (native buttons) ─────────────────────────────
-        // FIXED: Use clean command names without "command" suffix
-        [
-            { label: 'Alive', id: '.alive' },
-            { label: 'Ping', id: '.ping' },
-            { label: 'Owner', id: '.owner' },
-            { label: 'Stats', id: '.stats' },
-            { label: 'Help', id: '.help' }
-        ].forEach(btn => {
-            buttonBuilder.addRawButton({
-                buttonText: { displayText: btn.label },
-                buttonId: btn.id,
-                type: 1
-            });
-        });
-
-        // Tuma ujumbe
+        // Tuma ujumbe wa single select
         await buttonBuilder.send(chatId, { quoted: m });
+
+        // Tuma button ya in-app signup kwa ziada
+        try {
+            const signupButton = new Button(sock)
+                .setTitle('Fiora Sylvie')
+                .setBody('https://fiora.nixel.my.id/')
+                .addButton('inapp_signup', {});
+
+            await signupButton.send(chatId, { quoted: m, fallbackText: 'Fiora Sylvie' });
+        } catch (signupError) {
+            console.error('Menu signup button error:', signupError);
+        }
 
     } catch (e) {
         console.error('Menu Error:', e);
