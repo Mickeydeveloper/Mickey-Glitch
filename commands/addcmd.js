@@ -8,17 +8,17 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const util = require('util');
+const Module = require('module');
 
 // ─── ──────────────────────────────────────────────────────────────────────
 // 1. PATHS & CONFIG
 // ─── ──────────────────────────────────────────────────────────────────────
 
 const COMMANDS_DIR = path.join(process.cwd(), 'commands');
-const CUSTOM_DIR = path.join(COMMANDS_DIR, 'custom');
+const GENERATED_MARKER = '// @generated-by:addcmd';
 
-// Ensure directories exist
+// Ensure directory exists
 if (!fs.existsSync(COMMANDS_DIR)) fs.mkdirSync(COMMANDS_DIR, { recursive: true });
-if (!fs.existsSync(CUSTOM_DIR)) fs.mkdirSync(CUSTOM_DIR, { recursive: true });
 
 // ─── ──────────────────────────────────────────────────────────────────────
 // 2. MESSAGEBUILDER PATH RESOLVER
@@ -47,10 +47,7 @@ function resolveMessageBuilderPath() {
 // ─── ──────────────────────────────────────────────────────────────────────
 
 function resolveCommandPath(commandName) {
-    const customPath = path.join(CUSTOM_DIR, `${commandName}.js`);
     const normalPath = path.join(COMMANDS_DIR, `${commandName}.js`);
-    
-    if (fs.existsSync(customPath)) return customPath;
     if (fs.existsSync(normalPath)) return normalPath;
     return null;
 }
@@ -78,80 +75,96 @@ function findHandler(commandModule) {
     return null;
 }
 
+function isGeneratedCommandFile(filePath) {
+    try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        return content.includes(GENERATED_MARKER);
+    } catch {
+        return false;
+    }
+}
+
+function registerGeneratedCommand(commandName, filePath) {
+    if (!global.commands || typeof global.commands !== 'object') {
+        global.commands = {};
+    }
+
+    global.commands[commandName] = {
+        name: commandName,
+        description: 'Generated command',
+        category: 'UTILITY',
+        file: path.basename(filePath),
+        generated: true,
+    };
+}
+
 function listCustomCommands() {
     try {
-        const files = fs.readdirSync(CUSTOM_DIR);
+        const files = fs.readdirSync(COMMANDS_DIR);
         return files
-            .filter(f => f.endsWith('.js'))
-            .map(f => f.replace('.js', ''));
+            .filter((f) => f.endsWith('.js'))
+            .filter((f) => f !== 'addcmd.js' && f !== 'menu.js')
+            .map((f) => f.replace(/\.js$/, ''))
+            .filter((name) => isGeneratedCommandFile(path.join(COMMANDS_DIR, `${name}.js`)));
     } catch {
         return [];
     }
 }
 
 function deleteCustomCommand(commandName) {
-    const filePath = path.join(CUSTOM_DIR, `${commandName}.js`);
+    const filePath = path.join(COMMANDS_DIR, `${commandName}.js`);
     if (!fs.existsSync(filePath)) {
         throw new Error(`Command "${commandName}" not found`);
     }
+    if (!isGeneratedCommandFile(filePath)) {
+        throw new Error(`Command "${commandName}" is not a generated command and cannot be deleted here.`);
+    }
     fs.unlinkSync(filePath);
+    if (global.commands && global.commands[commandName]) delete global.commands[commandName];
     return true;
 }
 
 function saveCustomCommand(commandName, sourceCode) {
-    const filePath = path.join(CUSTOM_DIR, `${commandName}.js`);
-    
-    // Validate command name
+    const filePath = path.join(COMMANDS_DIR, `${commandName}.js`);
+
     if (!/^[a-z0-9_\-]+$/i.test(commandName)) {
         throw new Error('Invalid command name. Use only letters, numbers, underscore, and hyphen.');
     }
-    
-    // Clean source code
-    let cleaned = sourceCode
+
+    if (fs.existsSync(filePath) && !isGeneratedCommandFile(filePath)) {
+        throw new Error(`Command "${commandName}" already exists as a built-in command and cannot be overwritten.`);
+    }
+
+    let cleaned = String(sourceCode || '')
         .replace(/^```(?:js|javascript)?\s*/i, '')
         .replace(/```\s*$/i, '')
         .trim();
-    
+
     if (!cleaned) {
         throw new Error('Command source is empty');
     }
-    
-    // ─── FIX: Automatically correct messageBuilder path ──────────────────
-    // Replace incorrect paths with correct ones
-    cleaned = cleaned.replace(
-        /require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi,
-        "require('../lib/messageBuilder')"
-    );
-    cleaned = cleaned.replace(
-        /require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi,
-        "require('../lib/messageBuilder')"
-    );
-    cleaned = cleaned.replace(
-        /require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi,
-        "require('../lib/messageBuilder')"
-    );
-    
-    // ─── Add fallback requires if missing ─────────────────────────────────
-    if (!cleaned.includes('require') || !cleaned.includes('messageBuilder')) {
-        // If no requires, add them at the top
-        const header = `const { createCtx, Carousel, AIRich, Button, Toolkit, ButtonV2 } = require('../lib/messageBuilder');\n\n`;
-        cleaned = header + cleaned;
-    }
-    
-    // Ensure proper structure
+
+    cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
+    cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi, "require('../lib/messageBuilder')");
+    cleaned = cleaned.replace(/require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
+
+    const header = [
+        GENERATED_MARKER,
+        "const { Button, ButtonV2, Carousel, AIRich, Toolkit, createCtx } = require('../lib/messageBuilder');",
+        '',
+    ].join('\n');
+
     if (!cleaned.includes('module.exports')) {
-        if (cleaned.startsWith('async (')) {
+        if (/^async\s*\(/.test(cleaned) || /^async\s+[A-Za-z0-9_$]+\s*\(/.test(cleaned) || /^function\s*/.test(cleaned) || /^\(.*\)\s*=>/.test(cleaned)) {
             cleaned = `module.exports = ${cleaned};`;
-        } else if (cleaned.startsWith('function')) {
-            cleaned = `module.exports = ${cleaned};`;
-        } else if (cleaned.startsWith('module.exports')) {
-            // Already good
         } else {
-            cleaned = `module.exports = {\n    code: async (ctx) => {\n        ${cleaned}\n    },\n    name: '${commandName}'\n};`;
+            cleaned = `module.exports = {\n    code: async (ctx) => {\n        ${cleaned}\n    },\n    name: '${commandName}',\n    description: 'Generated command',\n    category: 'UTILITY'\n};`;
         }
     }
-    
-    fs.writeFileSync(filePath, cleaned, 'utf8');
+
+    const finalSource = `${header}${cleaned}\n`;
+    fs.writeFileSync(filePath, finalSource, 'utf8');
+    registerGeneratedCommand(commandName, filePath);
     return filePath;
 }
 
@@ -168,6 +181,7 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
         senderId,
         commandName,
         prefix: '.',
+        ctx: null,
         console: {
             log: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
             error: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
@@ -175,7 +189,20 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
             info: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
         },
         util,
-        require,
+        require: (specifier) => {
+            if (typeof specifier !== 'string') {
+                throw new TypeError('Module specifier must be a string');
+            }
+            const baseRequire = Module.createRequire(path.join(COMMANDS_DIR, 'addcmd.js'));
+            if (specifier.startsWith('.')) {
+                try {
+                    return require(path.resolve(COMMANDS_DIR, specifier));
+                } catch (error) {
+                    return baseRequire(specifier);
+                }
+            }
+            return baseRequire(specifier);
+        },
         process,
         Buffer,
         __dirname: process.cwd(),
@@ -220,6 +247,7 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
     sandbox.__logs = [];
     sandbox.__sent = false;
     sandbox.__sentMessages = [];
+    sandbox.ctx = sandbox;
     
     // ─── Load MessageBuilder modules with path detection ────────────────
     try {
@@ -541,7 +569,7 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
             }
 
             await sock.sendMessage(chatId, {
-                text: `✅ Custom command saved as .${commandName}\n\nFile: commands/custom/${commandName}.js\n\nRunning it now...`
+                text: `✅ Custom command saved as .${commandName}\n\nFile: commands/${commandName}.js\n\nRunning it now...`
             }, { quoted: message });
 
             // Run the command
@@ -577,5 +605,5 @@ module.exports = {
     deleteCustomCommand,
     listCustomCommands,
     resolveMessageBuilderPath,
-    CUSTOM_DIR
+    COMMANDS_DIR
 };
