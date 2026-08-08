@@ -178,7 +178,6 @@ const statsCommand = require('./commands/stats');
 const stickerAltCommand = require('./commands/sticker-alt');
 const textCommand = require('./commands/text');
 const sourceCommand = require('./commands/source');
-const nativeFlowCommand = require('./commands/nativeflow');
 const profileCardModule = require('./commands/profilecard');
 const { cmdaddCommand, runCommand } = require('./commands/addcmd');
 const { getCustomCommandHandler, loadCustomCommands, getCustomCommandNames } = require('./lib/customCommands');

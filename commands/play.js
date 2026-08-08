@@ -7,6 +7,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const yts = require('yt-search');
+const { prepareWAMessageMedia, generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
 const AXIOS_DEFAULTS = {
@@ -104,6 +105,66 @@ function truncateString(str, maxLength = 40) {
     if (!str) return 'Unknown';
     if (str.length <= maxLength) return str;
     return str.substring(0, maxLength) + '...';
+}
+
+async function sendLivePhotoPreview(sock, chatId, quoted, imageUrl, videoUrl, caption) {
+    try {
+        const image = await prepareWAMessageMedia(
+            { image: { url: imageUrl } },
+            { upload: sock.waUploadToServer }
+        );
+
+        const video = await prepareWAMessageMedia(
+            { video: { url: videoUrl } },
+            { upload: sock.waUploadToServer }
+        );
+
+        const previewMessage = generateWAMessageFromContent(
+            chatId,
+            {
+                imageMessage: {
+                    ...image.imageMessage,
+                    caption,
+                    contextInfo: {
+                        pairedMediaType: 5,
+                        statusSourceType: 0,
+                    },
+                },
+            },
+            {}
+        );
+
+        await sock.relayMessage(chatId, previewMessage.message, {
+            messageId: previewMessage.key.id,
+        });
+
+        await sock.relayMessage(
+            chatId,
+            {
+                videoMessage: {
+                    ...video.videoMessage,
+                    contextInfo: {
+                        pairedMediaType: 6,
+                        statusSourceType: 0,
+                    },
+                },
+                messageContextInfo: {
+                    messageAssociation: {
+                        associationType: 12,
+                        parentMessageKey: previewMessage.key,
+                    },
+                },
+            },
+            {}
+        );
+    } catch (error) {
+        console.error('[PLAY] live photo preview failed:', error?.message || error);
+        if (quoted) {
+            await sock.sendMessage(chatId, { text: caption }, { quoted });
+        } else {
+            await sock.sendMessage(chatId, { text: caption });
+        }
+    }
 }
 
 // ─── PREXVY API (PRIORITY 1) ──────────────────────────────────────────────
@@ -503,26 +564,17 @@ async function playCommand(sock, chatId, message) {
         }
 
         // ─── SEND THUMBNAIL WITH SONG INFO ──────────────────────────────
-        const thumb = thumbnailUrl || '';
+        const thumb = thumbnailUrl || 'https://cdn.ornzora.eu.cc/a6a1e8f4-b83d-4694-9bba-0f22a58bfd4f-FIORA.jpg';
+        const previewVideoUrl = 'https://cdn.ornzora.eu.cc/ed7ebb66-9bf4-44b6-858a-b6b7405e53c5-FIORA.mp4';
         const songTitle = truncateString(searchTitle || query, 50);
         const artistName = truncateString(searchArtist || 'Unknown Artist', 30);
 
-        let infoCaption = `🎵 *${songTitle}*\n\n`;
-        infoCaption += `👤 *Artist:* ${artistName}\n`;
-        infoCaption += `⏱️ *Duration:* Loading...\n`;
-        infoCaption += `📦 *Size:* Loading...\n\n`;
-        infoCaption += `⏳ *Processing download...*`;
+        const infoCaption = `🎵 *${songTitle}*\n` +
+            `👤 ${artistName}\n` +
+            `⏱️ Loading...  |  📦 Loading...\n` +
+            `⏳ Processing your download...`;
 
-        if (thumb) {
-            await sock.sendMessage(chatId, {
-                image: { url: thumb },
-                caption: infoCaption
-            }, { quoted: message });
-        } else {
-            await sock.sendMessage(chatId, { 
-                text: infoCaption 
-            }, { quoted: message });
-        }
+        await sendLivePhotoPreview(sock, chatId, message, thumb, previewVideoUrl, infoCaption);
 
         // ─── DOWNLOAD AUDIO ──────────────────────────────────────────────
         let audioData;
