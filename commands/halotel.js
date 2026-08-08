@@ -3,7 +3,7 @@
  * Usage: .halotel
  */
 
-const { createCtx } = require('../lib/messageBuilder');
+const { createCtx, Carousel } = require('../lib/messageBuilder');
 
 // ─── ──────────────────────────────────────────────────────────────────────
 // 1. PRODUCTS DATABASE (With Raw Images)
@@ -169,12 +169,29 @@ function searchProducts(query) {
 
 async function sendCarousel(ctx, products) {
     try {
-        const cards = products.map((p, i) => `${i + 1}. *${p.title}*\n📦 ${p.data} | ⏱️ ${p.validity}\n💰 ${p.sale_price || p.price}\n🆔 ${p.id}`).join('\n\n');
-        const text = `📶 *HALOTEL BUNDLES*\n\n${cards}\n\n📌 Send .halotel <id> for details`;
-        await ctx.reply(text);
-        return true;
+        if (!Array.isArray(products) || products.length === 0) return false;
+
+        const cards = products.map(createProductCard);
+        const builder = new Carousel(ctx.sock || ctx.core);
+
+        builder
+            .setBody('📶 *HALOTEL BUNDLES*\n\nSwipe through available bundles and choose the one that fits your data needs.')
+            .setFooter('⚡ Halotel Internet | Tap through the cards to browse offers')
+            .addCard(cards);
+
+        const sent = await builder.send(ctx.chatId, {
+            quoted: ctx.msg,
+            fallbackText: `📶 *HALOTEL BUNDLES*\n\n${products.map((p, i) => `${i + 1}. *${p.title}*\n📦 ${p.data} | ⏱️ ${p.validity}\n💰 ${p.sale_price || p.price}\n🆔 ${p.id}`).join('\n\n')}\n\n📌 Send .halotel <id> for details`
+        });
+
+        return !!sent || sent === null;
     } catch (error) {
-        console.error('[HALOTEL] Carousel fallback error:', error.message);
+        console.error('[HALOTEL] Carousel error:', error.message);
+        try {
+            const cards = products.map((p, i) => `${i + 1}. *${p.title}*\n📦 ${p.data} | ⏱️ ${p.validity}\n💰 ${p.sale_price || p.price}\n🆔 ${p.id}`).join('\n\n');
+            const text = `📶 *HALOTEL BUNDLES*\n\n${cards}\n\n📌 Send .halotel <id> for details`;
+            await ctx.reply(text);
+        } catch (_) {}
         return false;
     }
 }
