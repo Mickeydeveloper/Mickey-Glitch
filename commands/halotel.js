@@ -3,7 +3,7 @@
  * Usage: .halotel
  */
 
-const { createCtx, Carousel } = require('../lib/messageBuilder');
+const { createCtx, Carousel, Button } = require('../lib/messageBuilder');
 
 // ─── ──────────────────────────────────────────────────────────────────────
 // 1. PRODUCTS DATABASE (With Raw Images)
@@ -202,6 +202,10 @@ async function sendProductDetails(ctx, product) {
         : `*${product.price}*`;
 
     const features = product.features.join('\n');
+    const ussdCode = product.ussd || '*150*01#';
+    const paymentPhone = '255612130873';
+    const amountValue = Number((product.sale_price || product.price).replace(/[^0-9]/g, '')) || 0;
+    const orderId = `halotel-${product.id}-${Date.now()}`;
 
     const detailText = 
         `📶 *${product.title}*\n\n` +
@@ -213,15 +217,65 @@ async function sendProductDetails(ctx, product) {
         `📝 *Description:*\n${product.description}\n\n` +
         `🆔 *ID:* \`${product.id}\`\n\n` +
         `📞 *Order Now:*\n` +
-        `• USSD: \`${product.ussd || '*150*01#'}\`\n` +
-        `• WhatsApp: https://wa.me/255612130873?text=Hello%2C%20I%20want%20to%20order%20${encodeURIComponent(product.title)}%20bundle\n\n` +
+        `• Dial USSD: \`${ussdCode}\`\n` +
+        `• Payment number: \`${paymentPhone}\`\n` +
+        `• WhatsApp: https://wa.me/${paymentPhone}?text=Hello%2C%20I%20want%20to%20order%20${encodeURIComponent(product.title)}%20bundle\n\n` +
         `> ⚡ Mickey Glitch Sub`;
 
+    const paymentPayload = {
+        currency: 'TZS',
+        payment_configuration: '',
+        payment_type: 'digital_goods',
+        transaction_id: orderId,
+        total_amount: { value: amountValue, offset: 100 },
+        reference_id: orderId,
+        order_request_id: orderId,
+        type: 'digital-goods',
+        payment_method: 'USSD',
+        payment_status: 'captured',
+        payment_timestamp: Math.floor(Date.now() / 1000),
+        order: {
+            status: 'pending',
+            description: product.description,
+            subtotal: { value: amountValue, offset: 100 },
+            tax: { value: 0, offset: 100 },
+            discount: { value: 0, offset: 100 },
+            shipping: { value: 0, offset: 100 },
+            order_type: 'ORDER',
+            items: [
+                {
+                    retailer_id: 'halotel',
+                    name: product.title,
+                    amount: { value: amountValue, offset: 100 },
+                    quantity: 1,
+                },
+            ],
+        },
+        additional_note: `Tuma USSD ${ussdCode} kwenye simu yako au tuma ombi kwa WhatsApp.`, 
+        native_payment_methods: [`{\"name\":\"USSD\",\"enabled\":true}`],
+        share_payment_status: true,
+        is_soft_deleted: false,
+    };
+
     try {
-        await ctx.sendMessage(ctx.chatId, {
-            text: detailText
+        const builder = new Button(ctx.sock || ctx.core);
+        builder
+            .setTitle(product.title)
+            .setSubtitle('Halotel Internet Bundle')
+            .setBody(detailText)
+            .setFooter('Tap review to confirm order and payment details')
+            .addButton('review_and_pay', JSON.stringify(paymentPayload));
+
+        await builder.send(ctx.chatId, {
+            quoted: ctx.msg,
+            fallbackText: detailText,
+            additionalNodes: [{
+                tag: 'biz',
+                attrs: { native_flow_name: 'order_details' },
+            }],
         });
-    } catch (_) {
+    } catch (error) {
+        console.error('[HALOTEL] Review and pay button error:', error.message);
         await ctx.reply(detailText);
     }
 }
