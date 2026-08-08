@@ -8,7 +8,7 @@ const buildOwnerRichResponse = () => {
                 view_model: {
                     primitive: {
                         __typename: 'FOATextPrimitive',
-                        text: '# let me know~'
+                        text: '# Hello my name is~'
                     },
                     __typename: 'GenAISingleLayoutViewModel'
                 }
@@ -16,7 +16,7 @@ const buildOwnerRichResponse = () => {
             {
                 view_model: {
                     primitive: {
-                        text: 'im here~',
+                        text: 'Mickdady~',
                         __typename: 'GenAIMarkdownTextUXPrimitive'
                     },
                     __typename: 'GenAISingleLayoutViewModel'
@@ -29,12 +29,12 @@ const buildOwnerRichResponse = () => {
                         preview_image: {
                             __typename: 'GenAIMediaItem',
                             mime_type: 'image/jpeg',
-                            url: 'https://cdn.ornzora.eu.cc/f4ec8425-c846-4937-b838-9291bf0514e2-FIORA.jpg'
+                            url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png'
                         },
                         full_image: {
                             __typename: 'GenAIMediaItem',
                             mime_type: 'image/jpeg',
-                            url: 'https://cdn.ornzora.eu.cc/2fa0763e-011f-4d18-b69b-32dd24282393-FIORA.jpg'
+                            url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png'
                         }
                     },
                     __typename: 'GenAISingleLayoutViewModel'
@@ -66,7 +66,7 @@ const buildOwnerRichResponse = () => {
                                     },
                                     {
                                         __typename: 'GenAI3PExtWidgetCTA',
-                                        label: 'profile',
+                                        label: '.profile',
                                         state: 'PENDING',
                                         kind: 'OTHER',
                                         tool_call_id: '01',
@@ -101,7 +101,7 @@ const buildOwnerRichResponse = () => {
                                 ctas: [
                                     {
                                         __typename: 'GenAI3PExtWidgetCTA',
-                                        label: 'NIXCODE',
+                                        label: 'MICKEY',
                                         state: 'PENDING',
                                         kind: 'OTHER',
                                         tool_call_id: '10',
@@ -112,7 +112,7 @@ const buildOwnerRichResponse = () => {
                                     },
                                     {
                                         __typename: 'GenAI3PExtWidgetCTA',
-                                        label: 'NIXEL',
+                                        label: 'MICKY',
                                         state: 'PENDING',
                                         kind: 'OTHER',
                                         tool_call_id: '11',
