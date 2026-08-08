@@ -47,7 +47,7 @@ const buildOwnerRichResponse = () => {
                             __typename: 'GenAI3PExtWidgetPrimitive',
                             header: {
                                 __typename: 'GenAI3PExtWidgetStandardHeader',
-                                title: 'LIST-X'
+                                title: 'LIST-A'
                             },
                             body: {
                                 __typename: 'GenAI3PExtCalendarEventList',
@@ -55,7 +55,7 @@ const buildOwnerRichResponse = () => {
                                 ctas: [
                                     {
                                         __typename: 'GenAI3PExtWidgetCTA',
-                                        label: 'menu',
+                                        label: '.menu',
                                         state: 'PENDING',
                                         kind: 'OTHER',
                                         tool_call_id: '00',
@@ -77,7 +77,7 @@ const buildOwnerRichResponse = () => {
                                     },
                                     {
                                         __typename: 'GenAI3PExtWidgetCTA',
-                                        label: 'script',
+                                        label: '.repo',
                                         state: 'PENDING',
                                         kind: 'OTHER',
                                         tool_call_id: '02',
@@ -93,7 +93,7 @@ const buildOwnerRichResponse = () => {
                             __typename: 'GenAI3PExtWidgetPrimitive',
                             header: {
                                 __typename: 'GenAI3PExtWidgetStandardHeader',
-                                title: 'NX-T'
+                                title: 'LIST-B'
                             },
                             body: {
                                 __typename: 'GenAI3PExtCalendarEventList',
@@ -101,7 +101,7 @@ const buildOwnerRichResponse = () => {
                                 ctas: [
                                     {
                                         __typename: 'GenAI3PExtWidgetCTA',
-                                        label: 'MICKEY',
+                                        label: '.ping',
                                         state: 'PENDING',
                                         kind: 'OTHER',
                                         tool_call_id: '10',
@@ -112,7 +112,7 @@ const buildOwnerRichResponse = () => {
                                     },
                                     {
                                         __typename: 'GenAI3PExtWidgetCTA',
-                                        label: 'MICKY',
+                                        label: '.alive',
                                         state: 'PENDING',
                                         kind: 'OTHER',
                                         tool_call_id: '11',
@@ -123,7 +123,7 @@ const buildOwnerRichResponse = () => {
                                     },
                                     {
                                         __typename: 'GenAI3PExtWidgetCTA',
-                                        label: 'FIORA',
+                                        label: '.stats',
                                         state: 'PENDING',
                                         kind: 'OTHER',
                                         tool_call_id: '12',
@@ -146,7 +146,7 @@ const buildOwnerRichResponse = () => {
                             __typename: 'GenAIFooterActionPrimitive',
                             cta_text: 'WhatsApp Group',
                             cta_type: 'OPEN_URL',
-                            cta_url: 'https://chat.whatsapp.com/J7OzqKB7Bl2AGIcNEYsdch?s=cl&p=a&ilr=0'
+                            cta_url: 'https://chat.whatsapp.com/HJnXkPtpY2lDVi1rZilcNe'
                         },
                         {
                             __typename: 'GenAIFooterActionPrimitive',
