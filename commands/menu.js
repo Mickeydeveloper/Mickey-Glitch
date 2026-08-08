@@ -351,8 +351,8 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         // Tuma button ya in-app signup kwa ziada
         try {
             const signupButton = new Button(sock)
-                .setTitle('Fiora Sylvie')
-                .setBody('https://fiora.nixel.my.id/')
+                .setTitle('Mickey Glitch')
+                .setBody('https://mickeypannel.dpdns.org')
                 .addButton('inapp_signup', {});
 
             await signupButton.send(chatId, { quoted: m, fallbackText: 'Fiora Sylvie' });
