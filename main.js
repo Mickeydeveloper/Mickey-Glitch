@@ -110,7 +110,6 @@ const tagNotAdminCommand = require('./commands/tagnotadmin');
 const hideTagCommand = require('./commands/hidetag');
 const weatherCommand = require('./commands/weather');
 const reportCommand = require('./commands/report');
-const { halotelCommand, getPendingRequest } = require('./commands/halotel');
 const serverCommand = require('./commands/server');
 const { getButtonId, autoDetectButtonCommand } = require('./lib/buttonLoader');
 const coins = require('./lib/coins');
