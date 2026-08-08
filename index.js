@@ -524,7 +524,7 @@ async function startMickeyBot() {
 
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
-        const hasSession = state.creds?.registered === true;
+        const hasSession = Boolean(state.creds && Object.keys(state.creds).length > 0);
         console.log(chalk.cyan('  » Security auth:'), hasSession ? chalk.green('✅ Session Loaded ✓') : chalk.yellow('🔄 No active session found - Pairing Required'));
 
         const msgRetryCounterCache = new NodeCache();
@@ -726,10 +726,9 @@ async function startMickeyBot() {
                 }
 
                 if (statusCode === DisconnectReason.loggedOut) {
-                    UI.error('🔴 Session logged out permanently.');
-                    UI.info('📌 You need to re-pair manually.');
-                    UI.info('📌 To clear session and re-pair: node bot.js --clear-session');
-                    // Don't auto-clear, just attempt reconnect with existing session
+                    UI.warning('🔴 Session appears logged out.');
+                    UI.info('📌 Attempting recovery without deleting existing session files.');
+                    UI.info('📌 If this persists, clear the session and re-pair manually: node bot.js --clear-session');
                     reconnectAttempts++;
                     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                         const delayTime = Math.min(5000 + (reconnectAttempts * 2000), 60000);
@@ -757,12 +756,11 @@ async function startMickeyBot() {
                     console.log(chalk.cyan(`  🔄 [RECONNECT] Attempting re-entry in ${(delayTime/1000).toFixed(1)}s... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`));
                     await delay(delayTime);
 
-                    // 🛡️ NO SESSION CLEAR - just reconnect
+                    // Keep the auth state and reconnect with existing session files
                     return startMickeyBot();
                 } else {
-                    UI.error('⚠️ Max reconnection threshold reached.');
-                    UI.info('📌 Please restart the bot or clear session manually if needed.');
-                    UI.info('📌 To clear: node bot.js --clear-session');
+                    UI.warning('⚠️ Max reconnection threshold reached without clearing auth session.');
+                    UI.info('📌 If sign-out persists, restart the bot or clear session manually: node bot.js --clear-session');
                     reconnectAttempts = 0;
                     await delay(30000); // Wait 30 seconds before retry
                     return startMickeyBot();
