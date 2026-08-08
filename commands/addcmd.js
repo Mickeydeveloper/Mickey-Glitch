@@ -100,6 +100,21 @@ function registerGeneratedCommand(commandName, filePath) {
     if (!global.autoRegisteredCommands || typeof global.autoRegisteredCommands !== 'object') {
         global.autoRegisteredCommands = {};
     }
+    // prefer Map-based registry if available (main.js exposes it)
+    try {
+        if (global.autoRegisteredCommands instanceof Map) {
+            // force a reload so main.js picks up the new file
+            if (typeof global.reloadAutoRegisteredCommands === 'function') {
+                global.reloadAutoRegisteredCommands();
+            }
+            // also set basic meta in global.commands
+            global.commands[commandName] = global.commands[commandName] || {};
+            global.commands[commandName].file = path.basename(filePath);
+            global.commands[commandName].generated = true;
+            return;
+        }
+    } catch (e) {}
+
     global.autoRegisteredCommands[commandName] = global.commands[commandName];
 }
 

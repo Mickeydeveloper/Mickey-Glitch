@@ -257,12 +257,37 @@ function loadAutoRegisteredCommands() {
     return { commandMap, commandMeta };
 }
 
-const { commandMap: autoRegisteredCommands, commandMeta: autoRegisteredCommandMeta } = loadAutoRegisteredCommands();
+let { commandMap: autoRegisteredCommands, commandMeta: autoRegisteredCommandMeta } = loadAutoRegisteredCommands();
+
+// expose maps/globals so other modules can refresh or register new commands at runtime
+global.autoRegisteredCommands = global.autoRegisteredCommands || autoRegisteredCommands;
+global.autoRegisteredCommandMeta = global.autoRegisteredCommandMeta || autoRegisteredCommandMeta;
 
 global.commands = global.commands || {};
 for (const [name, meta] of autoRegisteredCommandMeta.entries()) {
     global.commands[name] = { ...(global.commands[name] || {}), ...meta };
 }
+
+// Allow runtime refresh of auto-registered commands (used by addcmd)
+global.reloadAutoRegisteredCommands = () => {
+    try {
+        const res = loadAutoRegisteredCommands();
+        autoRegisteredCommands = res.commandMap;
+        autoRegisteredCommandMeta = res.commandMeta;
+        global.autoRegisteredCommands = autoRegisteredCommands;
+        global.autoRegisteredCommandMeta = autoRegisteredCommandMeta;
+
+        // merge metadata into global.commands
+        for (const [name, meta] of autoRegisteredCommandMeta.entries()) {
+            global.commands[name] = { ...(global.commands[name] || {}), ...meta };
+        }
+
+        return res;
+    } catch (e) {
+        console.error('Failed to reload autoRegisteredCommands:', e);
+        return null;
+    }
+};
 
 function normalizeBotCommand(commandModule) {
     if (typeof commandModule === 'function') {
