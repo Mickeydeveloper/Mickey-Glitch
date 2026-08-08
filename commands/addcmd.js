@@ -96,6 +96,11 @@ function registerGeneratedCommand(commandName, filePath) {
         file: path.basename(filePath),
         generated: true,
     };
+
+    if (!global.autoRegisteredCommands || typeof global.autoRegisteredCommands !== 'object') {
+        global.autoRegisteredCommands = {};
+    }
+    global.autoRegisteredCommands[commandName] = global.commands[commandName];
 }
 
 function listCustomCommands() {
