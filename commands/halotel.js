@@ -115,12 +115,20 @@ async function halotelCommand(sock, chatId, message, args) {
   await sendPackageButton(ctx, pkgId);
 }
 
+function getPendingRequest() {
+  return null;
+}
+
 halotelCommand.aliases = ['halotel'];
 halotelCommand.description = 'Sell Halotel GB packages with payment button';
 halotelCommand.category = 'utility';
 
-module.exports = halotelCommand;
-module.exports.default = halotelCommand;
-module.exports.aliases = ['halotel'];
-module.exports.description = 'Sell Halotel GB packages with payment button';
-module.exports.category = 'utility';
+module.exports = {
+  halotelCommand,
+  code: halotelCommand,
+  default: halotelCommand,
+  getPendingRequest,
+  aliases: ['halotel'],
+  description: 'Sell Halotel GB packages with payment button',
+  category: 'utility',
+};
