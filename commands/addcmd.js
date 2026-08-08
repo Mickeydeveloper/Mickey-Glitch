@@ -592,11 +592,9 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
             }
 
             await sock.sendMessage(chatId, {
-                text: `✅ Custom command saved as .${commandName}\n\nFile: commands/${commandName}.js\n\nRunning it now...`
+                text: `✅ Custom command saved as .${commandName}\n\nFile: commands/${commandName}.js`
             }, { quoted: message });
 
-            // Run the command
-            await runCommand(sock, chatId, senderId, `.run ${commandName}`, message);
 
         } catch (saveError) {
             await sock.sendMessage(chatId, { 
