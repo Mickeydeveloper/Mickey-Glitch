@@ -1,6 +1,7 @@
 /**
- * buy.js - Ultimate Pterodactyl Server Creator
+ * buy.js - Ultimate Pterodactyl Server Creator (FIXED)
  * Features: Real User Creation, Server Deployment, Credentials Sending
+ * Fixed: Response handling, error detection, user retrieval
  * Usage: .buy <plan> <username>
  */
 
@@ -100,12 +101,51 @@ const generateEmail = (username) => {
 };
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. PTERODACTYL API FUNCTIONS (REAL USER & SERVER CREATION)
+// 4. PTERODACTYL API FUNCTIONS (FIXED RESPONSE HANDLING)
 // ─── ──────────────────────────────────────────────────────────────────────
 
-// 4.1 CREATE USER
+// 4.1 CHECK IF USER EXISTS
+async function findUserByEmail(email) {
+    try {
+        const response = await panelApi.get(`/users?filter[email]=${encodeURIComponent(email)}`);
+        
+        // Check different response structures
+        if (response.data) {
+            // Structure 1: { data: [ { attributes: {...} } ] }
+            if (response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
+                return response.data.data[0].attributes || response.data.data[0];
+            }
+            // Structure 2: { data: { attributes: {...} } }
+            if (response.data.data && response.data.data.attributes) {
+                return response.data.data.attributes;
+            }
+            // Structure 3: Direct attributes
+            if (response.data.attributes) {
+                return response.data.attributes;
+            }
+        }
+        return null;
+    } catch (error) {
+        // If user not found, API returns 404
+        if (error.response && error.response.status === 404) {
+            return null;
+        }
+        console.error('[FIND USER ERROR]', error.message);
+        return null;
+    }
+}
+
+// 4.2 CREATE USER (FIXED)
 async function createPterodactylUser(username, email, password) {
     try {
+        // First check if user already exists
+        const existingUser = await findUserByEmail(email);
+        if (existingUser) {
+            console.log('[USER EXISTS]', existingUser.id, existingUser.username);
+            return existingUser;
+        }
+
+        // Create new user
         const response = await panelApi.post('/users', {
             email: email,
             username: username,
@@ -115,30 +155,63 @@ async function createPterodactylUser(username, email, password) {
             password: password
         });
 
-        if (response.data && response.data.data) {
-            return response.data.data.attributes;
-        }
-        throw new Error('Failed to create user');
-    } catch (error) {
-        const errorDetail = error?.response?.data?.errors?.[0]?.detail || error.message;
+        console.log('[CREATE USER RESPONSE]', JSON.stringify(response.data, null, 2));
+
+        // Handle different response structures
+        let userData = null;
         
-        // Check if user already exists
-        if (errorDetail.includes('email has already been taken') || 
-            errorDetail.includes('username has already been taken')) {
-            try {
-                const searchRes = await panelApi.get(`/users?filter[email]=${email}`);
-                if (searchRes.data.data && searchRes.data.data.length > 0) {
-                    return searchRes.data.data[0].attributes;
+        // Structure 1: { data: { attributes: {...} } }
+        if (response.data && response.data.data && response.data.data.attributes) {
+            userData = response.data.data.attributes;
+        }
+        // Structure 2: { data: { ... } } (no attributes wrapper)
+        else if (response.data && response.data.data && !response.data.data.attributes) {
+            userData = response.data.data;
+        }
+        // Structure 3: Direct response
+        else if (response.data && response.data.attributes) {
+            userData = response.data.attributes;
+        }
+        // Structure 4: Response is the user object directly
+        else if (response.data && response.data.id) {
+            userData = response.data;
+        }
+
+        if (userData && userData.id) {
+            console.log('[USER CREATED]', userData.id, userData.username);
+            return userData;
+        }
+
+        // If we got a response but couldn't parse it, try to find the user
+        const foundUser = await findUserByEmail(email);
+        if (foundUser) {
+            console.log('[USER FOUND AFTER CREATE]', foundUser.id);
+            return foundUser;
+        }
+
+        throw new Error('Failed to create user - unknown response structure');
+        
+    } catch (error) {
+        console.error('[CREATE USER ERROR]', error.message);
+        
+        // Check if it's a duplicate error
+        if (error.response && error.response.status === 400) {
+            const errorDetail = error.response.data?.errors?.[0]?.detail || '';
+            if (errorDetail.includes('email') || errorDetail.includes('username')) {
+                // Try to find existing user
+                const foundUser = await findUserByEmail(email);
+                if (foundUser) {
+                    console.log('[USER FOUND AFTER DUPLICATE ERROR]', foundUser.id);
+                    return foundUser;
                 }
-            } catch (searchError) {
-                console.error('[SEARCH USER ERROR]', searchError.message);
             }
         }
-        throw new Error(`User creation failed: ${errorDetail}`);
+        
+        throw error;
     }
 }
 
-// 4.2 CREATE SERVER
+// 4.3 CREATE SERVER (FIXED)
 async function createPterodactylServer(userId, serverName, plan) {
     try {
         const spec = PLAN_SPECS[plan];
@@ -177,22 +250,65 @@ async function createPterodactylServer(userId, serverName, plan) {
             }
         });
 
-        if (response.data && response.data.data) {
-            return response.data.data.attributes;
+        console.log('[CREATE SERVER RESPONSE]', JSON.stringify(response.data, null, 2));
+
+        // Handle different response structures
+        let serverData = null;
+        
+        // Structure 1: { data: { attributes: {...} } }
+        if (response.data && response.data.data && response.data.data.attributes) {
+            serverData = response.data.data.attributes;
         }
-        throw new Error('Failed to create server');
+        // Structure 2: { data: { ... } } (no attributes wrapper)
+        else if (response.data && response.data.data && !response.data.data.attributes) {
+            serverData = response.data.data;
+        }
+        // Structure 3: Direct response
+        else if (response.data && response.data.attributes) {
+            serverData = response.data.attributes;
+        }
+        // Structure 4: Response is the server object directly
+        else if (response.data && response.data.id) {
+            serverData = response.data;
+        }
+
+        if (serverData && serverData.id) {
+            console.log('[SERVER CREATED]', serverData.id, serverData.name);
+            return serverData;
+        }
+
+        throw new Error('Failed to create server - unknown response structure');
+        
     } catch (error) {
-        const errorDetail = error?.response?.data?.errors?.[0]?.detail || error.message;
-        throw new Error(`Server creation failed: ${errorDetail}`);
+        console.error('[CREATE SERVER ERROR]', error.message);
+        if (error.response) {
+            console.error('[RESPONSE DATA]', JSON.stringify(error.response.data, null, 2));
+        }
+        throw error;
     }
 }
 
-// 4.3 GET SERVER DETAILS
+// 4.4 GET SERVER DETAILS
 async function getServerDetails(serverId) {
     try {
         const response = await panelApi.get(`/servers/${serverId}`);
-        if (response.data && response.data.data) {
-            return response.data.data.attributes;
+        
+        if (response.data) {
+            // Structure 1: { data: { attributes: {...} } }
+            if (response.data.data && response.data.data.attributes) {
+                return response.data.data.attributes;
+            }
+            // Structure 2: { data: { ... } }
+            if (response.data.data) {
+                return response.data.data;
+            }
+            // Structure 3: Direct
+            if (response.data.attributes) {
+                return response.data.attributes;
+            }
+            if (response.data.id) {
+                return response.data;
+            }
         }
         return null;
     } catch (error) {
@@ -201,12 +317,27 @@ async function getServerDetails(serverId) {
     }
 }
 
-// 4.4 GET USER DETAILS
+// 4.5 GET USER DETAILS
 async function getUserDetails(userId) {
     try {
         const response = await panelApi.get(`/users/${userId}`);
-        if (response.data && response.data.data) {
-            return response.data.data.attributes;
+        
+        if (response.data) {
+            // Structure 1: { data: { attributes: {...} } }
+            if (response.data.data && response.data.data.attributes) {
+                return response.data.data.attributes;
+            }
+            // Structure 2: { data: { ... } }
+            if (response.data.data) {
+                return response.data.data;
+            }
+            // Structure 3: Direct
+            if (response.data.attributes) {
+                return response.data.attributes;
+            }
+            if (response.data.id) {
+                return response.data;
+            }
         }
         return null;
     } catch (error) {
@@ -216,7 +347,7 @@ async function getUserDetails(userId) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 5. SEND CREDENTIALS WITH REAL SERVER DETAILS
+// 5. SEND CREDENTIALS
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails, plan, password) {
@@ -259,7 +390,6 @@ async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails
                 .setFooter('⚡ Mickey Glitch Sub')
                 .setThumbnail(PANEL_CONFIG.thumbnail)
                 
-                // CTA Copy Buttons
                 .addButton({
                     name: 'cta_copy',
                     buttonParamsJson: JSON.stringify({
@@ -284,8 +414,6 @@ async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails
                         id: 'copy_email'
                     })
                 })
-                
-                // CTA URL Buttons
                 .addRawButton({
                     name: 'cta_url',
                     buttonParamsJson: JSON.stringify({
@@ -302,8 +430,6 @@ async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails
                         webview_interaction: false
                     })
                 })
-                
-                // Quick Reply
                 .addRawButton({
                     name: 'quick_reply',
                     buttonParamsJson: JSON.stringify({
@@ -318,26 +444,7 @@ async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails
             console.error('[BUTTONV2 ERROR]', buttonError.message);
         }
 
-        // ─── FALLBACK: BUTTON V1 ──────────────────────────────────────────
-        try {
-            const fallback = new Button(sock)
-                .setTitle('🔐 Server Credentials')
-                .setBody(credentialsText)
-                .setFooter('⚡ Mickey Glitch Sub')
-                .setImage(PANEL_CONFIG.thumbnail)
-                .addUrl('🌐 Open Panel', panelUrl)
-                .addUrl('🚀 Open Server', `${panelUrl}/server/${serverDetails.id}`)
-                .addCopy('👤 Copy Username', userDetails.username)
-                .addCopy('🔑 Copy Password', password)
-                .addCopy('📧 Copy Email', userDetails.email);
-
-            await fallback.send(chatId, { quoted: msg });
-            return true;
-        } catch (fallbackError) {
-            console.error('[FALLBACK ERROR]', fallbackError.message);
-        }
-
-        // ─── ULTIMATE FALLBACK: PLAIN TEXT ──────────────────────────────
+        // ─── FALLBACK: PLAIN TEXT ──────────────────────────────────────────
         await sock.sendMessage(chatId, { text: credentialsText }, { quoted: msg });
         return true;
 
@@ -348,7 +455,7 @@ async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 6. MAIN BUY COMMAND
+// 6. MAIN BUY COMMAND (FIXED)
 // ─── ──────────────────────────────────────────────────────────────────────
 
 const buyCommand = async (sock, chatId, msg, args = []) => {
@@ -369,11 +476,11 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
             await sock.sendMessage(chatId, {
                 text: '⚠️ *Usage:* .buy <plan> <username>\n\n' +
                       '📋 *Available Plans:*\n' +
-                      '• 1gb - TSh 5,000\n' +
-                      '• 2gb - TSh 8,000\n' +
-                      '• 5gb - TSh 15,000\n' +
-                      '• 10gb - TSh 25,000\n' +
-                      '• unlimited - TSh 50,000\n\n' +
+                      '• 1gb - TSh 5,000 (1024MB RAM)\n' +
+                      '• 2gb - TSh 8,000 (2048MB RAM)\n' +
+                      '• 5gb - TSh 15,000 (5120MB RAM)\n' +
+                      '• 10gb - TSh 25,000 (10240MB RAM)\n' +
+                      '• unlimited - TSh 50,000 (20480MB RAM)\n\n' +
                       '📌 *Example:* .buy 1gb Mickey'
             }, { quoted: msg });
             return true;
@@ -407,26 +514,38 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
         let userDetails;
         try {
             userDetails = await createPterodactylUser(username, email, password);
-            console.log('[USER CREATED]', userDetails.id, userDetails.username);
+            console.log('[USER CREATED SUCCESS]', JSON.stringify(userDetails));
         } catch (userError) {
-            await sock.sendMessage(chatId, {
-                text: `❌ *Failed to create user*\n\n` +
-                      `📌 ${userError.message}\n\n` +
-                      `💡 Please try again later.`
-            }, { quoted: msg });
-            return false;
+            console.error('[USER ERROR]', userError.message);
+            
+            // Try to find if user was created anyway
+            const foundUser = await findUserByEmail(email);
+            if (foundUser) {
+                console.log('[USER FOUND AFTER ERROR]', foundUser.id);
+                userDetails = foundUser;
+            } else {
+                await sock.sendMessage(chatId, {
+                    text: `❌ *Failed to create user*\n\n` +
+                          `📌 ${userError.message || 'Unknown error'}\n\n` +
+                          `💡 Please try again later.`
+                }, { quoted: msg });
+                return false;
+            }
         }
 
         // ─── Create Server ──────────────────────────────────────────────────
         let serverDetails;
         try {
             serverDetails = await createPterodactylServer(userDetails.id, serverName, planLabel);
-            console.log('[SERVER CREATED]', serverDetails.id, serverDetails.name);
+            console.log('[SERVER CREATED SUCCESS]', JSON.stringify(serverDetails));
         } catch (serverError) {
+            console.error('[SERVER ERROR]', serverError.message);
             await sock.sendMessage(chatId, {
                 text: `❌ *Failed to create server*\n\n` +
-                      `📌 ${serverError.message}\n\n` +
-                      `💡 User was created but server failed. Please contact support.`
+                      `📌 ${serverError.message || 'Unknown error'}\n\n` +
+                      `💡 User was created but server failed. Please contact support.\n` +
+                      `👤 Username: ${userDetails.username}\n` +
+                      `📧 Email: ${userDetails.email}`
             }, { quoted: msg });
             return false;
         }
@@ -458,6 +577,7 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
                   `📋 *Summary:*\n` +
                   `├ Plan: ${planLabel.toUpperCase()}\n` +
                   `├ Username: ${userDetails.username}\n` +
+                  `├ Email: ${userDetails.email}\n` +
                   `├ Server ID: ${serverDetails.id}\n` +
                   `├ RAM: ${PLAN_SPECS[planLabel].ram} MB\n` +
                   `├ CPU: ${PLAN_SPECS[planLabel].cpu}%\n` +
@@ -496,3 +616,4 @@ module.exports = buyCommand;
 module.exports.PLAN_SPECS = PLAN_SPECS;
 module.exports.createPterodactylUser = createPterodactylUser;
 module.exports.createPterodactylServer = createPterodactylServer;
+module.exports.findUserByEmail = findUserByEmail;
