@@ -149,15 +149,18 @@ function saveCustomCommand(commandName, sourceCode) {
         throw new Error('Command source is empty');
     }
 
+    // Normalize any odd messageBuilder requires to the canonical path
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
 
-    const header = [
-        GENERATED_MARKER,
-        "const { Button, ButtonV2, Carousel, AIRich, Toolkit, createCtx } = require('../lib/messageBuilder');",
-        '',
-    ].join('\n');
+    // If user's source already references messageBuilder or the common symbols,
+    // do not inject the header to avoid duplicate declarations (createCtx, Button, etc.)
+    const symbolNames = ['Button', 'ButtonV2', 'Carousel', 'AIRich', 'Toolkit', 'createCtx'];
+    const hasMessageBuilderRequire = /messageBuilder/.test(cleaned);
+    const hasSymbol = symbolNames.some((s) => new RegExp('\\b' + s + '\\b').test(cleaned));
+
+    const header = `${GENERATED_MARKER}\nconst { Button, ButtonV2, Carousel, AIRich, Toolkit, createCtx } = require('../lib/messageBuilder');\n\n`;
 
     if (!cleaned.includes('module.exports')) {
         if (/^async\s*\(/.test(cleaned) || /^async\s+[A-Za-z0-9_$]+\s*\(/.test(cleaned) || /^function\s*/.test(cleaned) || /^\(.*\)\s*=>/.test(cleaned)) {
@@ -167,7 +170,7 @@ function saveCustomCommand(commandName, sourceCode) {
         }
     }
 
-    const finalSource = `${header}${cleaned}\n`;
+    const finalSource = `${hasMessageBuilderRequire || hasSymbol ? '' : header}${cleaned}\n`;
     fs.writeFileSync(filePath, finalSource, 'utf8');
     registerGeneratedCommand(commandName, filePath);
     return filePath;
