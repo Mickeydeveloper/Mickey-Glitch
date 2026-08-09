@@ -27,7 +27,7 @@ const richCommand = async (sock, chatId, msg, args) => {
                 metadata: {
                   latex_expression: '\\text{ }', // Force text rendering mode
                   latex_image: {
-                    url: 'https://n.uguu.se/WjKCEiWX.jpg',
+                    url: 'https://n.uguu.se/THgUooRT.jpg',
                     width: 1279,
                     height: 825,
                   },
