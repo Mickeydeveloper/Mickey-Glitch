@@ -27,7 +27,7 @@ const richCommand = async (sock, chatId, msg, args) => {
                 metadata: {
                   latex_expression: 'NIXCODE',
                   latex_image: {
-                    url: 'https://s6.imgcdn.dev/YXSuUi.png',
+                    url: 'https://d.uguu.se/vJjZyByw.jpg',
                     width: 1279,
                     height: 825,
                   },
