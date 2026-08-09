@@ -27,7 +27,7 @@ const richCommand = async (sock, chatId, msg, args) => {
                 metadata: {
                   latex_expression: 'NIXCODE',
                   latex_image: {
-                    url: 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/menu.png',
+                    url: 'https://s6.imgcdn.dev/YXSuUi.png',
                     width: 1279,
                     height: 825,
                   },
