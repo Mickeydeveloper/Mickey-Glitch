@@ -27,7 +27,7 @@ const richCommand = async (sock, chatId, msg, args) => {
                 metadata: {
                   latex_expression: '\\text{ }', // Force text rendering mode
                   latex_image: {
-                    url: 'https://n.uguu.se/LeczJdMl.jpg',
+                    url: 'https://cdn.ornzora.eu.cc/1ca0f9a4-a81f-498e-92e8-8a4c76abf1ef-FIORA.png',
                     width: 1279,
                     height: 825,
                   },
