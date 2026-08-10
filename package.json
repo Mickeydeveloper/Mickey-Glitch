@@ -30,7 +30,7 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@hapi/boom": "^10.0.1",
     "@types/node": "^18.0.6",
-    "@whiskeysockets/baileys": "^v7.0.0-rc11",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "awesome-phonenumber": "^5.9.0",
     "axios": "^1.8.4",
     "acrcloud": "^1.4.0",
