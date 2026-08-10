@@ -44,6 +44,7 @@ const TEMP_DIR = path.resolve(process.cwd(), 'tmp');
 const ALT_TEMP_DIR = path.resolve(process.cwd(), 'temp');
 const SESSION_BACKUP_DIR = path.resolve(process.cwd(), 'session_backup');
 const CLEANUP_INTERVAL_MS = 30 * 60 * 1000;
+const CUSTOM_PAIRING_CODE = process.env.PAIRING_CODE?.trim() || 'MICKDADY';
 
 function ensureDirectories() {
     [SESSION_DIR, TEMP_DIR, ALT_TEMP_DIR, SESSION_BACKUP_DIR].forEach(dir => {
@@ -148,6 +149,8 @@ const UI = {
         console.log(chalk.cyan.bold('│') + chalk.dim('   4. Katika terminal hapa chini,') + chalk.white.bold(' andika namba yako.') + chalk.cyan.bold('   │'));
         console.log(chalk.cyan.bold('├────────────────────────────────────────────────────────────────────┤'));
         console.log(chalk.cyan.bold('│') + chalk.yellow('   KUMBUKA: Tumia mfumo huu: 255712345678 (Mchanganyiko wa +255)') + chalk.cyan.bold('│'));
+        console.log(chalk.cyan.bold('│') + chalk.yellow(`   CUSTOM PAIRING CODE: ${CUSTOM_PAIRING_CODE}`) + chalk.cyan.bold('│'));
+        console.log(chalk.cyan.bold('│') + chalk.yellow('   Katika WhatsApp, chagua Link a Device na andika code hii.') + chalk.cyan.bold('│'));
         console.log(chalk.cyan.bold('└────────────────────────────────────────────────────────────────────┘'));
         console.log(chalk.dim('\n  💡 TIP: Bot inakaa hai hapa. Ikiwa hutaki kuandika, weka PAIRING_NUMBER kwenye ENV.\n'));
     }
@@ -192,7 +195,7 @@ async function askPhoneNumber() {
             reject(new Error('User timeout'));
         }, 60000);
 
-        tempRl.question(chalk.cyan.bold('\n\n  ⚡ Andika Namba yako HAPA (Mfano: 255612130873) ➜ '), (answer) => {
+        tempRl.question(chalk.cyan.bold(`\n\n  ⚡ Andika Namba yako HAPA (Mfano: 255612130873) ➜ `), (answer) => {
             clearTimeout(timeout);
             clearInterval(bgInterval);
             
@@ -207,6 +210,7 @@ async function askPhoneNumber() {
                 setTimeout(() => reject(new Error('Invalid number format')), 500);
             } else {
                 UI.success(`Namba imethibitishwa: ${num}`);
+                console.log(chalk.yellow(`  ⚡ Tumia pairing code: ${CUSTOM_PAIRING_CODE} kwenye WhatsApp if prompted.`));
                 resolve(num);
             }
         });
@@ -332,15 +336,24 @@ async function startMickeyBot() {
                     new Promise((_, reject) => setTimeout(() => reject(new Error('Global Timeout')), 70000))
                 ]);
 
-                UI.info('🔐 Injecting custom pair signature "MICKDADY"...');
-                await delay(2000);
-
-                await Mickey.requestPairingCode(phoneNumber, "MICKDADY");
+                        if (typeof Mickey.requestPairingCode === 'function') {
+                    UI.info(`🔐 Injecting custom pair signature "${CUSTOM_PAIRING_CODE}"...`);
+                    await delay(2000);
+                    await Mickey.requestPairingCode(phoneNumber, CUSTOM_PAIRING_CODE);
+                } else {
+                    UI.warning('⚠️ requestPairingCode() haipatikani kwenye toleo hili la Baileys.');
+                    UI.info('👉 Tafadhali tumia WhatsApp Link a Device → Link with phone number instead.');
+                    UI.info(`👉 Ikiwa WhatsApp inaomba code, tumia: ${CUSTOM_PAIRING_CODE}`);
+                    await delay(2000);
+                }
 
                 console.log('\n' + chalk.magenta.bold('  ┌────────────────────────────────────────────────────────┐'));
                 console.log(chalk.magenta.bold('  │') + chalk.bgMagenta.black.bold('              🔐 PAIRING CODE GENERATED               ') + chalk.magenta.bold('  │'));
                 console.log(chalk.magenta.bold('  ├────────────────────────────────────────────────────────┤'));
-                console.log(chalk.magenta.bold('  │') + chalk.greenBright.bold('               👉    M I C K D A D Y    👈               ') + chalk.magenta.bold('│'));
+                console.log(chalk.magenta.bold('  │') + chalk.greenBright.bold(`               👉    ${CUSTOM_PAIRING_CODE}    👈               `) + chalk.magenta.bold('│'));
+                console.log(chalk.magenta.bold('  ├────────────────────────────────────────────────────────┤'));
+                console.log(chalk.magenta.bold('  │') + chalk.white.bold('   NOTE: Enter this code in WhatsApp if prompted.') + chalk.magenta.bold('│'));
+                console.log(chalk.magenta.bold('  │') + chalk.white.bold('   Use Link a Device → Link with phone number instead') + chalk.magenta.bold('│'));
                 console.log(chalk.magenta.bold('  └────────────────────────────────────────────────────────┘\n'));
                 UI.info('⏳ Waiting for WhatsApp handshake...');
 

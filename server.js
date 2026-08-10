@@ -1,4 +1,5 @@
 const http = require('http')
+const path = require('path')
 
 const url = require('url');
 const { addTransaction, updateTransaction, findTransaction } = require('./lib/paymentStore');
@@ -107,7 +108,11 @@ server.listen(port, () => console.log(`✅ Server listening on port ${port}`))
 
 // Start the bot after the HTTP server is listening so platforms like Heroku see a bound port
 try {
-  require('./index')
+  const indexPath = path.join(__dirname, 'index.js')
+  if (!require('fs').existsSync(indexPath)) {
+    throw new Error(`Missing entry file: ${indexPath}`)
+  }
+  require(indexPath)
 } catch (err) {
   console.error('Failed to start bot from server.js:', err)
 }
