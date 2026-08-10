@@ -22,8 +22,11 @@ async function lyricsCommand(sock, chatId, songTitle, message) {
         }, { quoted: message });
 
         // API call
-        const apiUrl = `https://api.popcat.xyz/v2/lyrics?song=${encodeURIComponent(songTitle)}`;
-        const res = await fetch(apiUrl);
+        const API_BASE = 'https://engez.a7a.online/api/v1';
+        const params = new URLSearchParams();
+        params.append('query', songTitle);
+        const apiUrl = `${API_BASE}/tools/lyrics?${params.toString()}`;
+        const res = await fetch(apiUrl, { timeout: 30000 });
 
         if (!res.ok) {
             throw new Error(`API returned ${res.status}`);
@@ -31,26 +34,28 @@ async function lyricsCommand(sock, chatId, songTitle, message) {
 
         const data = await res.json();
 
-        // Check if API returned success and has results
-        if (!data.success || !data.result || data.result.length === 0) {
+        if (!data?.success) {
+            throw new Error(data?.error || 'فشل البحث عن كلمات الأغنية');
+        }
+
+        const result = data.response;
+        if (!result?.lyrics) {
             await sock.sendMessage(chatId, { 
                 text: `❌ *No lyrics found for:* "${songTitle}"\n\n💡 *Try:*\n• Checking the spelling\n• Using a different song title\n• Example: .lyrics Faded`
             }, { quoted: message });
             return;
         }
 
-        // Get first result (best match)
-        const song = data.result[0];
-        
-        // Check if song has lyrics (not instrumental)
-        if (song.instrumental === true || !song.plainLyrics) {
-            await sock.sendMessage(chatId, { 
-                text: `🎵 *${song.trackName}* by *${song.artistName}*\n\n⚠️ *This song is instrumental!*\nNo lyrics available for this track.`
-            }, { quoted: message });
-            return;
-        }
+        const song = {
+            trackName: result.title || songTitle,
+            artistName: result.artist || 'Unknown',
+            albumName: result.album || 'Single',
+            duration: result.duration || null,
+            plainLyrics: result.lyrics,
+            instrumental: false,
+            syncedLyrics: result.syncedLyrics || null
+        };
 
-        // Prepare lyrics with better formatting
         const duration = formatDuration(song.duration);
         const lyrics = song.plainLyrics;
         
