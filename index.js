@@ -257,7 +257,7 @@ async function startMickeyBot() {
         const Mickey = makeWASocket({
             version,
             logger: pinoLogger,
-            printQRInTerminal: false,
+            printQRInTerminal: true,
             browser: ["Ubuntu", "Chrome", "120.0.0.0"],
             auth: {
                 creds: state.creds,
@@ -292,7 +292,18 @@ async function startMickeyBot() {
         });
 
         Mickey.ev.on("connection.update", async (update) => {
-            const { connection, lastDisconnect } = update;
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                UI.info('🔐 Pairing QR/code generated. Scan it with WhatsApp.');
+                UI.info(`👉 Custom pairing code: ${CUSTOM_PAIRING_CODE}`);
+                UI.info('👉 If WhatsApp asks for a code, copy the exact custom code above.');
+            }
+
+            if (connection === "connecting") {
+                UI.info('🔄 WhatsApp is connecting...');
+                UI.info(`   Use phone number +255... and pairing code: ${CUSTOM_PAIRING_CODE}`);
+            }
 
             if (connection === "open") {
                 isWhatsAppRunning = true;

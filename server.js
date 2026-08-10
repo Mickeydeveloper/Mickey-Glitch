@@ -1,6 +1,9 @@
 const http = require('http')
 const path = require('path')
 
+// Ensure the runtime cwd is the project folder so relative requires resolve correctly.
+process.chdir(__dirname)
+
 const url = require('url');
 const { addTransaction, updateTransaction, findTransaction } = require('./lib/paymentStore');
 
