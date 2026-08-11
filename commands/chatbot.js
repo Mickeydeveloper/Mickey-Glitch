@@ -33,8 +33,10 @@ function loadMemory() {
         const data = JSON.parse(fs.readFileSync(MEMORY_PATH, 'utf8'));
         const now = Date.now();
         let changed = false;
+        
+        // Futa conversation_id za zamani baada ya dakika 30 zisipotumika
         for (const id in data) {
-            if (data[id].lastUpdate && (now - data[id].lastUpdate > 300000)) {
+            if (data[id].lastUpdate && (now - data[id].lastUpdate > 1800000)) {
                 delete data[id];
                 changed = true;
             }
@@ -89,40 +91,41 @@ async function handleChatbotMessage(sock, chatId, m) {
         const senderName = getSenderName(m);
         console.log(`\x1b[36m🤖 [${botName} AI]:\x1b[0m ${senderName}: ${userText.substring(0, 40)}...`);
 
-        let memory = loadMemory();
-        if (!memory[chatId]) memory[chatId] = { chats: [], lastUpdate: Date.now() };
-
-        memory[chatId].chats.push({ role: "user", content: userText });
-        memory[chatId].lastUpdate = Date.now();
-
-        if (memory[chatId].chats.length > 6) memory[chatId].chats.shift();
-
-        const history = memory[chatId].chats
-            .map(msg => `${msg.role === 'user' ? senderName : botName}: ${msg.content}`)
-            .join("\n");
-
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (e) {}
 
-        const systemPrompt = `Wewe ni ${botName}, chatbot wa Mickey Glitch. Unajua jina la mtu anayezungumza na wewe na unamjibu kwa mtindo wa kawaida wa binadamu.
-PERSONA: Jibu kwa kifupi, kwa ucheshi, na kwa nguvu za sasa. Tumia maneno ya kawaida ya mazungumzo, iwe friendly lakini iwe mtaalam.
-KNOWLEDGE: Bot ni Mickey Glitch V3, ina AI, inasaidia downloads, server hosting, bot setup, na maswali ya huduma. Ikiwa mteja anauliza server au hosting, toa link ya website: https://mickey-pterodacty.vercel.app. Elezea kwa muundo wa kirahisi na uwe na hatua kwa hatua kama mtu anaomba msaada.
-PERSONALIZATION: Mtumiaji anaitwa ${senderName}. Mwandike majibu kwa mtindo unaomfanya ajisikie umeelewa, tumia jina lake pale inafaa, na usionekane kama bot wa kawaida.
-RULES: Usitumie 'bro' au 'sister'. Kama hujui jibu, sema wazi 'Niaje, ngoja nikupeleke kwa mtoa huduma.' Au 'Niko hapa kusaidia, twende hatua kwa hatua.' Usipe taarifa zisizo sahihi. Endelea kuwa mnene kidogo, friendly, na direct.`;
+        // Weka taarifa za mtumiaji kwenye prompt
+        const fullPrompt = `[Mtumiaji anaitwa: ${senderName}]. ${userText}`;
 
-        const fullPrompt = `SYSTEM: ${systemPrompt}\n\nSTORY:\n${history}\n\nUSER: ${userText}\nMICKEY:`;
-        const apiUrl = `https://api.yupra.my.id/api/ai/gpt5?text=${encodeURIComponent(fullPrompt)}`;
+        // Kuchukua memory ya conversation_id kama ipo
+        let memory = loadMemory();
+        let conversationId = memory[chatId]?.conversation_id || '';
+
+        // Tengeneza API URL na prexzyapis.com
+        let apiUrl = `https://prexzyapis.com/ai/chatbot?text=${encodeURIComponent(fullPrompt)}`;
+        if (conversationId) {
+            apiUrl += `&conversation_id=${encodeURIComponent(conversationId)}`;
+        }
 
         const res = await fetch(apiUrl).then(r => r.json());
-        const reply = res?.response || res?.result || res?.message;
+        
+        // Kuchukua jibu kutoka kwenye muundo wa JSON wa Prexzy API
+        const reply = res?.data?.response;
+        const newConversationId = res?.data?.conversation_id;
 
         if (!reply) return;
 
-        memory[chatId].chats.push({ role: "assistant", content: reply });
-        saveMemory(memory);
+        // Hifadhi conversation_id mpya ili kuendeleza mazungumzo
+        if (newConversationId) {
+            memory[chatId] = {
+                conversation_id: newConversationId,
+                lastUpdate: Date.now()
+            };
+            saveMemory(memory);
+        }
 
         // ─── MUUNDO MPYA WA AI RICH UTAMU (AI ICON INJECTOR) ───
         const aiMessage = {
-            conversation: reply, // Hapa inabeba lile jibu lililotoka kwenye API ya AI
+            conversation: reply, // Jibu kutoka kwenye API ya Prexzy
             messageContextInfo: {
                 messageSecret: randomBytes(32),
                 supportPayload: JSON.stringify({
