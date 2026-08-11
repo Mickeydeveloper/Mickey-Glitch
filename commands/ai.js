@@ -1,25 +1,53 @@
-const axios = require('axios');
-
 /**
  * ai.js - Mickey AI Assistant (Enhanced Fully Integrated Version)
  * Creator: Mickdadi Hamza (Quantum Code Developer)
  */
-const aiCommand = async (sock, chatId, msg, args) => {
-    // 1. CHUJA TEXT (ANTI-BUG)
-    const query = Array.isArray(args) ? args.join(' ') : args;
 
-    if (!query) {
-        return sock.sendMessage(chatId, { 
-            text: '╭━━━〔 *MICKEY AI* 〕━━━┈⊷\n┃\n┃ 📝 *Usage:* `.ai [swali lako]`\n┃ 💡 *Example:* `.ai mambo vipi?`\n┃\n╰━━━━━━━━━━━━━━━━━━━━┈⊷' 
-        }, { quoted: msg });
+const axios = require('axios');
+
+const PRIMARY_API = 'https://engez.a7a.online/api/v1/ai/gpt';
+const TIMEOUT = 30000;
+
+// ─── MAIN EXECUTION FUNCTION ──────────────────────────────────────────
+async function aiCommand(sockOrCtx, chatIdParam, msgParam, argsParam) {
+    let sock, chatId, msg, args;
+
+    // Detect Context Object (ctx) vs standard parameters
+    if (sockOrCtx && (sockOrCtx.sock || sockOrCtx.core)) {
+        sock = sockOrCtx.sock || sockOrCtx.core;
+        chatId = sockOrCtx.chatId || sockOrCtx.msg?.key?.remoteJid;
+        msg = sockOrCtx.msg || sockOrCtx.quoted;
+        args = sockOrCtx.args || [];
+    } else {
+        sock = sockOrCtx;
+        chatId = chatIdParam;
+        msg = msgParam;
+        args = argsParam;
     }
 
-    // Ulinzi wa urefu wa text kuzuia crash
+    // 1. FILTER INPUT TEXT
+    const query = Array.isArray(args) ? args.join(' ') : (args || '');
+
+    if (!query.trim()) {
+        const usageText = 
+            '╭━━━〔 *MICKEY AI* 〕━━━┈⊷\n' +
+            '┃\n' +
+            '┃ 📝 *Usage:* `.ai [swali lako]`\n' +
+            '┃ 💡 *Example:* `.ai mambo vipi?`\n' +
+            '┃\n' +
+            '╰━━━━━━━━━━━━━━━━━━━━┈⊷';
+        
+        if (sockOrCtx.reply) return await sockOrCtx.reply(usageText);
+        return await sock.sendMessage(chatId, { text: usageText }, { quoted: msg });
+    }
+
     if (query.length > 5000) {
-        return sock.sendMessage(chatId, { text: '⚠️ *Mzee, swali lako ni refu kupita kiasi! Punguza kidogo.*' }, { quoted: msg });
+        const errorText = '⚠️ *Mzee, swali lako ni refu kupita kiasi! Punguza kidogo.*';
+        if (sockOrCtx.reply) return await sockOrCtx.reply(errorText);
+        return await sock.sendMessage(chatId, { text: errorText }, { quoted: msg });
     }
 
-    // Reaction ya kufikiri
+    // React while thinking
     await sock.sendMessage(chatId, { react: { text: '🧠', key: msg.key } }).catch(() => {});
 
     try {
@@ -34,38 +62,49 @@ const aiCommand = async (sock, chatId, msg, args) => {
 
         const fullQuery = `${systemPrompt}\n\nUser: ${query}\nAnswer:`;
 
-        // 3. MULTI-API LIST (FALLBACK SYSTEM)
-        const apiUrls = [
-            `https://apiskeith.top/ai/gpt?q=${encodeURIComponent(fullQuery)}`,
-            `https://apiskeith.top/ai/copilot?q=${encodeURIComponent(fullQuery)}`,
-            `https://apiskeith.top/ai/venice?q=${encodeURIComponent(fullQuery)}`
-        ];
-
         let finalReply = null;
 
-        // Loop ya kupita kwenye API mpaka ipatikane inayofanya kazi
-        for (const url of apiUrls) {
-            try {
-                const res = await axios.get(url, { timeout: 10000 }); // Sekunde 10 timeout
-                const data = res.data;
-                
-                // Kunasa jibu kulingana na muundo wa API (data, result, au response)
-                let tempReply = data.data || data.result || data.response || data.reply;
-                
-                if (tempReply && tempReply.length > 0) {
-                    finalReply = tempReply;
-                    break; // Imepata jibu, toka kwenye loop
+        // 3. TRY PRIMARY NEW API FIRST
+        try {
+            const { data } = await axios.get(PRIMARY_API, {
+                params: { q: fullQuery },
+                timeout: TIMEOUT
+            });
+
+            if (data?.success && data?.response?.success) {
+                finalReply = data.response.result?.message || data.response.raw;
+            }
+        } catch (primaryErr) {
+            console.log('⚠️ Primary Engez API failed, switching to backup providers...');
+        }
+
+        // 4. FALLBACK SYSTEM (IF PRIMARY API FAILS)
+        if (!finalReply) {
+            const backupUrls = [
+                `https://apiskeith.top/ai/gpt?q=${encodeURIComponent(fullQuery)}`,
+                `https://apiskeith.top/ai/copilot?q=${encodeURIComponent(fullQuery)}`,
+                `https://apiskeith.top/ai/venice?q=${encodeURIComponent(fullQuery)}`
+            ];
+
+            for (const url of backupUrls) {
+                try {
+                    const res = await axios.get(url, { timeout: 10000 });
+                    const tempReply = res.data?.data || res.data?.result || res.data?.response || res.data?.reply;
+
+                    if (tempReply && tempReply.length > 0) {
+                        finalReply = tempReply;
+                        break;
+                    }
+                } catch (backupErr) {
+                    continue;
                 }
-            } catch (apiErr) {
-                console.log(`⚠️ API ya ${url.split('/')[3]} imegoma, najaribu nyingine...`);
-                continue;
             }
         }
 
-        // 4. TUMA JIBU KAMA LIMEPAIKANA
+        // 5. SEND FINAL RESPONSE
         if (finalReply) {
-            // Safisha jibu kama AI amejisahau na kujitaja vibaya
-            finalReply = finalReply.replace(/Microsoft|Copilot|OpenAI|GPT-3|GPT-4|ChatGPT/gi, "Mickey Glitch");
+            // Sanitize identity references
+            finalReply = finalReply.replace(/Microsoft|Copilot|OpenAI|GPT-3|GPT-4|ChatGPT|GPT-5\.5/gi, "Mickey Glitch");
 
             const responseText = 
                 `╭━━━━〔 *MICKEY AI* 〕━━━━┈⊷\n` +
@@ -74,19 +113,40 @@ const aiCommand = async (sock, chatId, msg, args) => {
                 `┃\n` +
                 `╰━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-            await sock.sendMessage(chatId, { text: responseText }, { quoted: msg });
+            if (sockOrCtx.reply) {
+                await sockOrCtx.reply(responseText);
+            } else {
+                await sock.sendMessage(chatId, { text: responseText }, { quoted: msg });
+            }
+
             await sock.sendMessage(chatId, { react: { text: '✨', key: msg.key } }).catch(() => {});
         } else {
-            throw new Error("API_LIMIT_REACHED");
+            throw new Error("ALL_APIS_UNAVAILABLE");
         }
 
     } catch (e) {
         console.error("AI Error:", e.message);
-        await sock.sendMessage(chatId, { 
-            text: '❌ *Mzee, kijiwe kimeingiliwa na wadudu (Error). Jaribu baadae kidogo au mcheki Mickdadi.*' 
-        }, { quoted: msg });
+        const failText = '❌ *Mzee, kijiwe kimeingiliwa na wadudu (Error). Jaribu baadae kidogo au mcheki Mickdadi.*';
+        
+        if (sockOrCtx.reply) {
+            await sockOrCtx.reply(failText);
+        } else {
+            await sock.sendMessage(chatId, { text: failText }, { quoted: msg });
+        }
+
         await sock.sendMessage(chatId, { react: { text: '❌', key: msg.key } }).catch(() => {});
     }
-};
+}
 
-module.exports = aiCommand;
+// ─── EXPORTS (COMMONJS & HANDLER COMPATIBLE) ───────────────────────────
+module.exports = {
+    name: 'ai',
+    aliases: ['gpt', 'chatgpt', 'bot', 'mickey'],
+    category: 'ai',
+    desc: 'Mickey AI Assistant',
+    
+    execute: aiCommand,
+    run: aiCommand,
+    handler: aiCommand,
+    aiCommand: aiCommand
+};
