@@ -730,7 +730,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         // If userMessage is still not a command, check for active halotel pending state first
         if (!userMessage.startsWith('.')) {
             try {
-                if (getPendingRequest && typeof getPendingRequest === 'function') {
+                if (typeof getPendingRequest !== 'undefined' && typeof getPendingRequest === 'function') {
                     const pendingReq = getPendingRequest(chatId);
                     if (pendingReq) {
                         await halotelCommand(sock, chatId, message, userMessage);

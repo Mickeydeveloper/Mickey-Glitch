@@ -412,7 +412,7 @@ async function startMickeyBot() {
                 
                 const keepAliveInterval = setInterval(() => {
                     if (isWhatsAppRunning && typeof Mickey.sendPresenceUpdate === 'function') {
-                        try { Mickey.sendPresenceUpdate('available'); } catch (e) {}
+                        void Mickey.sendPresenceUpdate('available').catch(() => {});
                         clearInterval(keepAliveInterval);
                     }
                 }, 5000);
@@ -444,8 +444,8 @@ function startKeepAlive() {
     setInterval(autoClean, 30 * 60 * 1000);
     
     setInterval(() => {
-        if (whatsappBot && isWhatsAppRunning) {
-            try { whatsappBot.sendPresenceUpdate('available'); } catch (err) {}
+        if (whatsappBot && isWhatsAppRunning && typeof whatsappBot.sendPresenceUpdate === 'function') {
+            void whatsappBot.sendPresenceUpdate('available').catch(() => {});
         }
         const status = isWhatsAppRunning ? chalk.greenBright('ONLINE') : chalk.redBright('OFFLINE');
         const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
