@@ -1,12 +1,15 @@
 const fs = require('fs');
 const path = require('path');
-const fetch = require('node-fetch');
-const moment = require('moment-timezone');
-const { randomBytes } = require('crypto'); // Inahitajika kwa ajili ya kutengeneza messageSecret ya AI
+const axios = require('axios');
+const settings = require('../settings');
 
 // Paths za kuhifadhi data
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
 const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
+
+const CHATBOT_API_URL = process.env.CHATBOT_API_URL || 'https://prexzyapis.com/ai/ch';
+const CHATBOT_API_KEY = process.env.CHATBOT_API_KEY || '';
+const CHATBOT_TIMEOUT_MS = Number(process.env.CHATBOT_TIMEOUT_MS || 25000);
 
 // --- DATA HELPERS ---
 function loadState() {
@@ -14,8 +17,9 @@ function loadState() {
         if (!fs.existsSync(STATE_PATH)) return { perGroup: {}, private: false };
         const data = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
         return { perGroup: {}, private: false, ...data };
-    } catch (e) { 
-        return { perGroup: {}, private: false }; 
+    } catch (e) {
+        console.error('❌ Chatbot state load failed:', e.message);
+        return { perGroup: {}, private: false };
     }
 }
 
@@ -24,7 +28,9 @@ function saveState(state) {
         const dir = path.dirname(STATE_PATH);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
-    } catch (e) { console.error('❌ State Save Err:', e); }
+    } catch (e) {
+        console.error('❌ State Save Err:', e);
+    }
 }
 
 function loadMemory() {
@@ -33,7 +39,7 @@ function loadMemory() {
         const data = JSON.parse(fs.readFileSync(MEMORY_PATH, 'utf8'));
         const now = Date.now();
         let changed = false;
-        
+
         // Futa conversation_id za zamani baada ya dakika 30 zisipotumika
         for (const id in data) {
             if (data[id].lastUpdate && (now - data[id].lastUpdate > 1800000)) {
@@ -41,9 +47,13 @@ function loadMemory() {
                 changed = true;
             }
         }
+
         if (changed) saveMemory(data);
         return data;
-    } catch (e) { return {}; }
+    } catch (e) {
+        console.error('❌ Chatbot memory load failed:', e.message);
+        return {};
+    }
 }
 
 function saveMemory(memory) {
@@ -51,7 +61,9 @@ function saveMemory(memory) {
         const dir = path.dirname(MEMORY_PATH);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(MEMORY_PATH, JSON.stringify(memory, null, 2));
-    } catch (e) { console.error('❌ Memory Save Err:', e); }
+    } catch (e) {
+        console.error('❌ Memory Save Err:', e);
+    }
 }
 
 function extractText(m) {
@@ -59,7 +71,9 @@ function extractText(m) {
         if (!m || !m.message) return '';
         const msg = m.message;
         return (msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption || '').trim();
-    } catch (e) { return ''; }
+    } catch (e) {
+        return '';
+    }
 }
 
 function getSenderName(m) {
@@ -73,93 +87,94 @@ function getSenderName(m) {
     return 'Mteja';
 }
 
-// --- MAIN CHATBOT HANDLER ---
+function parseChatbotResponse(apiResult) {
+    if (!apiResult || typeof apiResult !== 'object') return null;
+    if (apiResult.status !== true && apiResult.statusCode !== 200) return null;
+    const candidate = apiResult.response || apiResult.data?.response || apiResult.result?.response;
+    if (!candidate) return null;
+    return String(candidate).trim();
+}
+
+async function requestChatbotReply(prompt, conversationId) {
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(CHATBOT_API_KEY ? { Authorization: `Bearer ${CHATBOT_API_KEY}` } : {})
+    };
+
+    const params = {
+        q: prompt
+    };
+
+    const response = await axios.get(CHATBOT_API_URL, {
+        params,
+        headers,
+        timeout: CHATBOT_TIMEOUT_MS,
+        validateStatus: () => true
+    });
+
+    if (response.status >= 400) {
+        throw new Error(`Chatbot API returned ${response.status}`);
+    }
+
+    return response.data;
+}
+
 async function handleChatbotMessage(sock, chatId, m) {
     try {
         if (!chatId || m.key?.fromMe) return;
 
         const userText = extractText(m);
-        if (!userText || userText.startsWith('.')) return; 
+        if (!userText || userText.startsWith('.')) return;
 
         const state = loadState();
         const isGroup = chatId.endsWith('@g.us');
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
-
         if (!enabled) return;
 
-        const botName = sock?.user?.name || 'MICKEY';
+        const botName = settings.botName || settings.botname || 'MICKEY';
         const senderName = getSenderName(m);
         console.log(`\x1b[36m🤖 [${botName} AI]:\x1b[0m ${senderName}: ${userText.substring(0, 40)}...`);
 
-        try { await sock.sendPresenceUpdate('composing', chatId); } catch (e) {}
+        try { await sock.sendPresenceUpdate('composing', chatId); } catch (err) {}
 
-        // Weka taarifa za mtumiaji kwenye prompt
-        const fullPrompt = `[Mtumiaji anaitwa: ${senderName}]. ${userText}`;
+        const fullPrompt = `[Mtumiaji: ${senderName}] ${userText}`;
+        const memory = loadMemory();
+        const conversationId = memory[chatId]?.conversation_id || '';
 
-        // Kuchukua memory ya conversation_id kama ipo
-        let memory = loadMemory();
-        let conversationId = memory[chatId]?.conversation_id || '';
+        const apiResult = await requestChatbotReply(fullPrompt, conversationId);
+        const reply = parseChatbotResponse(apiResult);
 
-        // Tengeneza API URL na prexzyapis.com
-        let apiUrl = `https://prexzyapis.com/ai/chatbot?text=${encodeURIComponent(fullPrompt)}`;
-        if (conversationId) {
-            apiUrl += `&conversation_id=${encodeURIComponent(conversationId)}`;
+        if (!reply) {
+            console.error('❌ Chatbot response empty', JSON.stringify(apiResult));
+            return;
         }
 
-        const res = await fetch(apiUrl).then(r => r.json());
-        
-        // Kuchukua jibu kutoka kwenye muundo wa JSON wa Prexzy API
-        const reply = res?.data?.response;
-        const newConversationId = res?.data?.conversation_id;
-
-        if (!reply) return;
-
-        // Hifadhi conversation_id mpya ili kuendeleza mazungumzo
-        if (newConversationId) {
-            memory[chatId] = {
-                conversation_id: newConversationId,
+        const updatedMemory = {
+            ...memory,
+            [chatId]: {
+                conversation_id: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
                 lastUpdate: Date.now()
-            };
-            saveMemory(memory);
-        }
-
-        // ─── MUUNDO MPYA WA AI RICH UTAMU (AI ICON INJECTOR) ───
-        const aiMessage = {
-            conversation: reply, // Jibu kutoka kwenye API ya Prexzy
-            messageContextInfo: {
-                messageSecret: randomBytes(32),
-                supportPayload: JSON.stringify({
-                    version: 1,
-                    is_ai_message: true,
-                    should_show_system_message: true,
-                    ticket_id: Date.now().toString()
-                })
             }
         };
+        saveMemory(updatedMemory);
 
-        // Inatuma jibu ikiwa imegongwa baji la AI chini kwa kutumia relayMessage
-        await sock.relayMessage(chatId, aiMessage, {
-            additionalNodes: [
-                { "attrs": { "biz_bot": "1" }, "tag": "bot" },
-                { "attrs": {}, "tag": "biz" }
-            ],
-            quoted: m
-        });
+        const responseText = `🤖 *${botName} Chatbot*
 
-    } catch (e) { 
-        console.error('❌ Chatbot Error:', e); 
+${reply}`;
+        await sock.sendMessage(chatId, { text: responseText }, { quoted: m });
+    } catch (e) {
+        console.error('❌ Chatbot Error:', e?.message || e);
     }
 }
 
-// --- TOGGLE COMMAND (.chatbot on/off) ---
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
         const state = loadState();
         const args = (body || '').trim().split(/\s+/).slice(1);
 
         if (args.length === 0) {
-            return await sock.sendMessage(chatId, { 
-                text: '💡 *MATUMIZI:* \n.chatbot on/off\n.chatbot private on/off' 
+            return await sock.sendMessage(chatId, {
+                text: '💡 *MATUMIZI:*\n.chatbot on/off\n.chatbot private on/off'
             }, { quoted: m });
         }
 
@@ -167,30 +182,44 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
 
         if (firstArg === 'private') {
             const mode = args[1]?.toLowerCase();
-            state.private = (mode === 'on');
+            state.private = mode === 'on';
             saveState(state);
-            return await sock.sendMessage(chatId, { text: `✅ Chatbot Private Mode: *${state.private ? 'ON' : 'OFF'}*` }, { quoted: m });
+            return await sock.sendMessage(chatId, {
+                text: `✅ Chatbot Private Mode: *${state.private ? 'ON' : 'OFF'}*`
+            }, { quoted: m });
         }
 
         if (['on', 'off'].includes(firstArg)) {
-            const modeStatus = (firstArg === 'on');
+            const modeStatus = firstArg === 'on';
             if (chatId.endsWith('@g.us')) {
                 if (!state.perGroup) state.perGroup = {};
                 state.perGroup[chatId] = { enabled: modeStatus };
                 saveState(state);
-                return await sock.sendMessage(chatId, { text: `✅ Chatbot Group: *${modeStatus ? 'ON' : 'OFF'}*` }, { quoted: m });
-            } else {
-                state.private = modeStatus;
-                saveState(state);
-                return await sock.sendMessage(chatId, { text: `✅ Chatbot Private: *${modeStatus ? 'ON' : 'OFF'}*` }, { quoted: m });
+                return await sock.sendMessage(chatId, {
+                    text: `✅ Chatbot Group: *${modeStatus ? 'ON' : 'OFF'}*`
+                }, { quoted: m });
             }
+
+            state.private = modeStatus;
+            saveState(state);
+            return await sock.sendMessage(chatId, {
+                text: `✅ Chatbot Private: *${modeStatus ? 'ON' : 'OFF'}*`
+            }, { quoted: m });
         }
 
-    } catch (e) { console.error('❌ Toggle Error:', e); }
+        return await sock.sendMessage(chatId, {
+            text: '❌ Amri isiyo sahihi.\n💡 Tumia .chatbot on/off au .chatbot private on/off'
+        }, { quoted: m });
+    } catch (e) {
+        console.error('❌ Toggle Error:', e?.message || e);
+    }
 }
 
-// --- CORRECT EXPORT SYNTAX ---
 module.exports = {
-    handleChatbotMessage, 
+    name: 'chatbot',
+    aliases: ['botchat', 'chat', 'gptchat'],
+    category: 'ai',
+    desc: 'Enable or disable chatbot AI',
+    handleChatbotMessage,
     groupChatbotToggleCommand
 };
