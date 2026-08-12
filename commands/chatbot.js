@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const settings = require('../settings');
+const { randomBytes } = require('crypto');
 
 // Paths za kuhifadhi data
 const STATE_PATH = path.join(__dirname, '..', 'data', 'chatbot.json');
@@ -9,7 +10,7 @@ const MEMORY_PATH = path.join(__dirname, '..', 'data', 'chatbot_memory.json');
 
 const CHATBOT_API_URL = process.env.CHATBOT_API_URL || 'https://prexzyapis.com/ai/ch';
 const CHATBOT_API_KEY = process.env.CHATBOT_API_KEY || '';
-const CHATBOT_TIMEOUT_MS = Number(process.env.CHATBOT_TIMEOUT_MS || 25000);
+const CHATBOT_TIMEOUT_MS = Number(process.env.CHATBOT_TIMEOUT_MS || 30000);
 
 // --- DATA HELPERS ---
 function loadState() {
@@ -119,6 +120,55 @@ async function requestChatbotReply(prompt, conversationId) {
     return response.data;
 }
 
+// --- Generate AI Message Structure ---
+function generateAIMessageStructure(text) {
+    const msg = {
+        conversation: text,
+        messageContextInfo: {
+            messageSecret: randomBytes(32),
+            supportPayload: JSON.stringify({
+                version: 1,
+                is_ai_message: true,
+                should_show_system_message: true,
+                ticket_id: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+            })
+        }
+    };
+    
+    return msg;
+}
+
+// --- Relay Message with AI Structure ---
+async function relayAIMessage(sock, chatId, text, quotedMsg = null) {
+    try {
+        const aiMessage = generateAIMessageStructure(text);
+        
+        const additionalNodes = [
+            {
+                tag: "bot",
+                attrs: {
+                    "biz_bot": "1"
+                }
+            },
+            {
+                tag: "biz",
+                attrs: {}
+            }
+        ];
+
+        await sock.relayMessage(chatId, aiMessage, {
+            quoted: quotedMsg,
+            additionalNodes
+        });
+
+        return true;
+    } catch (e) {
+        console.error('❌ Relay AI Message Error:', e.message);
+        return false;
+    }
+}
+
+// --- Enhanced Chatbot Handler ---
 async function handleChatbotMessage(sock, chatId, m) {
     try {
         if (!chatId || m.key?.fromMe) return;
@@ -131,13 +181,15 @@ async function handleChatbotMessage(sock, chatId, m) {
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
         if (!enabled) return;
 
-        const botName = settings.botName || settings.botname || 'MICKEY';
+        const botName = settings.botName || settings.botname || 'Nixell';
         const senderName = getSenderName(m);
         console.log(`\x1b[36m🤖 [${botName} AI]:\x1b[0m ${senderName}: ${userText.substring(0, 40)}...`);
 
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (err) {}
 
-        const fullPrompt = `[Mtumiaji: ${senderName}] ${userText}`;
+        // Enhanced prompt with better context
+        const fullPrompt = `Habari, mimi ni ${botName}, chatbot wa kipekee. Mteja ${senderName} ameuliza: "${userText}". Tafadhali jibu kwa lugha ya Kiswahili au Kiingereza kwa heshima na usahihi.`;
+
         const memory = loadMemory();
         const conversationId = memory[chatId]?.conversation_id || '';
 
@@ -149,77 +201,163 @@ async function handleChatbotMessage(sock, chatId, m) {
             return;
         }
 
+        // Update memory
         const updatedMemory = {
             ...memory,
             [chatId]: {
                 conversation_id: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
-                lastUpdate: Date.now()
+                lastUpdate: Date.now(),
+                lastMessage: userText,
+                lastReply: reply
             }
         };
         saveMemory(updatedMemory);
 
-        const responseText = `🤖 *${botName} Chatbot*
+        // Format response text
+        const responseText = `🤖 *${botName} AI Assistant*
 
-${reply}`;
-        await sock.sendMessage(chatId, { text: responseText }, { quoted: m });
+${reply}
+
+📌 *Mteja:* ${senderName}
+⏱️ *Saa:* ${new Date().toLocaleTimeString()}`;
+
+        // Send with AI structure
+        await relayAIMessage(sock, chatId, responseText, m);
+
+        return true;
     } catch (e) {
         console.error('❌ Chatbot Error:', e?.message || e);
+        return false;
     }
 }
 
+// --- Enhanced Toggle Command ---
 async function groupChatbotToggleCommand(sock, chatId, m, body) {
     try {
         const state = loadState();
         const args = (body || '').trim().split(/\s+/).slice(1);
 
         if (args.length === 0) {
-            return await sock.sendMessage(chatId, {
-                text: '💡 *MATUMIZI:*\n.chatbot on/off\n.chatbot private on/off'
-            }, { quoted: m });
+            const statusText = `📊 *Hali ya Chatbot*
+
+${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.enabled ? '✅ IMEWASHA' : '❌ IMEZIMA') : '👤 *Private Mode:* ' + (state.private ? '✅ IMEWASHA' : '❌ IMEZIMA')}
+
+💡 *MATUMIZI:*
+• .chatbot on/off - Washa/zima chatbot katika group
+• .chatbot private on/off - Washa/zima chatbot kwa private chat
+• .chatbot status - Angalia hali ya chatbot`;
+
+            return await sock.sendMessage(chatId, { text: statusText }, { quoted: m });
         }
 
         const firstArg = args[0].toLowerCase();
 
+        // Status command
+        if (firstArg === 'status') {
+            const statusText = `📊 *Hali ya Chatbot*
+
+👥 *Group Mode:* ${state.perGroup?.[chatId]?.enabled ? '✅ IMEWASHA' : '❌ IMEZIMA'}
+👤 *Private Mode:* ${state.private ? '✅ IMEWASHA' : '❌ IMEZIMA'}
+💬 *Hali:* ${state.perGroup?.[chatId]?.enabled || state.private ? '🟢 Inafanya kazi' : '🔴 Imezimwa'}`;
+
+            return await sock.sendMessage(chatId, { text: statusText }, { quoted: m });
+        }
+
         if (firstArg === 'private') {
             const mode = args[1]?.toLowerCase();
+            if (!['on', 'off'].includes(mode)) {
+                return await sock.sendMessage(chatId, { 
+                    text: '❌ Tafadhali tumia: .chatbot private on/off' 
+                }, { quoted: m });
+            }
+            
             state.private = mode === 'on';
             saveState(state);
             return await sock.sendMessage(chatId, {
-                text: `✅ Chatbot Private Mode: *${state.private ? 'ON' : 'OFF'}*`
+                text: `✅ *Private Chatbot:* ${state.private ? 'IMEZINDWA 🟢' : 'IMEZIMWA 🔴'}`
             }, { quoted: m });
         }
 
         if (['on', 'off'].includes(firstArg)) {
             const modeStatus = firstArg === 'on';
+            
             if (chatId.endsWith('@g.us')) {
                 if (!state.perGroup) state.perGroup = {};
                 state.perGroup[chatId] = { enabled: modeStatus };
                 saveState(state);
                 return await sock.sendMessage(chatId, {
-                    text: `✅ Chatbot Group: *${modeStatus ? 'ON' : 'OFF'}*`
+                    text: `✅ *Group Chatbot:* ${modeStatus ? 'IMEZINDWA 🟢' : 'IMEZIMWA 🔴'}`
                 }, { quoted: m });
             }
 
             state.private = modeStatus;
             saveState(state);
             return await sock.sendMessage(chatId, {
-                text: `✅ Chatbot Private: *${modeStatus ? 'ON' : 'OFF'}*`
+                text: `✅ *Private Chatbot:* ${modeStatus ? 'IMEZINDWA 🟢' : 'IMEZIMWA 🔴'}`
+            }, { quoted: m });
+        }
+
+        // Help command
+        if (firstArg === 'help') {
+            return await sock.sendMessage(chatId, {
+                text: `🤖 *Msaada wa Chatbot*
+
+📌 *Amri Zinazopatikana:*
+• .chatbot on - Washa chatbot
+• .chatbot off - Zima chatbot
+• .chatbot private on - Washa private mode
+• .chatbot private off - Zima private mode
+• .chatbot status - Angalia hali
+• .chatbot help - Msaada huu
+
+🔧 *Vipengele:*
+• AI smart replies
+• Memory ya mazungumzo
+• Muundo wa AI message
+• Auto-clear memory baada ya dakika 30
+
+💬 *Tuma ujumbe wowote kuanza mazungumzo!*`
             }, { quoted: m });
         }
 
         return await sock.sendMessage(chatId, {
-            text: '❌ Amri isiyo sahihi.\n💡 Tumia .chatbot on/off au .chatbot private on/off'
+            text: '❌ Amri isiyo sahihi.\n💡 Tumia .chatbot help kwa msaada'
         }, { quoted: m });
     } catch (e) {
         console.error('❌ Toggle Error:', e?.message || e);
     }
 }
 
+// --- Enhanced Help Function ---
+function getHelp() {
+    return `🤖 *Nixell AI Chatbot*
+
+📌 *Amri:*
+• .chatbot on - Washa chatbot katika group
+• .chatbot off - Zima chatbot katika group
+• .chatbot private on - Washa private mode
+• .chatbot private off - Zima private mode
+• .chatbot status - Angalia hali ya chatbot
+• .chatbot help - Onyesha msaada huu
+
+🔧 *Vipengele:*
+• AI inajibu kwa akili
+• Inakumbuka mazungumzo
+• Muundo maalum wa AI messages
+• Inajibu kwa kiswahili na kiingereza
+• Hali ya composing inaonekana
+
+💡 *Tuma ujumbe wowote kuanza mazungumzo na AI!*`;
+}
+
 module.exports = {
     name: 'chatbot',
-    aliases: ['botchat', 'chat', 'gptchat'],
+    aliases: ['botchat', 'chat', 'gptchat', 'ai'],
     category: 'ai',
-    desc: 'Enable or disable chatbot AI',
+    desc: 'Enable or disable chatbot AI with enhanced features',
     handleChatbotMessage,
-    groupChatbotToggleCommand
+    groupChatbotToggleCommand,
+    getHelp,
+    relayAIMessage,
+    generateAIMessageStructure
 };
