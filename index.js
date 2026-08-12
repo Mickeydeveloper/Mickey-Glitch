@@ -31,7 +31,7 @@ const MickeyHelper = require("./lib/Mickey");
 // Try to load telegram module
 let startTelegramBot = null;
 try {
-    const telegramModule = require("./telegram-bot");
+    const telegramModule = require("./glitch/telegram-bot");
     startTelegramBot = telegramModule.startTelegramBot;
 } catch (err) {
     // Silent fail if not found

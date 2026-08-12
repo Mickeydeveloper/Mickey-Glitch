@@ -2,10 +2,10 @@ const http = require('http')
 const path = require('path')
 
 // Ensure the runtime cwd is the project folder so relative requires resolve correctly.
-process.chdir(__dirname)
+process.chdir(path.join(__dirname, '..'))
 
 const url = require('url');
-const { addTransaction, updateTransaction, findTransaction } = require('./lib/paymentStore');
+const { addTransaction, updateTransaction, findTransaction } = require('../lib/paymentStore');
 
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
@@ -111,7 +111,7 @@ server.listen(port, () => console.log(`✅ Server listening on port ${port}`))
 
 // Start the bot after the HTTP server is listening so platforms like Heroku see a bound port
 try {
-  const indexPath = path.join(__dirname, 'index.js')
+  const indexPath = path.join(__dirname, '..', 'index.js')
   if (!require('fs').existsSync(indexPath)) {
     throw new Error(`Missing entry file: ${indexPath}`)
   }

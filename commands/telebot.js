@@ -1,5 +1,5 @@
 const settings = require('../settings');
-const { startTelegramBot, isTelegramBotRunning } = require('../telegram-bot');
+const { startTelegramBot, isTelegramBotRunning } = require('../glitch/telegram-bot');
 
 /**
  * .telebot command: Manages the Telegram bot bridge.
