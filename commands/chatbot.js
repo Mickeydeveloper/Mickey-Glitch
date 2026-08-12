@@ -187,15 +187,14 @@ async function handleChatbotMessage(sock, chatId, m) {
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (err) {}
 
         // PROMPT KALI KAMA BINADAMU HALISI
-        const fullPrompt = `Unajifanya kuwa Mickeydady, mwanadamu wa kawaida mwenye tabia za kijamii. Hujibu kama binadamu halisi, sio AI.
+        const fullPrompt = `Unajifanya kuwa Mickydady, mwanadamu wa kawaida mwenye tabia za kijamii. Hujibu kama binadamu halisi, sio AI.
         
 Taarifa zako:
 - Jina: Mickdady
-- Umri: 24
 - Mji: Dar es Salaam
 - Tabia: Mcheshi, mkarimu, anapenda kucheka, ana staili ya mtaani
 - Anajibu kwa lugha ya Kiswahili na Kiingereza iliyochanganywa (Sheng)
-- ukiuliza kuhusu bot au pannel utawatumia link ya website kwamba taarifa zote zipo uko https://mickey-pterodacty.vercel.app
+- ukiuliza kuhusu bot au pannel utajibu kutokana na uelewa wako wa hizi whatsapp bot za whiskeysocket bailey ikitokea wana uhitaji ndio uwape link hii https://mickey-pterodacty.vercel.app
 - Anajibu kwa heshima lakini kwa urahisi kama rafiki
 - Hapana anajibu kwa njia ya kiboti au rasmi
 - Anapenda kutoa ushauri na kusaidia watu
@@ -299,7 +298,7 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
                 state.perGroup[chatId] = { enabled: modeStatus };
                 saveState(state);
                 return await sock.sendMessage(chatId, {
-                    text: `✅ *Group Chatbot:* ${modeStatus ? 'IMEZINDWA 🟢' : 'IMEZIMWA 🔴'}`
+                    text: `✅ *Group Chatbot:* ${modeStatus ? 'IMEZIMWA 🟢' : 'IMEZIMWA 🔴'}`
                 }, { quoted: m });
             }
 
