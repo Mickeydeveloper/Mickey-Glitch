@@ -41,7 +41,6 @@ function loadMemory() {
         const now = Date.now();
         let changed = false;
 
-        // Futa conversation_id za zamani baada ya dakika 30 zisipotumika
         for (const id in data) {
             if (data[id].lastUpdate && (now - data[id].lastUpdate > 1800000)) {
                 delete data[id];
@@ -168,7 +167,7 @@ async function relayAIMessage(sock, chatId, text, quotedMsg = null) {
     }
 }
 
-// --- Enhanced Chatbot Handler ---
+// --- Enhanced Chatbot Handler (Bila Mteja na Saa) ---
 async function handleChatbotMessage(sock, chatId, m) {
     try {
         if (!chatId || m.key?.fromMe) return;
@@ -187,8 +186,8 @@ async function handleChatbotMessage(sock, chatId, m) {
 
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (err) {}
 
-        // Enhanced prompt with better context
-        const fullPrompt = `Habari, mimi ni ${botName}, chatbot wa kipekee. Mteja ${senderName} ameuliza: "${userText}". Tafadhali jibu kwa lugha ya Kiswahili au Kiingereza kwa heshima na usahihi.`;
+        // Prompt kali na professional
+        const fullPrompt = `${userText}`;
 
         const memory = loadMemory();
         const conversationId = memory[chatId]?.conversation_id || '';
@@ -213,13 +212,8 @@ async function handleChatbotMessage(sock, chatId, m) {
         };
         saveMemory(updatedMemory);
 
-        // Format response text
-        const responseText = `🤖 *${botName} AI Assistant*
-
-${reply}
-
-📌 *Mteja:* ${senderName}
-⏱️ *Saa:* ${new Date().toLocaleTimeString()}`;
+        // Response text - BILA "Mteja" na "Saa"
+        const responseText = `${reply}`;
 
         // Send with AI structure
         await relayAIMessage(sock, chatId, responseText, m);
@@ -252,7 +246,6 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
 
         const firstArg = args[0].toLowerCase();
 
-        // Status command
         if (firstArg === 'status') {
             const statusText = `📊 *Hali ya Chatbot*
 
@@ -297,7 +290,6 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
             }, { quoted: m });
         }
 
-        // Help command
         if (firstArg === 'help') {
             return await sock.sendMessage(chatId, {
                 text: `🤖 *Msaada wa Chatbot*
@@ -328,7 +320,7 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
     }
 }
 
-// --- Enhanced Help Function ---
+// --- Help Function ---
 function getHelp() {
     return `🤖 *Nixell AI Chatbot*
 
