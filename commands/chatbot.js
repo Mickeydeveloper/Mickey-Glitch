@@ -167,7 +167,7 @@ async function relayAIMessage(sock, chatId, text, quotedMsg = null) {
     }
 }
 
-// --- Enhanced Chatbot Handler (Bila Mteja na Saa) ---
+// --- Enhanced Chatbot Handler (Kama Binadamu) ---
 async function handleChatbotMessage(sock, chatId, m) {
     try {
         if (!chatId || m.key?.fromMe) return;
@@ -180,24 +180,45 @@ async function handleChatbotMessage(sock, chatId, m) {
         const enabled = isGroup ? !!state.perGroup?.[chatId]?.enabled : !!state.private;
         if (!enabled) return;
 
-        const botName = settings.botName || settings.botname || 'Nixell';
+        const botName = 'Mickeydady'; // Jina tupu la binadamu
         const senderName = getSenderName(m);
-        console.log(`\x1b[36m🤖 [${botName} AI]:\x1b[0m ${senderName}: ${userText.substring(0, 40)}...`);
+        console.log(`\x1b[36m👤 [${botName}]:\x1b[0m ${senderName}: ${userText.substring(0, 40)}...`);
 
         try { await sock.sendPresenceUpdate('composing', chatId); } catch (err) {}
 
-        // Prompt kali na professional
-        const fullPrompt = `${userText}`;
+        // PROMPT KALI KAMA BINADAMU HALISI
+        const fullPrompt = `Unajifanya kuwa Mickeydady, mwanadamu wa kawaida mwenye tabia za kijamii. Hujibu kama binadamu halisi, sio AI.
+        
+Taarifa zako:
+- Jina: Mickdady
+- Umri: 24
+- Mji: Dar es Salaam
+- Tabia: Mcheshi, mkarimu, anapenda kucheka, ana staili ya mtaani
+- Anajibu kwa lugha ya Kiswahili na Kiingereza iliyochanganywa (Sheng)
+- ukiuliza kuhusu bot au pannel utawatumia link ya website kwamba taarifa zote zipo uko https://mickey-pterodacty.vercel.app
+- Anajibu kwa heshima lakini kwa urahisi kama rafiki
+- Hapana anajibu kwa njia ya kiboti au rasmi
+- Anapenda kutoa ushauri na kusaidia watu
+
+Sasa wewe ni Mickdady, mwanadamu halisi. Mtumiaji aliyekupigia ni ${senderName}. Ujumbe wake ni: "${userText}"
+
+Jibu kwa staili yako ya kawaida kama binadamu - fupi, rahisi, na kwa tabia yako ya mtaani.`;
 
         const memory = loadMemory();
         const conversationId = memory[chatId]?.conversation_id || '';
 
         const apiResult = await requestChatbotReply(fullPrompt, conversationId);
-        const reply = parseChatbotResponse(apiResult);
+        let reply = parseChatbotResponse(apiResult);
 
         if (!reply) {
             console.error('❌ Chatbot response empty', JSON.stringify(apiResult));
-            return;
+            // Default reply kama binadamu
+            reply = "Mambo vipi bana! Samahani nimekosa kidogo, unaweza kurudia?";
+        }
+
+        // Humanize reply - fanya iwe fupi na ya kawaida
+        if (reply.length > 500) {
+            reply = reply.substring(0, 500) + '...';
         }
 
         // Update memory
@@ -212,10 +233,9 @@ async function handleChatbotMessage(sock, chatId, m) {
         };
         saveMemory(updatedMemory);
 
-        // Response text - BILA "Mteja" na "Saa"
-        const responseText = `${reply}`;
+        // Send kama binadamu - bila header yoyote
+        const responseText = reply;
 
-        // Send with AI structure
         await relayAIMessage(sock, chatId, responseText, m);
 
         return true;
@@ -237,9 +257,9 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
 ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.enabled ? '✅ IMEWASHA' : '❌ IMEZIMA') : '👤 *Private Mode:* ' + (state.private ? '✅ IMEWASHA' : '❌ IMEZIMA')}
 
 💡 *MATUMIZI:*
-• .chatbot on/off - Washa/zima chatbot katika group
-• .chatbot private on/off - Washa/zima chatbot kwa private chat
-• .chatbot status - Angalia hali ya chatbot`;
+• .chatbot on/off - Washa/zima chatbot
+• .chatbot private on/off - Washa/zima private mode
+• .chatbot status - Angalia hali`;
 
             return await sock.sendMessage(chatId, { text: statusText }, { quoted: m });
         }
@@ -267,7 +287,7 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
             state.private = mode === 'on';
             saveState(state);
             return await sock.sendMessage(chatId, {
-                text: `✅ *Private Chatbot:* ${state.private ? 'IMEZINDWA 🟢' : 'IMEZIMWA 🔴'}`
+                text: `✅ *Private Chatbot:* ${state.private ? 'IMEWASHWA 🟢' : 'IMEZIMWA 🔴'}`
             }, { quoted: m });
         }
 
@@ -292,28 +312,21 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
 
         if (firstArg === 'help') {
             return await sock.sendMessage(chatId, {
-                text: `🤖 *Msaada wa Chatbot*
+                text: `👤 *Mickeydady Chatbot*
 
-📌 *Amri Zinazopatikana:*
+📌 *Amri:*
 • .chatbot on - Washa chatbot
 • .chatbot off - Zima chatbot
 • .chatbot private on - Washa private mode
 • .chatbot private off - Zima private mode
 • .chatbot status - Angalia hali
-• .chatbot help - Msaada huu
 
-🔧 *Vipengele:*
-• AI smart replies
-• Memory ya mazungumzo
-• Muundo wa AI message
-• Auto-clear memory baada ya dakika 30
-
-💬 *Tuma ujumbe wowote kuanza mazungumzo!*`
+💬 *Mickeydady anajibu kama binadamu!*`
             }, { quoted: m });
         }
 
         return await sock.sendMessage(chatId, {
-            text: '❌ Amri isiyo sahihi.\n💡 Tumia .chatbot help kwa msaada'
+            text: '❌ Amri isiyo sahihi.\n💡 Tumia .chatbot help'
         }, { quoted: m });
     } catch (e) {
         console.error('❌ Toggle Error:', e?.message || e);
@@ -322,31 +335,29 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
 
 // --- Help Function ---
 function getHelp() {
-    return `🤖 *Nixell AI Chatbot*
+    return `👤 *Mickeydady Chatbot*
 
 📌 *Amri:*
-• .chatbot on - Washa chatbot katika group
-• .chatbot off - Zima chatbot katika group
+• .chatbot on - Washa chatbot
+• .chatbot off - Zima chatbot
 • .chatbot private on - Washa private mode
 • .chatbot private off - Zima private mode
-• .chatbot status - Angalia hali ya chatbot
-• .chatbot help - Onyesha msaada huu
+• .chatbot status - Angalia hali
 
-🔧 *Vipengele:*
-• AI inajibu kwa akili
-• Inakumbuka mazungumzo
-• Muundo maalum wa AI messages
-• Inajibu kwa kiswahili na kiingereza
-• Hali ya composing inaonekana
+💬 *Mickeydady anajibu kama binadamu halisi!*
 
-💡 *Tuma ujumbe wowote kuanza mazungumzo na AI!*`;
+🔧 *Tabia:*
+• Mcheshi na mkarimu
+• Anatumia lugha ya mtaani
+• Anajibu kwa urafiki
+• Sio AI - ni binadamu!`;
 }
 
 module.exports = {
     name: 'chatbot',
-    aliases: ['botchat', 'chat', 'gptchat', 'ai'],
+    aliases: ['botchat', 'chat', 'gptchat', 'ai', 'mickey'],
     category: 'ai',
-    desc: 'Enable or disable chatbot AI with enhanced features',
+    desc: 'Mickeydady Chatbot - Inajibu kama binadamu!',
     handleChatbotMessage,
     groupChatbotToggleCommand,
     getHelp,
