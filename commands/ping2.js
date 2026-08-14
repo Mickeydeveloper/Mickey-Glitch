@@ -2,24 +2,24 @@ const { Button, createCtx } = require('../lib/messageBuilder');
 
 const ping2Command = async (sock, chatId, msg, args) => {
     const ctx = createCtx(sock, chatId, msg, { args });
-    const title = args && args.length ? args.join(' ') : '[ TITLE ]';
+    const title = args && args.length ? args.join(' ') : ' MICKEY GLITCH ';
 
     const bookingPayload = {
         start_datetime: '2026-05-27T13:35:41.081Z',
         end_datetime: '2026-05-27T13:45:41.081Z',
-        location: 'Indonesia',
-        booking_url: 'https://fiora.nixel.my.id/',
-        phone_number: '6282139672290',
+        location: 'TANZANIA',
+        booking_url: 'https://mickeypannel.dpdns.org',
+        phone_number: '255612130873',
         booking_management_url: 'https://nixel.my.id/',
-        description: 'hii~ im fiora sylvie, just quietly observing things around here.',
-        email: 'fiorasylvie@gmail.com',
-        display_text: '[ DISPLAY TEXT ]',
+        description: 'hii~ im Mickey, just quietly observing things around here.',
+        email: 'mickidadyhamza@gmail.com',
+        display_text: 'MICKDADY HAMZA',
         display_content: {
             display_language: 'id',
-            display_meeting_type: '[ MEETING TYPE ]',
-            display_bottom_sheet_header: '[ HEADER ]',
+            display_meeting_type: 'Mbande Magengeni',
+            display_bottom_sheet_header: ' GLITCH INFOR ',
             display_add_to_calendar_cta_text: 'CALENDAR',
-            display_view_on_maps_cta_text: '[ DISPLAY VO MAP ]',
+            display_view_on_maps_cta_text: 'Mbande Magengeni',
             display_manage_booking_cta_text: '[ DISPLAY MBOOKING ]',
             display_manage_booking_not_supported_text: '[ DISPLAY MB NOT SUPPORT ]',
             display_read_more: '[ READ MORE ]',
