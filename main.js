@@ -119,6 +119,7 @@ const { lyricsCommand } = require('./commands/lyrics');
 const { clearCommand } = require('./commands/clear');
 const pingCommand = require('./commands/ping');
 const ping2Command = require('./commands/ping2');
+const ipLeakCommand = require('./commands/ipleak');
 const fromaiCommand = require('./commands/fromai');
 const aliveCommand = require('./commands/alive');
 const blurCommand = require('./commands/img-blur');
@@ -777,7 +778,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const isAdminCommand = adminCommands.some(cmd => userMessage.startsWith(cmd));
 
         // List of owner commands
-        const ownerCommands = ['.mode', '.autostatus', '.antidelete', '.cleartmp', '.setpp', '.pp', '.clearsession', '.areact', '.autoreact', '.autotyping', '.autorecording', '.autoread', '.pmblocker'];
+        const ownerCommands = ['.mode', '.autostatus', '.antidelete', '.cleartmp', '.setpp', '.pp', '.clearsession', '.areact', '.autoreact', '.autotyping', '.autorecording', '.autoread', '.pmblocker', '.ipleak'];
         const isOwnerCommand = ownerCommands.some(cmd => userMessage.startsWith(cmd));
 
         let isSenderAdmin = false;
@@ -1078,6 +1079,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ping2':
                 await ping2Command(sock, chatId, message, userMessage.split(/\s+/).slice(1));
+                commandExecuted = true;
+                break;
+            case userMessage === '.ipleak' || userMessage.startsWith('.ipleak '):
+                await ipLeakCommand(sock, chatId, message, userMessage.split(/\s+/).slice(1));
                 commandExecuted = true;
                 break;
             case userMessage === '.balance' || userMessage.startsWith('.coin') || userMessage.startsWith('.setcoin') || userMessage.startsWith('.addcoin') || userMessage.startsWith('.removecoin'):
