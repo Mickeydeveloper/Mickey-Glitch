@@ -118,6 +118,7 @@ const { complimentCommand } = require('./commands/compliment');
 const { lyricsCommand } = require('./commands/lyrics');
 const { clearCommand } = require('./commands/clear');
 const pingCommand = require('./commands/ping');
+const ping2Command = require('./commands/ping2');
 const fromaiCommand = require('./commands/fromai');
 const aliveCommand = require('./commands/alive');
 const blurCommand = require('./commands/img-blur');
@@ -916,7 +917,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         // PIN Security Check
-        const allowWithoutPin = userMessage.startsWith('.pin');
+        const allowWithoutPin = userMessage === '.pin' || userMessage.startsWith('.pin ');
         if (!allowWithoutPin) {
             try {
                 const pinVerified = await checkPinVerification(senderId);
@@ -1073,6 +1074,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ping':
                 await pingCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
+            case userMessage === '.ping2':
+                await ping2Command(sock, chatId, message, userMessage.split(/\s+/).slice(1));
                 commandExecuted = true;
                 break;
             case userMessage === '.balance' || userMessage.startsWith('.coin') || userMessage.startsWith('.setcoin') || userMessage.startsWith('.addcoin') || userMessage.startsWith('.removecoin'):
