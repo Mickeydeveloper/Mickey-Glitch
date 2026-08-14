@@ -1,36 +1,71 @@
-const axios = require('axios');
+const fetch = global.fetch || require('node-fetch');
 const { ButtonV2 } = require('../lib/messageBuilder');
 
 /**
  * Mickey Glitch - Text Styling Command
- * Powered by Prexzy Villa API
+ * Powered by Prexzy API
  */
+
+async function fetchTextStyles(text) {
+    const apiUrls = [
+        `https://prexzyapis.com/tools/allstyles?text=${encodeURIComponent(text)}`,
+        `https://apis.prexzyvilla.site/tools/allstyles?text=${encodeURIComponent(text)}`
+    ];
+
+    for (const apiUrl of apiUrls) {
+        try {
+            const response = await fetch(apiUrl);
+            if (!response || !response.ok) continue;
+
+            const data = await response.json();
+            const styles = Array.isArray(data?.styles) ? data.styles : Array.isArray(data?.data?.styles) ? data.data.styles : [];
+
+            if (data?.status && styles.length) {
+                return { status: true, styles, source: apiUrl };
+            }
+        } catch (error) {
+            continue;
+        }
+    }
+
+    return { status: false, styles: [] };
+}
 
 async function textCommand(sock, chatId, m, body = '') {
     try {
         const messageText = m.message?.conversation || m.message?.extendedTextMessage?.text || body || '';
         const args = messageText.split(' ').slice(1).join(' ').trim();
 
-        // Detect button response selection
         let selectedId = '';
         if (m.message?.interactiveResponseBody?.nativeFlowSearchResult?.selectedButtonId) {
             selectedId = m.message.interactiveResponseBody.nativeFlowSearchResult.selectedButtonId;
         }
 
-        // 1. Handle Selection (Mtu akichagua style)
         if (selectedId.startsWith('txtstyle_')) {
-            const [_, index, ...textParts] = selectedId.split('_');
-            const originalText = textParts.join('_');
-            
-            await sock.sendMessage(chatId, { react: { text: '✨', key: m.key } });
-            
-            const res = await axios.get(`https://prexzyapis.com/tools/allstyles?text=${encodeURIComponent(originalText)}`);
-            const style = res.data.styles[parseInt(index)];
+            const match = selectedId.match(/^txtstyle_(\d+)/);
+            const index = match ? Number(match[1]) : NaN;
+            if (Number.isNaN(index)) {
+                return sock.sendMessage(chatId, { text: '❌ Style haikupatikana.' }, { quoted: m });
+            }
 
-            if (!style) return sock.sendMessage(chatId, { text: '❌ Style haikupatikana.' });
+            const originalText = (m.message?.conversation || m.message?.extendedTextMessage?.text || body || '').trim();
+            const textForStyle = originalText.replace(/^\.(?:text|txt)\s*/i, '').trim();
+            const styleData = await fetchTextStyles(textForStyle || args);
+
+            if (!styleData.status) {
+                return sock.sendMessage(chatId, { text: '❌ API imeshindwa kupakua staili.' }, { quoted: m });
+            }
+
+            const style = styleData.styles[index];
+            if (!style) {
+                return sock.sendMessage(chatId, { text: '❌ Style haikupatikana.' }, { quoted: m });
+            }
+
+            const styledText = style.styled_text || style.preview || style.plain_text || '';
+            await sock.sendMessage(chatId, { react: { text: '✨', key: m.key } });
 
             const copyButton = new ButtonV2(sock)
-                .setBody(`✨ *Muundo:* ${style.style_name}\n\n${style.styled_text}`)
+                .setBody(`✨ *Muundo:* ${style.style_name || 'Style'}\n\n${styledText || 'No preview available'}`)
                 .setFooter('𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑 𝚃𝚎𝚌𝚑')
                 .setThumbnail('https://cdn.ornzora.eu.cc/4d2905ce-3707-4ec0-998a-68a3d851629f-FIORA.jpg')
                 .addRawButton({
@@ -42,7 +77,7 @@ async function textCommand(sock, chatId, m, body = '') {
                         paramsJson: JSON.stringify({
                             display_text: '📋 COPY STYLED TEXT',
                             id: 'copy_styled',
-                            copy_code: style.styled_text
+                            copy_code: styledText
                         })
                     }
                 });
@@ -50,38 +85,33 @@ async function textCommand(sock, chatId, m, body = '') {
             return await copyButton.send(chatId, { quoted: m });
         }
 
-        // 2. Initial Command (Mtu akiandika .text Mickey)
         if (!args) {
-            return sock.sendMessage(chatId, { 
-                text: '❌ *Tafadhali weka maandishi!*\n\nExample: `.text Mickey`' 
+            return sock.sendMessage(chatId, {
+                text: '❌ *Tafadhali weka maandishi!*\n\nExample: `.text Mickey`'
             }, { quoted: m });
         }
 
         await sock.sendMessage(chatId, { react: { text: '🎨', key: m.key } });
 
-        const apiUrl = `https://apis.prexzyvilla.site/tools/allstyles?text=${encodeURIComponent(args)}`;
-        const response = await axios.get(apiUrl);
-
-        if (!response.data?.status || !response.data?.styles) {
+        const result = await fetchTextStyles(args);
+        if (!result.status || !Array.isArray(result.styles) || !result.styles.length) {
             throw new Error('API Error');
         }
 
-        const styles = response.data.styles;
-        
-        // Jenga orodha ya staili
+        const styles = result.styles;
         const sections = [{
             title: '🎨 CHAGUA MUUNDO WA MAANDISHI',
             rows: styles.slice(0, 35).map((s, i) => ({
-                header: `${i + 1}. ${s.style_name}`,
-                title: s.preview,
-                id: `txtstyle_${i}_${args}` 
+                header: `${i + 1}. ${s.style_name || 'Style'}`,
+                title: s.preview || s.styled_text || s.plain_text || 'Preview',
+                id: `txtstyle_${i}`
             }))
         }];
 
         const menuText = `🎨 *TEXT STYLER*\n\n` +
-                         `📝 *Maandishi:* ${args}\n` +
-                         `✨ *Jumla ya Miundo:* ${styles.length}\n\n` +
-                         `👇 Chagua muundo hapo chini ili uutumie:`;
+            `📝 *Maandishi:* ${args}\n` +
+            `✨ *Jumla ya Miundo:* ${styles.length}\n\n` +
+            `👇 Chagua muundo hapo chini ili uutumie:`;
 
         await new ButtonV2(sock)
             .setBody(menuText)
@@ -103,8 +133,8 @@ async function textCommand(sock, chatId, m, body = '') {
 
     } catch (e) {
         console.error('Text Styler Error:', e);
-        await sock.sendMessage(chatId, { 
-            text: '❌ *Hitilafu!* API imeshindwa kufanya kazi kwa sasa.' 
+        await sock.sendMessage(chatId, {
+            text: '❌ *Hitilafu!* API imeshindwa kufanya kazi kwa sasa.'
         }, { quoted: m });
     }
 }
