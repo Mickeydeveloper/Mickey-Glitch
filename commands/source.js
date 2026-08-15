@@ -1,107 +1,630 @@
-// source.js - Full Fixed & Optimized Version with Advanced Features
-const { Button, ButtonV2, Carousel, AIRich, createCtx } = require('../lib/messageBuilder');
-const baileys = require('@whiskeysockets/baileys');
-const axios = require('axios');
-const cheerio = require('cheerio');
+// ✨ AI TANNING IMAGE FEATURE - ADVANCED & OPTIMIZED
+import axios from 'axios'
+import FormData from 'form-data'
+import { fileTypeFromBuffer } from 'file-type'
+import crypto from 'crypto'
 
-// Function ya kutengeneza delay
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// ==============================================
-// 📥 NIXELLV2 PASTEBIN INTEGRATION
-// ==============================================
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// Function ya kupata mifano yote kutoka Pastebin ya Nixellv2
-async function fetchNixellExamples() {
-    try {
-        console.log('📥 Inapakua mifano kutoka Nixellv2 Pastebin...');
-        const response = await axios.get('https://pastebin.com/u/Nixellv2', {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            timeout: 10000
-        });
+// ═══════════════════════════════════════════════════════════════
+// 🎭 IDENTITY GENERATOR - ANTI-DETECTION SYSTEM
+// ═══════════════════════════════════════════════════════════════
 
-        const $ = cheerio.load(response.data);
-        const examples = [];
+class IdentityGenerator {
+    static userAgents = {
+        chrome_windows: [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{v}.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{v}.0.{b}.{p} Safari/537.36'
+        ],
+        chrome_mac: [
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{v}.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{v}.0.{b}.{p} Safari/537.36'
+        ],
+        chrome_android: [
+            'Mozilla/5.0 (Linux; Android 14; {device}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{v}.0.{b}.{p} Mobile Safari/537.36',
+            'Mozilla/5.0 (Linux; Android 13; {device}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{v}.0.{b}.{p} Mobile Safari/537.36',
+            'Mozilla/5.0 (Linux; Android 12; {device}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{v}.0.{b}.{p} Mobile Safari/537.36'
+        ],
+        chrome_ios: [
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_{v} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/{v}.0.{b}.{p} Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (iPad; CPU OS 17_{v} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/{v}.0.{b}.{p} Mobile/15E148 Safari/604.1'
+        ],
+        firefox_windows: [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:{v}.0) Gecko/20100101 Firefox/{v}.0'
+        ],
+        firefox_mac: [
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:{v}.0) Gecko/20100101 Firefox/{v}.0'
+        ],
+        safari_mac: [
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.{v} Safari/605.1.15'
+        ],
+        safari_ios: [
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_{v} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.{v} Mobile/15E148 Safari/604.1'
+        ],
+        edge_windows: [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{v}.0.0.0 Safari/537.36 Edg/{v}.0.0.0'
+        ]
+    }
 
-        try {
-            $('table.maintable tr').each((i, row) => {
-                if (i === 0) return;
-                const columns = $(row).find('td');
-                if (columns.length >= 4) {
-                    const title = $(columns[0]).text().trim();
-                    const link = $(columns[0]).find('a').attr('href');
-                    const added = $(columns[1]).text().trim();
-                    const syntax = $(columns[4]).text().trim();
+    static androidDevices = [
+        'SM-S918B', 'SM-S918U', 'SM-S911B', 'SM-S911U',
+        'SM-S928B', 'SM-S928U', 'SM-S921B', 'SM-S921U',
+        'Pixel 8 Pro', 'Pixel 8', 'Pixel 7 Pro', 'Pixel 7', 'Pixel 7a', 'Pixel 6 Pro', 'Pixel 6', 'Pixel 6a',
+        '2210132G', '2210132C', '22081212C',
+        'RMX3700', 'RMX3701', 'CPH2449',
+        'IN2023', 'IN2025', 'LE2123',
+        'V2254', 'V2250', 'V2241',
+        '2201116TG', '2112123G', '2201117TG'
+    ]
 
-                    if (title && link) {
-                        examples.push({
-                            title: title,
-                            link: link.startsWith('http') ? link : `https://pastebin.com${link}`,
-                            added: added,
-                            syntax: syntax,
-                            id: link.split('/').pop()
-                        });
-                    }
-                }
-            });
-        } catch (parseError) {
-            console.error('❌ Imeshindwa kuparsa HTML:', parseError.message);
-            return [];
+    static getRandomVersion() {
+        const major = Math.floor(Math.random() * 30) + 100
+        const minor = Math.floor(Math.random() * 10)
+        const build = Math.floor(Math.random() * 9999)
+        const patch = Math.floor(Math.random() * 200)
+        return { major, minor, build, patch }
+    }
+
+    static generateUserAgent() {
+        const platforms = Object.keys(this.userAgents)
+        const platform = platforms[Math.floor(Math.random() * platforms.length)]
+        const templates = this.userAgents[platform]
+        const template = templates[Math.floor(Math.random() * templates.length)]
+
+        const version = this.getRandomVersion()
+        const device = this.androidDevices[Math.floor(Math.random() * this.androidDevices.length)]
+
+        return template
+            .replace(/{v}/g, version.major)
+            .replace(/{b}/g, version.build)
+            .replace(/{p}/g, version.patch)
+            .replace(/{device}/g, device)
+    }
+
+    static generateResidentialIP() {
+        const residentialRanges = [
+            [73, 0, 0, 0, 73, 255, 255, 255],
+            [76, 0, 0, 0, 76, 255, 255, 255],
+            [98, 0, 0, 0, 98, 255, 255, 255],
+            [174, 192, 0, 0, 174, 255, 255, 255],
+            [85, 0, 0, 0, 85, 255, 255, 255],
+            [88, 0, 0, 0, 88, 255, 255, 255],
+            [92, 0, 0, 0, 92, 255, 255, 255],
+            [119, 0, 0, 0, 119, 255, 255, 255],
+            [122, 0, 0, 0, 122, 255, 255, 255],
+            [41, 0, 0, 0, 41, 255, 255, 255],
+            [197, 0, 0, 0, 197, 255, 255, 255]
+        ]
+
+        const range = residentialRanges[Math.floor(Math.random() * residentialRanges.length)]
+        const ip = []
+
+        for (let i = 0; i < 4; i++) {
+            const min = range[i]
+            const max = range[i + 4]
+            ip.push(min + Math.floor(Math.random() * (max - min + 1)))
         }
 
-        console.log(`✅ Imepata ${examples.length} mifano kutoka Nixellv2`);
-        return examples;
-    } catch (error) {
-        console.error('❌ Imeshindwa kupata mifano:', error.message);
-        return [];
+        return ip.join('.')
+    }
+
+    static generateDeviceId() {
+        const patterns = [
+            () => crypto.randomUUID(),
+            () => crypto.randomBytes(8).toString('hex'),
+            () => `${crypto.randomBytes(4).toString('hex').toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`,
+            () => crypto.randomBytes(16).toString('hex'),
+            () => `${Math.random().toString(36).substring(2, 10)}-${Math.random().toString(36).substring(2, 10)}`
+        ]
+
+        const pattern = patterns[Math.floor(Math.random() * patterns.length)]
+        return pattern()
+    }
+
+    static generateSessionId() {
+        return crypto.randomBytes(32).toString('hex')
+    }
+
+    static generateFingerprint() {
+        return {
+            sessionId: this.generateSessionId(),
+            deviceId: this.generateDeviceId(),
+            clientId: crypto.randomBytes(16).toString('hex'),
+            visitorId: crypto.randomBytes(8).toString('hex'),
+            requestId: crypto.randomUUID()
+        }
+    }
+
+    static generateFullIdentity() {
+        return {
+            userAgent: this.generateUserAgent(),
+            ip: this.generateResidentialIP(),
+            fingerprint: this.generateFingerprint(),
+            timestamp: Date.now()
+        }
     }
 }
 
-// Function ya kupata content ya paste moja
-async function fetchPasteContent(pasteId) {
-    try {
-        const response = await axios.get(`https://pastebin.com/raw/${pasteId}`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            timeout: 10000
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`❌ Imeshindwa kupata paste ${pasteId}:`, error.message);
-        return null;
-    }
-}
+// ═══════════════════════════════════════════════════════════════
+// 🔄 RETRY MANAGER - SMART RETRY LOGIC
+// ═══════════════════════════════════════════════════════════════
 
-// ==============================================
-// 🗑️ DELETE MESSAGES FUNCTION
-// ==============================================
+class RetryManager {
+    static async executeWithRetry(fn, maxRetries = 3, context = '') {
+        let lastError = null
 
-async function deletePreviousMessages(sock, chatId, messages) {
-    try {
-        if (!messages || messages.length === 0) return;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const identity = IdentityGenerator.generateFullIdentity()
+                console.log(`🔄 ${context} - Jaribu ${attempt}/${maxRetries} | IP: ${identity.ip}`)
 
-        for (const msg of messages) {
-            if (msg && msg.key) {
-                try {
-                    await sock.sendMessage(chatId, {
-                        delete: msg.key
-                    });
-                    await delay(200);
-                } catch (deleteError) {
-                    console.log('Error deleting single message:', deleteError.message);
+                const result = await fn(identity)
+                return result
+            } catch (error) {
+                lastError = error
+                console.log(`⚠️ ${context} - Jaribu ${attempt} imeshindwa: ${error.message}`)
+
+                if (error.message.includes('usage limit') || error.message.includes('limit reached')) {
+                    const waitTime = Math.random() * 5000 + 5000
+                    console.log(`⏳ Kusubiri ${Math.round(waitTime)}ms kabla ya jaribu linalofuata...`)
+                    await delay(waitTime)
+                } else if (attempt < maxRetries) {
+                    const waitTime = Math.random() * 2000 + 1000
+                    await delay(waitTime)
                 }
             }
         }
-    } catch (e) {
-        console.log('Error deleting messages:', e);
+
+        throw lastError || new Error('Jaribu zote zimeshindwa')
     }
 }
 
-// Store ya messages za kila user
-const userMessages = {};
+// ═══════════════════════════════════════════════════════════════
+// 📤 IMAGE UPLOAD FUNCTION
+// ═══════════════════════════════════════════════════════════════
+
+async function uploadImage(imageBuffer, filename, mimeType) {
+    return RetryManager.executeWithRetry(async (identity) => {
+        const form = new FormData()
+        form.append('image', imageBuffer, {
+            filename: filename || `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`,
+            contentType: mimeType || 'image/jpeg'
+        })
+
+        const response = await axios.post(
+            'https://api.longhair.ai/api/v2/image/upload',
+            form,
+            {
+                headers: {
+                    ...form.getHeaders(),
+                    'x-product-id': '3',
+                    'x-session-id': identity.fingerprint.sessionId,
+                    'x-device-id': identity.fingerprint.deviceId,
+                    'x-client-id': identity.fingerprint.clientId,
+                    'x-visitor-id': identity.fingerprint.visitorId,
+                    'x-request-id': identity.fingerprint.requestId,
+                    'x-forwarded-for': identity.ip,
+                    'x-real-ip': identity.ip,
+                    'x-original-forwarded-for': identity.ip,
+                    'access-control-allow-origin': '*',
+                    'User-Agent': identity.userAgent,
+                    'Accept': 'application/json',
+                    'Accept-Language': `${getRandomLocale()},en-US;q=0.9,en;q=0.8`,
+                    'Origin': 'https://buzz-cut.ai',
+                    'Referer': 'https://buzz-cut.ai/',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'cross-site'
+                },
+                timeout: 60000,
+                maxContentLength: 100 * 1024 * 1024,
+                maxBodyLength: 100 * 1024 * 1024
+            }
+        )
+
+        if (response.data?.code === 200 && response.data?.data?.img_name) {
+            return {
+                imgUrl: response.data.data.img_url,
+                imgName: response.data.data.img_name
+            }
+        }
+        throw new Error(`Jaribu la kupakia imeshindwa: ${response.data?.msg || 'Jibu sio halali'}`)
+    }, 3, 'Kupakia Picha')
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🎨 CREATE TANNING TASK
+// ═══════════════════════════════════════════════════════════════
+
+async function createTanTask(imgName) {
+    return RetryManager.executeWithRetry(async (identity) => {
+        const response = await axios.post(
+            'https://api.longhair.ai/api/v2/skin-tone-filter/create',
+            {
+                skin_tone_type: 'bronze',
+                img_name: imgName,
+                timestamp: Date.now(),
+                nonce: crypto.randomBytes(8).toString('hex')
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-product-id': '3',
+                    'x-session-id': identity.fingerprint.sessionId,
+                    'x-device-id': identity.fingerprint.deviceId,
+                    'x-client-id': identity.fingerprint.clientId,
+                    'x-visitor-id': identity.fingerprint.visitorId,
+                    'x-request-id': identity.fingerprint.requestId,
+                    'x-forwarded-for': identity.ip,
+                    'x-real-ip': identity.ip,
+                    'x-original-forwarded-for': identity.ip,
+                    'authorization': 'null',
+                    'access-control-allow-origin': '*',
+                    'User-Agent': identity.userAgent,
+                    'Accept': 'application/json',
+                    'Accept-Language': `${getRandomLocale()},en-US;q=0.9,en;q=0.8`,
+                    'Origin': 'https://buzz-cut.ai',
+                    'Referer': 'https://buzz-cut.ai/',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'cross-site'
+                },
+                timeout: 30000
+            }
+        )
+
+        if (response.data?.code === 200 && response.data?.data?.job_id) {
+            return response.data.data.job_id
+        }
+        const errorMsg = response.data?.msg || ''
+        if (errorMsg.includes('limit') || errorMsg.includes('usage')) {
+            throw new Error(`Kikomo cha matumizi: ${errorMsg}`)
+        }
+
+        throw new Error(`Kutengeneza kazi imeshindwa: ${errorMsg || 'Jibu sio halali'}`)
+    }, 5, 'Kutengeneza Kazi ya Tanning')
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ⏳ POLLING FOR RESULTS
+// ═══════════════════════════════════════════════════════════════
+
+async function pollForResult(jobId, maxAttempts = 30, delayMs = 3000) {
+    for (let i = 0; i < maxAttempts; i++) {
+        const identity = IdentityGenerator.generateFullIdentity()
+
+        try {
+            const response = await axios.get(
+                'https://api.longhair.ai/api/v2/task/result',
+                {
+                    params: {
+                        job_id: jobId,
+                        _: Date.now()
+                    },
+                    headers: {
+                        'x-product-id': '3',
+                        'x-session-id': identity.fingerprint.sessionId,
+                        'x-device-id': identity.fingerprint.deviceId,
+                        'x-client-id': identity.fingerprint.clientId,
+                        'x-visitor-id': identity.fingerprint.visitorId,
+                        'x-request-id': identity.fingerprint.requestId,
+                        'x-forwarded-for': identity.ip,
+                        'x-real-ip': identity.ip,
+                        'authorization': 'null',
+                        'access-control-allow-origin': '*',
+                        'User-Agent': identity.userAgent,
+                        'Accept': 'application/json',
+                        'Accept-Language': `${getRandomLocale()},en-US;q=0.9,en;q=0.8`,
+                        'Origin': 'https://buzz-cut.ai',
+                        'Referer': 'https://buzz-cut.ai/',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache',
+                        'Sec-Fetch-Dest': 'empty',
+                        'Sec-Fetch-Mode': 'cors',
+                        'Sec-Fetch-Site': 'cross-site'
+                    },
+                    timeout: 30000
+                }
+            )
+
+            if (response.data?.code === 200 && response.data?.data) {
+                const status = response.data.data.status
+
+                if (status === 'success' && response.data.data.task_result) {
+                    return response.data.data.task_result
+                }
+
+                if (status === 'failed' || status === 'error') {
+                    throw new Error(`Ukagaji umeshindwa: ${response.data.data.error || 'Hitilafu isiyojulikana'}`)
+                }
+
+                console.log(`⏳ Jaribu ${i + 1}/${maxAttempts} - Hali: ${status}`)
+            }
+        } catch (error) {
+            console.log(`⚠️ Polling jaribu ${i + 1} imeshindwa: ${error.message}`)
+        }
+
+        const jitter = Math.random() * 1000
+        await delay(delayMs + jitter)
+    }
+
+    throw new Error('Muda umekoma - Hakuna matokeo')
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 📥 DOWNLOAD RESULT IMAGE
+// ═══════════════════════════════════════════════════════════════
+
+async function downloadResultImage(resultUrl) {
+    return RetryManager.executeWithRetry(async (identity) => {
+        const response = await axios.get(resultUrl, {
+            responseType: 'arraybuffer',
+            headers: {
+                'User-Agent': identity.userAgent,
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Accept-Language': `${getRandomLocale()},en-US;q=0.9,en;q=0.8`,
+                'Referer': 'https://buzz-cut.ai/',
+                'Origin': 'https://buzz-cut.ai',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            },
+            timeout: 60000
+        })
+
+        return Buffer.from(response.data)
+    }, 3, 'Kupakia Picha')
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🌍 RANDOM LOCALE GENERATOR
+// ═══════════════════════════════════════════════════════════════
+
+function getRandomLocale() {
+    const locales = [
+        'en-US', 'en-GB', 'en-CA', 'en-AU', 'en-IN',
+        'es-ES', 'es-MX', 'es-AR', 'es-CO',
+        'fr-FR', 'fr-CA', 'fr-BE',
+        'de-DE', 'de-AT', 'de-CH',
+        'it-IT', 'it-CH',
+        'pt-BR', 'pt-PT',
+        'ar-EG', 'ar-SA', 'ar-AE', 'ar-MA',
+        'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW',
+        'ru-RU', 'uk-UA', 'pl-PL', 'nl-NL',
+        'sw-KE', 'sw-TZ', 'am-ET', 'ha-NG'
+    ]
+    return locales[Math.floor(Math.random() * locales.length)]
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🎨 MAIN HANDLER - TANNING IMAGE FEATURE
+// ═══════════════════════════════════════════════════════════════
+
+const handler = async (m, { conn, command }) => {
+    const q = m.quoted || m
+    const mime = (q.msg || q).mimetype || ''
+
+    // Main Command
+    if (command === 'تزنيج-صورة' || command === 'tan-image' || command === 'تسمير-البشرة' || command === 'tanning') {
+        if (!mime || !mime.startsWith('image/')) {
+            return m.reply(
+                `╔═══════════════════════════════════╗
+║      ☀️ AI TANNING IMAGE TOOL     ║
+╚═══════════════════════════════════╝
+
+*📌 Jinsi ya Kutumia:*
+• Jaribu amri hii kwa kujibu kwenye picha
+• Mfano: \`.تزنيج-صورة\`
+
+*🎨 Mifano ya Amri:*
+\`\`\`
+.tan-image (jibu picha)
+.تزنيج-صورة (jibu picha)  
+.تسمير-البشرة (jibu picha)
+.tanning (jibu picha)
+\`\`\`
+
+*⚙️ Sifa:*
+✨ AI-powered skin tone adjustment
+🚀 Kasi na usalama wa juu
+🔒 Anti-detection system
+📊 Hifadhi ya picha imboreshwa
+🌍 Inasupporta picha za kila ukubwa
+
+*⏱️ Muda wa Kazi:* ~30-60 sekunde
+*📁 Ukubwa wa Max:* 100MB
+
+*💡 Ujumbe:* Picha yako inaproseswa kwa usalama
+`
+            )
+        }
+
+        // Start Processing
+        await m.react('⏳')
+        
+        const processingMsg = await m.reply(
+            `╔════════════════════════════════════╗
+║    🔄 INAKAGUA PICHA YAKO...       ║
+╚════════════════════════════════════╝
+
+*Marhabani!* Picha yako inakaagua...
+⏱️ Hii inaweza kuchukua 30-60 sekunde
+
+*Hadharani:*
+📤 Kupakia picha
+🎨 Kusanidi tone ya ngozi  
+⏳ Kusubiri matokeo
+📥 Kupakia matokeo
+
+Karibu subiri... 🔄`
+        )
+
+        try {
+            // Download image
+            const buffer = await q.download()
+            if (!buffer || buffer.length === 0) throw new Error('Imeshindwa kupakua picha')
+
+            // Get file type
+            const fileInfo = await fileTypeFromBuffer(buffer)
+            const ext = fileInfo?.ext || 'jpg'
+            const mimeType = fileInfo?.mime || 'image/jpeg'
+            const sizeKB = (buffer.length / 1024).toFixed(2)
+
+            console.log(`📊 Picha: ${sizeKB}KB | Aina: ${ext}`)
+
+            // Send size info
+            await m.react('📊')
+            await m.reply(`📊 *Ukubwa wa Picha:* ${sizeKB} KB\n✨ *Aina:* ${mimeType}`)
+
+            // Upload
+            await m.react('📤')
+            await m.reply('📤 *Kupakia picha kwenye seva...*')
+            const uploadResult = await uploadImage(
+                buffer,
+                `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`,
+                mimeType
+            )
+            console.log('✅ Upload successful:', uploadResult.imgName)
+
+            // Wait before next step
+            await delay(Math.random() * 2000 + 1000)
+
+            // Create task
+            await m.react('🎨')
+            await m.reply('🎨 *Kutengeneza kazi ya tanning...*')
+            const jobId = await createTanTask(uploadResult.imgName)
+            console.log('✅ Task created:', jobId)
+
+            // Poll for results
+            await m.react('⏳')
+            await m.reply('⏳ *Kusubiri matokeo... (Hii inaweza kuchukua 30-60 sekunde)*')
+            const resultUrl = await pollForResult(jobId, 30, 3000)
+            console.log('✅ Results ready:', resultUrl)
+
+            // Download result
+            await m.react('📥')
+            await m.reply('📥 *Kupakia matokeo...*')
+            const resultBuffer = await downloadResultImage(resultUrl)
+
+            // Send final image
+            await conn.sendMessage(m.chat, {
+                image: resultBuffer,
+                caption: `╔════════════════════════════════════╗
+║     ☀️ TANNING SUCCESS! ✅         ║
+╚════════════════════════════════════╝
+
+🎨 *Picha yako imechakatwa kwa mafanikio!*
+
+📊 *Takwimu:*
+• 📥 Ingizo: ${sizeKB} KB
+• 📤 Matokeo: ${(resultBuffer.length / 1024).toFixed(2)} KB
+• ⚡ Wakati: ~${Math.round((Date.now() - m.messageTimestamp?.low || 0) / 1000)} sec
+• 🌐 Chanzo: buzz-cut.ai AI
+
+✨ *Picha imepokea tone ya ngozi ya kawaida!*
+🎯 Matokeo yanajitokeza na ya asili
+
+*Karibu ujaribu tena!* 🔄`
+            }, { quoted: m })
+
+            await m.react('✅')
+            console.log('✅ Command completed successfully')
+
+        } catch (error) {
+            console.error('❌ Processing error:', error)
+            await m.react('❌')
+
+            let errorMsg = error.message
+            let emoji = '❌'
+            let solution = ''
+
+            // Smart error messages
+            if (errorMsg.includes('usage limit') || errorMsg.includes('limit reached')) {
+                emoji = '⏸️'
+                solution = '🔄 *Suluhisho:* Jaribu baada ya dakika 5-10\n💡 Au subiri hadi kesho kwa idadi mpya'
+            } else if (errorMsg.includes('timeout') || errorMsg.includes('Muda umekoma')) {
+                emoji = '⏳'
+                solution = '🔄 *Suluhisho:* Seva inakumbukwa, jaribu tena\n💡 Au sumbua kwa dakika michache'
+            } else if (errorMsg.includes('network') || errorMsg.includes('ECONNREFUSED')) {
+                emoji = '🌐'
+                solution = '🔄 *Suluhisho:* Angalia muunganisho wa mtandao\n💡 Jaribu kutoka tena kwa bweni tofauti'
+            } else if (errorMsg.includes('invalid') || errorMsg.includes('mime')) {
+                emoji = '🖼️'
+                solution = '🔄 *Suluhisho:* Tumia picha nyingine (JPG/PNG)\n💡 Picha lazima iwe sahihi'
+            } else {
+                solution = '🔄 *Suluhisho:* Jaribu picha ndogo au tofauti\n💡 Hakikisha muunganisho mzuri wa internet'
+            }
+
+            return m.reply(
+                `╔════════════════════════════════════╗
+║        ${emoji} KOSA LIMEFANYIKA          ║
+╚════════════════════════════════════╝
+
+*${emoji} Hitilafu:* ${errorMsg}
+
+${solution}
+
+*📞 Msaada:* Tafadhali jaribu tena, au wasiliana na admin`
+            )
+        }
+        return
+    }
+
+    // Help message
+    return m.reply(
+        `╔═══════════════════════════════════╗
+║    ☀️ TANNING IMAGE COMMANDS      ║
+╚═══════════════════════════════════╝
+
+*🎯 Amri za Msingi:*
+1. \`.تزنيج-صورة\` - Tanning standard
+2. \`.tan-image\` - English variant
+3. \`.تسمير-البشرة\` - Alternate Arabic
+4. \`.tanning\` - Simple command
+
+*📝 Jinsi ya Kutumia:*
+• Jibu picha: \`.tan-image\`
+• Picha itakachagwa kwa haba
+• Matokeo yatajitokeza katika sekunde 30-60
+
+*✨ Kile Kinachoweza Kufanya:*
+✓ Kubadilisha tone ya ngozi
+✓ AI-powered image enhancement
+✓ Kasi ya kuprosesa
+✓ Matokeo ya juu ya kalidad
+
+*⚠️ Maelezo Muhimu:*
+⏱️ Muda wa Kazi: 30-60 sekunde
+📁 Max Ukubwa: 100MB
+🔒 Picha ni siri na salama
+🌐 Mfumo: buzz-cut.ai
+
+*💡 Nani anaweza kutumia?*
+✓ Watumiaji wote
+✓ Hakuna kikomo cha kila saa
+✓ Rasilimali halisi
+
+*❓ Matatizo?*
+• Jaribu picha ndogo zaidi
+• Angalia muunganisho wa mtandao
+• Subiri dakika 5-10 kisha jaribu tena
+
+Karibu jaribu! 🎨✨`
+    )
+}
+
+// Export handler
+handler.command = ['تزنيج-صورة', 'tan-image', 'تسمير-البشرة', 'tanning']
+handler.help = ['تزنيج-صورة <reply image>']
+handler.tags = ['tools', 'ai', 'image']
+handler.limit = true
+
+export default handler
 
 // ==============================================
 // 🎬 LIVE SAMPLES ZA NIXELLV2 (ZENYE CONTENT HALISI)
