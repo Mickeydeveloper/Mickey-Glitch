@@ -168,6 +168,59 @@ async function sendLivePhotoPreview(sock, chatId, quoted, imageUrl, videoUrl, ca
 }
 
 // ─── PREXZY API ONLY (MP3 FINAL OUTPUT) ───────────────────────────────────
+async function downloadFromCandidates(candidates) {
+    const checked = [];
+    let lastError = null;
+
+    for (const url of candidates) {
+        if (!url || typeof url !== 'string') continue;
+        checked.push(url);
+
+        try {
+            const response = await fetch(url, {
+                headers: AXIOS_DEFAULTS.headers,
+                redirect: 'follow'
+            });
+
+            if (!response.ok) {
+                lastError = new Error(`HTTP ${response.status}`);
+                continue;
+            }
+
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            const arrayBuffer = await response.arrayBuffer();
+            const rawBuffer = Buffer.from(arrayBuffer);
+
+            if (!rawBuffer || rawBuffer.length < 256) {
+                lastError = new Error('Downloaded audio is empty or too small');
+                continue;
+            }
+
+            const isLikelyAudio = contentType.includes('audio') ||
+                contentType.includes('video') ||
+                contentType.includes('octet-stream') ||
+                contentType.includes('mpeg') ||
+                contentType.includes('mp4') ||
+                contentType.includes('webm');
+
+            if (!isLikelyAudio && rawBuffer.length < 1500) {
+                lastError = new Error('Downloaded content is not a valid audio stream');
+                continue;
+            }
+
+            return rawBuffer;
+        } catch (err) {
+            lastError = err;
+        }
+    }
+
+    if (lastError) {
+        throw lastError;
+    }
+
+    throw new Error('No valid download URL returned any audio content');
+}
+
 async function getAudioFromPrexzy(ytUrl) {
     const videoId = extractYoutubeVideoId(ytUrl);
     if (!videoId) throw new Error('Invalid YouTube URL');
@@ -185,23 +238,22 @@ async function getAudioFromPrexzy(ytUrl) {
         }
 
         const data = await response.json();
-        if (!data?.status || !data?.download_url) {
+        if (!data?.status) {
             throw new Error(data?.message || 'Prexzy API response invalid');
         }
 
-        const downloadUrl = data.download_url;
-        const audioResponse = await axios.get(downloadUrl, {
-            headers: AXIOS_DEFAULTS.headers,
-            responseType: 'arraybuffer',
-            timeout: 60000,
-            validateStatus: (status) => status < 500
-        });
+        const candidates = [
+            data.download_url,
+            data.format?.download_url,
+            data.format_id && data.quality && data.qualities?.find((item) => item.format_id === data.format_id)?.download_url,
+            ...((Array.isArray(data.qualities) ? data.qualities : []).map((item) => item.download_url).filter(Boolean))
+        ].filter(Boolean);
 
-        const rawBuffer = Buffer.from(audioResponse.data || []);
-        if (!rawBuffer || rawBuffer.length < 1000) {
-            throw new Error('Downloaded audio too small');
+        if (candidates.length === 0) {
+            throw new Error('Prexzy API did not return any downloadable audio URL');
         }
 
+        const rawBuffer = await downloadFromCandidates(candidates);
         const inputExt = String(data.ext || 'm4a').toLowerCase();
         let mp3Buffer = rawBuffer;
 
