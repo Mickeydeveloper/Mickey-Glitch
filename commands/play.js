@@ -1,422 +1,225 @@
 const axios = require('axios');
-const fs = require('fs/promises');
-const { createWriteStream } = require('fs');
-const os = require('os');
-const path = require('path');
-const crypto = require('crypto');
-const { spawn } = require('child_process');
-const { pipeline } = require('stream/promises');
+const yts = require('yt-search');
+const { ButtonV2 } = require('../lib/messageBuilder');
 
-const NEW_API_BASE = 'https://engez.a7a.online/api/v1/download/ytdl';
-const OLD_API_BASE = 'https://engez.a7a.online/api/v1/download/youtube';
-const SELECT_SEPARATOR = '|';
-
-const DOWNLOAD_TIMEOUT_MS = 120 * 1000;
-const YT_SEARCH_LIMIT = 5;
-
-function addProtocol(url) {
-  if (!url) return '';
-  url = url.trim();
-  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
-}
-
-function cleanYouTubeUrl(url) {
-  try {
-    const parsed = new URL(addProtocol(url));
-    // Keep only necessary parameters
-    const cleanParams = new URLSearchParams();
-    if (parsed.searchParams.has('v')) {
-      cleanParams.set('v', parsed.searchParams.get('v'));
-    }
-    if (parsed.searchParams.has('list')) {
-      cleanParams.set('list', parsed.searchParams.get('list'));
-    }
-    const cleanUrl = `${parsed.origin}${parsed.pathname}?${cleanParams.toString()}`;
-    return cleanUrl;
-  } catch {
-    return url;
-  }
-}
-
-function isYouTubeUrl(input) {
-  try {
-    const url = input.trim();
-    const parsed = new URL(addProtocol(url));
-    const host = parsed.hostname.replace(/^www\./i, '').replace(/^m\./i, '');
-    return host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com');
-  } catch {
-    return false;
-  }
-}
-
-function extractVideoId(url) {
-  try {
-    const parsed = new URL(addProtocol(url));
-    if (parsed.hostname.includes('youtu.be')) {
-      return parsed.pathname.slice(1);
-    }
-    return parsed.searchParams.get('v');
-  } catch {
-    return null;
-  }
-}
-
-function cleanTitle(value) {
-  if (!value) return 'Unknown Title';
-  return String(value).replace(/\s+/g, ' ').trim();
-}
-
-function buildApiUrl(base, url, type, quality) {
-  const cleanUrl = cleanYouTubeUrl(url);
-  const params = new URLSearchParams({ url: cleanUrl });
-  if (type) params.set('type', type);
-  if (quality) params.set('quality', quality);
-  return `${base}?${params.toString()}`;
-}
-
-// Search YouTube for videos
-async function searchYouTube(query) {
-  try {
-    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-    const response = await axios.get(searchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-      },
-      timeout: 10000
-    });
-
-    const videoIds = [];
-    const titles = [];
-    
-    // Extract video IDs
-    const regex = /"videoId":"([^"]+)"/g;
-    let match;
-    while ((match = regex.exec(response.data)) !== null) {
-      if (!videoIds.includes(match[1])) {
-        videoIds.push(match[1]);
-      }
-      if (videoIds.length >= YT_SEARCH_LIMIT) break;
-    }
-
-    // Extract titles
-    const titleRegex = /"title":{"runs":\[{"text":"([^"]+)"}\]}/g;
-    while ((match = titleRegex.exec(response.data)) !== null) {
-      titles.push(match[1]);
-      if (titles.length >= videoIds.length) break;
-    }
-
-    const results = videoIds.map((id, index) => ({
-      id,
-      title: titles[index] || `Video ${index + 1}`,
-      url: `https://youtube.com/watch?v=${id}`
-    }));
-
-    return results;
-  } catch (error) {
-    console.error('[SEARCH] Error searching YouTube:', error.message);
-    return [];
-  }
-}
-
-async function fetchYoutubeData(url, type = null, quality = null) {
-  const cleanUrl = cleanYouTubeUrl(url);
-  
-  const sources = [
-    () => axios.get(buildApiUrl(NEW_API_BASE, cleanUrl, type, quality), { timeout: DOWNLOAD_TIMEOUT_MS }),
-    () => axios.get(buildApiUrl(OLD_API_BASE, cleanUrl, type, quality), { timeout: DOWNLOAD_TIMEOUT_MS })
-  ];
-
-  let lastError = null;
-
-  for (const source of sources) {
-    try {
-      const { data } = await source();
-      if (!data || data.success !== true) {
-        throw new Error(data?.error || 'API failed');
-      }
-
-      const payload = data.response || data.data || {};
-      const downloadUrl = payload.download_url;
-
-      if (!downloadUrl) {
-        throw new Error('download_url not found');
-      }
-
-      return {
-        title: payload.title || cleanTitle(url),
-        thumbnail: payload.thumbnail || '',
-        download_url: downloadUrl,
-        type: payload.type === 'audio' || payload.type === 'mp3' ? 'audio' : 'mp4',
-        requested_quality: payload.requested_quality || quality || 'auto',
-        file_size_bytes: payload.file_size_bytes || null,
-        source_used: data.response ? 'new' : 'old',
-        is_fallback: data.response ? false : true
-      };
-    } catch (err) {
-      lastError = err;
-      console.log('[PLAY] API source failed:', err.message);
-    }
-  }
-
-  throw lastError || new Error('All API sources failed');
-}
-
-async function downloadFile(fileUrl, outputPath) {
-  const response = await axios.get(fileUrl, {
-    responseType: 'stream',
-    timeout: 120000,
-    maxRedirects: 5,
+const AUDIO_API_BASE = 'https://apiziaul.vercel.app/api/downloader/ytmp3';
+const AXIOS_DEFAULTS = {
+    timeout: 30000,
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-      Accept: '*/*',
-      'Accept-Language': 'en-US,en;q=0.9'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        accept: '*/*'
     }
-  });
+};
 
-  await pipeline(response.data, createWriteStream(outputPath));
+function isYouTubeUrl(value = '') {
+    if (!value) return false;
+    return /(?:youtu\.be\/|youtube\.com\/watch\?v=|youtube\.com\/shorts\/|youtube\.com\/embed\/)/i.test(value);
 }
 
-function runFfmpeg(args) {
-  return new Promise((resolve, reject) => {
-    const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
+function extractYoutubeVideoId(ytUrl) {
+    if (!ytUrl) return '';
 
-    ff.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
+    if (ytUrl.includes('youtu.be/')) {
+        const after = ytUrl.split('youtu.be/')[1];
+        return after.split('?')[0].split('&')[0].trim();
+    }
 
-    ff.on('error', reject);
-    ff.on('close', (code) => {
-      if (code === 0) return resolve();
-      reject(new Error(`ffmpeg exited with code ${code}\n${stderr}`));
-    });
-  });
+    if (ytUrl.includes('youtube.com')) {
+        try {
+            const url = new URL(ytUrl);
+            if (url.searchParams.get('v')) return url.searchParams.get('v');
+            const pathParts = url.pathname.split('/').filter(Boolean);
+            if (pathParts[0] === 'shorts' && pathParts[1]) return pathParts[1];
+        } catch {
+            const match = ytUrl.match(/[?&]v=([^&]+)/i) || ytUrl.match(/\/shorts\/([^/?]+)/i);
+            if (match && match[1]) return match[1];
+        }
+    }
+
+    return '';
 }
 
-async function convertAudioToMp3(inputPath, outputPath, bitrate = '192k') {
-  try {
-    await runFfmpeg(['-y', '-i', inputPath, '-vn', '-c:a', 'libmp3lame', '-b:a', bitrate, outputPath]);
-    return outputPath;
-  } catch (err) {
-    console.error('[PLAY] MP3 conversion failed:', err.message);
-    await runFfmpeg(['-y', '-i', inputPath, '-vn', '-c:a', 'aac', '-b:a', '128k', outputPath]);
-    return outputPath;
-  }
+async function tryRequest(getter, attempts = 2) {
+    let lastErr;
+    for (let i = 1; i <= attempts; i++) {
+        try {
+            return await getter();
+        } catch (err) {
+            lastErr = err;
+            if (i < attempts) await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+    }
+    throw lastErr;
 }
 
-async function prepareFileFromDownload(payload, quality = '192k') {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ytplay-'));
-  const randomId = crypto.randomBytes(6).toString('hex');
-  const sourcePath = path.join(tmpDir, `source-${randomId}.bin`);
-  const audioPath = path.join(tmpDir, `audio-${randomId}.mp3`);
+async function getYoutubeAudio(ytUrl) {
+    const youtubeUrl = (typeof ytUrl === 'string' && ytUrl.trim()) ? ytUrl.trim() : '';
+    if (!youtubeUrl) {
+        throw new Error('Please provide a valid YouTube URL or song name');
+    }
 
-  await downloadFile(payload.download_url, sourcePath);
+    const finalUrl = isYouTubeUrl(youtubeUrl)
+        ? `${AUDIO_API_BASE}?url=${encodeURIComponent(youtubeUrl)}`
+        : `${AUDIO_API_BASE}?url=${encodeURIComponent(`https://youtu.be/${extractYoutubeVideoId(youtubeUrl) || ' '}`)}`;
 
-  if (payload.type === 'audio') {
-    const finalPath = await convertAudioToMp3(sourcePath, audioPath, quality);
-    return { filePath: finalPath, tmpDir, mimetype: 'audio/mpeg' };
-  }
+    const apiUrl = finalUrl;
 
-  return { filePath: sourcePath, tmpDir, mimetype: 'video/mp4' };
+    try {
+        const res = await tryRequest(() => axios.get(apiUrl, {
+            ...AXIOS_DEFAULTS,
+            validateStatus: (status) => status >= 200 && status < 500
+        }));
+
+        const payload = res?.data;
+        if (!payload || payload.status !== true || !payload.result?.downloadUrl) {
+            throw new Error(payload?.message || 'Audio API did not return a valid download URL');
+        }
+
+        const result = payload.result;
+        const downloadUrl = result.downloadUrl;
+
+        const fileRes = await tryRequest(() => axios.get(downloadUrl, {
+            ...AXIOS_DEFAULTS,
+            responseType: 'arraybuffer',
+            maxRedirects: 10,
+            validateStatus: (status) => status >= 200 && status < 500
+        }));
+
+        if (!fileRes || !fileRes.data) {
+            throw new Error('No audio file data was returned from the download URL');
+        }
+
+        return {
+            buffer: Buffer.from(fileRes.data),
+            title: String(result.title || 'Unknown Title').replace(/\s+/g, ' ').trim(),
+            thumbnail: result.thumbnail || '',
+            quality: result.quality || '128kbps',
+            duration: result.duration || 'Unknown',
+            source: 'apiziaul',
+            videoUrl: result.videoUrl || youtubeUrl,
+            videoId: result.videoId || extractYoutubeVideoId(youtubeUrl),
+            downloadUrl
+        };
+    } catch (err) {
+        const message = err?.response?.data?.message || err?.message || 'Unknown audio error';
+        throw new Error(`Audio download failed: ${message}`);
+    }
 }
 
-async function getYoutubeAudio(inputUrl, quality = '192k') {
-  const parsedUrl = addProtocol(inputUrl);
-  const cleanUrl = cleanYouTubeUrl(parsedUrl);
-  const result = await fetchYoutubeData(cleanUrl);
+async function searchYoutubeSong(query) {
+    const search = await yts(query);
+    const videos = search?.videos || [];
+    if (!videos.length) {
+        throw new Error('No YouTube result found for your query');
+    }
 
-  if (!result || !result.download_url) {
-    throw new Error('The API did not return a valid download URL.');
-  }
-
-  const prepared = await prepareFileFromDownload(result, quality);
-  const buffer = await fs.readFile(prepared.filePath);
-
-  await fs.rm(prepared.tmpDir, { recursive: true, force: true }).catch(() => {});
-
-  return {
-    buffer,
-    title: cleanTitle(result.title),
-    source: result.source_used || 'engez API',
-    quality: result.requested_quality || 'auto',
-    mimeType: prepared.mimetype,
-    filesize: buffer.length
-  };
+    const first = videos[0];
+    return {
+        url: first.url,
+        title: first.title,
+        thumbnail: first.thumbnail,
+        author: first.author?.name || 'Unknown',
+        duration: first.timestamp || 'Unknown',
+        views: first.views || 0
+    };
 }
 
 async function playCommand(sock, chatId, message) {
-  try {
-    const text = message.message?.conversation || 
-                  message.message?.extendedTextMessage?.text || 
-                  message.message?.imageMessage?.caption || '';
-    
-    // Extract query - handle multiple spaces and variations
-    let query = text.replace(/^\S+\s*/, '').trim();
-    
-    // Remove extra spaces and clean
-    query = query.replace(/\s+/g, ' ').trim();
-
-    // Check for quality option
-    let quality = '192k';
-    const qualityMatch = query.match(/--quality\s+(64k|128k|192k|256k|320k)/i);
-    if (qualityMatch) {
-      quality = qualityMatch[1];
-      query = query.replace(qualityMatch[0], '').trim();
-    }
-
-    if (!query) {
-      return sock.sendMessage(chatId, {
-        text: '🎵 *YouTube Audio Downloader*\n\n' +
-              '🔹 *Usage:* `.play <link or search term>`\n' +
-              '🔹 *Examples:*\n' +
-              '  • `.play https://youtu.be/xxxxx`\n' +
-              '  • `.play shape of you ed sheeran`\n' +
-              '  • `.play love story --quality 320k`\n\n' +
-              '💡 *Quality Options:* 64k, 128k, 192k, 256k, 320k\n' +
-              '⚡ *Default:* 192k'
-      });
-    }
-
-    // Send initial reaction
-    await sock.sendMessage(chatId, { react: { text: '🔎', key: message.key } });
-
-    let videoUrl = query;
-    let searchResults = [];
-    let isUrl = false;
-
-    // Check if it's a YouTube URL (with or without extra parameters)
-    const urlMatch = query.match(/(?:https?:\/\/)?(?:www\.|m\.)?(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([a-zA-Z0-9_-]{11})(?:\?[^\s]*)?/i);
-    
-    if (urlMatch) {
-      isUrl = true;
-      videoUrl = urlMatch[0];
-      // Clean the URL
-      videoUrl = cleanYouTubeUrl(videoUrl);
-      console.log('[PLAY] Using URL:', videoUrl);
-    } else {
-      // Search YouTube
-      await sock.sendMessage(chatId, { 
-        react: { text: '🔍', key: message.key } 
-      });
-
-      searchResults = await searchYouTube(query);
-
-      if (searchResults.length === 0) {
-        return sock.sendMessage(chatId, {
-          text: '❌ *No results found*\n\n' +
-                'Try a different search term or use a direct YouTube link.\n\n' +
-                '💡 *Tips:*\n' +
-                '• Use specific song title and artist\n' +
-                '• Try a direct YouTube link\n' +
-                '• Check your spelling'
-        });
-      }
-
-      // Send search results
-      let resultText = '🎵 *Search Results:*\n\n';
-      searchResults.forEach((result, index) => {
-        resultText += `${index + 1}. ${result.title.substring(0, 50)}${result.title.length > 50 ? '...' : ''}\n`;
-        resultText += `   🔗 ${result.url}\n\n`;
-      });
-      resultText += '💡 *Reply with a number or use the URL directly*';
-
-      await sock.sendMessage(chatId, { text: resultText });
-
-      // For now, use the first result
-      videoUrl = searchResults[0].url;
-    }
-
-    // Check if user selected a search result (only if we did search)
-    if (searchResults.length > 0 && /^\d+$/.test(query) && parseInt(query) <= searchResults.length) {
-      const index = parseInt(query) - 1;
-      videoUrl = searchResults[index].url;
-      isUrl = true;
-    }
-
-    // If it's a number but not valid selection
-    if (!isUrl && /^\d+$/.test(query)) {
-      return sock.sendMessage(chatId, {
-        text: '❌ *Invalid selection*\n\n' +
-              'Please use a number from the search results above.\n' +
-              'Or try a different search term.'
-      });
-    }
-
-    await sock.sendMessage(chatId, { 
-      react: { text: '📥', key: message.key } 
-    });
-
-    // Download audio
-    const result = await getYoutubeAudio(videoUrl, quality);
-
-    await sock.sendMessage(chatId, { 
-      react: { text: '📤', key: message.key } 
-    });
-
-    // Send audio
-    await sock.sendMessage(chatId, {
-      audio: result.buffer,
-      mimetype: result.mimeType,
-      ptt: false,
-      fileName: `${result.title}.mp3`
-    });
-
-    await sock.sendMessage(chatId, { 
-      react: { text: '✅', key: message.key } 
-    });
-
-    // Send completion message
-    await sock.sendMessage(chatId, {
-      text: `✅ *Download Complete*\n\n` +
-            `🎵 *Title:* ${result.title}\n` +
-            `🎚️ *Quality:* ${quality}\n` +
-            `📦 *Size:* ${(result.filesize / 1024 / 1024).toFixed(2)} MB\n` +
-            `🔗 *Source:* ${result.source}`
-    });
-
-  } catch (err) {
-    console.error('[PLAY] Fatal error:', err);
     try {
-      await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-      
-      // Better error messages
-      let errorMsg = '❌ *Download Failed*\n\n';
-      
-      if (err.message.includes('No results found')) {
-        errorMsg += 'No results found for your search.\n\n💡 Try:\n• Be more specific\n• Use artist name + song title\n• Try a direct YouTube link';
-      } else if (err.message.includes('API')) {
-        errorMsg += 'YouTube API is temporarily unavailable.\n\n💡 Try:\n• Using a direct YouTube link\n• Waiting a few minutes\n• Trying again later';
-      } else if (err.message.includes('timeout')) {
-        errorMsg += 'Download timed out.\n\n💡 Try:\n• Using a lower quality (e.g., 128k)\n• Using a direct YouTube link\n• Trying again later';
-      } else {
-        errorMsg += `Error: ${err.message || 'Unknown error'}\n\n💡 Try:\n• Using a direct YouTube link\n• Checking your internet connection\n• Trying again later`;
-      }
-      
-      await sock.sendMessage(chatId, { text: errorMsg });
-    } catch (e) {
-      console.error('[PLAY] Error sending failure message:', e);
+        const rawText = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
+        const query = rawText.split(/\s+/).slice(1).join(' ').trim();
+
+        if (!query) {
+            return sock.sendMessage(chatId, {
+                text: '🎵 *Play Music*\n\n📝 .play song name\n🔗 .play youtube_url\n\nExample: .play Mczo Morfani Akienda Kama Anaenda'
+            }, { quoted: message });
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
+
+        let selectedUrl = query;
+        let songMeta = null;
+
+        if (!isYouTubeUrl(query)) {
+            const searchResult = await searchYoutubeSong(query);
+            songMeta = searchResult;
+            selectedUrl = searchResult.url;
+
+            const infoText = `🎵 *${searchResult.title}*\n⏱️ ${searchResult.duration} | 👤 ${searchResult.author}\n👁️ ${(searchResult.views || 0).toLocaleString()}\n\n⬇️ Downloading audio...`;
+
+            if (searchResult.thumbnail) {
+                await sock.sendMessage(chatId, {
+                    image: { url: searchResult.thumbnail },
+                    caption: infoText
+                }, { quoted: message });
+            } else {
+                await sock.sendMessage(chatId, { text: infoText }, { quoted: message });
+            }
+        } else {
+            await sock.sendMessage(chatId, { text: '⬇️ Processing audio...' }, { quoted: message });
+        }
+
+        const processMsg = await sock.sendMessage(chatId, { text: '⏳ Loading audio...' });
+        const audioData = await getYoutubeAudio(selectedUrl);
+        await sock.sendMessage(chatId, { delete: processMsg.key });
+
+        const title = String(audioData.title || songMeta?.title || query || 'Unknown Song').replace(/\s+/g, ' ').trim();
+        const caption = `✅ *${title.substring(0, 50)}*\n🎚️ ${audioData.quality}\n⏱️ ${audioData.duration}\n📡 ${audioData.source}`;
+
+        if (audioData.thumbnail) {
+            await sock.sendMessage(chatId, {
+                image: { url: audioData.thumbnail },
+                caption
+            }, { quoted: message });
+        }
+
+        await sock.sendMessage(chatId, {
+            audio: audioData.buffer,
+            mimetype: 'audio/mpeg',
+            ptt: false,
+            caption: caption,
+            fileName: `${title}.mp3`
+        }, { quoted: message });
+
+        const videoTitle = title;
+        const videoButton = new ButtonV2(sock)
+            .setThumbnail(audioData.thumbnail || songMeta?.thumbnail)
+            .text(`🎬 Download video for: ${videoTitle}`)
+            .footer('Mickey Glitch')
+            .button('Download Video', `.video ${videoTitle}`);
+
+        await videoButton.send(chatId, { quoted: message });
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+    } catch (err) {
+        console.error('[PLAY] Error:', err);
+        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+        await sock.sendMessage(chatId, {
+            text: `❌ Failed to download audio.\n\n${err.message || 'Try again later.'}`
+        }, { quoted: message });
     }
-  }
 }
 
-// Command configuration
-playCommand.command = ['play', 'yt', 'music', 'song', 'audio', 'mp3'];
-playCommand.help = ['play <youtube link or search term>'];
-playCommand.tags = ['downloader'];
-playCommand.aliases = ['music', 'song', 'audio', 'mp3'];
-playCommand.category = 'downloader';
-playCommand.description = 'Download audio from YouTube with search support';
-playCommand.usage = '.play <link or search term> [--quality 192k]';
+async function handleAudioDownload(sock, chatId, ytUrl, message) {
+    try {
+        await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
+        const audioData = await getYoutubeAudio(ytUrl);
+
+        await sock.sendMessage(chatId, {
+            audio: audioData.buffer,
+            mimetype: 'audio/mpeg',
+            ptt: false,
+            caption: `✅ Audio ready!\n> Mickey Glitch`
+        }, { quoted: message });
+
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+    } catch (e) {
+        await sock.sendMessage(chatId, { text: '❌ Download failed: ' + (e.message || 'Unknown error') }, { quoted: message });
+    }
+}
 
 module.exports = playCommand;
-module.exports.default = playCommand;
-module.exports.handler = playCommand;
 module.exports.name = 'play';
-module.exports.aliases = ['music', 'song', 'audio', 'mp3'];
-module.exports.category = 'downloader';
-module.exports.description = 'Download audio from YouTube with search support';
-module.exports.usage = '.play <link or search term> [--quality 192k]';
+module.exports.aliases = ['song', 'music'];
 module.exports.getYoutubeAudio = getYoutubeAudio;
-module.exports.searchYouTube = searchYouTube;
-module.exports.cleanYouTubeUrl = cleanYouTubeUrl;
+module.exports.searchYoutubeSong = searchYoutubeSong;
+module.exports.handleAudioDownload = handleAudioDownload;
