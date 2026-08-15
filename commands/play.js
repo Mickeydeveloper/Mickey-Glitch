@@ -3,6 +3,7 @@ const yts = require('yt-search');
 const { ButtonV2 } = require('../lib/messageBuilder');
 
 const AUDIO_API_BASE = 'https://apiziaul.vercel.app/api/downloader/ytmp3';
+const AUDIO_API_FALLBACK = 'https://api.nexray.eu.cc/downloader/savetube';
 const AUDIO_TIMEOUT_MS = 120000;
 const DOWNLOAD_TIMEOUT_MS = 180000;
 const AXIOS_DEFAULTS = {
@@ -54,78 +55,132 @@ async function tryRequest(getter, attempts = 2) {
     throw lastErr;
 }
 
-async function getYoutubeAudio(ytUrl) {
+function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function downloadAudioBuffer(downloadUrl) {
+    let fileRes;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+        try {
+            fileRes = await axios.get(downloadUrl, {
+                ...AXIOS_DEFAULTS,
+                timeout: DOWNLOAD_TIMEOUT_MS,
+                responseType: 'arraybuffer',
+                maxRedirects: 15,
+                headers: {
+                    ...AXIOS_DEFAULTS.headers,
+                    Accept: 'audio/mpeg,audio/mp4,*/*;q=0.8',
+                    Referer: 'https://www.youtube.com/'
+                },
+                validateStatus: (status) => status >= 200 && status < 500
+            });
+            break;
+        } catch (downloadErr) {
+            if (attempt === 4) throw downloadErr;
+            await wait(2000 * attempt);
+        }
+    }
+
+    if (!fileRes || !fileRes.data) {
+        throw new Error('No audio file data was returned from the download URL');
+    }
+
+    const buffer = Buffer.from(fileRes.data);
+    if (!buffer || buffer.length < 1000) {
+        throw new Error('Downloaded audio file is too small or empty');
+    }
+
+    return buffer;
+}
+
+async function getYoutubeAudioFromZiaUlhaq(ytUrl) {
     const youtubeUrl = (typeof ytUrl === 'string' && ytUrl.trim()) ? ytUrl.trim() : '';
     if (!youtubeUrl) {
         throw new Error('Please provide a valid YouTube URL or song name');
     }
 
-    const finalUrl = isYouTubeUrl(youtubeUrl)
+    const apiUrl = isYouTubeUrl(youtubeUrl)
         ? `${AUDIO_API_BASE}?url=${encodeURIComponent(youtubeUrl)}`
         : `${AUDIO_API_BASE}?url=${encodeURIComponent(`https://youtu.be/${extractYoutubeVideoId(youtubeUrl) || ' '}`)}`;
 
-    const apiUrl = finalUrl;
+    const res = await tryRequest(() => axios.get(apiUrl, {
+        ...AXIOS_DEFAULTS,
+        timeout: AUDIO_TIMEOUT_MS,
+        validateStatus: (status) => status >= 200 && status < 500
+    }));
 
+    const payload = res?.data;
+    if (!payload || payload.status !== true || !payload.result?.downloadUrl) {
+        throw new Error(payload?.message || 'Audio API did not return a valid download URL');
+    }
+
+    const result = payload.result;
+    const buffer = await downloadAudioBuffer(result.downloadUrl);
+
+    return {
+        buffer,
+        title: String(result.title || 'Unknown Title').replace(/\s+/g, ' ').trim(),
+        thumbnail: result.thumbnail || '',
+        quality: result.quality || '128kbps',
+        duration: result.duration || 'Unknown',
+        source: 'apiziaul',
+        videoUrl: result.videoUrl || youtubeUrl,
+        videoId: result.videoId || extractYoutubeVideoId(youtubeUrl),
+        downloadUrl: result.downloadUrl
+    };
+}
+
+async function getYoutubeAudioFromNexray(ytUrl) {
+    const youtubeUrl = (typeof ytUrl === 'string' && ytUrl.trim()) ? ytUrl.trim() : '';
+    if (!youtubeUrl) {
+        throw new Error('Please provide a valid YouTube URL or song name');
+    }
+
+    const videoId = extractYoutubeVideoId(youtubeUrl);
+    if (!videoId) {
+        throw new Error('Invalid YouTube URL');
+    }
+
+    const apiUrl = `${AUDIO_API_FALLBACK}?url=${encodeURIComponent(`https://youtu.be/${videoId}?si=${videoId}`)}&quality=mp3`;
+    const res = await tryRequest(() => axios.get(apiUrl, {
+        ...AXIOS_DEFAULTS,
+        timeout: AUDIO_TIMEOUT_MS,
+        validateStatus: (status) => status >= 200 && status < 500
+    }));
+
+    const payload = res?.data;
+    if (!payload || payload.status !== true || !payload.result?.url) {
+        throw new Error(payload?.message || 'Nexray API did not return a valid audio URL');
+    }
+
+    const result = payload.result;
+    const buffer = await downloadAudioBuffer(result.url);
+
+    return {
+        buffer,
+        title: String(result.title || 'Unknown Title').replace(/\s+/g, ' ').trim(),
+        thumbnail: result.thumbnail || '',
+        quality: result.quality ? `${result.quality}kbps` : '128kbps',
+        duration: result.duration || 'Unknown',
+        source: 'nexray',
+        videoUrl: youtubeUrl,
+        videoId,
+        downloadUrl: result.url
+    };
+}
+
+async function getYoutubeAudio(ytUrl) {
     try {
-        const res = await tryRequest(() => axios.get(apiUrl, {
-            ...AXIOS_DEFAULTS,
-            timeout: AUDIO_TIMEOUT_MS,
-            validateStatus: (status) => status >= 200 && status < 500
-        }));
-
-        const payload = res?.data;
-        if (!payload || payload.status !== true || !payload.result?.downloadUrl) {
-            throw new Error(payload?.message || 'Audio API did not return a valid download URL');
+        return await getYoutubeAudioFromZiaUlhaq(ytUrl);
+    } catch (primaryErr) {
+        try {
+            return await getYoutubeAudioFromNexray(ytUrl);
+        } catch (fallbackErr) {
+            const primaryMsg = primaryErr?.response?.data?.message || primaryErr?.message || 'Primary source failed';
+            const fallbackMsg = fallbackErr?.response?.data?.message || fallbackErr?.message || 'Fallback source failed';
+            throw new Error(`Audio download failed: ${primaryMsg} | ${fallbackMsg}`);
         }
-
-        const result = payload.result;
-        const downloadUrl = result.downloadUrl;
-
-        let fileRes;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                fileRes = await axios.get(downloadUrl, {
-                    ...AXIOS_DEFAULTS,
-                    timeout: DOWNLOAD_TIMEOUT_MS,
-                    responseType: 'arraybuffer',
-                    maxRedirects: 15,
-                    headers: {
-                        ...AXIOS_DEFAULTS.headers,
-                        Accept: 'audio/mpeg,audio/mp4,*/*;q=0.8',
-                        Referer: 'https://www.youtube.com/'
-                    },
-                    validateStatus: (status) => status >= 200 && status < 500
-                });
-                break;
-            } catch (downloadErr) {
-                if (attempt === 3) throw downloadErr;
-                await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
-            }
-        }
-
-        if (!fileRes || !fileRes.data) {
-            throw new Error('No audio file data was returned from the download URL');
-        }
-
-        const buffer = Buffer.from(fileRes.data);
-        if (!buffer || buffer.length < 1000) {
-            throw new Error('Downloaded audio file is too small or empty');
-        }
-
-        return {
-            buffer,
-            title: String(result.title || 'Unknown Title').replace(/\s+/g, ' ').trim(),
-            thumbnail: result.thumbnail || '',
-            quality: result.quality || '128kbps',
-            duration: result.duration || 'Unknown',
-            source: 'apiziaul',
-            videoUrl: result.videoUrl || youtubeUrl,
-            videoId: result.videoId || extractYoutubeVideoId(youtubeUrl),
-            downloadUrl
-        };
-    } catch (err) {
-        const message = err?.response?.data?.message || err?.message || 'Unknown audio error';
-        throw new Error(`Audio download failed: ${message}`);
     }
 }
 
@@ -164,60 +219,54 @@ async function playCommand(sock, chatId, message) {
         let songMeta = null;
 
         if (!isYouTubeUrl(query)) {
-            const searchResult = await searchYoutubeSong(query);
-            songMeta = searchResult;
-            selectedUrl = searchResult.url;
-
-            const infoText = `🎵 *${searchResult.title}*\n⏱️ ${searchResult.duration} | 👤 ${searchResult.author}\n👁️ ${(searchResult.views || 0).toLocaleString()}\n\n⬇️ Downloading audio...`;
-
-            if (searchResult.thumbnail) {
-                await sock.sendMessage(chatId, {
-                    image: { url: searchResult.thumbnail },
-                    caption: infoText
-                }, { quoted: message });
-            } else {
-                await sock.sendMessage(chatId, { text: infoText }, { quoted: message });
-            }
-        } else {
-            await sock.sendMessage(chatId, { text: '⬇️ Processing audio...' }, { quoted: message });
+            songMeta = await searchYoutubeSong(query);
+            selectedUrl = songMeta.url;
         }
 
-        const processMsg = await sock.sendMessage(chatId, { text: '⏳ Loading audio...' });
+        const initialTitle = String(songMeta?.title || query || 'Unknown Song').replace(/\s+/g, ' ').trim();
+        const safeTitle = initialTitle.length > 60 ? `${initialTitle.slice(0, 57)}...` : initialTitle;
+        const initialThumb = songMeta?.thumbnail || 'https://i.imgur.com/4XfCwQ0.png';
+
+        const firstMessage = new ButtonV2(sock)
+            .setThumbnail(initialThumb)
+            .text(`🎵 ${safeTitle}\n\n👤 ${songMeta?.author || 'YouTube'}\n⏱️ ${songMeta?.duration || 'Audio'}\n🎧 Preparing audio...`)
+            .footer('Mickey Glitch')
+            .button('🎬 Watch Video', `.video ${initialTitle}`)
+            .button('🔁 Play Again', `.play ${initialTitle}`);
+
+        await firstMessage.send(chatId, { quoted: message });
+
+        const loadingMsg = await sock.sendMessage(chatId, {
+            text: '⏳ Preparing your audio...'
+        }, { quoted: message });
+
         const audioData = await getYoutubeAudio(selectedUrl);
-        await sock.sendMessage(chatId, { delete: processMsg.key });
+        await sock.sendMessage(chatId, { delete: loadingMsg.key });
 
-        const title = String(audioData.title || songMeta?.title || query || 'Unknown Song').replace(/\s+/g, ' ').trim();
-        const caption = `✅ *${title.substring(0, 50)}*\n🎚️ ${audioData.quality}\n⏱️ ${audioData.duration}\n📡 ${audioData.source}`;
-
-        if (audioData.thumbnail) {
-            await sock.sendMessage(chatId, {
-                image: { url: audioData.thumbnail },
-                caption
-            }, { quoted: message });
-        }
+        const finalTitle = String(audioData.title || initialTitle || 'Unknown Song').replace(/\s+/g, ' ').trim();
+        const finalThumb = audioData.thumbnail || initialThumb;
 
         await sock.sendMessage(chatId, {
             audio: audioData.buffer,
             mimetype: 'audio/mpeg',
             ptt: false,
-            caption: caption,
-            fileName: `${title}.mp3`
+            fileName: `${finalTitle}.mp3`
         }, { quoted: message });
 
-        const videoTitle = title;
-        const videoButton = new ButtonV2(sock)
-            .setThumbnail(audioData.thumbnail || songMeta?.thumbnail)
-            .text(`� Download video for: ${videoTitle}`)
+        const finalMessage = new ButtonV2(sock)
+            .setThumbnail(finalThumb)
+            .text(`🎵 ${finalTitle}\n\n🎧 Ready to play\n📍 ${audioData.source}`)
             .footer('Mickey Glitch')
-            .button('Download Video', `.video ${videoTitle}`);
+            .button('🎬 Watch Video', `.video ${finalTitle}`)
+            .button('🔁 Play Again', `.play ${finalTitle}`);
 
-        await videoButton.send(chatId, { quoted: message });
+        await finalMessage.send(chatId, { quoted: message });
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
     } catch (err) {
         console.error('[PLAY] Error:', err);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
         await sock.sendMessage(chatId, {
-            text: `❌ Failed to download audio.\n\n${err.message || 'Try again later.'}`
+            text: '❌ Audio unavailable right now.\n\nPlease try again in a moment or use a different song title.'
         }, { quoted: message });
     }
 }
@@ -231,12 +280,14 @@ async function handleAudioDownload(sock, chatId, ytUrl, message) {
             audio: audioData.buffer,
             mimetype: 'audio/mpeg',
             ptt: false,
-            caption: `✅ Audio ready!\n> Mickey Glitch`
+            caption: '✅ Audio ready!\n> Mickey Glitch'
         }, { quoted: message });
 
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
     } catch (e) {
-        await sock.sendMessage(chatId, { text: '❌ Download failed: ' + (e.message || 'Unknown error') }, { quoted: message });
+        await sock.sendMessage(chatId, {
+            text: '❌ Audio unavailable right now.\n\nTry a different song or link.'
+        }, { quoted: message });
     }
 }
 
