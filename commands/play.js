@@ -16,16 +16,48 @@ const YT_SEARCH_LIMIT = 5;
 
 function addProtocol(url) {
   if (!url) return '';
+  url = url.trim();
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
+function cleanYouTubeUrl(url) {
+  try {
+    const parsed = new URL(addProtocol(url));
+    // Keep only necessary parameters
+    const cleanParams = new URLSearchParams();
+    if (parsed.searchParams.has('v')) {
+      cleanParams.set('v', parsed.searchParams.get('v'));
+    }
+    if (parsed.searchParams.has('list')) {
+      cleanParams.set('list', parsed.searchParams.get('list'));
+    }
+    const cleanUrl = `${parsed.origin}${parsed.pathname}?${cleanParams.toString()}`;
+    return cleanUrl;
+  } catch {
+    return url;
+  }
 }
 
 function isYouTubeUrl(input) {
   try {
-    const parsed = new URL(addProtocol(input));
+    const url = input.trim();
+    const parsed = new URL(addProtocol(url));
     const host = parsed.hostname.replace(/^www\./i, '').replace(/^m\./i, '');
     return host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com');
   } catch {
     return false;
+  }
+}
+
+function extractVideoId(url) {
+  try {
+    const parsed = new URL(addProtocol(url));
+    if (parsed.hostname.includes('youtu.be')) {
+      return parsed.pathname.slice(1);
+    }
+    return parsed.searchParams.get('v');
+  } catch {
+    return null;
   }
 }
 
@@ -35,7 +67,8 @@ function cleanTitle(value) {
 }
 
 function buildApiUrl(base, url, type, quality) {
-  const params = new URLSearchParams({ url });
+  const cleanUrl = cleanYouTubeUrl(url);
+  const params = new URLSearchParams({ url: cleanUrl });
   if (type) params.set('type', type);
   if (quality) params.set('quality', quality);
   return `${base}?${params.toString()}`;
@@ -53,8 +86,10 @@ async function searchYouTube(query) {
       timeout: 10000
     });
 
-    // Extract video IDs from HTML
     const videoIds = [];
+    const titles = [];
+    
+    // Extract video IDs
     const regex = /"videoId":"([^"]+)"/g;
     let match;
     while ((match = regex.exec(response.data)) !== null) {
@@ -64,26 +99,13 @@ async function searchYouTube(query) {
       if (videoIds.length >= YT_SEARCH_LIMIT) break;
     }
 
-    if (videoIds.length === 0) {
-      // Alternative regex pattern
-      const altRegex = /\/watch\?v=([a-zA-Z0-9_-]{11})/g;
-      while ((match = altRegex.exec(response.data)) !== null) {
-        if (!videoIds.includes(match[1])) {
-          videoIds.push(match[1]);
-        }
-        if (videoIds.length >= YT_SEARCH_LIMIT) break;
-      }
-    }
-
     // Extract titles
-    const titles = [];
     const titleRegex = /"title":{"runs":\[{"text":"([^"]+)"}\]}/g;
     while ((match = titleRegex.exec(response.data)) !== null) {
       titles.push(match[1]);
       if (titles.length >= videoIds.length) break;
     }
 
-    // Combine IDs and titles
     const results = videoIds.map((id, index) => ({
       id,
       title: titles[index] || `Video ${index + 1}`,
@@ -98,9 +120,11 @@ async function searchYouTube(query) {
 }
 
 async function fetchYoutubeData(url, type = null, quality = null) {
+  const cleanUrl = cleanYouTubeUrl(url);
+  
   const sources = [
-    () => axios.get(buildApiUrl(NEW_API_BASE, url, type, quality), { timeout: DOWNLOAD_TIMEOUT_MS }),
-    () => axios.get(buildApiUrl(OLD_API_BASE, url, type, quality), { timeout: DOWNLOAD_TIMEOUT_MS })
+    () => axios.get(buildApiUrl(NEW_API_BASE, cleanUrl, type, quality), { timeout: DOWNLOAD_TIMEOUT_MS }),
+    () => axios.get(buildApiUrl(OLD_API_BASE, cleanUrl, type, quality), { timeout: DOWNLOAD_TIMEOUT_MS })
   ];
 
   let lastError = null;
@@ -199,7 +223,8 @@ async function prepareFileFromDownload(payload, quality = '192k') {
 
 async function getYoutubeAudio(inputUrl, quality = '192k') {
   const parsedUrl = addProtocol(inputUrl);
-  const result = await fetchYoutubeData(parsedUrl);
+  const cleanUrl = cleanYouTubeUrl(parsedUrl);
+  const result = await fetchYoutubeData(cleanUrl);
 
   if (!result || !result.download_url) {
     throw new Error('The API did not return a valid download URL.');
@@ -226,8 +251,12 @@ async function playCommand(sock, chatId, message) {
                   message.message?.extendedTextMessage?.text || 
                   message.message?.imageMessage?.caption || '';
     
+    // Extract query - handle multiple spaces and variations
     let query = text.replace(/^\S+\s*/, '').trim();
     
+    // Remove extra spaces and clean
+    query = query.replace(/\s+/g, ' ').trim();
+
     // Check for quality option
     let quality = '192k';
     const qualityMatch = query.match(/--quality\s+(64k|128k|192k|256k|320k)/i);
@@ -254,9 +283,18 @@ async function playCommand(sock, chatId, message) {
 
     let videoUrl = query;
     let searchResults = [];
+    let isUrl = false;
 
-    // Check if it's a YouTube URL
-    if (!isYouTubeUrl(query)) {
+    // Check if it's a YouTube URL (with or without extra parameters)
+    const urlMatch = query.match(/(?:https?:\/\/)?(?:www\.|m\.)?(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([a-zA-Z0-9_-]{11})(?:\?[^\s]*)?/i);
+    
+    if (urlMatch) {
+      isUrl = true;
+      videoUrl = urlMatch[0];
+      // Clean the URL
+      videoUrl = cleanYouTubeUrl(videoUrl);
+      console.log('[PLAY] Using URL:', videoUrl);
+    } else {
       // Search YouTube
       await sock.sendMessage(chatId, { 
         react: { text: '🔍', key: message.key } 
@@ -267,7 +305,11 @@ async function playCommand(sock, chatId, message) {
       if (searchResults.length === 0) {
         return sock.sendMessage(chatId, {
           text: '❌ *No results found*\n\n' +
-                'Try a different search term or use a direct YouTube link.'
+                'Try a different search term or use a direct YouTube link.\n\n' +
+                '💡 *Tips:*\n' +
+                '• Use specific song title and artist\n' +
+                '• Try a direct YouTube link\n' +
+                '• Check your spelling'
         });
       }
 
@@ -277,7 +319,7 @@ async function playCommand(sock, chatId, message) {
         resultText += `${index + 1}. ${result.title.substring(0, 50)}${result.title.length > 50 ? '...' : ''}\n`;
         resultText += `   🔗 ${result.url}\n\n`;
       });
-      resultText += '💡 *Select a number or use the URL directly*';
+      resultText += '💡 *Reply with a number or use the URL directly*';
 
       await sock.sendMessage(chatId, { text: resultText });
 
@@ -285,15 +327,25 @@ async function playCommand(sock, chatId, message) {
       videoUrl = searchResults[0].url;
     }
 
-    await sock.sendMessage(chatId, { 
-      react: { text: '📥', key: message.key } 
-    });
-
-    // Check if it's a search result selection
+    // Check if user selected a search result (only if we did search)
     if (searchResults.length > 0 && /^\d+$/.test(query) && parseInt(query) <= searchResults.length) {
       const index = parseInt(query) - 1;
       videoUrl = searchResults[index].url;
+      isUrl = true;
     }
+
+    // If it's a number but not valid selection
+    if (!isUrl && /^\d+$/.test(query)) {
+      return sock.sendMessage(chatId, {
+        text: '❌ *Invalid selection*\n\n' +
+              'Please use a number from the search results above.\n' +
+              'Or try a different search term.'
+      });
+    }
+
+    await sock.sendMessage(chatId, { 
+      react: { text: '📥', key: message.key } 
+    });
 
     // Download audio
     const result = await getYoutubeAudio(videoUrl, quality);
@@ -302,22 +354,12 @@ async function playCommand(sock, chatId, message) {
       react: { text: '📤', key: message.key } 
     });
 
-    // Send audio with metadata
+    // Send audio
     await sock.sendMessage(chatId, {
       audio: result.buffer,
       mimetype: result.mimeType,
       ptt: false,
-      fileName: `${result.title}.mp3`,
-      contextInfo: {
-        externalAdReply: {
-          title: result.title,
-          body: `Quality: ${quality}`,
-          thumbnail: result.buffer.slice(0, 1000), // First 1KB as thumbnail
-          mediaType: 2,
-          mediaUrl: videoUrl,
-          sourceUrl: videoUrl
-        }
-      }
+      fileName: `${result.title}.mp3`
     });
 
     await sock.sendMessage(chatId, { 
@@ -337,14 +379,21 @@ async function playCommand(sock, chatId, message) {
     console.error('[PLAY] Fatal error:', err);
     try {
       await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-      await sock.sendMessage(chatId, {
-        text: `❌ *Download Failed*\n\n` +
-              `Error: ${err.message || 'Unknown error'}\n\n` +
-              `💡 Try:\n` +
-              `• Using a direct YouTube link\n` +
-              `• Checking your internet connection\n` +
-              `• Trying again later`
-      });
+      
+      // Better error messages
+      let errorMsg = '❌ *Download Failed*\n\n';
+      
+      if (err.message.includes('No results found')) {
+        errorMsg += 'No results found for your search.\n\n💡 Try:\n• Be more specific\n• Use artist name + song title\n• Try a direct YouTube link';
+      } else if (err.message.includes('API')) {
+        errorMsg += 'YouTube API is temporarily unavailable.\n\n💡 Try:\n• Using a direct YouTube link\n• Waiting a few minutes\n• Trying again later';
+      } else if (err.message.includes('timeout')) {
+        errorMsg += 'Download timed out.\n\n💡 Try:\n• Using a lower quality (e.g., 128k)\n• Using a direct YouTube link\n• Trying again later';
+      } else {
+        errorMsg += `Error: ${err.message || 'Unknown error'}\n\n💡 Try:\n• Using a direct YouTube link\n• Checking your internet connection\n• Trying again later`;
+      }
+      
+      await sock.sendMessage(chatId, { text: errorMsg });
     } catch (e) {
       console.error('[PLAY] Error sending failure message:', e);
     }
@@ -370,3 +419,4 @@ module.exports.description = 'Download audio from YouTube with search support';
 module.exports.usage = '.play <link or search term> [--quality 192k]';
 module.exports.getYoutubeAudio = getYoutubeAudio;
 module.exports.searchYouTube = searchYouTube;
+module.exports.cleanYouTubeUrl = cleanYouTubeUrl;
