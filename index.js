@@ -351,10 +351,20 @@ async function startMickeyBot() {
                 // Check if it's a decrypt/session error (non-fatal)
                 const isDecryptError = errorMessage?.includes('decrypt') || 
                                       errorMessage?.includes('no session') ||
-                                      errorMessage?.includes('session');
+                                      errorMessage?.includes('session') ||
+                                      errorMessage?.includes('Bad MAC') ||
+                                      errorMessage?.includes('Bad mac');
                 
                 if (isDecryptError) {
                     UI.info(`Session error (recoverable): ${errorMessage.substring(0, 40)}...`);
+                    try {
+                        if (fs.existsSync(SESSION_DIR)) {
+                            fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+                            UI.warning('Corrupted WhatsApp session removed. Re-pairing will start fresh.');
+                        }
+                    } catch (cleanupErr) {
+                        UI.warning(`Could not clear broken session: ${cleanupErr.message}`);
+                    }
                 } else {
                     UI.warning(`Link disrupted: ${errorMessage.substring(0, 50)}`);
                 }

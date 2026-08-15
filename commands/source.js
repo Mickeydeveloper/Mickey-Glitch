@@ -1,10 +1,16 @@
 // ✨ AI TANNING IMAGE FEATURE - ADVANCED & OPTIMIZED
-import axios from 'axios'
-import FormData from 'form-data'
-import { fileTypeFromBuffer } from 'file-type'
-import crypto from 'crypto'
+const axios = require('axios')
+const FormData = require('form-data')
+const fileType = require('file-type')
+const crypto = require('crypto')
+const { createCtx } = require('../lib/messageBuilder')
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const fileTypeFromBuffer =
+  typeof fileType?.fileTypeFromBuffer === 'function'
+    ? fileType.fileTypeFromBuffer
+    : typeof fileType?.default?.fileTypeFromBuffer === 'function'
+      ? fileType.default.fileTypeFromBuffer
+      : null
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -470,7 +476,7 @@ Karibu subiri... 🔄`
             if (!buffer || buffer.length === 0) throw new Error('Imeshindwa kupakua picha')
 
             // Get file type
-            const fileInfo = await fileTypeFromBuffer(buffer)
+            const fileInfo = fileTypeFromBuffer ? await fileTypeFromBuffer(buffer) : null
             const ext = fileInfo?.ext || 'jpg'
             const mimeType = fileInfo?.mime || 'image/jpeg'
             const sizeKB = (buffer.length / 1024).toFixed(2)
@@ -624,7 +630,8 @@ handler.help = ['تزنيج-صورة <reply image>']
 handler.tags = ['tools', 'ai', 'image']
 handler.limit = true
 
-export default handler
+module.exports = handler
+module.exports.default = handler
 
 // ==============================================
 // 🎬 LIVE SAMPLES ZA NIXELLV2 (ZENYE CONTENT HALISI)
