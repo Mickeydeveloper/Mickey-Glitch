@@ -122,12 +122,14 @@ async function getYoutubeAudioFromZiaUlhaq(ytUrl) {
         buffer,
         title: String(result.title || 'Unknown Title').replace(/\s+/g, ' ').trim(),
         thumbnail: result.thumbnail || '',
-        quality: result.quality || '128kbps',
+        quality: result.quality || '128 kbps',
         duration: result.duration || 'Unknown',
         source: 'apiziaul',
         videoUrl: result.videoUrl || youtubeUrl,
         videoId: result.videoId || extractYoutubeVideoId(youtubeUrl),
-        downloadUrl: result.downloadUrl
+        downloadUrl: result.downloadUrl,
+        fileSize: buffer.length,
+        fileSizeMB: (buffer.length / 1024 / 1024).toFixed(2)
     };
 }
 
@@ -161,12 +163,14 @@ async function getYoutubeAudioFromNexray(ytUrl) {
         buffer,
         title: String(result.title || 'Unknown Title').replace(/\s+/g, ' ').trim(),
         thumbnail: result.thumbnail || '',
-        quality: result.quality ? `${result.quality}kbps` : '128kbps',
+        quality: result.quality ? `${result.quality} kbps` : '128 kbps',
         duration: result.duration || 'Unknown',
         source: 'nexray',
         videoUrl: youtubeUrl,
         videoId,
-        downloadUrl: result.url
+        downloadUrl: result.url,
+        fileSize: buffer.length,
+        fileSizeMB: (buffer.length / 1024 / 1024).toFixed(2)
     };
 }
 
@@ -213,6 +217,7 @@ async function playCommand(sock, chatId, message) {
             }, { quoted: message });
         }
 
+        // Reaction ya kuanza
         await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
 
         let selectedUrl = query;
@@ -223,45 +228,31 @@ async function playCommand(sock, chatId, message) {
             selectedUrl = songMeta.url;
         }
 
-        const initialTitle = String(songMeta?.title || query || 'Unknown Song').replace(/\s+/g, ' ').trim();
-        const safeTitle = initialTitle.length > 60 ? `${initialTitle.slice(0, 57)}...` : initialTitle;
-        const initialThumb = songMeta?.thumbnail || 'https://i.imgur.com/4XfCwQ0.png';
-
-        const firstMessage = new ButtonV2(sock)
-            .setThumbnail(initialThumb)
-            .text(`🎵 ${safeTitle}\n\n👤 ${songMeta?.author || 'YouTube'}\n⏱️ ${songMeta?.duration || 'Audio'}\n🎧 Preparing audio...`)
-            .footer('Mickey Glitch')
-            .button('🎬 Watch Video', `.video ${initialTitle}`)
-            .button('🔁 Play Again', `.play ${initialTitle}`);
-
-        await firstMessage.send(chatId, { quoted: message });
-
+        // SEND LOADING MESSAGE
         const loadingMsg = await sock.sendMessage(chatId, {
             text: '⏳ Preparing your audio...'
         }, { quoted: message });
 
+        // Download audio
         const audioData = await getYoutubeAudio(selectedUrl);
+        
+        // Delete loading message
         await sock.sendMessage(chatId, { delete: loadingMsg.key });
 
-        const finalTitle = String(audioData.title || initialTitle || 'Unknown Song').replace(/\s+/g, ' ').trim();
-        const finalThumb = audioData.thumbnail || initialThumb;
+        // Prepare audio title
+        const finalTitle = String(audioData.title || query || 'Unknown Song').replace(/\s+/g, ' ').trim();
 
+        // SEND AUDIO ONLY - No final message
         await sock.sendMessage(chatId, {
             audio: audioData.buffer,
             mimetype: 'audio/mpeg',
             ptt: false,
             fileName: `${finalTitle}.mp3`
         }, { quoted: message });
-
-        const finalMessage = new ButtonV2(sock)
-            .setThumbnail(finalThumb)
-            .text(`🎵 ${finalTitle}\n\n🎧 Ready to play\n📍 ${audioData.source}`)
-            .footer('Mickey Glitch')
-            .button('🎬 Watch Video', `.video ${finalTitle}`)
-            .button('🔁 Play Again', `.play ${finalTitle}`);
-
-        await finalMessage.send(chatId, { quoted: message });
+        
+        // Reaction ya mwisho
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+
     } catch (err) {
         console.error('[PLAY] Error:', err);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
