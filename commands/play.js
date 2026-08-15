@@ -3,8 +3,10 @@ const yts = require('yt-search');
 const { ButtonV2 } = require('../lib/messageBuilder');
 
 const AUDIO_API_BASE = 'https://apiziaul.vercel.app/api/downloader/ytmp3';
+const AUDIO_TIMEOUT_MS = 120000;
+const DOWNLOAD_TIMEOUT_MS = 180000;
 const AXIOS_DEFAULTS = {
-    timeout: 30000,
+    timeout: AUDIO_TIMEOUT_MS,
     headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         accept: '*/*'
@@ -67,6 +69,7 @@ async function getYoutubeAudio(ytUrl) {
     try {
         const res = await tryRequest(() => axios.get(apiUrl, {
             ...AXIOS_DEFAULTS,
+            timeout: AUDIO_TIMEOUT_MS,
             validateStatus: (status) => status >= 200 && status < 500
         }));
 
@@ -78,19 +81,39 @@ async function getYoutubeAudio(ytUrl) {
         const result = payload.result;
         const downloadUrl = result.downloadUrl;
 
-        const fileRes = await tryRequest(() => axios.get(downloadUrl, {
-            ...AXIOS_DEFAULTS,
-            responseType: 'arraybuffer',
-            maxRedirects: 10,
-            validateStatus: (status) => status >= 200 && status < 500
-        }));
+        let fileRes;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                fileRes = await axios.get(downloadUrl, {
+                    ...AXIOS_DEFAULTS,
+                    timeout: DOWNLOAD_TIMEOUT_MS,
+                    responseType: 'arraybuffer',
+                    maxRedirects: 15,
+                    headers: {
+                        ...AXIOS_DEFAULTS.headers,
+                        Accept: 'audio/mpeg,audio/mp4,*/*;q=0.8',
+                        Referer: 'https://www.youtube.com/'
+                    },
+                    validateStatus: (status) => status >= 200 && status < 500
+                });
+                break;
+            } catch (downloadErr) {
+                if (attempt === 3) throw downloadErr;
+                await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+            }
+        }
 
         if (!fileRes || !fileRes.data) {
             throw new Error('No audio file data was returned from the download URL');
         }
 
+        const buffer = Buffer.from(fileRes.data);
+        if (!buffer || buffer.length < 1000) {
+            throw new Error('Downloaded audio file is too small or empty');
+        }
+
         return {
-            buffer: Buffer.from(fileRes.data),
+            buffer,
             title: String(result.title || 'Unknown Title').replace(/\s+/g, ' ').trim(),
             thumbnail: result.thumbnail || '',
             quality: result.quality || '128kbps',
