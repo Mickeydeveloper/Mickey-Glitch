@@ -228,9 +228,24 @@ async function playCommand(sock, chatId, message) {
             selectedUrl = songMeta.url;
         }
 
+        // Prepare thumbnail and title
+        const initialTitle = String(songMeta?.title || query || 'Unknown Song').replace(/\s+/g, ' ').trim();
+        const safeTitle = initialTitle.length > 60 ? `${initialTitle.slice(0, 57)}...` : initialTitle;
+        const thumbnail = songMeta?.thumbnail || 'https://i.imgur.com/4XfCwQ0.png';
+
+        // SEND THUMBNAIL WITH SONG INFO
+        const thumbnailMessage = new ButtonV2(sock)
+            .setThumbnail(thumbnail)
+            .text(`🎵 *${safeTitle}*\n\n👤 ${songMeta?.author || 'YouTube'}\n⏱️ ${songMeta?.duration || 'Audio'}\n🎧 Preparing audio...`)
+            .footer('Mickey Glitch')
+            .button('🎬 Watch Video', `.video ${safeTitle}`)
+            .button('🔁 Play Again', `.play ${safeTitle}`);
+
+        await thumbnailMessage.send(chatId, { quoted: message });
+
         // SEND LOADING MESSAGE
         const loadingMsg = await sock.sendMessage(chatId, {
-            text: '⏳ Preparing your audio...'
+            text: '⏳ Downloading audio...'
         }, { quoted: message });
 
         // Download audio
@@ -242,7 +257,7 @@ async function playCommand(sock, chatId, message) {
         // Prepare audio title
         const finalTitle = String(audioData.title || query || 'Unknown Song').replace(/\s+/g, ' ').trim();
 
-        // SEND AUDIO ONLY - No final message
+        // SEND AUDIO
         await sock.sendMessage(chatId, {
             audio: audioData.buffer,
             mimetype: 'audio/mpeg',
