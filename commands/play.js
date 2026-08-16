@@ -6,12 +6,11 @@ const { ButtonV2 } = require('../lib/messageBuilder');
 const AUDIO_APIS = [
     'https://apiziaul.vercel.app/api/downloader/ytmp3',
     'https://api.nexray.eu.cc/downloader/savetube',
-    'https://api.downloader.xyz/ytmp3',
-    'https://api.ytmp3.com/download'
+    'https://api.downloader.xyz/ytmp3'
 ];
 
-const AUDIO_TIMEOUT_MS = 120000;
-const DOWNLOAD_TIMEOUT_MS = 180000;
+const AUDIO_TIMEOUT_MS = 90000;
+const DOWNLOAD_TIMEOUT_MS = 150000;
 const AXIOS_DEFAULTS = {
     timeout: AUDIO_TIMEOUT_MS,
     headers: {
@@ -69,7 +68,7 @@ function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function downloadAudioBuffer(downloadUrl, retries = 3) {
+async function downloadAudioBuffer(downloadUrl, retries = 2) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             const response = await axios.get(downloadUrl, {
@@ -90,10 +89,10 @@ async function downloadAudioBuffer(downloadUrl, retries = 3) {
                 return Buffer.from(response.data);
             }
             
-            if (attempt < retries) await wait(2000 * attempt);
+            if (attempt < retries) await wait(1000 * attempt);
         } catch (err) {
             if (attempt === retries) throw err;
-            await wait(2000 * attempt);
+            await wait(1000 * attempt);
         }
     }
     throw new Error('Failed to download audio after multiple attempts');
@@ -112,7 +111,7 @@ async function fetchFromMultipleAPIs(videoId, youtubeUrl) {
 
             const response = await axios.get(apiUrl, {
                 ...AXIOS_DEFAULTS,
-                timeout: 30000 // 30 seconds per API
+                timeout: 20000 // 20 seconds per API (fast fail)
             });
 
             return { api: apiBase, response: response.data, success: true };
@@ -121,7 +120,7 @@ async function fetchFromMultipleAPIs(videoId, youtubeUrl) {
         }
     });
 
-    // Race - get first successful response
+    // Race - get first successful response (don't wait for all)
     const results = await Promise.allSettled(promises);
     
     for (const result of results) {
@@ -279,18 +278,12 @@ async function playCommand(sock, chatId, message) {
 
         await thumbnailMessage.send(chatId, { quoted: message });
 
-        const loadingMsg = await sock.sendMessage(chatId, {
-            text: '⏳ Downloading audio...'
-        }, { quoted: message });
-
-        // Get audio with parallel API requests
+        // Get audio with parallel API requests - no extra loading message
         const audioData = await getYoutubeAudio(selectedUrl);
-
-        await sock.sendMessage(chatId, { delete: loadingMsg.key });
 
         const finalTitle = String(audioData.title || query || 'Unknown Song').replace(/\s+/g, ' ').trim();
 
-        // Send audio with progress indication
+        // Send audio directly
         await sock.sendMessage(chatId, {
             audio: audioData.buffer,
             mimetype: 'audio/mpeg',
