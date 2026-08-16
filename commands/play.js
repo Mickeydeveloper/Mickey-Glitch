@@ -2,10 +2,16 @@ const axios = require('axios');
 const yts = require('yt-search');
 const { ButtonV2 } = require('../lib/messageBuilder');
 
-const AUDIO_API_BASE = 'https://apiziaul.vercel.app/api/downloader/ytmp3';
-const AUDIO_API_FALLBACK = 'https://api.nexray.eu.cc/downloader/savetube';
-const AUDIO_TIMEOUT_MS = 180000; // 3 minutes
-const DOWNLOAD_TIMEOUT_MS = 240000; // 4 minutes
+// Multiple API endpoints for redundancy
+const AUDIO_APIS = [
+    'https://apiziaul.vercel.app/api/downloader/ytmp3',
+    'https://api.nexray.eu.cc/downloader/savetube',
+    'https://api.downloader.xyz/ytmp3',
+    'https://api.ytmp3.com/download'
+];
+
+const AUDIO_TIMEOUT_MS = 120000;
+const DOWNLOAD_TIMEOUT_MS = 180000;
 const AXIOS_DEFAULTS = {
     timeout: AUDIO_TIMEOUT_MS,
     headers: {
@@ -13,6 +19,10 @@ const AXIOS_DEFAULTS = {
         accept: '*/*'
     }
 };
+
+// Cache ya muda mfupi
+const audioCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 function isYouTubeUrl(value = '') {
     if (!value) return false;
@@ -42,15 +52,14 @@ function extractYoutubeVideoId(ytUrl) {
     return '';
 }
 
-async function tryRequest(getter, attempts = 3) {
+async function tryRequest(getter, attempts = 2) {
     let lastErr;
     for (let i = 1; i <= attempts; i++) {
         try {
             return await getter();
         } catch (err) {
             lastErr = err;
-            console.log(`Attempt ${i}/${attempts} failed:`, err.message);
-            if (i < attempts) await new Promise((resolve) => setTimeout(resolve, 2000 * i));
+            if (i < attempts) await new Promise((resolve) => setTimeout(resolve, 1000));
         }
     }
     throw lastErr;
@@ -60,12 +69,10 @@ function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function downloadAudioBuffer(downloadUrl) {
-    let fileRes;
-    for (let attempt = 1; attempt <= 5; attempt++) {
+async function downloadAudioBuffer(downloadUrl, retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-            console.log(`Download attempt ${attempt} for:`, downloadUrl.substring(0, 100));
-            fileRes = await axios.get(downloadUrl, {
+            const response = await axios.get(downloadUrl, {
                 ...AXIOS_DEFAULTS,
                 timeout: DOWNLOAD_TIMEOUT_MS,
                 responseType: 'arraybuffer',
@@ -78,232 +85,146 @@ async function downloadAudioBuffer(downloadUrl) {
                 },
                 validateStatus: (status) => status >= 200 && status < 500
             });
-            
-            if (fileRes && fileRes.data && fileRes.data.length > 1000) {
-                console.log(`Download successful! Size: ${fileRes.data.length} bytes`);
-                return Buffer.from(fileRes.data);
+
+            if (response.data && response.data.length > 1000) {
+                return Buffer.from(response.data);
             }
             
-            console.log(`Attempt ${attempt} failed: Invalid data size`);
-            if (attempt < 5) await wait(3000 * attempt);
-        } catch (downloadErr) {
-            console.log(`Download attempt ${attempt} error:`, downloadErr.message);
-            if (attempt === 5) throw downloadErr;
-            await wait(3000 * attempt);
+            if (attempt < retries) await wait(2000 * attempt);
+        } catch (err) {
+            if (attempt === retries) throw err;
+            await wait(2000 * attempt);
         }
     }
-    throw new Error('Failed to download audio after 5 attempts');
+    throw new Error('Failed to download audio after multiple attempts');
 }
 
-async function getYoutubeAudioFromZiaUlhaq(ytUrl) {
-    const youtubeUrl = (typeof ytUrl === 'string' && ytUrl.trim()) ? ytUrl.trim() : '';
-    if (!youtubeUrl) {
-        throw new Error('Please provide a valid YouTube URL or song name');
+// Fast parallel API requests
+async function fetchFromMultipleAPIs(videoId, youtubeUrl) {
+    const promises = AUDIO_APIS.map(async (apiBase) => {
+        try {
+            let apiUrl;
+            if (apiBase.includes('savetube')) {
+                apiUrl = `${apiBase}?url=${encodeURIComponent(`https://youtu.be/${videoId}`)}&quality=mp3`;
+            } else {
+                apiUrl = `${apiBase}?url=${encodeURIComponent(youtubeUrl)}`;
+            }
+
+            const response = await axios.get(apiUrl, {
+                ...AXIOS_DEFAULTS,
+                timeout: 30000 // 30 seconds per API
+            });
+
+            return { api: apiBase, response: response.data, success: true };
+        } catch (err) {
+            return { api: apiBase, error: err.message, success: false };
+        }
+    });
+
+    // Race - get first successful response
+    const results = await Promise.allSettled(promises);
+    
+    for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.success) {
+            return result.value;
+        }
+    }
+    
+    return null;
+}
+
+async function getYoutubeAudio(ytUrl) {
+    const videoId = extractYoutubeVideoId(ytUrl);
+    if (!videoId) {
+        throw new Error('Invalid YouTube URL');
     }
 
-    const apiUrl = isYouTubeUrl(youtubeUrl)
-        ? `${AUDIO_API_BASE}?url=${encodeURIComponent(youtubeUrl)}`
-        : `${AUDIO_API_BASE}?url=${encodeURIComponent(`https://youtu.be/${extractYoutubeVideoId(youtubeUrl) || ' '}`)}`;
-
-    console.log('Primary API URL:', apiUrl);
-
-    const res = await tryRequest(() => axios.get(apiUrl, {
-        ...AXIOS_DEFAULTS,
-        timeout: AUDIO_TIMEOUT_MS,
-        validateStatus: (status) => status >= 200 && status < 500
-    }));
-
-    console.log('Primary API Response Status:', res.status);
-    console.log('Primary API Response Data Keys:', Object.keys(res.data || {}));
-
-    const payload = res?.data;
-    if (!payload) {
-        throw new Error('API returned empty response');
+    // Check cache first
+    const cacheKey = videoId;
+    const cached = audioCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        console.log('✅ Using cached audio for:', videoId);
+        return cached.data;
     }
 
-    // Check different response formats
+    console.log('🚀 Fetching audio for:', videoId);
+
+    // Try parallel API requests
+    const result = await fetchFromMultipleAPIs(videoId, ytUrl);
+    
+    if (!result) {
+        throw new Error('All API sources failed. Please try again later.');
+    }
+
+    console.log('✅ API source found:', result.api);
+
+    // Parse response based on API source
     let downloadUrl = null;
     let title = 'Unknown Title';
     let thumbnail = '';
     let quality = '128 kbps';
     let duration = 'Unknown';
-    let videoId = extractYoutubeVideoId(youtubeUrl);
 
-    // Try different response structures
-    if (payload.status === true && payload.result) {
-        downloadUrl = payload.result.downloadUrl || payload.result.url || payload.result.download_link;
-        title = payload.result.title || payload.result.name || 'Unknown Title';
-        thumbnail = payload.result.thumbnail || payload.result.thumb || '';
-        quality = payload.result.quality || payload.result.bitrate || '128 kbps';
-        duration = payload.result.duration || payload.result.dur || 'Unknown';
-        videoId = payload.result.videoId || payload.result.id || videoId;
-    } else if (payload.success === true && payload.data) {
-        downloadUrl = payload.data.downloadUrl || payload.data.url;
-        title = payload.data.title || 'Unknown Title';
-        thumbnail = payload.data.thumbnail || '';
-        quality = payload.data.quality || '128 kbps';
-        duration = payload.data.duration || 'Unknown';
-        videoId = payload.data.videoId || videoId;
-    } else if (payload.downloadUrl) {
-        downloadUrl = payload.downloadUrl;
-        title = payload.title || 'Unknown Title';
-        thumbnail = payload.thumbnail || '';
-        quality = payload.quality || '128 kbps';
-        duration = payload.duration || 'Unknown';
+    const data = result.response;
+
+    // Try different response formats
+    if (data.status === true && data.result) {
+        downloadUrl = data.result.downloadUrl || data.result.url || data.result.download_link;
+        title = data.result.title || data.result.name || 'Unknown Title';
+        thumbnail = data.result.thumbnail || data.result.thumb || '';
+        quality = data.result.quality || data.result.bitrate || '128 kbps';
+        duration = data.result.duration || data.result.dur || 'Unknown';
+    } else if (data.success === true && data.data) {
+        downloadUrl = data.data.downloadUrl || data.data.url;
+        title = data.data.title || 'Unknown Title';
+        thumbnail = data.data.thumbnail || '';
+        quality = data.data.quality || '128 kbps';
+        duration = data.data.duration || 'Unknown';
+    } else if (data.url) {
+        downloadUrl = data.url;
+        title = data.title || 'Unknown Title';
+        thumbnail = data.thumbnail || '';
+        quality = data.quality || '128 kbps';
+        duration = data.duration || 'Unknown';
+    } else if (data.downloadUrl) {
+        downloadUrl = data.downloadUrl;
+        title = data.title || 'Unknown Title';
+        thumbnail = data.thumbnail || '';
+        quality = data.quality || '128 kbps';
+        duration = data.duration || 'Unknown';
     }
 
     if (!downloadUrl) {
-        console.error('Full API response:', JSON.stringify(payload, null, 2));
-        throw new Error(payload?.message || payload?.error || 'Audio API did not return a valid download URL');
+        console.error('Failed to extract download URL from:', JSON.stringify(data, null, 2));
+        throw new Error('Could not extract download URL from API response');
     }
 
-    console.log('Download URL found:', downloadUrl.substring(0, 100));
+    // Download audio with retries
+    console.log('⬇️ Downloading audio...');
     const buffer = await downloadAudioBuffer(downloadUrl);
 
-    return {
+    const audioData = {
         buffer,
         title: String(title).replace(/\s+/g, ' ').trim(),
         thumbnail: thumbnail || 'https://i.imgur.com/4XfCwQ0.png',
         quality: quality,
         duration: duration,
-        source: 'apiziaul',
-        videoUrl: youtubeUrl,
+        source: result.api,
+        videoUrl: ytUrl,
         videoId: videoId,
         downloadUrl: downloadUrl,
         fileSize: buffer.length,
         fileSizeMB: (buffer.length / 1024 / 1024).toFixed(2)
     };
-}
 
-async function getYoutubeAudioFromNexray(ytUrl) {
-    const youtubeUrl = (typeof ytUrl === 'string' && ytUrl.trim()) ? ytUrl.trim() : '';
-    if (!youtubeUrl) {
-        throw new Error('Please provide a valid YouTube URL or song name');
-    }
+    // Cache the result
+    audioCache.set(cacheKey, {
+        data: audioData,
+        timestamp: Date.now()
+    });
 
-    const videoId = extractYoutubeVideoId(youtubeUrl);
-    if (!videoId) {
-        throw new Error('Invalid YouTube URL');
-    }
-
-    const apiUrl = `${AUDIO_API_FALLBACK}?url=${encodeURIComponent(`https://youtu.be/${videoId}`)}&quality=mp3`;
-    console.log('Fallback API URL:', apiUrl);
-
-    const res = await tryRequest(() => axios.get(apiUrl, {
-        ...AXIOS_DEFAULTS,
-        timeout: AUDIO_TIMEOUT_MS,
-        validateStatus: (status) => status >= 200 && status < 500
-    }));
-
-    console.log('Fallback API Response Status:', res.status);
-    const payload = res?.data;
-    
-    if (!payload) {
-        throw new Error('Fallback API returned empty response');
-    }
-
-    // Check different response formats for fallback
-    let downloadUrl = null;
-    let title = 'Unknown Title';
-    let thumbnail = '';
-    let quality = '128 kbps';
-    let duration = 'Unknown';
-
-    if (payload.status === true && payload.result) {
-        downloadUrl = payload.result.url || payload.result.downloadUrl;
-        title = payload.result.title || 'Unknown Title';
-        thumbnail = payload.result.thumbnail || '';
-        quality = payload.result.quality ? `${payload.result.quality} kbps` : '128 kbps';
-        duration = payload.result.duration || 'Unknown';
-    } else if (payload.url) {
-        downloadUrl = payload.url;
-        title = payload.title || 'Unknown Title';
-        thumbnail = payload.thumbnail || '';
-        quality = payload.quality || '128 kbps';
-        duration = payload.duration || 'Unknown';
-    } else if (payload.success && payload.data) {
-        downloadUrl = payload.data.url || payload.data.downloadUrl;
-        title = payload.data.title || 'Unknown Title';
-        thumbnail = payload.data.thumbnail || '';
-        quality = payload.data.quality || '128 kbps';
-        duration = payload.data.duration || 'Unknown';
-    }
-
-    if (!downloadUrl) {
-        console.error('Fallback API response:', JSON.stringify(payload, null, 2));
-        throw new Error(payload?.message || payload?.error || 'Nexray API did not return a valid audio URL');
-    }
-
-    console.log('Fallback download URL found:', downloadUrl.substring(0, 100));
-    const buffer = await downloadAudioBuffer(downloadUrl);
-
-    return {
-        buffer,
-        title: String(title).replace(/\s+/g, ' ').trim(),
-        thumbnail: thumbnail || 'https://i.imgur.com/4XfCwQ0.png',
-        quality: quality,
-        duration: duration,
-        source: 'nexray',
-        videoUrl: youtubeUrl,
-        videoId,
-        downloadUrl,
-        fileSize: buffer.length,
-        fileSizeMB: (buffer.length / 1024 / 1024).toFixed(2)
-    };
-}
-
-async function getYoutubeAudio(ytUrl) {
-    console.log('Starting audio download for:', ytUrl);
-    
-    try {
-        console.log('Trying primary source...');
-        return await getYoutubeAudioFromZiaUlhaq(ytUrl);
-    } catch (primaryErr) {
-        console.error('Primary source error:', primaryErr.message);
-        
-        try {
-            console.log('Trying fallback source...');
-            return await getYoutubeAudioFromNexray(ytUrl);
-        } catch (fallbackErr) {
-            console.error('Fallback source error:', fallbackErr.message);
-            
-            // Try one more time with a different approach
-            try {
-                console.log('Trying fallback with different format...');
-                const videoId = extractYoutubeVideoId(ytUrl);
-                if (videoId) {
-                    const altUrl = `https://api.nexray.eu.cc/downloader/savetube?url=${encodeURIComponent(`https://youtu.be/${videoId}`)}&quality=mp3`;
-                    const res = await axios.get(altUrl, {
-                        ...AXIOS_DEFAULTS,
-                        timeout: AUDIO_TIMEOUT_MS
-                    });
-                    
-                    if (res.data && res.data.url) {
-                        const buffer = await downloadAudioBuffer(res.data.url);
-                        return {
-                            buffer,
-                            title: res.data.title || 'Unknown Title',
-                            thumbnail: res.data.thumbnail || 'https://i.imgur.com/4XfCwQ0.png',
-                            quality: '128 kbps',
-                            duration: res.data.duration || 'Unknown',
-                            source: 'nexray-alt',
-                            videoUrl: ytUrl,
-                            videoId,
-                            downloadUrl: res.data.url,
-                            fileSize: buffer.length,
-                            fileSizeMB: (buffer.length / 1024 / 1024).toFixed(2)
-                        };
-                    }
-                }
-            } catch (finalErr) {
-                console.error('Final attempt error:', finalErr.message);
-            }
-            
-            const primaryMsg = primaryErr?.message || 'Primary source failed';
-            const fallbackMsg = fallbackErr?.message || 'Fallback source failed';
-            throw new Error(`Audio download failed: ${primaryMsg} | ${fallbackMsg}`);
-        }
-    }
+    console.log('✅ Audio ready! Size:', audioData.fileSizeMB, 'MB');
+    return audioData;
 }
 
 async function searchYoutubeSong(query) {
@@ -362,15 +283,14 @@ async function playCommand(sock, chatId, message) {
             text: '⏳ Downloading audio...'
         }, { quoted: message });
 
-        console.log('Starting audio download for:', selectedUrl);
+        // Get audio with parallel API requests
         const audioData = await getYoutubeAudio(selectedUrl);
 
         await sock.sendMessage(chatId, { delete: loadingMsg.key });
 
         const finalTitle = String(audioData.title || query || 'Unknown Song').replace(/\s+/g, ' ').trim();
-        
-        console.log('Sending audio:', finalTitle, 'Size:', audioData.fileSizeMB, 'MB');
 
+        // Send audio with progress indication
         await sock.sendMessage(chatId, {
             audio: audioData.buffer,
             mimetype: 'audio/mpeg',
@@ -381,13 +301,20 @@ async function playCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error('[PLAY] Full error:', err);
+        console.error('[PLAY] Error:', err);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
         
-        // Send detailed error message for debugging
-        const errorMsg = err.message || 'Unknown error';
+        let errorMessage = '❌ Audio unavailable right now.\n\n';
+        if (err.message.includes('All API sources failed')) {
+            errorMessage += 'All download sources are currently unavailable. Please try again in a few minutes.';
+        } else if (err.message.includes('Invalid YouTube URL')) {
+            errorMessage += 'Invalid YouTube URL. Please check and try again.';
+        } else {
+            errorMessage += 'Please try again in a moment or use a different song title.';
+        }
+        
         await sock.sendMessage(chatId, {
-            text: `❌ Audio unavailable right now.\n\nError: ${errorMsg}\n\nPlease try again in a moment or use a different song title.`
+            text: errorMessage
         }, { quoted: message });
     }
 }
@@ -412,6 +339,16 @@ async function handleAudioDownload(sock, chatId, ytUrl, message) {
         }, { quoted: message });
     }
 }
+
+// Clean cache periodically
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of audioCache.entries()) {
+        if (now - value.timestamp > CACHE_DURATION) {
+            audioCache.delete(key);
+        }
+    }
+}, 60000); // Clean every minute
 
 module.exports = playCommand;
 module.exports.name = 'play';
