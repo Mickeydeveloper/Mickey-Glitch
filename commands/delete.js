@@ -15,13 +15,11 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
     const hasQuoted = message?.quoted || message?.message?.extendedTextMessage?.contextInfo?.quotedMessage || message?.contextInfo?.quotedMessage;
 
     if (!hasQuoted) {
-      await sock?.sendMessage?.(targetChatId, { text: 'Reply pesan yang ingin diproses.' }, { quoted: message });
       return true;
     }
 
     // Check if group command
     if (!targetChatId || !targetChatId.endsWith('@g.us')) {
-      await sock?.sendMessage?.(targetChatId, { text: 'Command ini hanya untuk group.' }, { quoted: message });
       return true;
     }
 
@@ -29,7 +27,6 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
     if (senderId) {
       const isAllowed = await isOwnerOrSudo(senderId, sock, targetChatId);
       if (!isAllowed) {
-        await sock?.sendMessage?.(targetChatId, { text: '⚠️ Hanya owner yang boleh menggunakan command ini.' }, { quoted: message });
         return true;
       }
     }
@@ -38,7 +35,6 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
     let stanzaId = message.quoted?.stanzaId || message.quoted?.key?.id || message?.message?.extendedTextMessage?.contextInfo?.stanzaId;
 
     if (!stanzaId) {
-      await sock?.sendMessage?.(targetChatId, { text: '❌ Tidak dapat mengenal pasti ID pesan yang di-reply. Cuba lagi.' }, { quoted: message });
       return false;
     }
 
@@ -109,11 +105,6 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
     return true;
   } catch (error) {
     console.error('[delete]', error);
-    if (sock && message) {
-      await sock.sendMessage(chatId || message?.key?.remoteJid, {
-        text: 'Error: ' + (error?.message || error),
-      }, { quoted: message }).catch(() => {});
-    }
     return false;
   }
 }
@@ -121,7 +112,7 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
 // Command handler for direct use
 async function dmsgHandler(m, { conn }) {
     if (!m.quoted) {
-        return m.reply('Reply pesan yang ingin diproses.');
+        return;
     }
 
     try {
@@ -191,7 +182,6 @@ async function dmsgHandler(m, { conn }) {
 
     } catch (e) {
         console.error('[dmsg]', e);
-        await m.reply('Error: ' + (e?.message || e));
     }
 }
 
