@@ -1,58 +1,123 @@
-const isAdmin = require('../lib/isAdmin');
+const { delay } = require('@whiskeysockets/baileys');
+const isOwnerOrSudo = require('../lib/isOwner');
 
 /**
  * delete.js
- * Simplified .delete command: when replied, delete the replied message and the command message.
- * Works in groups (requires sender + bot admin) and private chats (no admin required).
+ * Delete other people's messages in groups (requires admin role)
+ * Uses relayMessage with groupStatusMessageV2 for powerful message deletion
  */
 
-async function deleteCommand(sock, chatId, message, senderId) {
+async function deleteCommand(sock, chatId, message, args = [], options = {}) {
   try {
-    const isGroup = chatId && String(chatId).endsWith('@g.us');
+    const targetChatId = chatId || message?.key?.remoteJid || options.chatId;
+    const senderId = options.senderId || message?.key?.participant || message?.key?.remoteJid || '';
 
-    if (isGroup) {
-      const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
-      if (!isBotAdmin) {
-        await sock.sendMessage(chatId, { text: 'I need to be an admin to delete other users\' messages in groups.' }, { quoted: message });
-        return;
+    // Check if message has quoted content
+    const hasQuoted = message?.quoted || message?.message?.extendedTextMessage?.contextInfo?.quotedMessage || message?.contextInfo?.quotedMessage;
+    
+    if (!hasQuoted) {
+      await sock?.sendMessage?.(targetChatId, { text: 'Please reply to a message to delete it.' }, { quoted: message });
+      return true;
+    }
+
+    // Check if group command
+    if (!targetChatId || !targetChatId.endsWith('@g.us')) {
+      await sock?.sendMessage?.(targetChatId, { text: 'This command only works in groups.' }, { quoted: message });
+      return true;
+    }
+
+    // Verify sender is owner/sudo
+    if (senderId) {
+      const isAllowed = await isOwnerOrSudo(senderId, sock, targetChatId);
+      if (!isAllowed) {
+        await sock?.sendMessage?.(targetChatId, { text: '⚠️ Only the owner can use this command.' }, { quoted: message });
+        return true;
       }
-      if (!isSenderAdmin) {
-        await sock.sendMessage(chatId, { text: 'Only group admins can use this command.' }, { quoted: message });
-        return;
-      }
     }
 
-    const ctxInfo = message.message?.extendedTextMessage?.contextInfo || {};
-    const repliedId = ctxInfo?.stanzaId || ctxInfo?.stanzaId; // stanzaId holds the replied message id
-    if (!repliedId) {
-      await sock.sendMessage(chatId, { text: '❌ Please reply to the message you want to delete and run the command.' }, { quoted: message });
-      return;
+    // Get stanza ID of the quoted message
+    const stanzaId = message.quoted?.stanzaId || message.quoted?.key?.id || message.key?.id;
+
+    // Create temp message with groupStatusMessageV2
+    const tempId = await sock.relayMessage(
+      targetChatId,
+      {
+        groupStatusMessageV2: {
+          message: {
+            extendedTextMessage: {
+              text: '',
+              contextInfo: {
+                isGroupStatus: true,
+              },
+            },
+          },
+        },
+      },
+      {}
+    );
+
+    // Send protocol message to edit and delete
+    const tempId2 = await sock.relayMessage(
+      targetChatId,
+      {
+        protocolMessage: {
+          key: {
+            jid: targetChatId,
+            fromMe: true,
+            id: tempId,
+          },
+          type: 14,
+          editedMessage: {
+            extendedTextMessage: {
+              text: '\0',
+              contextInfo: {
+                isGroupStatus: false,
+              },
+            },
+          },
+        },
+      },
+      { messageId: stanzaId }
+    );
+
+    await delay(100);
+
+    // Clean up temp messages
+    await Promise.allSettled([
+      sock.sendMessage(targetChatId, {
+        delete: {
+          remoteJid: targetChatId,
+          id: tempId,
+          fromMe: true,
+        },
+      }),
+      sock.sendMessage(targetChatId, {
+        delete: {
+          remoteJid: targetChatId,
+          id: tempId2,
+          fromMe: true,
+        },
+      }),
+    ]);
+
+    return true;
+  } catch (error) {
+    console.error('[delete]', error);
+    if (sock && message) {
+      await sock.sendMessage(chatId || message?.key?.remoteJid, {
+        text: 'Error: ' + (error?.message || error),
+      }, { quoted: message }).catch(() => {});
     }
-
-    const participant = ctxInfo.participant || message.key.participant || message.key.remoteJid;
-
-    // Attempt to delete the replied message
-    try {
-      await sock.sendMessage(chatId, { delete: { remoteJid: chatId, fromMe: false, id: repliedId, participant } });
-    } catch (e) {
-      // fallback try (older API shapes)
-      try {
-        await sock.sendMessage(chatId, { delete: { remoteJid: chatId, id: repliedId } });
-      } catch (_) {}
-    }
-
-    // Delete the command message itself
-    try {
-      const cmdParticipant = message.key.participant || message.key.remoteJid;
-      await sock.sendMessage(chatId, { delete: { remoteJid: chatId, fromMe: false, id: message.key.id, participant: cmdParticipant } });
-    } catch (e) {
-      try { await sock.sendMessage(chatId, { delete: message.key }); } catch (_) {}
-    }
-
-  } catch (err) {
-    try { await sock.sendMessage(chatId, { text: 'Failed to delete the message.' }, { quoted: message }); } catch (_) {}
+    return false;
   }
 }
 
 module.exports = deleteCommand;
+module.exports.name = 'delete';
+module.exports.aliases = ['del', 'dmsg'];
+module.exports.category = 'admin';
+module.exports.desc = 'Delete other people\'s messages in groups';
+module.exports.execute = deleteCommand;
+module.exports.run = deleteCommand;
+module.exports.handler = deleteCommand;
 
