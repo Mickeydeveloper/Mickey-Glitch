@@ -35,9 +35,20 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
       }
     }
 
-    // Get stanza ID of the quoted message
-    const stanzaId = message.quoted?.stanzaId || message.quoted?.key?.id || message.key?.id;
-    const quotedParticipant = message.quoted?.participant || message.quoted?.key?.participant;
+    // Get stanza ID of the quoted message - try multiple paths
+    let stanzaId = message.quoted?.stanzaId || message.quoted?.key?.id;
+    
+    // If not found in quoted, try contextInfo
+    if (!stanzaId && message.message?.extendedTextMessage?.contextInfo?.stanzaId) {
+      stanzaId = message.message.extendedTextMessage.contextInfo.stanzaId;
+    }
+    
+    if (!stanzaId) {
+      await sock?.sendMessage?.(targetChatId, { text: '❌ Could not identify the quoted message ID. Please try again.' }, { quoted: message });
+      return false;
+    }
+
+    const quotedParticipant = message.quoted?.participant || message.quoted?.key?.participant || message.key?.participant;
 
     // Create temp message with groupStatusMessageV2
     const tempId = await sock.relayMessage(
@@ -57,15 +68,15 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
       {}
     );
 
-    // Send protocol message to edit and delete
-    const tempId2 = await sock.relayMessage(
+    // Send protocol message to edit and delete the QUOTED message using messageId targeting
+    await sock.relayMessage(
       targetChatId,
       {
         protocolMessage: {
           key: {
             jid: targetChatId,
-            fromMe: true,
-            id: tempId,
+            fromMe: false,
+            id: stanzaId,
           },
           type: 14,
           editedMessage: {
@@ -83,33 +94,12 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
 
     await delay(100);
 
-    // Delete the quoted message first
-    await Promise.allSettled([
-      sock.sendMessage(targetChatId, {
-        delete: {
-          remoteJid: targetChatId,
-          id: stanzaId,
-          fromMe: false,
-          participant: quotedParticipant,
-        },
-      }),
-    ]);
-
-    await delay(50);
-
-    // Then clean up temp messages
+    // Clean up temp message
     await Promise.allSettled([
       sock.sendMessage(targetChatId, {
         delete: {
           remoteJid: targetChatId,
           id: tempId,
-          fromMe: true,
-        },
-      }),
-      sock.sendMessage(targetChatId, {
-        delete: {
-          remoteJid: targetChatId,
-          id: tempId2,
           fromMe: true,
         },
       }),
