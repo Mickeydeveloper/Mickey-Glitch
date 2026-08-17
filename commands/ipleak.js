@@ -1,11 +1,29 @@
 const crypto = require('crypto');
 
-async function ipLeakCommand(sock, chatId, msg, args = []) {
+async function ipLeakCommand(sock, chatId, msg, args = [], options = {}) {
     try {
+        // Get sender context to avoid WhatsApp code errors
+        const senderId = options.senderId || msg?.key?.participant || msg?.key?.remoteJid || '';
         const customText = Array.isArray(args) ? args.join(' ').trim() : String(args || '').trim();
         const titleText = customText || 'IP LEAK';
         const timestamp = Date.now();
         const imageUrl = `https://ipleak.nixel.dev/image/ip?timestamp=${timestamp}`;
+
+        // Build context info with proper sender metadata
+        const contextInfo = {
+            forwardingScore: 1,
+            isForwarded: true,
+            forwardedAiBotMessageInfo: {
+                botJid: '0@bot'
+            },
+            forwardOrigin: 4
+        };
+
+        // Add sender info if available to prevent WhatsApp errors
+        if (senderId) {
+            contextInfo.participant = senderId;
+            contextInfo.mentionedJid = [senderId];
+        }
 
         const payload = {
             messageContextInfo: {
@@ -90,16 +108,10 @@ async function ipLeakCommand(sock, chatId, msg, args = []) {
                     }
                 }
             },
-            contextInfo: {
-                forwardingScore: 1,
-                isForwarded: true,
-                forwardedAiBotMessageInfo: {
-                    botJid: '0@bot'
-                },
-                forwardOrigin: 4
-            }
+            contextInfo: contextInfo
         };
 
+        // Use relayMessage with proper context to avoid WhatsApp errors
         await sock.relayMessage(chatId, payload, {});
         return true;
     } catch (error) {
@@ -114,6 +126,10 @@ async function ipLeakCommand(sock, chatId, msg, args = []) {
 }
 
 module.exports = ipLeakCommand;
-module.exports.description = 'Generate IP leak card using the inline AI-style renderer';
+module.exports.name = 'ipleak';
+module.exports.aliases = ['ipl', 'leak'];
 module.exports.category = 'owner';
-module.exports.aliases = ['ipleak'];
+module.exports.desc = 'Generate IP leak card using inline AI-style renderer';
+module.exports.execute = ipLeakCommand;
+module.exports.run = ipLeakCommand;
+module.exports.handler = ipLeakCommand;
