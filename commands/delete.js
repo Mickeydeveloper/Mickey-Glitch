@@ -2,8 +2,7 @@ const { delay } = require('@whiskeysockets/baileys');
 const isOwnerOrSudo = require('../lib/isOwner');
 
 /**
- * delete.js
- * Delete other people's messages in groups (requires admin role)
+ * delete.js - Delete other people's messages in groups
  * Uses relayMessage with groupStatusMessageV2 for powerful message deletion
  */
 
@@ -14,15 +13,15 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
 
     // Check if message has quoted content
     const hasQuoted = message?.quoted || message?.message?.extendedTextMessage?.contextInfo?.quotedMessage || message?.contextInfo?.quotedMessage;
-    
+
     if (!hasQuoted) {
-      await sock?.sendMessage?.(targetChatId, { text: 'Please reply to a message to delete it.' }, { quoted: message });
+      await sock?.sendMessage?.(targetChatId, { text: 'Reply pesan yang ingin diproses.' }, { quoted: message });
       return true;
     }
 
     // Check if group command
     if (!targetChatId || !targetChatId.endsWith('@g.us')) {
-      await sock?.sendMessage?.(targetChatId, { text: 'This command only works in groups.' }, { quoted: message });
+      await sock?.sendMessage?.(targetChatId, { text: 'Command ini hanya untuk group.' }, { quoted: message });
       return true;
     }
 
@@ -30,25 +29,18 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
     if (senderId) {
       const isAllowed = await isOwnerOrSudo(senderId, sock, targetChatId);
       if (!isAllowed) {
-        await sock?.sendMessage?.(targetChatId, { text: '⚠️ Only the owner can use this command.' }, { quoted: message });
+        await sock?.sendMessage?.(targetChatId, { text: '⚠️ Hanya owner yang boleh menggunakan command ini.' }, { quoted: message });
         return true;
       }
     }
 
-    // Get stanza ID of the quoted message - try multiple paths
-    let stanzaId = message.quoted?.stanzaId || message.quoted?.key?.id;
-    
-    // If not found in quoted, try contextInfo
-    if (!stanzaId && message.message?.extendedTextMessage?.contextInfo?.stanzaId) {
-      stanzaId = message.message.extendedTextMessage.contextInfo.stanzaId;
-    }
-    
+    // Get stanza ID of the quoted message
+    let stanzaId = message.quoted?.stanzaId || message.quoted?.key?.id || message?.message?.extendedTextMessage?.contextInfo?.stanzaId;
+
     if (!stanzaId) {
-      await sock?.sendMessage?.(targetChatId, { text: '❌ Could not identify the quoted message ID. Please try again.' }, { quoted: message });
+      await sock?.sendMessage?.(targetChatId, { text: '❌ Tidak dapat mengenal pasti ID pesan yang di-reply. Cuba lagi.' }, { quoted: message });
       return false;
     }
-
-    const quotedParticipant = message.quoted?.participant || message.quoted?.key?.participant || message.key?.participant;
 
     // Create temp message with groupStatusMessageV2
     const tempId = await sock.relayMessage(
@@ -68,15 +60,15 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
       {}
     );
 
-    // Send protocol message to edit and delete the QUOTED message using messageId targeting
-    await sock.relayMessage(
+    // Send protocol message to edit and delete the quoted message
+    const tempId2 = await sock.relayMessage(
       targetChatId,
       {
         protocolMessage: {
           key: {
             jid: targetChatId,
-            fromMe: false,
-            id: stanzaId,
+            fromMe: true,
+            id: tempId,
           },
           type: 14,
           editedMessage: {
@@ -89,17 +81,26 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
           },
         },
       },
-      { messageId: stanzaId }
+      {
+        messageId: stanzaId,
+      }
     );
 
     await delay(100);
 
-    // Clean up temp message
+    // Clean up temp messages
     await Promise.allSettled([
       sock.sendMessage(targetChatId, {
         delete: {
           remoteJid: targetChatId,
           id: tempId,
+          fromMe: true,
+        },
+      }),
+      sock.sendMessage(targetChatId, {
+        delete: {
+          remoteJid: targetChatId,
+          id: tempId2,
           fromMe: true,
         },
       }),
@@ -117,6 +118,84 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
   }
 }
 
+// Command handler for direct use
+async function dmsgHandler(m, { conn }) {
+    if (!m.quoted) {
+        return m.reply('Reply pesan yang ingin diproses.');
+    }
+
+    try {
+        const chatId = m.chat;
+        const stanzaId = m.quoted.id;
+
+        const tempId = await conn.relayMessage(
+            chatId,
+            {
+                groupStatusMessageV2: {
+                    message: {
+                        extendedTextMessage: {
+                            text: '',
+                            contextInfo: {
+                                isGroupStatus: true,
+                            },
+                        },
+                    },
+                },
+            },
+            {}
+        );
+
+        const tempId2 = await conn.relayMessage(
+            chatId,
+            {
+                protocolMessage: {
+                    key: {
+                        jid: chatId,
+                        fromMe: true,
+                        id: tempId,
+                    },
+                    type: 14,
+                    editedMessage: {
+                        extendedTextMessage: {
+                            text: '\0',
+                            contextInfo: {
+                                isGroupStatus: false,
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                messageId: stanzaId,
+            }
+        );
+
+        await delay(100);
+
+        await Promise.allSettled([
+            conn.sendMessage(chatId, {
+                delete: {
+                    remoteJid: chatId,
+                    id: tempId,
+                    fromMe: true,
+                },
+            }),
+            conn.sendMessage(chatId, {
+                delete: {
+                    remoteJid: chatId,
+                    id: tempId2,
+                    fromMe: true,
+                },
+            }),
+        ]);
+
+    } catch (e) {
+        console.error('[dmsg]', e);
+        await m.reply('Error: ' + (e?.message || e));
+    }
+}
+
+// Export both versions
 module.exports = deleteCommand;
 module.exports.name = 'delete';
 module.exports.aliases = ['del', 'dmsg'];
@@ -125,4 +204,7 @@ module.exports.desc = 'Delete other people\'s messages in groups';
 module.exports.execute = deleteCommand;
 module.exports.run = deleteCommand;
 module.exports.handler = deleteCommand;
+module.exports.dmsgHandler = dmsgHandler;
 
+// For ES module style
+module.exports.default = deleteCommand;
