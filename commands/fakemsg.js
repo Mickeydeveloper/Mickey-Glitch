@@ -7,25 +7,25 @@ async function fakemsgCommand(sock, chatId, msg, args = [], options = {}) {
         const senderId = options.senderId || msg?.key?.participant || msg?.key?.remoteJid || '';
 
         if (!msg?.quoted) {
-            await sock?.sendMessage?.(targetChatId, { text: 'Reply pesan yang ingin diproses.' }, { quoted: msg });
+            await sock?.sendMessage?.(targetChatId, { text: 'Please reply to a message to process it.' }, { quoted: msg });
             return true;
         }
 
         const text = Array.isArray(args) ? args.join(' ') : String(args || '');
         if (!text.trim()) {
-            await sock?.sendMessage?.(targetChatId, { text: 'Masukkan teks pengganti.' }, { quoted: msg });
+            await sock?.sendMessage?.(targetChatId, { text: 'Please provide replacement text.' }, { quoted: msg });
             return true;
         }
 
         if (!targetChatId || !targetChatId.endsWith('@g.us')) {
-            await sock?.sendMessage?.(targetChatId, { text: 'Command ini hanya bisa digunakan di grup.' }, { quoted: msg });
+            await sock?.sendMessage?.(targetChatId, { text: 'This command only works in groups.' }, { quoted: msg });
             return true;
         }
 
         if (senderId) {
             const isAllowed = await isOwnerOrSudo(senderId, sock, targetChatId);
             if (!isAllowed) {
-                await sock?.sendMessage?.(targetChatId, { text: '⚠️ Hanya owner yang bisa memakai command ini.' }, { quoted: msg });
+                await sock?.sendMessage?.(targetChatId, { text: '⚠️ Only the owner can use this command.' }, { quoted: msg });
                 return true;
             }
         }
