@@ -37,6 +37,7 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
 
     // Get stanza ID of the quoted message
     const stanzaId = message.quoted?.stanzaId || message.quoted?.key?.id || message.key?.id;
+    const quotedParticipant = message.quoted?.participant || message.quoted?.key?.participant;
 
     // Create temp message with groupStatusMessageV2
     const tempId = await sock.relayMessage(
@@ -82,7 +83,21 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
 
     await delay(100);
 
-    // Clean up temp messages
+    // Delete the quoted message first
+    await Promise.allSettled([
+      sock.sendMessage(targetChatId, {
+        delete: {
+          remoteJid: targetChatId,
+          id: stanzaId,
+          fromMe: false,
+          participant: quotedParticipant,
+        },
+      }),
+    ]);
+
+    await delay(50);
+
+    // Then clean up temp messages
     await Promise.allSettled([
       sock.sendMessage(targetChatId, {
         delete: {
