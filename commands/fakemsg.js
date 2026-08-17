@@ -6,7 +6,10 @@ async function fakemsgCommand(sock, chatId, msg, args = [], options = {}) {
         const targetChatId = chatId || msg?.key?.remoteJid || options.chatId;
         const senderId = options.senderId || msg?.key?.participant || msg?.key?.remoteJid || '';
 
-        if (!msg?.quoted) {
+        // Check if message has quoted/replied content
+        const hasQuoted = msg?.quoted || msg?.message?.extendedTextMessage?.contextInfo?.quotedMessage || msg?.contextInfo?.quotedMessage;
+        
+        if (!hasQuoted) {
             await sock?.sendMessage?.(targetChatId, { text: 'Please reply to a message to process it.' }, { quoted: msg });
             return true;
         }
