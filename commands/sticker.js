@@ -1,10 +1,216 @@
-const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { downloadMediaMessage, downloadContentFromMessage, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const settings = require('../settings');
 const webp = require('node-webpmux');
 const crypto = require('crypto');
+
+// ─────────────────────────────────────────────────────────────
+// PREMIUM STICKER FUNCTIONS (EXIF/Metadata Injection)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Build EXIF data for sticker metadata
+ */
+function buildStickerExif(metadata) {
+    const json = Buffer.from(JSON.stringify(metadata), 'utf-8');
+    
+    const exif = Buffer.concat([
+        Buffer.from([
+            0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57,
+            0x07, 0x00
+        ]),
+        Buffer.alloc(4),
+        Buffer.from([0x16, 0x00, 0x00, 0x00]),
+        json
+    ]);
+    
+    exif.writeUInt32LE(json.length, 14);
+    return exif;
+}
+
+/**
+ * Create WebP chunk with proper formatting
+ */
+function makeChunk(type, data) {
+    const typeBuffer = Buffer.from(type);
+    const sizeBuffer = Buffer.alloc(4);
+    sizeBuffer.writeUInt32LE(data.length, 0);
+    
+    const padding = data.length % 2 === 1 ? Buffer.from([0x00]) : Buffer.alloc(0);
+    
+    return Buffer.concat([typeBuffer, sizeBuffer, data, padding]);
+}
+
+/**
+ * Inject EXIF metadata into WebP sticker
+ */
+function setWebpExif(webpBuffer, metadata) {
+    // Validate WebP header
+    if (webpBuffer.slice(0, 4).toString() !== 'RIFF' || webpBuffer.slice(8, 12).toString() !== 'WEBP') {
+        throw new Error('Invalid WEBP file.');
+    }
+    
+    const chunks = [];
+    let offset = 12;
+    
+    // Parse existing chunks
+    while (offset + 8 <= webpBuffer.length) {
+        const type = webpBuffer.slice(offset, offset + 4).toString();
+        const size = webpBuffer.readUInt32LE(offset + 4);
+        const chunkStart = offset;
+        const chunkEnd = offset + 8 + size + (size % 2);
+        
+        if (chunkEnd > webpBuffer.length) break;
+        
+        // Skip existing EXIF chunk
+        if (type !== 'EXIF') {
+            chunks.push(webpBuffer.slice(chunkStart, chunkEnd));
+        }
+        
+        offset = chunkEnd;
+    }
+    
+    // Add new EXIF chunk
+    const exifPayload = buildStickerExif(metadata);
+    const exifChunk = makeChunk('EXIF', exifPayload);
+    
+    const body = Buffer.concat([...chunks, exifChunk]);
+    
+    // Build new RIFF header
+    const header = Buffer.alloc(12);
+    header.write('RIFF', 0);
+    header.writeUInt32LE(body.length + 4, 4);
+    header.write('WEBP', 8);
+    
+    return Buffer.concat([header, body]);
+}
+
+/**
+ * Download sticker buffer from message
+ */
+async function downloadStickerBuffer(stickerMessage) {
+    try {
+        const stream = await downloadContentFromMessage(stickerMessage, 'sticker');
+        
+        const chunks = [];
+        for await (const chunk of stream) {
+            chunks.push(chunk);
+        }
+        
+        return Buffer.concat(chunks);
+    } catch (error) {
+        console.error('[downloadStickerBuffer]', error?.message || error);
+        throw error;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PREMIUM STICKER COMMAND (Inject EXIF/Metadata)
+// ─────────────────────────────────────────────────────────────
+
+async function stickerPremiumCommand(sock, chatId, message) {
+    try {
+        const senderId = message?.key?.participant || message?.key?.remoteJid || '';
+        
+        // Get the quoted message
+        const contextInfo = message.message?.extendedTextMessage?.contextInfo || message.quoted?.contextInfo || {};
+        const quotedMessage = contextInfo.quotedMessage || message.quoted?.message || message.quoted;
+        const stickerMessage = quotedMessage?.stickerMessage || quotedMessage?.message?.stickerMessage;
+        
+        if (!stickerMessage) {
+            await sock.sendMessage(chatId, { 
+                text: '✋ Reply to a regular WEBP sticker first.'
+            }, { quoted: message });
+            return;
+        }
+        
+        if (stickerMessage.mimetype !== 'image/webp') {
+            await sock.sendMessage(chatId, {
+                text: '❌ Not a regular WEBP sticker. Animated/Lottie stickers need different handling.'
+            }, { quoted: message });
+            return;
+        }
+        
+        // Download sticker buffer
+        const stickerBuffer = await downloadStickerBuffer(stickerMessage);
+        
+        // Define premium metadata
+        const metadata = {
+            'sticker-pack-id': crypto.randomUUID(),
+            'sticker-pack-name': settings.packname || '⚡ Mickey Glitch',
+            'sticker-pack-publisher': settings.author || 'Copilot',
+            'accessibility-text': 'Premium Sticker',
+            'android-app-store-link': 'https://whatsapp.com',
+            'ios-app-store-link': 'https://whatsapp.com/ios',
+            'emojis': ['🦸', '😴', '😌'],
+            'is-from-sticker-maker': 0,
+            'is-avatar-sticker': 1,
+            'avatar-sticker-template-id': 'whatsapp',
+            'is-ai-sticker': 1,
+            'is-avatar-country-sticker': 1,
+            'is-avatar-instant-sticker': 1,
+            'sticker-maker-source-type': 4,
+            'is-avatar-social-sticker': 1,
+            'avatar-sticker-style': 'whatsapp',
+            'avatar-sticker-revision-id': '2026',
+            'is-from-user-created-pack': 1,
+            'origin-pack-id': 'whatsapp',
+            'is-text-sticker': 1,
+            'premium': 1
+        };
+        
+        // Inject EXIF metadata
+        const finalStickerBuffer = setWebpExif(stickerBuffer, metadata);
+        
+        // Prepare media for upload
+        const media = await prepareWAMessageMedia(
+            { sticker: finalStickerBuffer },
+            { upload: sock.waUploadToServer }
+        );
+        
+        // Build message content
+        const msgContent = {
+            messageContextInfo: {
+                limitSharingV2: {
+                    sharingLimited: true,
+                    trigger: 'CHAT_SETTING',
+                    limitSharingSettingTimestamp: Date.now().toString(),
+                    initiatedByMe: true
+                }
+            },
+            stickerMessage: {
+                ...media.stickerMessage,
+                isAnimated: stickerMessage.isAnimated || false,
+                isAvatar: true,
+                isAiSticker: true,
+                isLottie: false
+            }
+        };
+        
+        // Generate and relay message
+        const msg = await generateWAMessageFromContent(chatId, msgContent, {
+            quoted: message,
+            userJid: sock.user.id
+        });
+        
+        await sock.relayMessage(chatId, msg.message, {
+            messageId: msg.key.id
+        });
+        
+        console.log('[sticker-premium] ✅ Sticker metadata injected and sent');
+        return true;
+        
+    } catch (error) {
+        console.error('[sticker-premium]', error?.message || error);
+        await sock.sendMessage(chatId, {
+            text: '❌ Failed to inject sticker metadata. Check console.'
+        }, { quoted: message }).catch(() => {});
+        return false;
+    }
+}
+
 
 async function stickerCommand(sock, chatId, message) {
     // The message that will be quoted in the reply.
@@ -198,4 +404,17 @@ async function stickerCommand(sock, chatId, message) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+// EXPORTS
+// ─────────────────────────────────────────────────────────────
+
 module.exports = stickerCommand;
+module.exports.name = 'sticker';
+module.exports.aliases = ['s', 'stick'];
+module.exports.category = 'converter';
+module.exports.desc = 'Convert image/video to sticker';
+module.exports.execute = stickerCommand;
+
+// Premium sticker command (inject metadata)
+module.exports.stickerPremium = stickerPremiumCommand;
+module.exports.stickerPremiumCommand = stickerPremiumCommand;
