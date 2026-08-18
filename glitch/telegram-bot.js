@@ -347,18 +347,32 @@ function collectCommandEntries(cmdModule, baseName) {
     const entries = [];
 
     const addEntry = (handler, name = baseName, aliases = [], config = {}) => {
-        if (typeof handler === 'function') {
-            entries.push({
-                execute: handler,
-                name: name || baseName,
-                aliases: Array.isArray(aliases) ? aliases : [],
-                config
-            });
-        }
+        if (typeof handler !== 'function') return;
+        const finalName = String(name || baseName || '').trim();
+        if (!finalName || finalName === 'default') return;
+
+        entries.push({
+            execute: handler,
+            name: finalName,
+            aliases: Array.isArray(aliases) ? aliases : [],
+            config: config || {}
+        });
+    };
+
+    const isLikelyHelper = (name, candidate) => {
+        if (typeof candidate !== 'function') return false;
+        const lower = String(name || '').toLowerCase();
+        const helperPatterns = [
+            'create', 'find', 'get', 'make', 'generate', 'normalize', 'sanitize',
+            'download', 'send', 'build', 'set', 'parse', 'load', 'save', 'format',
+            'check', 'is', 'add', 'remove', 'log', 'ensure', 'extract'
+        ];
+        return helperPatterns.some(pattern => lower.startsWith(pattern)) && lower !== baseName.toLowerCase();
     };
 
     if (typeof cmdModule === 'function') {
-        addEntry(cmdModule, baseName);
+        const name = cmdModule.name || baseName;
+        if (!isLikelyHelper(name, cmdModule)) addEntry(cmdModule, name);
         return entries;
     }
 
@@ -373,7 +387,8 @@ function collectCommandEntries(cmdModule, baseName) {
 
     if (cmdModule.default) {
         if (typeof cmdModule.default === 'function') {
-            addEntry(cmdModule.default, cmdModule.name || baseName);
+            const name = cmdModule.name || cmdModule.default.name || baseName;
+            if (!isLikelyHelper(name, cmdModule.default)) addEntry(cmdModule.default, name, Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [], cmdModule.config || {});
         } else if (typeof cmdModule.default.execute === 'function') {
             addEntry(
                 cmdModule.default.execute,
@@ -396,8 +411,12 @@ function collectCommandEntries(cmdModule, baseName) {
     }
 
     for (const [key, value] of Object.entries(cmdModule)) {
+        if (key === 'default' || key === 'config' || key === 'name' || key === 'aliases') continue;
+
         if (typeof value === 'function') {
-            addEntry(value, key === 'default' ? baseName : key);
+            if (!isLikelyHelper(key, value)) {
+                addEntry(value, key === 'default' ? baseName : key);
+            }
         } else if (value && typeof value === 'object' && typeof value.execute === 'function') {
             const entryName = value.name || (key === 'default' ? baseName : key);
             addEntry(value.execute, entryName, Array.isArray(value.aliases) ? value.aliases : [], value.config || {});
@@ -701,6 +720,77 @@ function logToFile(fileName, content) {
     }
 }
 
+function createTelegramSafeSock(sock, chatId, message) {
+    const fallbackSend = async (jid, content, options = {}) => {
+        try {
+            if (typeof sock?.sendMessage === 'function') {
+                return await sock.sendMessage(jid, content, options);
+            }
+
+            const text = typeof content === 'string'
+                ? content
+                : (content?.text || content?.caption || JSON.stringify(content || {}));
+
+            if (!text) return false;
+            return await sendTelegramMessage(String(jid || chatId), String(text).slice(0, 4000), {}, message?.message_id || null);
+        } catch (error) {
+            return false;
+        }
+    };
+
+    const fallbackRelay = async (targetJid, payload, options = {}) => {
+        try {
+            if (typeof sock?.relayMessage === 'function') {
+                return await sock.relayMessage(targetJid, payload, options);
+            }
+
+            if (payload && typeof payload === 'object') {
+                if (payload.text || payload.caption) {
+                    return await fallbackSend(targetJid, payload.text || payload.caption, options);
+                }
+
+                if (payload.interactiveResponseMessage) {
+                    const title = payload.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson
+                        ? JSON.parse(payload.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson || '{}')
+                        : {};
+                    const titleText = title?.wa_flow_response_params?.title || 'Mickey Glitch';
+                    await sendTelegramMessage(String(targetJid || chatId), String(titleText).slice(0, 4000), {}, message?.message_id || null);
+                    return { ok: true };
+                }
+
+                if (payload.sticker || payload.image || payload.video || payload.document) {
+                    const text = payload.caption || 'Media sent from WhatsApp-safe fallback';
+                    if (payload.sticker) {
+                        return await sendTelegramSticker(String(targetJid || chatId), payload.sticker, message?.message_id || null);
+                    }
+                    if (payload.image) {
+                        return await sendTelegramPhoto(String(targetJid || chatId), payload.image, text, message?.message_id || null);
+                    }
+                    if (payload.video) {
+                        return await sendTelegramVideo(String(targetJid || chatId), payload.video, text, message?.message_id || null);
+                    }
+                    if (payload.document) {
+                        return await sendTelegramDocument(String(targetJid || chatId), payload.document, text, message?.message_id || null);
+                    }
+                }
+            }
+
+            return { ok: true };
+        } catch (error) {
+            return false;
+        }
+    };
+
+    return {
+        ...sock,
+        sendMessage: fallbackSend,
+        relayMessage: fallbackRelay,
+        user: sock?.user || { id: 'telegram-user' },
+        chatId,
+        message
+    };
+}
+
 async function executeCommand(sock, chatId, message, commandText) {
     try {
         const parsed = parseCommandText(commandText || '');
@@ -709,7 +799,13 @@ async function executeCommand(sock, chatId, message, commandText) {
         const target = whatsappCommands.get(parsed.name) || whatsappCommands.get(normalizeCommandName(parsed.name));
         if (!target || typeof target.execute !== 'function') return false;
 
-        const result = await target.execute(sock, chatId, message, parsed.args || '');
+        const safeSock = createTelegramSafeSock(sock, chatId, message);
+        const result = await target.execute(safeSock, chatId, message, parsed.args || '', {
+            senderId: message?.from || message?.sender || message?.chat?.id || null,
+            chatId,
+            telegram: true,
+            isTelegramBridge: true
+        });
         return !!result;
     } catch (error) {
         logError(`Telegram command execution failed: ${error?.message || error}`);

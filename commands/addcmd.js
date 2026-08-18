@@ -65,13 +65,30 @@ function loadCommandModule(commandPath) {
 
 function findHandler(commandModule) {
     if (typeof commandModule === 'function') return commandModule;
-    if (commandModule && typeof commandModule === 'object') {
-        if (typeof commandModule.code === 'function') return commandModule.code;
-        if (typeof commandModule.handler === 'function') return commandModule.handler;
-        if (typeof commandModule.default === 'function') return commandModule.default;
-        if (typeof commandModule.run === 'function') return commandModule.run;
-        if (typeof commandModule.execute === 'function') return commandModule.execute;
+    if (!commandModule || typeof commandModule !== 'object') return null;
+
+    const candidates = [
+        commandModule.code,
+        commandModule.handler,
+        commandModule.run,
+        commandModule.execute,
+        commandModule.default,
+        commandModule.main,
+        commandModule.logic,
+    ];
+
+    for (const candidate of candidates) {
+        if (typeof candidate === 'function') return candidate;
     }
+
+    if (commandModule && typeof commandModule === 'object') {
+        for (const value of Object.values(commandModule)) {
+            if (typeof value === 'function') {
+                return value;
+            }
+        }
+    }
+
     return null;
 }
 
@@ -164,25 +181,30 @@ function saveCustomCommand(commandName, sourceCode) {
         throw new Error('Command source is empty');
     }
 
-    // Normalize any odd messageBuilder requires to the canonical path
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
 
-    // If user's source already references messageBuilder or the common symbols,
-    // do not inject the header to avoid duplicate declarations (createCtx, Button, etc.)
     const symbolNames = ['Button', 'ButtonV2', 'Carousel', 'AIRich', 'Toolkit', 'createCtx'];
     const hasMessageBuilderRequire = /messageBuilder/.test(cleaned);
     const hasSymbol = symbolNames.some((s) => new RegExp('\\b' + s + '\\b').test(cleaned));
-
     const header = `${GENERATED_MARKER}\nconst { Button, ButtonV2, Carousel, AIRich, Toolkit, createCtx } = require('../lib/messageBuilder');\n\n`;
 
-    if (!cleaned.includes('module.exports')) {
-        if (/^async\s*\(/.test(cleaned) || /^async\s+[A-Za-z0-9_$]+\s*\(/.test(cleaned) || /^function\s*/.test(cleaned) || /^\(.*\)\s*=>/.test(cleaned)) {
+    const isDirectFunction = /^async\s*\(/.test(cleaned) || /^async\s+[A-Za-z0-9_$]+\s*\(/.test(cleaned) || /^function\s*/.test(cleaned) || /^\(.*\)\s*=>/.test(cleaned);
+    const isObjectExport = /module\.exports\s*=\s*\{/.test(cleaned) || /exports\.[A-Za-z0-9_$]+\s*=/.test(cleaned);
+
+    if (!cleaned.includes('module.exports') && !isObjectExport) {
+        if (isDirectFunction) {
             cleaned = `module.exports = ${cleaned};`;
         } else {
-            cleaned = `module.exports = {\n    code: async (ctx) => {\n        ${cleaned}\n    },\n    name: '${commandName}',\n    description: 'Generated command',\n    category: 'UTILITY'\n};`;
+            cleaned = `module.exports = {\n    code: async (sock, chatId, message, args = [], options = {}) => {\n        ${cleaned}\n    },\n    name: '${commandName}',\n    description: 'Generated command',\n    category: 'UTILITY'\n};`;
         }
+    }
+
+    // If source is a single exported function object with no explicit name metadata, auto-add metadata.
+    if (/module\.exports\s*=\s*async\s+function/.test(cleaned) || /module\.exports\s*=\s*\(?\s*\(?[^)]*\)\s*=>/.test(cleaned)) {
+        cleaned = cleaned.replace(/module\.exports\s*=\s*/, "module.exports = async function generatedCommand(sock, chatId, message, args = [], options = {}) {\n    return (async () => {\n    ");
+        cleaned += '\n    })();\n};\n';
     }
 
     const finalSource = `${hasMessageBuilderRequire || hasSymbol ? '' : header}${cleaned}\n`;
@@ -336,6 +358,31 @@ async function executeInSandbox(codeText, sandbox, timeout = 10000) {
 // 5. RUN COMMAND
 // ─── ──────────────────────────────────────────────────────────────────────
 
+async function safeInvokeHandler(handler, sandbox, args = []) {
+    if (typeof handler !== 'function') {
+        throw new Error('No valid handler found');
+    }
+
+    const arity = handler.length;
+
+    if (arity <= 1) {
+        return await handler(sandbox);
+    }
+
+    if (arity === 2) {
+        return await handler(sandbox.sock, sandbox.chatId);
+    }
+
+    if (arity >= 3) {
+        return await handler(sandbox.sock, sandbox.chatId, sandbox.message, args, {
+            senderId: sandbox.senderId,
+            commandName: sandbox.commandName,
+        });
+    }
+
+    return await handler();
+}
+
 async function runCommand(sock, chatId, senderId, rawText, message, fullText = '') {
     try {
         const isOwner = message?.key?.fromMe || senderId?.toString()?.endsWith('@s.whatsapp.net') || false;
@@ -462,12 +509,7 @@ Examples:
 
             try {
                 const sandbox = createSandbox(sock, chatId, message, args, senderId, commandName);
-                const handlerResult = handler.length <= 1
-                    ? await handler(sandbox)
-                    : await handler(sandbox.sock, sandbox.chatId, sandbox.message, sandbox.args, {
-                        senderId: sandbox.senderId,
-                        commandName: sandbox.commandName,
-                    });
+                const handlerResult = await safeInvokeHandler(handler, sandbox, sandbox.args);
 
                 if (!sandbox.__sent) {
                     let response;
