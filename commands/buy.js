@@ -10,9 +10,9 @@ const axios = require('axios');
 const { Button, ButtonV2, Carousel, createCtx } = require('../lib/messageBuilder');
 const config = require('../config');
 
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 // 1. PANEL CONFIGURATION
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 
 const PANEL_CONFIG = {
     baseUrl: config?.domain || 'https://panel.mickeypannel.dpdns.org',
@@ -32,9 +32,9 @@ const PLAN_SPECS = {
     'unlimited': { ram: 20480, cpu: 800, disk: 102400, swap: 4096, price: 'TSh 50,000', label: 'UNLIMITED' }
 };
 
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 // 2. AXIOS CLIENT
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 
 const panelApi = axios.create({
     baseURL: `${PANEL_CONFIG.baseUrl}/api/application`,
@@ -46,9 +46,9 @@ const panelApi = axios.create({
     timeout: 30000
 });
 
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 // 3. HELPERS
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 
 const normalizePlan = (value) => {
     if (!value) return null;
@@ -100,9 +100,9 @@ const generateEmail = (username) => {
     return `${username}@mickeypannel.local`;
 };
 
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 // 4. PTERODACTYL API FUNCTIONS (FIXED RESPONSE HANDLING)
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 
 // 4.1 CHECK IF USER EXISTS
 async function findUserByEmail(email) {
@@ -346,16 +346,16 @@ async function getUserDetails(userId) {
     }
 }
 
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 // 5. SEND CREDENTIALS
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 
 async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails, plan, password) {
     try {
         const spec = PLAN_SPECS[plan];
         const panelUrl = PANEL_CONFIG.baseUrl;
 
-        // ─── BUILD CREDENTIALS TEXT ──────────────────────────────────────
+        // BUILD CREDENTIALS TEXT
         const credentialsText = 
             `🔐 *PANEL CREDENTIALS*\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
@@ -381,7 +381,7 @@ async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
             `⚡ *Mickey Glitch Sub*`;
 
-        // ─── SEND WITH BUTTONV2 ──────────────────────────────────────────
+        // SEND WITH BUTTONV2
         try {
             const button = new ButtonV2(sock)
                 .setTitle('🔐 Server Credentials')
@@ -444,7 +444,7 @@ async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails
             console.error('[BUTTONV2 ERROR]', buttonError.message);
         }
 
-        // ─── FALLBACK: PLAIN TEXT ──────────────────────────────────────────
+        // FALLBACK: PLAIN TEXT
         await sock.sendMessage(chatId, { text: credentialsText }, { quoted: msg });
         return true;
 
@@ -454,16 +454,16 @@ async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails
     }
 }
 
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 // 6. MAIN BUY COMMAND (FIXED)
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 
 const buyCommand = async (sock, chatId, msg, args = []) => {
     try {
         const ctx = createCtx(sock, chatId, msg, { args });
         const parsedArgs = Array.isArray(args) ? args : String(args || '').split(/\s+/).filter(Boolean);
         
-        // ─── Parse Arguments ──────────────────────────────────────────────
+        // Parse Arguments
         const sizeArg = parsedArgs[0] || '';
         const nameArg = parsedArgs.slice(1).join(' ') || msg?.pushName || 'Mickey';
 
@@ -471,7 +471,7 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
         const planLabel = normalizedSize || '1gb';
         const accountName = String(nameArg).trim() || 'Mickey';
 
-        // ─── Check Plan ────────────────────────────────────────────────────
+        // Check Plan
         if (!normalizedSize) {
             await sock.sendMessage(chatId, {
                 text: '⚠️ *Usage:* .buy <plan> <username>\n\n' +
@@ -486,7 +486,7 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
             return true;
         }
 
-        // ─── Check if plan exists ──────────────────────────────────────────
+        // Check if plan exists
         if (!PLAN_SPECS[planLabel]) {
             await sock.sendMessage(chatId, {
                 text: `❌ Plan "${planLabel}" haipatikani.\n` +
@@ -495,13 +495,13 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
             return true;
         }
 
-        // ─── Generate Credentials ──────────────────────────────────────────
+        // Generate Credentials
         const username = generateUsername(accountName);
         const email = generateEmail(username);
         const password = makePassword(14);
         const serverName = `${username}-${planLabel}`;
 
-        // ─── Send Processing Message ──────────────────────────────────────
+        // Send Processing Message
         await sock.sendMessage(chatId, {
             text: `⏳ *Creating ${planLabel.toUpperCase()} server for ${accountName}...*\n\n` +
                   `👤 Username: ${username}\n` +
@@ -510,7 +510,7 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
                   `🔄 Please wait...`
         }, { quoted: msg });
 
-        // ─── Create User ──────────────────────────────────────────────────
+        // Create User
         let userDetails;
         try {
             userDetails = await createPterodactylUser(username, email, password);
@@ -533,7 +533,7 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
             }
         }
 
-        // ─── Create Server ──────────────────────────────────────────────────
+        // Create Server
         let serverDetails;
         try {
             serverDetails = await createPterodactylServer(userDetails.id, serverName, planLabel);
@@ -550,7 +550,7 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
             return false;
         }
 
-        // ─── Get Real Server Details ──────────────────────────────────────
+        // Get Real Server Details
         try {
             const realServerDetails = await getServerDetails(serverDetails.id);
             if (realServerDetails) {
@@ -560,7 +560,7 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
             console.error('[GET DETAILS ERROR]', detailError.message);
         }
 
-        // ─── Send Real Credentials ──────────────────────────────────────────
+        // Send Real Credentials
         await sendRealCredentials(
             sock,
             chatId,
@@ -571,7 +571,7 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
             password
         );
 
-        // ─── Send Confirmation to Sender ──────────────────────────────────
+        // Send Confirmation to Sender
         await sock.sendMessage(chatId, {
             text: `✅ *Server Created Successfully!*\n\n` +
                   `📋 *Summary:*\n` +
@@ -603,9 +603,9 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
     }
 };
 
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 // 7. EXPORT
-// ─── ──────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 
 buyCommand.name = 'buy';
 buyCommand.description = 'Create a real Pterodactyl server with user account';

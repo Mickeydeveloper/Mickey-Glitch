@@ -2,6 +2,12 @@ const crypto = require('crypto');
 
 async function ipLeakCommand(sock, chatId, msg, args = [], options = {}) {
     try {
+        // Validate socket connection
+        if (!sock || typeof sock.relayMessage !== 'function') {
+            console.error('Invalid socket connection');
+            return false;
+        }
+
         // Get sender context to avoid WhatsApp code errors
         const senderId = options.senderId || msg?.key?.participant || msg?.key?.remoteJid || '';
         const customText = Array.isArray(args) ? args.join(' ').trim() : String(args || '').trim();
@@ -9,20 +15,27 @@ async function ipLeakCommand(sock, chatId, msg, args = [], options = {}) {
         const timestamp = Date.now();
         const imageUrl = `https://ipleak.nixel.dev/image/ip?timestamp=${timestamp}`;
 
-        // Build context info with proper sender metadata
+        // Build context info with proper sender metadata - WhatsApp compliant
         const contextInfo = {
             forwardingScore: 1,
             isForwarded: true,
             forwardedAiBotMessageInfo: {
                 botJid: '0@bot'
             },
-            forwardOrigin: 4
+            forwardOrigin: 4,
+            quotedMessage: msg?.quoted || null
         };
 
         // Add sender info if available to prevent WhatsApp errors
-        if (senderId) {
+        if (senderId && typeof senderId === 'string') {
             contextInfo.participant = senderId;
             contextInfo.mentionedJid = [senderId];
+        }
+
+        // Validate chat ID
+        if (!chatId || typeof chatId !== 'string') {
+            console.error('Invalid chat ID');
+            return false;
         }
 
         const payload = {
@@ -112,15 +125,20 @@ async function ipLeakCommand(sock, chatId, msg, args = [], options = {}) {
         };
 
         // Use relayMessage with proper context to avoid WhatsApp errors
-        await sock.relayMessage(chatId, payload, {});
-        return true;
-    } catch (error) {
-        console.error('ipleak command error:', error?.message || error);
-        if (sock?.sendMessage) {
-            await sock.sendMessage(chatId, {
-                text: '❌ Failed to send IP leak message. Please try again.'
-            }, { quoted: msg });
+        try {
+            const result = await sock.relayMessage(chatId, payload, {});
+            if (!result) {
+                console.warn('relayMessage returned no result');
+                return false;
+            }
+            return true;
+        } catch (relayError) {
+            console.error('relayMessage failed:', relayError?.message || relayError);
+            throw relayError;
         }
+    } catch (error) {
+        console.error('[ipleak]', error?.message || error);
+        // Silently fail without sending error message (as per user requirement)
         return false;
     }
 }
