@@ -10,6 +10,19 @@ const axios = require('axios');
 const { Button, ButtonV2, Carousel, createCtx } = require('../lib/messageBuilder');
 const config = require('../config');
 
+const BUY_INTERACTIVE_NODES = [{
+    tag: 'biz',
+    attrs: {},
+    content: [{
+        tag: 'interactive',
+        attrs: { type: 'native_flow', v: '1' },
+        content: [{
+            tag: 'native_flow',
+            attrs: { v: '9', name: 'mixed' }
+        }]
+    }]
+}];
+
 // ════════════════════════════════════════════════════════════════════════════
 // 1. PANEL CONFIGURATION
 // ════════════════════════════════════════════════════════════════════════════
@@ -438,7 +451,10 @@ async function sendRealCredentials(sock, chatId, msg, userDetails, serverDetails
                     })
                 });
 
-            await button.send(chatId, { quoted: msg });
+            await button.send(chatId, {
+                quoted: msg,
+                additionalNodes: BUY_INTERACTIVE_NODES
+            });
             return true;
         } catch (buttonError) {
             console.error('[BUTTONV2 ERROR]', buttonError.message);
