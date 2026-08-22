@@ -17,6 +17,28 @@ const fileTypeFromBuffer =
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+async function deletePreviousMessages(sock, chatId, messages = []) {
+    if (!sock?.sendMessage || !Array.isArray(messages)) return
+
+    for (const sentMessage of messages) {
+        const key = sentMessage?.key
+        if (!key?.id) continue
+
+        try {
+            await sock.sendMessage(chatId, {
+                delete: {
+                    remoteJid: key.remoteJid || chatId,
+                    fromMe: key.fromMe !== false,
+                    id: key.id,
+                    participant: key.participant,
+                },
+            })
+        } catch (error) {
+            console.error('Failed to delete previous source message:', error?.message || error)
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // 🎭 IDENTITY GENERATOR - ANTI-DETECTION SYSTEM
 // ═══════════════════════════════════════════════════════════════
