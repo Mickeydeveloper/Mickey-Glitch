@@ -320,9 +320,9 @@ async function repoCommand(sock, chatId, m, body = '') {
                 `🔗 *Visit now:* ${CONFIG.REPO_URL}`;
 
             const buttons = [
-                { displayText: '📦 Download ZIP', buttonId: 'download_zip' },
-                { displayText: '📜 Menu', buttonId: '.menu' },
-                { displayText: '⭐ Star', buttonId: 'view_repo' }
+                { displayText: '📦 Download ZIP', buttonId: '.rich' },
+                { displayText: '📜 Menu', buttonId: '.rich' },
+                { displayText: '⭐ Star', buttonId: '.rich' }
             ];
 
             await sendWithButtonV2(sock, chatId, safeM, repoMessage, CONFIG.FOOTER, '🌐 GitHub View', buttons);
@@ -370,9 +370,9 @@ async function repoCommand(sock, chatId, m, body = '') {
 _Use buttons below to interact._`;
 
             const buttons = [
-                { displayText: '📦 DOWNLOAD ZIP', buttonId: 'download_zip' },
-                { displayText: '🌐 VIEW REPO', buttonId: 'view_repo' },
-                { displayText: '📜 MENU', buttonId: '.menu' }
+                { displayText: '📦 DOWNLOAD ZIP', buttonId: '.rich' },
+                { displayText: '🌐 VIEW REPO', buttonId: '.rich' },
+                { displayText: '📜 MENU', buttonId: '.rich' }
             ];
 
             await sendWithButtonV2(sock, chatId, safeM, statusMessage, CONFIG.FOOTER, '🛸 Repo Info', buttons);
