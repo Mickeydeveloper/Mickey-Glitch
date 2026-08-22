@@ -1,10 +1,4 @@
-const { delay } = require('@whiskeysockets/baileys');
 const isOwnerOrSudo = require('../lib/isOwner');
-
-/**
- * delete.js - Delete other people's messages in groups
- * Uses relayMessage with groupStatusMessageV2 for powerful message deletion
- */
 
 async function deleteCommand(sock, chatId, message, args = [], options = {}) {
   try {
@@ -31,76 +25,18 @@ async function deleteCommand(sock, chatId, message, args = [], options = {}) {
       }
     }
 
-    // Get stanza ID of the quoted message
-    let stanzaId = message.quoted?.stanzaId || message.quoted?.key?.id || message?.message?.extendedTextMessage?.contextInfo?.stanzaId;
+    const quotedKey = message.quoted?.key || {
+      remoteJid: targetChatId,
+      id: message.quoted?.stanzaId || message?.message?.extendedTextMessage?.contextInfo?.stanzaId,
+      participant: message.quoted?.participant || message?.message?.extendedTextMessage?.contextInfo?.participant,
+      fromMe: Boolean(message.quoted?.fromMe)
+    };
 
-    if (!stanzaId) {
+    if (!quotedKey.id) {
       return false;
     }
 
-    // Create temp message with groupStatusMessageV2
-    const tempId = await sock.relayMessage(
-      targetChatId,
-      {
-        groupStatusMessageV2: {
-          message: {
-            extendedTextMessage: {
-              text: '',
-              contextInfo: {
-                isGroupStatus: true,
-              },
-            },
-          },
-        },
-      },
-      {}
-    );
-
-    // Send protocol message to edit and delete the quoted message
-    const tempId2 = await sock.relayMessage(
-      targetChatId,
-      {
-        protocolMessage: {
-          key: {
-            jid: targetChatId,
-            fromMe: true,
-            id: tempId,
-          },
-          type: 14,
-          editedMessage: {
-            extendedTextMessage: {
-              text: '\0',
-              contextInfo: {
-                isGroupStatus: false,
-              },
-            },
-          },
-        },
-      },
-      {
-        messageId: stanzaId,
-      }
-    );
-
-    await delay(100);
-
-    // Clean up temp messages
-    await Promise.allSettled([
-      sock.sendMessage(targetChatId, {
-        delete: {
-          remoteJid: targetChatId,
-          id: tempId,
-          fromMe: true,
-        },
-      }),
-      sock.sendMessage(targetChatId, {
-        delete: {
-          remoteJid: targetChatId,
-          id: tempId2,
-          fromMe: true,
-        },
-      }),
-    ]);
+    await sock.sendMessage(targetChatId, { delete: quotedKey });
 
     return true;
   } catch (error) {
@@ -116,69 +52,12 @@ async function dmsgHandler(m, { conn }) {
     }
 
     try {
-        const chatId = m.chat;
-        const stanzaId = m.quoted.id;
+      const chatId = m.chat;
+      const senderId = m.sender || m.key?.participant || m.key?.remoteJid;
+      const isAllowed = await isOwnerOrSudo(senderId, conn, chatId);
+      if (!isAllowed) return;
 
-        const tempId = await conn.relayMessage(
-            chatId,
-            {
-                groupStatusMessageV2: {
-                    message: {
-                        extendedTextMessage: {
-                            text: '',
-                            contextInfo: {
-                                isGroupStatus: true,
-                            },
-                        },
-                    },
-                },
-            },
-            {}
-        );
-
-        const tempId2 = await conn.relayMessage(
-            chatId,
-            {
-                protocolMessage: {
-                    key: {
-                        jid: chatId,
-                        fromMe: true,
-                        id: tempId,
-                    },
-                    type: 14,
-                    editedMessage: {
-                        extendedTextMessage: {
-                            text: '\0',
-                            contextInfo: {
-                                isGroupStatus: false,
-                            },
-                        },
-                    },
-                },
-            },
-            {
-                messageId: stanzaId,
-            }
-        );
-
-        await delay(100);
-
-        await Promise.allSettled([
-            conn.sendMessage(chatId, {
-                delete: {
-                    remoteJid: chatId,
-                    id: tempId,
-                    fromMe: true,
-                },
-            }),
-            conn.sendMessage(chatId, {
-                delete: {
-                    remoteJid: chatId,
-                    id: tempId2,
-                    fromMe: true,
-                },
-            }),
-        ]);
+      await conn.sendMessage(chatId, { delete: m.quoted.key });
 
     } catch (e) {
         console.error('[dmsg]', e);
