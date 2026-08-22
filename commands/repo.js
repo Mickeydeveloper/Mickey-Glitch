@@ -30,7 +30,7 @@ const { Button, ButtonV2, AIRich, Toolkit, createCtx } = messageBuilder;
 // ─── CONFIGURATION ─────────────────────────────────────────────────────────────
 const CONFIG = {
     FOOTER: '🪐 ᴍɪᴄᴋᴇʏ ɢʟɪᴛᴄʜ ᴍᴅ • 𝟸𝟶𝟸𝟼 🪐',
-    REPO_URL: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
+    REPO_URL: 'ipo inbox ',
     BANNER: 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/chatbot.png?raw=true',
     VERSION: '3.3.0',
     MODE: 'PUBLIC',
