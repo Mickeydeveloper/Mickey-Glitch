@@ -17,6 +17,53 @@ const fileTypeFromBuffer =
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const NIXELL_API_URL = process.env.NIXELL_API_URL || ''
+
+async function fetchNixellExamples() {
+    if (!NIXELL_API_URL) return []
+
+    try {
+        const response = await axios.get(NIXELL_API_URL, { timeout: 15000 })
+        const examples = Array.isArray(response.data)
+            ? response.data
+            : response.data?.examples || response.data?.data || []
+
+        return examples
+            .filter((example) => example && (example.id || example.raw_url || example.url))
+            .map((example, index) => ({
+                id: String(example.id || example.raw_url || example.url),
+                title: String(example.title || example.name || `Example ${index + 1}`),
+                added: String(example.added || example.created_at || 'Nixellv2'),
+                url: example.raw_url || example.url || null,
+            }))
+            .slice(0, 30)
+    } catch (error) {
+        console.error('Failed to fetch Nixell examples:', error?.message || error)
+        return []
+    }
+}
+
+async function fetchPasteContent(exampleId) {
+    if (!exampleId) return ''
+
+    const url = /^https?:\/\//i.test(exampleId)
+        ? exampleId
+        : `${NIXELL_API_URL.replace(/\/$/, '')}/${encodeURIComponent(exampleId)}`
+
+    if (!NIXELL_API_URL && !/^https?:\/\//i.test(exampleId)) return ''
+
+    try {
+        const response = await axios.get(url, { timeout: 15000, responseType: 'text' })
+        const content = typeof response.data === 'string'
+            ? response.data
+            : response.data?.content || response.data?.raw || ''
+        return typeof content === 'string' ? content.slice(0, 50000) : ''
+    } catch (error) {
+        console.error('Failed to fetch Nixell example content:', error?.message || error)
+        return ''
+    }
+}
+
 async function deletePreviousMessages(sock, chatId, messages = []) {
     if (!sock?.sendMessage || !Array.isArray(messages)) return
 
@@ -671,30 +718,14 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
         if (!userMessages[chatId]) userMessages[chatId] = [];
         userMessages[chatId].push(msg);
 
-        // Kama kodi ina muundo wa relayMessage au interactiveMessage, itakuwa executed kama live sample
+        // Remote samples are displayed as code and are never executed inside the bot.
         if (content.includes('relayMessage') || content.includes('interactiveMessage') || 
             content.includes('documentMessage') || content.includes('stickerMessage')) {
-            try {
-                const sanitizedContent = content
-                    .replace(/sock\.sendMessage/g, 'sock?.sendMessage')
-                    .replace(/sock\.relayMessage/g, 'sock?.relayMessage');
-
-                const runTemplate = new Function('sock', 'chatId', 'msg', 'baileys', `
-                    const conn = sock; 
-                    const m = { chat: chatId };
-                    try {
-                        ${sanitizedContent}
-                    } catch(err) {
-                        console.error("Internal template runtime error:", err);
-                        return false;
-                    }
-                    return true;
-                `);
-                return await runTemplate(sock, chatId, msg, baileys) || false;
-            } catch (e) {
-                console.error("❌ Imeshindwa ku-render live template kutoka pastebin:", e.message);
-                return false;
-            }
+            const sentCode = await sock.sendMessage(chatId, {
+                text: `📄 *${example.title || 'Nixellv2 Sample'}*\n\n\`\`\`javascript\n${content}\n\`\`\``
+            }, { quoted: msg })
+            userMessages[chatId].push(sentCode)
+            return true
         }
 
         // Hardcoded options kwa ajili ya usalama wa ziada
@@ -860,21 +891,13 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
                     .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/connection.jpg')
                     
                     // CTA COPY
-                    .addButton({
+                    .addRawButton({
                         name: 'cta_copy',
-                        buttonParamsJson: JSON.stringify({
-                            display_text: '📋 Copy Username',
-                            copy_code: 'demo_user',
-                            id: 'copy_user'
-                        })
+                        buttonParamsJson: JSON.stringify({ display_text: '📋 Copy Username', copy_code: 'demo_user' })
                     })
-                    .addButton({
+                    .addRawButton({
                         name: 'cta_copy',
-                        buttonParamsJson: JSON.stringify({
-                            display_text: '🔑 Copy Password',
-                            copy_code: 'demo_pass123',
-                            id: 'copy_pass'
-                        })
+                        buttonParamsJson: JSON.stringify({ display_text: '🔑 Copy Password', copy_code: 'demo_pass123' })
                     })
                     
                     // CTA URL
@@ -975,7 +998,7 @@ async function showNixellLiveSample(sock, chatId, msg, example, content) {
                         '• Template support'
                     )
                     .setFooter('⚡ Mickey Glitch Sub')
-                    .setTemplate(1);
+                    .addText('Rich message template demo.');
 
                 const sent = await rich.send(chatId, { quoted: msg });
                 userMessages[chatId].push(sent);
@@ -1442,7 +1465,7 @@ const sourceCommand = async (sock, chatId, msg, args) => {
             text: `📥 Inapakua: ${example.title}...` 
         }, { quoted: ctx._msg });
 
-        const content = await fetchPasteContent(example.id);
+        const content = await fetchPasteContent(example.url || example.id);
         if (!content) {
             await sock.sendMessage(ctx.chatId, { 
                 text: `❌ Imeshindwa kupata content ya ${example.title}` 
