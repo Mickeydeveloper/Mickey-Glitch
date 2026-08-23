@@ -2,13 +2,13 @@ const axios = require('axios');
 
 const MUSIC_CARD_API = 'https://api.nexray.eu.cc/canvas/musiccard';
 
-async function musiccardCommand(sock, chatId, message, args = []) {
+async function cardCommand(sock, chatId, message, args = []) {
     const input = Array.isArray(args) ? args.join(' ').trim() : String(args || '').trim();
     const [judul, nama, imageUrl] = input.split('|').map((value) => value.trim());
 
     if (!judul || !nama || !imageUrl) {
         await sock.sendMessage(chatId, {
-            text: '*Music Card Usage*\n\n.musiccard judul | nama | image_url\n\nExample:\n.musiccard dady bwai | mickey | https://files.catbox.moe/xmy96l.png'
+            text: '*Card Usage*\n\n.card judul | nama | image_url\n\nExample:\n.card dady bwai | mickey | https://files.catbox.moe/xmy96l.png'
         }, { quoted: message });
         return;
     }
@@ -22,7 +22,7 @@ async function musiccardCommand(sock, chatId, message, args = []) {
         return;
     }
 
-    await sock.sendMessage(chatId, { text: '🎵 Inatengeneza music card...' }, { quoted: message });
+    await sock.sendMessage(chatId, { text: '🎵 Inatengeneza card...' }, { quoted: message });
 
     try {
         const response = await axios.get(MUSIC_CARD_API, {
@@ -40,11 +40,11 @@ async function musiccardCommand(sock, chatId, message, args = []) {
             caption: `🎵 *${judul}*\n👤 ${nama}`
         }, { quoted: message });
     } catch (error) {
-        console.error('Music card error:', error?.message || error);
+        console.error('Card generation error:', error?.message || error);
         await sock.sendMessage(chatId, {
-            text: `❌ Imeshindwa kutengeneza music card.\n${error?.response?.data?.message || 'Jaribu tena baada ya muda.'}`
+            text: `❌ Imeshindwa kutengeneza card.\n${error?.response?.data?.message || 'Jaribu tena baada ya muda.'}`
         }, { quoted: message });
     }
 }
 
-module.exports = musiccardCommand;
+module.exports = cardCommand;
