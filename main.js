@@ -181,7 +181,6 @@ const repoCommand = require('./commands/repo');
 const statsCommand = require('./commands/stats');
 const stickerAltCommand = require('./commands/sticker-alt');
 const textCommand = require('./commands/text');
-const sourceCommand = require('./commands/source');
 const profileCardModule = require('./commands/profilecard');
 const { cmdaddCommand, runCommand } = require('./commands/addcmd');
 const { getCustomCommandHandler, loadCustomCommands, getCustomCommandNames } = require('./lib/customCommands');
@@ -1607,10 +1606,6 @@ We will process it and send you an update shortly.`
                 break;
             case userMessage.startsWith('.nativeflow') || userMessage.startsWith('.flow') || userMessage.startsWith('.orderflow') || userMessage.startsWith('.payflow'):
                 await nativeFlowCommand(sock, chatId, message, userMessage.split(/\s+/).slice(1));
-                commandExecuted = true;
-                break;
-            case userMessage.startsWith('.source'):
-                await sourceCommand(sock, chatId, message, userMessage.replace(/^\.source\s*/i, '').split(/\s+/));
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.cmdadd'):
