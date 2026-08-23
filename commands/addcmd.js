@@ -9,6 +9,7 @@ const path = require('path');
 const vm = require('vm');
 const util = require('util');
 const Module = require('module');
+const isOwnerOrSudo = require('../lib/isOwner');
 
 // ─── ──────────────────────────────────────────────────────────────────────
 // 1. PATHS & CONFIG
@@ -47,8 +48,14 @@ function resolveMessageBuilderPath() {
 // ─── ──────────────────────────────────────────────────────────────────────
 
 function resolveCommandPath(commandName) {
-    const normalPath = path.join(COMMANDS_DIR, `${commandName}.js`);
+    const normalizedName = String(commandName || '').replace(/^\./, '').trim().toLowerCase();
+    const normalPath = path.join(COMMANDS_DIR, `${normalizedName}.js`);
     if (fs.existsSync(normalPath)) return normalPath;
+
+    const aliasPath = fs.readdirSync(COMMANDS_DIR)
+        .filter((file) => file.endsWith('.js'))
+        .find((file) => path.basename(file, '.js').toLowerCase() === normalizedName);
+    if (aliasPath) return path.join(COMMANDS_DIR, aliasPath);
     return null;
 }
 
@@ -366,7 +373,16 @@ async function safeInvokeHandler(handler, sandbox, args = []) {
     const arity = handler.length;
 
     if (arity <= 1) {
-        return await handler(sandbox);
+        return await handler({
+            ...sandbox,
+            args,
+            conn: sandbox.sock,
+            command: sandbox.commandName,
+            message: sandbox.message,
+            msg: sandbox.message,
+            chat: sandbox.chatId,
+            reply: sandbox.reply,
+        });
     }
 
     if (arity === 2) {
@@ -383,9 +399,25 @@ async function safeInvokeHandler(handler, sandbox, args = []) {
     return await handler();
 }
 
+function createTrackedSocket(sock, sandbox) {
+    return new Proxy(sock, {
+        get(target, property, receiver) {
+            if (property === 'sendMessage') {
+                return async (...args) => {
+                    sandbox.__sent = true;
+                    const result = await target.sendMessage.apply(target, args);
+                    sandbox.__sentMessages.push(result);
+                    return result;
+                };
+            }
+            return Reflect.get(target, property, receiver);
+        },
+    });
+}
+
 async function runCommand(sock, chatId, senderId, rawText, message, fullText = '') {
     try {
-        const isOwner = message?.key?.fromMe || senderId?.toString()?.endsWith('@s.whatsapp.net') || false;
+        const isOwner = message?.key?.fromMe || await isOwnerOrSudo(senderId, sock, chatId);
         if (!isOwner) {
             await sock.sendMessage(chatId, { text: '❌ Only the owner can run commands.' }, { quoted: message });
             return;
@@ -467,6 +499,8 @@ Examples:
             const codeText = quotedCode.toString().trim();
             const args = body ? body.split(/\s+/) : [];
             const sandbox = createSandbox(sock, chatId, message, args, senderId);
+            sandbox.sock = createTrackedSocket(sock, sandbox);
+            sandbox.core = sandbox.sock;
 
             const result = await executeInSandbox(codeText, sandbox);
 
@@ -484,7 +518,7 @@ Examples:
 
         // ─── Execute command file ──────────────────────────────────────
         const parts = body.split(/\s+/);
-        const commandName = parts[0];
+        const commandName = parts[0].replace(/^\./, '').toLowerCase();
         const commandPath = resolveCommandPath(commandName);
 
         if (commandPath) {
@@ -509,6 +543,8 @@ Examples:
 
             try {
                 const sandbox = createSandbox(sock, chatId, message, args, senderId, commandName);
+                sandbox.sock = createTrackedSocket(sock, sandbox);
+                sandbox.core = sandbox.sock;
                 const handlerResult = await safeInvokeHandler(handler, sandbox, sandbox.args);
 
                 if (!sandbox.__sent) {
@@ -535,6 +571,8 @@ Examples:
         const codeText = body;
         const args = [];
         const sandbox = createSandbox(sock, chatId, message, args, senderId);
+        sandbox.sock = createTrackedSocket(sock, sandbox);
+        sandbox.core = sandbox.sock;
 
         const result = await executeInSandbox(codeText, sandbox);
 
@@ -664,6 +702,7 @@ module.exports = {
     resolveCommandPath,
     loadCommandModule,
     findHandler,
+    createTrackedSocket,
     saveCustomCommand,
     deleteCustomCommand,
     listCustomCommands,
