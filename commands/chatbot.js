@@ -251,14 +251,14 @@ async function groupChatbotToggleCommand(sock, chatId, m, body) {
         const args = (body || '').trim().split(/\s+/).slice(1);
 
         if (args.length === 0) {
-            const statusText = `📊 *Hali ya Chatbot*
+            const statusText = `📊 *Chatbot Status*
 
-${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.enabled ? '✅ IMEWASHA' : '❌ IMEZIMA') : '👤 *Private Mode:* ' + (state.private ? '✅ IMEWASHA' : '❌ IMEZIMA')}
+${chatId.endsWith('@g.us') ? '👥 *Group:* ' + (state.perGroup?.[chatId]?.enabled ? '✅ ON' : '❌ OFF') : '👤 *Private:* ' + (state.private ? '✅ ON' : '❌ OFF')}
 
-💡 *MATUMIZI:*
-• .chatbot on/off - Washa/zima chatbot
-• .chatbot private on/off - Washa/zima private mode
-• .chatbot status - Angalia hali`;
+💡 *Usage:*
+• .chatbot on/off - Toggle chatbot
+• .chatbot private on/off - Toggle private mode
+• .chatbot status - View status`;
 
             return await sock.sendMessage(chatId, { text: statusText }, { quoted: m });
         }
@@ -266,11 +266,11 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
         const firstArg = args[0].toLowerCase();
 
         if (firstArg === 'status') {
-            const statusText = `📊 *Hali ya Chatbot*
+            const statusText = `📊 *Chatbot Status*
 
-👥 *Group Mode:* ${state.perGroup?.[chatId]?.enabled ? '✅ IMEWASHA' : '❌ IMEZIMA'}
-👤 *Private Mode:* ${state.private ? '✅ IMEWASHA' : '❌ IMEZIMA'}
-💬 *Hali:* ${state.perGroup?.[chatId]?.enabled || state.private ? '🟢 Inafanya kazi' : '🔴 Imezimwa'}`;
+👥 *Group:* ${state.perGroup?.[chatId]?.enabled ? '✅ ON' : '❌ OFF'}
+👤 *Private:* ${state.private ? '✅ ON' : '❌ OFF'}
+💬 *Status:* ${state.perGroup?.[chatId]?.enabled || state.private ? '🟢 Active' : '🔴 Disabled'}`;
 
             return await sock.sendMessage(chatId, { text: statusText }, { quoted: m });
         }
@@ -279,14 +279,14 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
             const mode = args[1]?.toLowerCase();
             if (!['on', 'off'].includes(mode)) {
                 return await sock.sendMessage(chatId, { 
-                    text: '❌ Tafadhali tumia: .chatbot private on/off' 
+                    text: '❌ Use: .chatbot private on/off' 
                 }, { quoted: m });
             }
             
             state.private = mode === 'on';
             saveState(state);
             return await sock.sendMessage(chatId, {
-                text: `✅ *Private Chatbot:* ${state.private ? 'IMEWASHWA 🟢' : 'IMEZIMWA 🔴'}`
+                text: `✅ *Private Chatbot:* ${state.private ? 'ON 🟢' : 'OFF 🔴'}`
             }, { quoted: m });
         }
 
@@ -298,14 +298,14 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
                 state.perGroup[chatId] = { enabled: modeStatus };
                 saveState(state);
                 return await sock.sendMessage(chatId, {
-                    text: `✅ *Group Chatbot:* ${modeStatus ? 'IMEZIMWA 🟢' : 'IMEZIMWA 🔴'}`
+                    text: `✅ *Group Chatbot:* ${modeStatus ? 'ON 🟢' : 'OFF 🔴'}`
                 }, { quoted: m });
             }
 
             state.private = modeStatus;
             saveState(state);
             return await sock.sendMessage(chatId, {
-                text: `✅ *Private Chatbot:* ${modeStatus ? 'IMEZINDWA 🟢' : 'IMEZIMWA 🔴'}`
+                text: `✅ *Private Chatbot:* ${modeStatus ? 'ON 🟢' : 'OFF 🔴'}`
             }, { quoted: m });
         }
 
@@ -313,19 +313,19 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
             return await sock.sendMessage(chatId, {
                 text: `👤 *Mickeydady Chatbot*
 
-📌 *Amri:*
-• .chatbot on - Washa chatbot
-• .chatbot off - Zima chatbot
-• .chatbot private on - Washa private mode
-• .chatbot private off - Zima private mode
-• .chatbot status - Angalia hali
+📌 *Commands:*
+• .chatbot on - Enable chatbot
+• .chatbot off - Disable chatbot
+• .chatbot private on - Enable private mode
+• .chatbot private off - Disable private mode
+• .chatbot status - View status
 
-💬 *Mickeydady anajibu kama binadamu!*`
+💬 *Mickeydady replies like a human!*`
             }, { quoted: m });
         }
 
         return await sock.sendMessage(chatId, {
-            text: '❌ Amri isiyo sahihi.\n💡 Tumia .chatbot help'
+            text: '❌ Invalid command.\n💡 Use .chatbot help'
         }, { quoted: m });
     } catch (e) {
         console.error('❌ Toggle Error:', e?.message || e);
@@ -336,14 +336,14 @@ ${chatId.endsWith('@g.us') ? '👥 *Group Mode:* ' + (state.perGroup?.[chatId]?.
 function getHelp() {
     return `👤 *Mickeydady Chatbot*
 
-📌 *Amri:*
-• .chatbot on - Washa chatbot
-• .chatbot off - Zima chatbot
-• .chatbot private on - Washa private mode
-• .chatbot private off - Zima private mode
-• .chatbot status - Angalia hali
+📌 *Commands:*
+• .chatbot on - Enable chatbot
+• .chatbot off - Disable chatbot
+• .chatbot private on - Enable private mode
+• .chatbot private off - Disable private mode
+• .chatbot status - View status
 
-💬 *Mickeydady anajibu kama binadamu halisi!*
+💬 *Mickeydady replies like a real human!*
 
 🔧 *Tabia:*
 • Mcheshi na mkarimu
