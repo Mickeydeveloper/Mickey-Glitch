@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { ButtonV2, Button } = require('../lib/messageBuilder');
+const { ButtonV2 } = require('../lib/messageBuilder');
 const os = require('os');
 const chalk = require('chalk');
 
@@ -83,11 +83,11 @@ const normalizeCommandName = (value, fallback) => {
     if (!value) return fallback;
     const cleaned = String(value).trim();
     if (!cleaned) return fallback;
-    
+
     // Remove "command" suffix if present (case insensitive)
     let withoutCommand = cleaned.replace(/command$/i, '').trim();
     if (!withoutCommand) return fallback;
-    
+
     // Ensure it starts with dot
     return withoutCommand.startsWith('.') ? withoutCommand.toLowerCase() : `.${withoutCommand.toLowerCase()}`;
 };
@@ -97,16 +97,16 @@ const isLikelyRealCommandName = (value) => {
     if (typeof value !== 'string') return false;
     const cleaned = String(value).trim();
     if (!cleaned) return false;
-    
+
     const noPrefix = cleaned.startsWith('.') ? cleaned.slice(1) : cleaned;
     if (!noPrefix) return false;
-    
+
     // Reject names ending with 'command'
     if (/command$/i.test(noPrefix)) return false;
-    
+
     // Reject names that are too long or have invalid characters
     if (noPrefix.length > 30) return false;
-    
+
     return /^[a-z0-9._-]+$/i.test(noPrefix);
 };
 
@@ -176,7 +176,7 @@ const loadDynamicMenu = (showAll = true) => {
     const addItem = (cat, item) => {
         const category = (cat || 'OTHER').toUpperCase();
         if (!dynamicMenu[category]) dynamicMenu[category] = [];
-        
+
         // Check if command already exists in this category
         const commandExists = dynamicMenu[category].some(i => i.cmd === item.cmd);
         if (!commandExists) {
@@ -223,13 +223,13 @@ const loadDynamicMenu = (showAll = true) => {
                 delete require.cache[require.resolve(fullPath)];
                 const cmdModule = require(fullPath);
                 const meta = getCommandMeta(cmdModule, baseName);
-                
+
                 // Skip if command name is already used
                 if (usedCommandNames.has(meta.commandId)) {
                     return;
                 }
                 usedCommandNames.add(meta.commandId);
-                
+
                 const category = (cmdModule && (cmdModule.category || fileMapping[baseName] || fileMapping[meta.commandId.replace(/^\./, '')])) || 'OTHER';
                 addItem(category, {
                     cmd: meta.commandId,
@@ -242,7 +242,7 @@ const loadDynamicMenu = (showAll = true) => {
                     return;
                 }
                 usedCommandNames.add(cmdId);
-                
+
                 const category = fileMapping[baseName] || 'OTHER';
                 addItem(category, {
                     cmd: cmdId,
@@ -261,7 +261,7 @@ const loadDynamicMenu = (showAll = true) => {
                     return;
                 }
                 usedCommandNames.add(cmdId);
-                
+
                 const category = cmd.category || fileMapping[cmd.name] || 'OTHER';
                 addItem(category, {
                     cmd: cmdId,
@@ -348,17 +348,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         // Tuma ujumbe wa single select
         await buttonBuilder.send(chatId, { quoted: m });
 
-        // Tuma button ya in-app signup kwa ziada
-        try {
-            const signupButton = new Button(sock)
-                .setTitle('Mickey Glitch')
-                .setBody('https://mickeypannel.dpdns.org')
-                .addButton('inapp_signup', {});
-
-            await signupButton.send(chatId, { quoted: m, fallbackText: 'Fiora Sylvie' });
-        } catch (signupError) {
-            console.error('Menu signup button error:', signupError);
-        }
+        // IMEONDOSWA: Sehemu ya in-app signup
 
     } catch (e) {
         console.error('Menu Error:', e);
@@ -400,3 +390,4 @@ if (typeof global !== 'undefined') {
 console.log(chalk.green('✓ Menu System Loaded Successfully'));
 console.log(chalk.cyan('✓ Using Single Select with Vertical Buttons'));
 console.log(chalk.yellow('✓ Fixed: No duplicate commands with "command" suffix'));
+console.log(chalk.red('✓ Removed: In-app signup button'));
