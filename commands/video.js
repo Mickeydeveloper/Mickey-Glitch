@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const yts = require('yt-search');
+const { AIRich, createCtx } = require('../lib/messageBuilder'); // Imp. AIRich hapa
 
 const AXIOS_DEFAULTS = {
     timeout: 30000,
@@ -133,10 +134,8 @@ async function getVideoFromYouTubeMP4Scraper(ytUrl) {
     };
 }
 
-// Get video from Nayan AllDown API
 async function getVideoFromAllDown(ytUrl) {
     const videoId = extractYoutubeVideoId(ytUrl);
-
     if (!videoId) throw new Error('Invalid URL');
 
     const apiUrl = `https://nayan-video-downloader.vercel.app/alldown?url=https://youtu.be/${videoId}`;
@@ -168,10 +167,8 @@ async function getVideoFromAllDown(ytUrl) {
     }
 }
 
-// Get video from Nayan YouTube API (best quality)
 async function getVideoFromYoutubeAPI(ytUrl) {
     const videoId = extractYoutubeVideoId(ytUrl);
-
     if (!videoId) throw new Error('Invalid URL');
 
     const apiUrl = `https://nayan-video-downloader.vercel.app/youtube?url=https://youtu.be/${videoId}`;
@@ -189,14 +186,8 @@ async function getVideoFromYoutubeAPI(ytUrl) {
             let bestQuality = 0;
 
             const qualityPriority = {
-                '2160p': 100,
-                '1440p': 90,
-                '1080p': 80,
-                '720p': 70,
-                '480p': 60,
-                '360p': 50,
-                '240p': 40,
-                '144p': 30
+                '2160p': 100, '1440p': 90, '1080p': 80,
+                '720p': 70, '480p': 60, '360p': 50, '240p': 40, '144p': 30
             };
 
             for (const format of formats) {
@@ -211,9 +202,7 @@ async function getVideoFromYoutubeAPI(ytUrl) {
                         }
                     }
 
-                    if (format.type === 'video_with_audio') {
-                        priority += 5;
-                    }
+                    if (format.type === 'video_with_audio') priority += 5;
 
                     if (priority > bestQuality) {
                         bestQuality = priority;
@@ -244,7 +233,6 @@ async function getVideoFromYoutubeAPI(ytUrl) {
     }
 }
 
-// Main function - tries YouTubeMP4 scraper first, then AllDown, then YouTube API
 async function getYoutubeVideo(ytUrl) {
     try {
         console.log('[VIDEO] Trying YouTubeMP4 scraper...');
@@ -265,10 +253,10 @@ async function getYoutubeVideo(ytUrl) {
 }
 
 // Video Command - Download MP4
-async function videoCommand(sock, chatId, message) {
+async function videoCommand(sock, chatId, message, args = []) {
     try {
         const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
-        const query = text.split(' ').slice(1).join(' ').trim();
+        const query = Array.isArray(args) && args.length > 0 ? args.join(' ').trim() : text.split(' ').slice(1).join(' ').trim();
 
         if (!query) {
             return sock.sendMessage(chatId, { 
@@ -296,19 +284,24 @@ async function videoCommand(sock, chatId, message) {
             videoUrl = videoInfo.url;
             thumbnailUrl = videoInfo.thumbnail;
 
-            // Kutuma thumbnail kupitia AIRich.addPost badala ya message ya kawaida au ButtonV2
-            const rich = new AIRich(sock);
-            rich.addPost({
-                profile: thumbnailUrl,
-                title: videoInfo.title || 'YouTube Video',
-                username: 'Mickey',
-                verified: true,
-                caption: `🎥 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()}\n\n⬇️ Downloading video...`,
-                thumbnail: thumbnailUrl,
-                url: videoUrl,
-                source_app: 'YOUTUBE'
-            });
-            await rich.send(chatId);
+            // Tuma kwa AIRich Post format
+            try {
+                const ctx = createCtx(sock, chatId, message, { args });
+                const rich = new AIRich(ctx.sock || sock);
+                rich.addPost({
+                    profile: thumbnailUrl,
+                    title: videoInfo.title || 'YouTube Video',
+                    username: 'Mickey',
+                    verified: true,
+                    caption: `🎥 *${videoInfo.title}*\n⏱️ ${videoInfo.timestamp} | 👤 ${videoInfo.author.name}\n👁️ ${(videoInfo.views || 0).toLocaleString()}\n\n⬇️ Downloading video...`,
+                    thumbnail: thumbnailUrl,
+                    url: videoUrl,
+                    source_app: 'YOUTUBE'
+                });
+                await rich.send(chatId, { quoted: message });
+            } catch (e) {
+                console.error('[AIRich Error]:', e.message);
+            }
         } else {
             await sock.sendMessage(chatId, { text: '⬇️ Processing video...' });
         }
@@ -319,23 +312,28 @@ async function videoCommand(sock, chatId, message) {
 
         await sock.sendMessage(chatId, { delete: processMsg.key });
 
-        // Kama thumbnail ilikuwa haijatumwa kwenye search, tutaituma kupitia AIRich.addPost hapa
+        // Kama url pekee ndiyo ilitumiwa, tuma AIRich Post hapa
         if (videoData.thumbnail && !thumbnailUrl) {
-            const rich = new AIRich(sock);
-            rich.addPost({
-                profile: videoData.thumbnail,
-                title: videoData.title || 'YouTube Video',
-                username: 'Mickey',
-                verified: true,
-                caption: `🎥 *${videoData.title.substring(0, 50)}*\n🎚️ ${videoData.quality || 'HD'}\n📡 ${videoData.source}`,
-                thumbnail: videoData.thumbnail,
-                url: videoUrl,
-                source_app: 'YOUTUBE'
-            });
-            await rich.send(chatId);
+            try {
+                const ctx = createCtx(sock, chatId, message, { args });
+                const rich = new AIRich(ctx.sock || sock);
+                rich.addPost({
+                    profile: videoData.thumbnail,
+                    title: videoData.title || 'YouTube Video',
+                    username: 'Mickey',
+                    verified: true,
+                    caption: `🎥 *${videoData.title.substring(0, 50)}*\n🎚️ ${videoData.quality || 'HD'}\n📡 ${videoData.source}`,
+                    thumbnail: videoData.thumbnail,
+                    url: videoUrl,
+                    source_app: 'YOUTUBE'
+                });
+                await rich.send(chatId, { quoted: message });
+            } catch (e) {
+                console.error('[AIRich Error]:', e.message);
+            }
         }
 
-        // Send video
+        // Tuma Video MP4
         const videoMessage = {
             video: videoData.buffer,
             mimetype: 'video/mp4',
@@ -343,17 +341,16 @@ async function videoCommand(sock, chatId, message) {
             fileName: `${videoData.title.substring(0, 40)}.mp4`
         };
 
-        await sock.sendMessage(chatId, videoMessage);
+        await sock.sendMessage(chatId, videoMessage, { quoted: message });
         await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (err) {
-        console.error('[VIDEO] Error:', err);
+        console.error('[VIDEO Error Details]:', err);
         await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-        await sock.sendMessage(chatId, { text: '❌ Error: Try again later' });
+        await sock.sendMessage(chatId, { text: `❌ Error: ${err.message || 'Try again later'}` });
     }
 }
 
-// Handle video download for button responses
 async function handleVideoDownload(sock, chatId, ytUrl, message) {
     try {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
@@ -372,7 +369,6 @@ async function handleVideoDownload(sock, chatId, ytUrl, message) {
     }
 }
 
-// Handle audio download for button responses
 async function handleAudioDownload(sock, chatId, ytUrl, message) {
     try {
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
