@@ -1,7 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const yts = require('yt-search');
-const { AIRich, createCtx } = require('../lib/messageBuilder'); // Imp. AIRich hapa
+const { AIRich, createCtx } = require('../lib/messageBuilder');
 
 const AXIOS_DEFAULTS = {
     timeout: 30000,
@@ -38,6 +38,44 @@ function extractYoutubeVideoId(ytUrl) {
     return '';
 }
 
+// 1. API MPYA: ZiaUl API (Chanzo cha Kwanza)
+async function getVideoFromZiaUlAPI(ytUrl) {
+    const encodedUrl = encodeURIComponent(ytUrl);
+    const apiUrl = `https://apiziaul.vercel.app/api/downloader/ytmp4?url=${encodedUrl}`;
+
+    try {
+        const res = await tryRequest(() => axios.get(apiUrl, {
+            ...AXIOS_DEFAULTS,
+            headers: {
+                ...AXIOS_DEFAULTS.headers,
+                'accept': '*/*'
+            }
+        }));
+
+        if (res.data?.status === true && res.data?.result?.downloadUrl) {
+            const result = res.data.result;
+
+            // Kupakua faili la MP4 kupitia downloadUrl
+            const fileRes = await tryRequest(() => axios.get(result.downloadUrl, {
+                ...AXIOS_DEFAULTS,
+                responseType: 'arraybuffer'
+            }));
+
+            return {
+                buffer: Buffer.from(fileRes.data),
+                title: result.title || 'YouTube Video',
+                thumbnail: result.thumbnail || '',
+                quality: result.quality || '720p',
+                source: 'ZiaUl API'
+            };
+        }
+        throw new Error('ZiaUl API returned invalid structure or missing downloadUrl');
+    } catch (err) {
+        throw new Error(`ZiaUl API failed: ${err.message}`);
+    }
+}
+
+// 2. YouTubeMP4 Scraper
 class YouTubeMP4Downloader {
     constructor() {
         this.baseUrl = 'https://youtubemp4.to';
@@ -134,6 +172,7 @@ async function getVideoFromYouTubeMP4Scraper(ytUrl) {
     };
 }
 
+// 3. Nayan AllDown API
 async function getVideoFromAllDown(ytUrl) {
     const videoId = extractYoutubeVideoId(ytUrl);
     if (!videoId) throw new Error('Invalid URL');
@@ -167,6 +206,7 @@ async function getVideoFromAllDown(ytUrl) {
     }
 }
 
+// 4. Nayan YouTube API
 async function getVideoFromYoutubeAPI(ytUrl) {
     const videoId = extractYoutubeVideoId(ytUrl);
     if (!videoId) throw new Error('Invalid URL');
@@ -233,26 +273,32 @@ async function getVideoFromYoutubeAPI(ytUrl) {
     }
 }
 
+// Function inayojaribu kupakua video ikianzia na ZiaUl API
 async function getYoutubeVideo(ytUrl) {
     try {
-        console.log('[VIDEO] Trying YouTubeMP4 scraper...');
-        return await getVideoFromYouTubeMP4Scraper(ytUrl);
-    } catch (scraperErr) {
-        console.log(`[VIDEO] YouTubeMP4 failed: ${scraperErr.message}, trying AllDown API...`);
+        console.log('[VIDEO] Trying ZiaUl API (1st priority)...');
+        return await getVideoFromZiaUlAPI(ytUrl);
+    } catch (ziaUlErr) {
+        console.log(`[VIDEO] ZiaUl API failed: ${ziaUlErr.message}, trying YouTubeMP4 scraper...`);
         try {
-            return await getVideoFromAllDown(ytUrl);
-        } catch (allDownErr) {
-            console.log(`[VIDEO] AllDown failed: ${allDownErr.message}, trying YouTube API...`);
+            return await getVideoFromYouTubeMP4Scraper(ytUrl);
+        } catch (scraperErr) {
+            console.log(`[VIDEO] YouTubeMP4 failed: ${scraperErr.message}, trying AllDown API...`);
             try {
-                return await getVideoFromYoutubeAPI(ytUrl);
-            } catch (ytErr) {
-                throw new Error(`All download sources failed: ${ytErr.message}`);
+                return await getVideoFromAllDown(ytUrl);
+            } catch (allDownErr) {
+                console.log(`[VIDEO] AllDown failed: ${allDownErr.message}, trying YouTube API...`);
+                try {
+                    return await getVideoFromYoutubeAPI(ytUrl);
+                } catch (ytErr) {
+                    throw new Error(`All download sources failed: ${ytErr.message}`);
+                }
             }
         }
     }
 }
 
-// Video Command - Download MP4
+// Video Command Function
 async function videoCommand(sock, chatId, message, args = []) {
     try {
         const text = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
@@ -270,7 +316,6 @@ async function videoCommand(sock, chatId, message, args = []) {
         let videoInfo = null;
         let thumbnailUrl = '';
 
-        // Search if not YouTube URL
         if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
             const searchResults = await yts(query);
             const videos = searchResults?.videos;
@@ -284,7 +329,6 @@ async function videoCommand(sock, chatId, message, args = []) {
             videoUrl = videoInfo.url;
             thumbnailUrl = videoInfo.thumbnail;
 
-            // Tuma kwa AIRich Post format
             try {
                 const ctx = createCtx(sock, chatId, message, { args });
                 const rich = new AIRich(ctx.sock || sock);
@@ -312,7 +356,6 @@ async function videoCommand(sock, chatId, message, args = []) {
 
         await sock.sendMessage(chatId, { delete: processMsg.key });
 
-        // Kama url pekee ndiyo ilitumiwa, tuma AIRich Post hapa
         if (videoData.thumbnail && !thumbnailUrl) {
             try {
                 const ctx = createCtx(sock, chatId, message, { args });
@@ -333,7 +376,6 @@ async function videoCommand(sock, chatId, message, args = []) {
             }
         }
 
-        // Tuma Video MP4
         const videoMessage = {
             video: videoData.buffer,
             mimetype: 'video/mp4',
