@@ -1,8 +1,9 @@
 const isOwnerOrSudo = require('../lib/isOwner');
+const { AIRich } = require('../lib/messageBuilder');
 
 const buildOwnerRichResponse = () => {
     const responsePayload = {
-        response_id: '742a451a-0c33-45ca-a205-42c2b1666bca',
+        response_id: require('crypto').randomUUID(),
         sections: [
             {
                 view_model: {
@@ -163,7 +164,14 @@ const buildOwnerRichResponse = () => {
 
     return {
         messageContextInfo: {
-            messageSecret: 'v/3VN8Gfr2dbKzgt1GKDEU7ovyYW+nswh4Duwq6KDuU='
+            messageSecret: require('crypto').randomBytes(32),
+            deviceListMetadata: {},
+            deviceListMetadataVersion: 2,
+            botMetadata: {
+                messageDisclaimerText: 'MICKEY OWNER MENU',
+                botResponseId: require('crypto').randomUUID(),
+                verificationMetadata: AIRich.generateVerificationMetadata()
+            }
         },
         botForwardedMessage: {
             message: {
