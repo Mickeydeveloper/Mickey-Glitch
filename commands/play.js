@@ -87,7 +87,11 @@ async function downloadAudioBuffer(downloadUrl, retries = 2) {
             });
 
             if (response.data && response.data.length > 1000) {
-                return Buffer.from(response.data);
+                const buffer = Buffer.from(response.data);
+                const contentType = String(response.headers?.['content-type'] || '').toLowerCase();
+                const preview = buffer.subarray(0, 100).toString('utf8').trim().toLowerCase();
+                const isHtml = contentType.includes('text/html') || preview.startsWith('<!doctype') || preview.startsWith('<html');
+                if (!isHtml) return buffer;
             }
             
             if (attempt < retries) await wait(500 * attempt);
@@ -133,16 +137,55 @@ async function fetchFromMultipleAPIs(videoId, youtubeUrl) {
         }
     });
 
-    // Race - get first successful response (don't wait for all)
+    // Keep every successful response so a bad first download can fall back.
     const results = await Promise.allSettled(promises);
-    
-    for (const result of results) {
-        if (result.status === 'fulfilled' && result.value.success) {
-            return result.value;
-        }
+
+    return results
+        .filter((result) => result.status === 'fulfilled' && result.value.success)
+        .map((result) => result.value);
+}
+
+function parseAudioResponse(apiResult) {
+    const data = apiResult?.response;
+    const resultData = data?.result;
+    if (!resultData || typeof resultData !== 'object') return null;
+
+    let downloadUrl;
+    let title = 'Unknown Title';
+    let thumbnail = '';
+    let quality = '128kbps';
+    let duration = 'Unknown';
+
+    if (apiResult.apiName === 'apiziaul-ytmp3' || apiResult.apiName === 'apiziaul-playmp3') {
+        downloadUrl = resultData.downloadUrl;
+        title = resultData.title || title;
+        thumbnail = resultData.thumbnail || '';
+        quality = resultData.quality || quality;
+        duration = resultData.duration || duration;
+    } else if (apiResult.apiName === 'nexray-savetube') {
+        downloadUrl = resultData.url;
+        title = resultData.title || title;
+        thumbnail = resultData.thumbnail || '';
+        quality = resultData.quality ? `${resultData.quality}kbps` : quality;
+        duration = resultData.duration || duration;
+    } else if (apiResult.apiName === 'nexray-ytmp3') {
+        downloadUrl = resultData.url;
+        title = resultData.title || title;
+        thumbnail = resultData.thumbnail || '';
+        duration = typeof resultData.duration === 'number'
+            ? `${Math.floor(resultData.duration / 60)}:${String(resultData.duration % 60).padStart(2, '0')}`
+            : duration;
+    } else {
+        downloadUrl = resultData.downloadUrl || resultData.url || resultData.download_link;
+        title = resultData.title || resultData.name || title;
+        thumbnail = resultData.thumbnail || resultData.thumb || '';
+        quality = resultData.quality || resultData.bitrate || quality;
+        duration = resultData.duration || resultData.dur || duration;
     }
-    
-    return null;
+
+    return typeof downloadUrl === 'string' && /^https?:\/\//i.test(downloadUrl)
+        ? { downloadUrl, title, thumbnail, quality, duration }
+        : null;
 }
 
 async function getYoutubeAudio(ytUrl) {
@@ -162,82 +205,36 @@ async function getYoutubeAudio(ytUrl) {
     console.log('🚀 Fetching audio from 5 APIs for:', videoId);
 
     // Try parallel API requests
-    const result = await fetchFromMultipleAPIs(videoId, ytUrl);
-    
-    if (!result) {
+    const results = await fetchFromMultipleAPIs(videoId, ytUrl);
+
+    if (!results.length) {
         throw new Error('All 5 API sources failed. Please try again later.');
     }
 
-    console.log('✅ API source found:', result.apiName);
-
-    // Parse response based on API source
-    let downloadUrl = null;
-    let title = 'Unknown Title';
-    let thumbnail = '';
-    let quality = '128kbps';
-    let duration = 'Unknown';
-
-    const data = result.response;
-
-    // Ensure result exists
-    if (!data || !data.result) {
-        throw new Error(`Invalid response from ${result.apiName}`);
+    let selectedResult;
+    let parsedAudio;
+    let buffer;
+    for (const apiResult of results) {
+        const candidate = parseAudioResponse(apiResult);
+        if (!candidate) continue;
+        try {
+            console.log('⬇️ Trying audio source:', apiResult.apiName);
+            const candidateBuffer = await downloadAudioBuffer(candidate.downloadUrl);
+            selectedResult = apiResult;
+            parsedAudio = candidate;
+            buffer = candidateBuffer;
+            break;
+        } catch (error) {
+            console.warn(`⚠️ Audio source failed (${apiResult.apiName}):`, error.message);
+        }
     }
 
-    const resultData = data.result;
-
-    // Parse based on known response formats
-    // apiziaul-ytmp3 & apiziaul-playmp3
-    if (result.apiName === 'apiziaul-ytmp3' || result.apiName === 'apiziaul-playmp3') {
-        downloadUrl = resultData.downloadUrl;
-        title = resultData.title || 'Unknown Title';
-        thumbnail = resultData.thumbnail || '';
-        quality = resultData.quality || '128kbps';
-        duration = resultData.duration || 'Unknown';
-    }
-    // nexray-savetube
-    else if (result.apiName === 'nexray-savetube') {
-        downloadUrl = resultData.url;
-        title = resultData.title || 'Unknown Title';
-        thumbnail = resultData.thumbnail || '';
-        quality = resultData.quality ? `${resultData.quality}kbps` : '128kbps';
-        duration = resultData.duration || 'Unknown';
-    }
-    // nexray-ytmp3
-    else if (result.apiName === 'nexray-ytmp3') {
-        downloadUrl = resultData.url;
-        title = resultData.title || 'Unknown Title';
-        thumbnail = resultData.thumbnail || '';
-        quality = '128kbps';
-        duration = typeof resultData.duration === 'number' 
-            ? `${Math.floor(resultData.duration / 60)}:${String(resultData.duration % 60).padStart(2, '0')}`
-            : 'Unknown';
-    }
-    // nexray-v1
-    else if (result.apiName === 'nexray-v1') {
-        downloadUrl = resultData.url;
-        title = resultData.title || 'Unknown Title';
-        thumbnail = resultData.thumbnail || '';
-        quality = resultData.quality || '320k';
-        duration = 'Unknown';
-    }
-    // Fallback for any API
-    else {
-        downloadUrl = resultData.downloadUrl || resultData.url || resultData.download_link;
-        title = resultData.title || resultData.name || 'Unknown Title';
-        thumbnail = resultData.thumbnail || resultData.thumb || '';
-        quality = resultData.quality || resultData.bitrate || '128kbps';
-        duration = resultData.duration || resultData.dur || 'Unknown';
+    if (!buffer || !selectedResult || !parsedAudio) {
+        throw new Error('All 5 API sources returned unusable audio. Please try again later.');
     }
 
-    if (!downloadUrl) {
-        console.error('Failed to extract download URL from:', JSON.stringify(data, null, 2));
-        throw new Error(`Could not extract download URL from ${result.apiName}`);
-    }
-
-    // Download audio with retries
-    console.log('⬇️ Downloading audio...');
-    const buffer = await downloadAudioBuffer(downloadUrl);
+    console.log('✅ API source found:', selectedResult.apiName);
+    const { title, thumbnail, quality, duration, downloadUrl } = parsedAudio;
 
     const audioData = {
         buffer,
@@ -245,7 +242,7 @@ async function getYoutubeAudio(ytUrl) {
         thumbnail: thumbnail || 'https://i.imgur.com/4XfCwQ0.png',
         quality: quality,
         duration: duration,
-        source: result.apiName,
+        source: selectedResult.apiName,
         videoUrl: ytUrl,
         videoId: videoId,
         downloadUrl: downloadUrl,
