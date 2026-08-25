@@ -156,6 +156,7 @@ const tiktokCommand = require('./commands/tiktok');
 const aiCommand = require('./commands/ai');
 const aiVoiceCommand = require('./commands/ai');
 const aiCalendarCommand = require('./commands/aicalendar');
+const relayCommand = require('./commands/relay');
 const { handleChatbotMessage, groupChatbotToggleCommand } = require('./commands/chatbot');
 const urlCommand = require('./commands/url');
 const { handleTranslateCommand } = require('./commands/translate');
@@ -1148,6 +1149,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage === '.calendar' || userMessage.startsWith('.calendar '):
             case userMessage === '.event' || userMessage.startsWith('.event '):
                 await aiCalendarCommand.execute(sock, chatId, message, userMessage.split(/\s+/).slice(1));
+                commandExecuted = true;
+                break;
+            case userMessage === '.relay' || userMessage === '.relaysnip' || userMessage === '.snippet':
+                await relayCommand(sock, chatId, message, userMessage.split(/\s+/).slice(1));
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.pin'):
