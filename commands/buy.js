@@ -7,7 +7,7 @@
 
 const crypto = require('crypto');
 const axios = require('axios');
-const { Button, ButtonV2, Carousel, createCtx } = require('../lib/messageBuilder');
+const { Button, ButtonV2, Carousel, AIRich, createCtx } = require('../lib/messageBuilder');
 const config = require('../config');
 
 const BUY_INTERACTIVE_NODES = [{
@@ -112,6 +112,79 @@ const generateUsername = (name) => {
 const generateEmail = (username) => {
     return `${username}@mickeypannel.local`;
 };
+
+async function sendPlanWidget(sock, chatId, msg) {
+    const plans = Object.entries(PLAN_SPECS).map(([id, spec]) => ({
+        title: spec.label,
+        sections: [{
+            title: `${spec.price} | ${spec.ram}MB RAM | ${spec.cpu}% CPU`,
+            items: [{ label: 'Storage', value: `${spec.disk}MB` }],
+        }],
+        actions: [{
+            label: `Buy ${spec.label}`,
+            id: `buy_plan_${id}`,
+            kind: 'CONFIRM',
+            state: 'PENDING',
+            toast: { label: `Use .buy ${id} <username>` },
+        }],
+    }));
+
+    try {
+        await new AIRich(sock)
+            .setTitle('MICKEY HOSTING PLANS')
+            .setBody('Choose a plan to create your Pterodactyl server')
+            .setFooter('Example: .buy 2gb Mickey')
+            .addText('🚀 *Choose your hosting plan*\n\nUse the command shown in the button hint to continue.')
+            .addWidget(plans)
+            .send(chatId, { quoted: msg });
+        return true;
+    } catch (error) {
+        console.error('[BUY PLAN WIDGET ERROR]', error.message);
+        return false;
+    }
+}
+
+async function sendBuySuccessWidget(sock, chatId, msg, planLabel, userDetails, serverDetails) {
+    const spec = PLAN_SPECS[planLabel];
+    const panelUrl = PANEL_CONFIG.baseUrl;
+
+    try {
+        await new AIRich(sock)
+            .setTitle('MICKEY HOSTING')
+            .setBody(`Server ${serverDetails.name || serverDetails.id} is ready`)
+            .setFooter('Credentials have been sent privately')
+            .addWidget({
+                title: `${spec.label} Server Ready`,
+                sections: [{
+                    title: 'Server summary',
+                    items: [
+                        { label: 'Username', value: userDetails.username },
+                        { label: 'Server ID', value: String(serverDetails.id) },
+                        { label: 'RAM', value: `${spec.ram} MB` },
+                        { label: 'CPU', value: `${spec.cpu}%` },
+                        { label: 'Price', value: spec.price },
+                    ],
+                }],
+                actions: [{
+                    label: 'Open server',
+                    id: 'buy_open_server',
+                    kind: 'OPEN_URL',
+                    state: 'PENDING',
+                    toast: { label: 'Opening server panel' },
+                }],
+            })
+            .addFooterAction({
+                text: 'Open Panel',
+                type: 'OPEN_URL',
+                url: panelUrl,
+            })
+            .send(chatId, { quoted: msg });
+        return true;
+    } catch (error) {
+        console.error('[BUY SUCCESS WIDGET ERROR]', error.message);
+        return false;
+    }
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // 4. PTERODACTYL API FUNCTIONS (FIXED RESPONSE HANDLING)
@@ -489,6 +562,9 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
 
         // Check Plan
         if (!normalizedSize) {
+            const widgetSent = await sendPlanWidget(sock, chatId, msg);
+            if (widgetSent) return true;
+
             await sock.sendMessage(chatId, {
                 text: '⚠️ *Usage:* .buy <plan> <username>\n\n' +
                       '📋 *Available Plans:*\n' +
@@ -587,20 +663,24 @@ const buyCommand = async (sock, chatId, msg, args = []) => {
             password
         );
 
-        // Send Confirmation to Sender
-        await sock.sendMessage(chatId, {
-            text: `✅ *Server Created Successfully!*\n\n` +
-                  `📋 *Summary:*\n` +
-                  `├ Plan: ${planLabel.toUpperCase()}\n` +
-                  `├ Username: ${userDetails.username}\n` +
-                  `├ Email: ${userDetails.email}\n` +
-                  `├ Server ID: ${serverDetails.id}\n` +
-                  `├ RAM: ${PLAN_SPECS[planLabel].ram} MB\n` +
-                  `├ CPU: ${PLAN_SPECS[planLabel].cpu}%\n` +
-                  `└ Price: ${PLAN_SPECS[planLabel].price}\n\n` +
-                  `📌 Credentials sent above.\n\n` +
-                  `⚡ *Mickey Glitch Sub*`
-        }, { quoted: msg });
+        // Send a compact interactive summary after credentials are delivered.
+        const widgetSent = await sendBuySuccessWidget(
+            sock,
+            chatId,
+            msg,
+            planLabel,
+            userDetails,
+            serverDetails,
+        );
+
+        if (!widgetSent) {
+            await sock.sendMessage(chatId, {
+                text: `✅ *Server Created Successfully!*\n\n` +
+                      `Plan: ${planLabel.toUpperCase()} | User: ${userDetails.username}\n` +
+                      `Server ID: ${serverDetails.id}\n` +
+                      `📌 Credentials sent above.`
+            }, { quoted: msg });
+        }
 
         return true;
 
