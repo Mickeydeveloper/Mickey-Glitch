@@ -253,12 +253,19 @@ async function handleMessageRevocation(sock, revocationMessage) {
             day: '2-digit', month: 'short', year: 'numeric'
         });
 
-        let reportText = `🗑️ *DELETED MESSAGE*\nFrom: @${senderName}\nTime: ${time}`;
-        if (isGroup) reportText += `\nGroup: ${groupName}`;
-
-        if (original.content) {
-            reportText += `\n\n📝 ${original.content}`;
-        }
+        const messageText = String(original.content || '').trim();
+        const preview = messageText.length > 2000
+            ? `${messageText.slice(0, 2000)}...`
+            : messageText;
+        let reportText = [
+            '╭─〔 🗑️ *DELETED MESSAGE* 〕',
+            `│ 👤 From: @${senderName}`,
+            `│ 🕒 Time: ${time}`,
+            ...(isGroup ? [`│ 👥 Group: ${groupName}`] : []),
+            `│ 📦 Type: ${original.mediaType || 'text'}`,
+            '╰────────────────',
+            ...(preview ? ['', `> ${preview.replace(/\n/g, '\n> ')}`] : []),
+        ].join('\n');
 
         // Quiet mode: restore deleted content to the owner without group spam.
         if (original.mediaType && fs.existsSync(original.mediaPath)) {
