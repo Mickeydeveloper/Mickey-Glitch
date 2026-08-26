@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { ButtonV2 } = require('../lib/messageBuilder');
+const { AIRich } = require('../lib/messageBuilder');
 const os = require('os');
 const chalk = require('chalk');
 
@@ -301,6 +301,16 @@ const buildSections = (menuData) => {
     }));
 };
 
+const buildWidgetSections = (menuData) => {
+    return menuData.map(cat => ({
+        title: `${cat.icon} ${cat.title}`,
+        items: cat.items.slice(0, 12).map(item => ({
+            label: item.cmd,
+            value: item.desc || 'Mickey Glitch command'
+        }))
+    }));
+};
+
 // ==============================================
 // 🚀 MAIN MENU COMMAND
 // ==============================================
@@ -323,32 +333,27 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 👇 *Bonyeza "📂 Menu" kuona command zote*
 ❤️ _i love mom_`;
 
-        // ==============================================
-        // 📤 SEND INTERACTIVE MENU - SINGLE SELECT
-        // ==============================================
-        const buttonBuilder = new ButtonV2(sock)
-            .setBody(menuText)
+        const rich = new AIRich(sock)
+            .setTitle('MICKEY GLITCH MENU')
+            .setSubtitle(`⚡ ${menuData.reduce((total, cat) => total + cat.items.length, 0)} commands`)
             .setFooter(`⚡ MICKEY BOT | ${date}`)
-            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png');
+            .addText(menuText)
+            .addImage('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png')
+            .addSuggest(['.ping', '.alive', '.stats', '.owner', '.repo', '.ai'])
+            .addWidget({
+                title: '📋 Orodha ya Commands',
+                sections: buildWidgetSections(menuData),
+                actions: [
+                    { label: 'Open full menu', id: '.menu', kind: 'OTHER' },
+                    { label: 'View bot stats', id: '.stats', kind: 'OTHER' }
+                ]
+            })
+            .addFooterAction([
+                { text: 'GitHub', type: 'OPEN_URL', url: 'https://github.com/Mickeydeveloper' },
+                { text: 'Bot Website', type: 'OPEN_URL', url: 'https://mickey-pterodacty.vercel.app/' }
+            ]);
 
-        // ─── BUTTON 1: MENU (Single Select) ──────────────────────────────
-        buttonBuilder.addRawButton({
-            buttonText: { displayText: '📂 Menu' },
-            buttonId: 'mickey_list_menu',
-            type: 1,
-            nativeFlowInfo: {
-                name: 'single_select',
-                paramsJson: JSON.stringify({
-                    title: '📋 Orodha ya Commands',
-                    sections: buildSections(menuData)
-                })
-            }
-        });
-
-        // Tuma ujumbe wa single select
-        await buttonBuilder.send(chatId, { quoted: m });
-
-        // IMEONDOSWA: Sehemu ya in-app signup
+        await rich.send(chatId, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
