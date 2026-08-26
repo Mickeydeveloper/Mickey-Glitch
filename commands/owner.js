@@ -17,14 +17,14 @@ const OWNER_POST = {
 
 const sendOwnerRichResponse = async (sock, chatId, msg) => {
     const ownerRich = new AIRich(sock)
-        .setTitle('MICKEY OWNER MENU')
+        .setTitle('𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚔𝚒𝚝𝚌𝚑 𝙾𝚠𝚗𝚎𝚛 𝙸𝚗𝚏𝚘')
         .setSubtitle('Mickdady~')
         .addFOAText('# Hello my name is~')
         .addPost(Array.from({ length: 5 }, () => ({ ...OWNER_POST })))
         .addText('Owner commands: .menu  .profile  .repo  .ping  .alive  .stats')
         .addFooterAction([
             { text: 'WhatsApp Group', type: 'OPEN_URL', url: 'https://chat.whatsapp.com/HJnXkPtpY2lDVi1rZilcNe' },
-            { text: 'WhatsApp Channel', type: 'OPEN_URL', url: 'https://whatsapp.com/channel/0029VbCV1ck8fewpdNb2TY2k' }
+            { text: 'WhatsApp Channel', type: 'OPEN_URL', url: 'https://whatsapp.com/channel/0029vb6b9xfcxoaseug1g610' }
         ]);
 
     await ownerRich.send(chatId, { quoted: msg });
