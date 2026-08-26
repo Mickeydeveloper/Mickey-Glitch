@@ -1,204 +1,33 @@
 const isOwnerOrSudo = require('../lib/isOwner');
 const { AIRich } = require('../lib/messageBuilder');
-const crypto = require('crypto');
+const OWNER_POST = {
+    profile: 'https://cdn.ornzora.eu.cc/2498bf66-6870-4f8a-8421-0a77f7baa95b-FIORA.jpg',
+    username: 'RINA',
+    title: 'Demo Post',
+    subtitle: 'RIN MD',
+    caption: 'hii~ im fiora sylvie, just quietly observing things around here.',
+    verified: true,
+    url: 'https://fiora.nixel.my.id/',
+    thumbnail: 'https://cdn.ornzora.eu.cc/7048efb4-2abf-4081-bdd1-2f65972d793a-FIORA.jpg',
+    source: 'INSTAGRAM',
+    footer: 'Fiora Sylvie',
+    deeplink: 'https://fiora.nixel.my.id/',
+    icon: 'https://cdn.ornzora.eu.cc/2498bf66-6870-4f8a-8421-0a77f7baa95b-FIORA.jpg'
+};
 
-function createDynamicAIRichIds() {
-    return {
-        responseId: crypto.randomUUID(),
-        botResponseId: crypto.randomUUID(),
-        messageSecret: crypto.randomBytes(32)
-    };
-}
+const sendOwnerRichResponse = async (sock, chatId, msg) => {
+    const ownerRich = new AIRich(sock)
+        .setTitle('MICKEY OWNER MENU')
+        .setSubtitle('Mickdady~')
+        .addFOAText('# Hello my name is~')
+        .addPost(Array.from({ length: 5 }, () => ({ ...OWNER_POST })))
+        .addText('Owner commands: .menu  .profile  .repo  .ping  .alive  .stats')
+        .addFooterAction([
+            { text: 'WhatsApp Group', type: 'OPEN_URL', url: 'https://chat.whatsapp.com/HJnXkPtpY2lDVi1rZilcNe' },
+            { text: 'WhatsApp Channel', type: 'OPEN_URL', url: 'https://whatsapp.com/channel/0029VbCV1ck8fewpdNb2TY2k' }
+        ]);
 
-const buildOwnerRichResponse = () => {
-    const { responseId, botResponseId, messageSecret } = createDynamicAIRichIds();
-    const responsePayload = {
-        response_id: responseId,
-        sections: [
-            {
-                view_model: {
-                    primitive: {
-                        __typename: 'FOATextPrimitive',
-                        text: '# Hello my name is~'
-                    },
-                    __typename: 'GenAISingleLayoutViewModel'
-                }
-            },
-            {
-                view_model: {
-                    primitive: {
-                        text: 'Mickdady~',
-                        __typename: 'GenAIMarkdownTextUXPrimitive'
-                    },
-                    __typename: 'GenAISingleLayoutViewModel'
-                }
-            },
-            {
-                view_model: {
-                    primitive: {
-                        __typename: 'GenAIImagePrimitive',
-                        preview_image: {
-                            __typename: 'GenAIMediaItem',
-                            mime_type: 'image/jpeg',
-                            url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png'
-                        },
-                        full_image: {
-                            __typename: 'GenAIMediaItem',
-                            mime_type: 'image/jpeg',
-                            url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png'
-                        }
-                    },
-                    __typename: 'GenAISingleLayoutViewModel'
-                }
-            },
-            {
-                view_model: {
-                    primitives: [
-                        {
-                            __typename: 'GenAI3PExtWidgetPrimitive',
-                            header: {
-                                __typename: 'GenAI3PExtWidgetStandardHeader',
-                                title: 'LIST-A'
-                            },
-                            body: {
-                                __typename: 'GenAI3PExtCalendarEventList',
-                                sections: [],
-                                ctas: [
-                                    {
-                                        __typename: 'GenAI3PExtWidgetCTA',
-                                        label: '.menu',
-                                        state: 'PENDING',
-                                        kind: 'OTHER',
-                                        tool_call_id: '00',
-                                        toast: {
-                                            __typename: 'GenAI3PExtWidgetToast',
-                                            label: 'NIX'
-                                        }
-                                    },
-                                    {
-                                        __typename: 'GenAI3PExtWidgetCTA',
-                                        label: '.profile',
-                                        state: 'PENDING',
-                                        kind: 'OTHER',
-                                        tool_call_id: '01',
-                                        toast: {
-                                            __typename: 'GenAI3PExtWidgetToast',
-                                            label: 'NIX'
-                                        }
-                                    },
-                                    {
-                                        __typename: 'GenAI3PExtWidgetCTA',
-                                        label: '.repo',
-                                        state: 'PENDING',
-                                        kind: 'OTHER',
-                                        tool_call_id: '02',
-                                        toast: {
-                                            __typename: 'GenAI3PExtWidgetToast',
-                                            label: 'NIX'
-                                        }
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            __typename: 'GenAI3PExtWidgetPrimitive',
-                            header: {
-                                __typename: 'GenAI3PExtWidgetStandardHeader',
-                                title: 'LIST-B'
-                            },
-                            body: {
-                                __typename: 'GenAI3PExtCalendarEventList',
-                                sections: [],
-                                ctas: [
-                                    {
-                                        __typename: 'GenAI3PExtWidgetCTA',
-                                        label: '.ping',
-                                        state: 'PENDING',
-                                        kind: 'OTHER',
-                                        tool_call_id: '10',
-                                        toast: {
-                                            __typename: 'GenAI3PExtWidgetToast',
-                                            label: 'NIX'
-                                        }
-                                    },
-                                    {
-                                        __typename: 'GenAI3PExtWidgetCTA',
-                                        label: '.alive',
-                                        state: 'PENDING',
-                                        kind: 'OTHER',
-                                        tool_call_id: '11',
-                                        toast: {
-                                            __typename: 'GenAI3PExtWidgetToast',
-                                            label: 'NIX'
-                                        }
-                                    },
-                                    {
-                                        __typename: 'GenAI3PExtWidgetCTA',
-                                        label: '.stats',
-                                        state: 'PENDING',
-                                        kind: 'OTHER',
-                                        tool_call_id: '12',
-                                        toast: {
-                                            __typename: 'GenAI3PExtWidgetToast',
-                                            label: 'NIX'
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    ],
-                    __typename: 'GenAIHScrollLayoutViewModel'
-                }
-            },
-            {
-                view_model: {
-                    primitives: [
-                        {
-                            __typename: 'GenAIFooterActionPrimitive',
-                            cta_text: 'WhatsApp Group',
-                            cta_type: 'OPEN_URL',
-                            cta_url: 'https://chat.whatsapp.com/HJnXkPtpY2lDVi1rZilcNe'
-                        },
-                        {
-                            __typename: 'GenAIFooterActionPrimitive',
-                            cta_text: 'WhatsApp Channel',
-                            cta_type: 'OPEN_URL',
-                            cta_url: 'https://whatsapp.com/channel/0029VbCV1ck8fewpdNb2TY2k'
-                        }
-                    ],
-                    __typename: 'GenAIHScrollLayoutViewModel'
-                }
-            }
-        ]
-    };
-
-    return {
-        messageContextInfo: {
-            messageSecret,
-            deviceListMetadata: {},
-            deviceListMetadataVersion: 2,
-            botMetadata: {
-                messageDisclaimerText: 'MICKEY OWNER MENU',
-                botResponseId,
-                verificationMetadata: AIRich.generateVerificationMetadata()
-            }
-        },
-        botForwardedMessage: {
-            message: {
-                richResponseMessage: {
-                    messageType: 1,
-                    unifiedResponse: {
-                        data: Buffer.from(JSON.stringify(responsePayload)).toString('base64')
-                    },
-                    contextInfo: {
-                        forwardingScore: 1,
-                        isForwarded: true,
-                        forwardOrigin: 4
-                    }
-                }
-            }
-        }
-    };
+    await ownerRich.send(chatId, { quoted: msg });
 };
 
 const ownerCommand = async (sock, chatId, msg, args = [], options = {}) => {
@@ -220,10 +49,8 @@ const ownerCommand = async (sock, chatId, msg, args = [], options = {}) => {
             }
         }
 
-        const payload = buildOwnerRichResponse();
-
         if (typeof sock?.relayMessage === 'function') {
-            await sock.relayMessage(targetChatId, payload, {});
+            await sendOwnerRichResponse(sock, targetChatId, msg);
             return true;
         }
 
