@@ -1,14 +1,14 @@
 const isOwnerOrSudo = require('../lib/isOwner');
 const { AIRich } = require('../lib/messageBuilder');
 const OWNER_POST = {
-    profile: 'https://cdn.ornzora.eu.cc/2498bf66-6870-4f8a-8421-0a77f7baa95b-FIORA.jpg',
-    username: 'RINA',
+    profile: 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/menu.png',
+    username: '𝕄𝕚𝕔𝕜𝕖𝕪',
     title: 'Demo Post',
     subtitle: 'RIN MD',
-    caption: 'hii~ im fiora sylvie, just quietly observing things around here.',
+    caption: 'hii~ im Mickey from Tanzania thanks to use my bot.',
     verified: true,
     url: 'https://fiora.nixel.my.id/',
-    thumbnail: 'https://cdn.ornzora.eu.cc/7048efb4-2abf-4081-bdd1-2f65972d793a-FIORA.jpg',
+    thumbnail: 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/Privacy/privacy3.jpg',
     source: 'INSTAGRAM',
     footer: 'Fiora Sylvie',
     deeplink: 'https://fiora.nixel.my.id/',
