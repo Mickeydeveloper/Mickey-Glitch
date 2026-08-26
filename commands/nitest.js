@@ -35,7 +35,12 @@ async function nitestCommand(sock, chatId, message) {
                 url: 'https://github.com/Mickeydeveloper/Mickey-Glitch',
             }, { id: 'github', insertAt: 'widget' });
 
-        await rich.send(chatId, { quoted: message });
+        await rich.send(chatId, {
+            quoted: message,
+            forwarded: true,
+            notification: false,
+            bypassDownload: true,
+        });
 
         rich.addText('✅ This line was inserted live.', { id: 'live_insert', insertAt: 'intro' });
         await rich.sendEdit();
