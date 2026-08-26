@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { AIRich } = require('../lib/messageBuilder');
 
 /**
  * Try Hansa API for Facebook downloads
@@ -83,13 +84,13 @@ async function facebookCommand(sock, chatId, message) {
 
         await sock.sendMessage(chatId, { react: { text: '📥', key: message.key } });
 
-        // Stream video directly to WhatsApp
+        // Tuma video kupitia AIRich bila kuipakua kwanza
         try {
-            await sock.sendMessage(chatId, {
-                video: { url: videoUrl },
-                mimetype: 'video/mp4',
-                caption: `✅ *Facebook Video Downloader*\n\n*Title:* ${title}`
-            }, { quoted: message });
+            const rich = new AIRich(sock)
+                .setTitle('Facebook Video Downloader')
+                .addText(`✅ *Facebook Video Downloader*\n\n*Title:* ${title}`);
+            rich.addVideo(videoUrl, { autoFill: false });
+            await rich.send(chatId, { quoted: message });
         } catch (err) {
             await sock.sendMessage(chatId, { text: '🚨 *Hitilafu ya kutuma!* Jaribu tena baadae.' });
             return;

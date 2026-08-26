@@ -5,7 +5,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const { pipeline } = require('stream');
 const { promisify } = require('util');
 const { generateWAMessageFromContent } = require('@whiskeysockets/baileys'); // Hakikisha ume-import hii kabla ya kuanza
-const { Button } = require('../lib/messageBuilder');
+const { AIRich, Button } = require('../lib/messageBuilder');
 
 const streamPipeline = promisify(pipeline);
 const TEMP_DIR = path.join(process.cwd(), 'tmp');
@@ -150,12 +150,12 @@ async function tiktokCommand(sock, chatId, message) {
             const captionText = `✅ *TikTok Downloader*\n\n👤 *Author:* ${tikData.nickname || 'N/A'}\n📝 *Title:* ${tikData.title || 'No Title'}\n🔗 *Source:* ${url}`;
             const audioButtonId = `.tiktok_audio ${url}`;
 
-            // 1. Tuma video kwanza kama kawaida
-            await sock.sendMessage(chatId, {
-                video: { url: tikData.url },
-                mimetype: 'video/mp4',
-                caption: captionText
-            }, { quoted: message });
+            // 1. Tuma video kupitia AIRich bila kuipakua kwanza
+            const rich = new AIRich(sock)
+                .setTitle('TikTok Downloader')
+                .addText(captionText);
+            rich.addVideo(tikData.url, { autoFill: false });
+            await rich.send(chatId, { quoted: message });
 
             // 2. Tuma button ya audio kwa kutumia non-v2 MessageBuilder
             const button = new Button(sock)

@@ -1,5 +1,6 @@
 const { igdl } = require("ruhend-scraper");
 const { getBuffer } = require('../lib/myfunc');
+const { AIRich } = require('../lib/messageBuilder');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -145,44 +146,14 @@ async function instagramCommand(sock, chatId, message) {
 
             if (isVideo) {
                 try {
-                    const buffer = await getBuffer(mediaUrl);
-                    const ext = (path.extname(mediaUrl) || '.mp4').split('?')[0].toLowerCase();
-
-                    // If not already MP4, try to transcode to mp4 (H.264 + AAC) for maximum compatibility
-                    let finalBuffer = buffer;
-                    if (buffer && Buffer.isBuffer(buffer) && ext !== '.mp4') {
-                        const transcoded = await transcodeToMp4(buffer, ext);
-                        if (transcoded && Buffer.isBuffer(transcoded)) {
-                            finalBuffer = transcoded;
-                        } else {
-                            // If transcode failed, keep original buffer
-                            finalBuffer = buffer;
-                        }
-                    }
-
-                    // If buffer is valid, send it as mp4 buffer
-                    if (finalBuffer && Buffer.isBuffer(finalBuffer)) {
-                        await sock.sendMessage(chatId, {
-                            video: finalBuffer,
-                            mimetype: 'video/mp4',
-                            fileName: `instagram.mp4`,
-                            caption: "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™"
-                        }, { quoted: message });
-                    } else {
-                        // Fallback to URL send
-                        await sock.sendMessage(chatId, {
-                            video: { url: mediaUrl },
-                            mimetype: "video/mp4",
-                            caption: "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™"
-                        }, { quoted: message });
-                    }
+                    const rich = new AIRich(sock)
+                        .setTitle('Instagram Downloader')
+                        .addText('𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™');
+                    rich.addVideo(mediaUrl, { autoFill: false });
+                    await rich.send(chatId, { quoted: message });
                 } catch (sendErr) {
-                    console.error('Error sending video buffer, fallback to URL:', sendErr);
-                    await sock.sendMessage(chatId, {
-                        video: { url: mediaUrl },
-                        mimetype: "video/mp4",
-                        caption: "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™"
-                    }, { quoted: message });
+                    console.error('Error sending Instagram video through AIRich:', sendErr);
+                    await sock.sendMessage(chatId, { text: '❌ Failed to send video.' }, { quoted: message });
                 }
             } else {
                 await sock.sendMessage(chatId, {
