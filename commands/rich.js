@@ -1,3 +1,5 @@
+const { AIRich } = require('../lib/messageBuilder');
+
 const richCommand = async (sock, chatId, msg, args) => {
   const text = args && args.length ? args.join(' ') : 'Shiroko is my bini:';
   const body =
@@ -59,38 +61,24 @@ const richCommand = async (sock, chatId, msg, args) => {
     ],
   };
 
-  const content = {
-    messageContextInfo: {
-      deviceListMetadata: {},
-      deviceListMetadataVersion: 2,
-      botMetadata: {
-        pluginMetadata: {},
-        richResponseSourcesMetadata: {},
-      },
-    },
-    botForwardedMessage: {
-      message: {
-        richResponseMessage: {
-          messageType: 1,
-          submessages,
-          unifiedResponse: {
-            data: Buffer.from(JSON.stringify(unified), 'utf-8').toString('base64'),
-          },
-          contextInfo: {
-            forwardingScore: 1,
-            isForwarded: true,
-            forwardedAiBotMessageInfo: {
-              botJid: '0@bot',
-            },
-            forwardOrigin: 4,
-          },
-        },
-      },
-    },
-  };
-
   try {
-    await sock.relayMessage(chatId, content, {});
+    const rich = new AIRich(sock)
+      .setTitle('MICKEY RICH')
+      .setContextInfo({
+        forwardingScore: 1,
+        isForwarded: true,
+        forwardedAiBotMessageInfo: { botJid: '0@bot' },
+        forwardOrigin: 4,
+      })
+      .addSection(unified.sections)
+      .addSubmessage(submessages);
+
+    await rich.send(chatId, {
+      quoted: msg,
+      forwarded: true,
+      notification: false,
+      bypassDownload: true,
+    });
   } catch (error) {
     console.error('richCommand error:', error?.message || error);
     await sock.sendMessage(chatId, { text: '❌ Jambo limekosea kutuma rich message.' }, { quoted: msg });
