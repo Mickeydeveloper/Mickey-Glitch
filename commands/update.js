@@ -117,14 +117,16 @@ async function updateCommand(sock, chatId, message, zipUrl) {
 
         try {
             await extractZipFile(zipPath, extractPath);
-            
+
             const folders = fs.readdirSync(extractPath);
             if (folders.length === 0) {
                 throw new Error('Extracted folder is empty');
             }
-            
+
             const rootFolder = path.join(extractPath, folders[0]); 
-            const ignore = ['node_modules', 'session', 'auth_info_baileys', '.git', 'settings.js', 'config.js', '.env'];
+            
+            // Hapa ndipo mafaili yanaporukwa (yasi-update-we)
+            const ignore = ['node_modules', 'session', 'auth_info_baileys', '.git', 'settings.js', 'config.js', '.env', 'index.js', 'main.js'];
 
             const files = fs.readdirSync(rootFolder);
             for (const file of files) {
@@ -144,7 +146,7 @@ async function updateCommand(sock, chatId, message, zipUrl) {
         } catch (extractErr) {
             console.error(chalk.red('Extraction Error:'), extractErr.message);
             fs.removeSync(tmpDir);
-            
+
             // Provide helpful error message
             const errorMsg = extractErr.message.includes('EXTRACTION_FAILED')
                 ? extractErr.message
@@ -153,7 +155,7 @@ async function updateCommand(sock, chatId, message, zipUrl) {
                   '• Hakikisha panel inaruhusu unzip/7z commands\n' +
                   '• Jaribu `.repo` command kudownload bot kwenye local\n' +
                   '• Sitiki kwenye hosting provider';
-            
+
             await sock.sendMessage(chatId, { text: errorMsg }).catch(() => {});
         }
 
