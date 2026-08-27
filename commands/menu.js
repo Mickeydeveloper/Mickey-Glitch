@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { AIRich } = require('../lib/messageBuilder');
+const { AIRich, Button } = require('../lib/messageBuilder');
 const os = require('os');
 const chalk = require('chalk');
 
@@ -311,6 +311,26 @@ const buildWidgetSections = (menuData) => {
     }));
 };
 
+const sendCommandList = async (sock, chatId, m, menuData) => {
+    const list = new Button(sock)
+        .setTitle('MICKEY GLITCH COMMANDS')
+        .setBody('Chagua category kuona commands zilizopo')
+        .setFooter('Mickey Glitch')
+        .addSelection('📂 Command Categories');
+
+    menuData.forEach((category) => {
+        list.makeSection(`${category.icon} ${category.title}`, `${category.items.length} commands`);
+        category.items.forEach((item) => {
+            list.makeRow('', item.cmd, item.desc || 'Mickey Glitch command', item.cmd);
+        });
+    });
+
+    await list.send(chatId, {
+        quoted: m,
+        fallbackText: '❌ Command list haipatikani kwa WhatsApp yako.'
+    });
+};
+
 // ==============================================
 // 🚀 MAIN MENU COMMAND
 // ==============================================
@@ -344,6 +364,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
             ]);
 
         await rich.send(chatId, { quoted: m });
+        await sendCommandList(sock, chatId, m, menuData);
 
     } catch (e) {
         console.error('Menu Error:', e);
