@@ -338,16 +338,6 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
             .setSubtitle(`⚡ ${menuData.reduce((total, cat) => total + cat.items.length, 0)} commands`)
             .setFooter(`⚡ MICKEY BOT | ${date}`)
             .addText(menuText)
-            .addImage('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png')
-            .addSuggest(['.ping', '.alive', '.stats', '.owner', '.repo', '.ai'])
-            .addWidget({
-                title: '📋 Orodha ya Commands',
-                sections: buildWidgetSections(menuData),
-                actions: [
-                    { label: 'Open full menu', id: '.menu', kind: 'OTHER' },
-                    { label: 'View bot stats', id: '.stats', kind: 'OTHER' }
-                ]
-            })
             .addFooterAction([
                 { text: 'GitHub', type: 'OPEN_URL', url: 'https://github.com/Mickeydeveloper' },
                 { text: 'Bot Website', type: 'OPEN_URL', url: 'https://mickey-pterodacty.vercel.app/' }
