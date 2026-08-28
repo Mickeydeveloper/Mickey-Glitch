@@ -282,7 +282,10 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const time = now.format('HH:mm:ss');
         const totalCmds = menuData.reduce((total, cat) => total + cat.items.length, 0);
 
-        // Caption text iliyopangwa vizuri
+        // Raw Image URL kutoka GitHub Repo yako
+        const menuImage = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png';
+
+        // Caption iliyopangwa vizuri Mfumo wa V2
         const menuText = `╭─── [ *MICKEY GLITCH V3.0.5* ] ───
 │ 👋 *Habari ya ${greeting.text}* ${greeting.emoji}
 │ 👤 *User:* ${userName}
@@ -297,17 +300,14 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 
 ❤️ _i love mom_`;
 
-        // Tumia Image/Poster Link au Buffer hapa
-        const menuImage = 'https://i.ibb.co/L8G8d12/mickey.jpg'; // Badilisha na Link au Path ya picha yako
-
-        // Kutengeneza List Message yenye Button 2 (1 List Button + 1 Quick/Url Action Button)
+        // Kuunda Button Builder wenye Image + List + URL Button
         const list = new Button(sock)
             .setImage(menuImage)
             .setTitle('🔥 MICKEY GLITCH V2')
             .setBody(menuText)
             .setFooter('✨ Quantum Base Dev (TZ) | MICKEY BOT')
-            .addSelection('📂 Command Categories') // Button 1: List Select
-            .addUrl('🌐 Website', 'https://mickey-pterodacty.vercel.app/'); // Button 2: URL/Action Button
+            .addSelection('📂 Command Categories') // Button 1: Selection List
+            .addUrl('🌐 Website', 'https://mickey-pterodacty.vercel.app/'); // Button 2: URL Link Button
 
         // Kuweka Categories na Rows kwenye List Button
         menuData.forEach((category) => {
@@ -317,11 +317,8 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
             });
         });
 
-        // Tuma Message
-        await list.send(chatId, {
-            quoted: m,
-            fallbackText: '❌ WhatsApp yako haisupport Message za Buttons.'
-        });
+        // Tuma Ujumbe (Bila fallbackText ili kuzuia error za uongo)
+        await list.send(chatId, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
