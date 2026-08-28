@@ -1,7 +1,6 @@
 /**
  * TELEGRAM BOT MODULE - MICKEY GLITCH ULTIMATE
- * Version 2.0 - Fully Enhanced with African Charts, Downloader, and AI Features
- * Autofix & Crash Prevention Enabled
+ * Version 2.0 - Fully Enhanced with Real Telegram Polling Engine & Auto-Start
  */
 
 const fs = require('fs');
@@ -11,7 +10,6 @@ const yts = require('yt-search');
 const os = require('os');
 const { performance } = require('perf_hooks');
 const settings = require('../settings');
-const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, delay } = require('@whiskeysockets/baileys');
 const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
@@ -28,11 +26,14 @@ const COMMANDS_DIR = path.join(__dirname, '..', 'commands');
 const CACHE_DIR = path.join(__dirname, '..', 'cache');
 const LOGS_DIR = path.join(__dirname, '..', 'logs');
 
-// Store active pairing sessions and command cache
+// Store active pairing sessions and states
 const activePairingSessions = new Map();
 const whatsappCommands = new Map();
 const commandCache = new Map();
 const rateLimiter = new Map();
+
+let isPollingActive = false;
+let pollingOffset = 0;
 
 // Default axios config with retry
 const AXIOS_DEFAULTS = {
@@ -79,7 +80,6 @@ function logSystem(text) { console.log(colors.magenta(`[${getTimestamp()}] ⚙�
 // ============================================================
 // 📋 FORMATTING UTILITIES
 // ============================================================
-
 const formatUptime = (seconds) => {
     const d = Math.floor(seconds / (3600 * 24));
     const h = Math.floor((seconds % (3600 * 24)) / 3600);
@@ -112,7 +112,93 @@ const getSystemLoad = () => {
 };
 
 // ============================================================
-// 🎯 ENHANCED BUTTONS AND INLINE KEYBOARDS
+// 🛠️ TELEGRAM POLLING & LISTENER ENGINE
+// ============================================================
+
+async function startTelegramBot(providedSock = null) {
+    const token = settings.telegram?.botToken?.trim();
+
+    if (!token) {
+        logError('Cannot start Telegram Bot: Token missing in settings.js!');
+        return false;
+    }
+
+    if (isPollingActive) {
+        logWarning('Telegram Bot polling is already active.');
+        return true;
+    }
+
+    // Load WhatsApp commands into Telegram Bridge
+    loadWhatsappCommands();
+
+    try {
+        // Test connection with Telegram API
+        const meRes = await axios.get(`${TELEGRAM_BASE_URL(token)}/getMe`, { timeout: 10000 });
+        if (!meRes.data || !meRes.data.ok) {
+            logError('Telegram Bot Token is invalid!');
+            return false;
+        }
+
+        const botInfo = meRes.data.result;
+        logSuccess(`Telegram Bot Connected: @${botInfo.username} (${botInfo.first_name})`);
+
+        isPollingActive = true;
+        runTelegramPollingLoop(token, providedSock);
+        return true;
+    } catch (e) {
+        logError(`Failed to start Telegram Bot: ${e.message}`);
+        return false;
+    }
+}
+
+async function runTelegramPollingLoop(token, sock) {
+    while (isPollingActive) {
+        try {
+            const res = await axios.get(`${TELEGRAM_BASE_URL(token)}/getUpdates`, {
+                params: {
+                    offset: pollingOffset,
+                    timeout: 20
+                },
+                timeout: 30000
+            });
+
+            if (res.data && res.data.ok && Array.isArray(res.data.result)) {
+                for (const update of res.data.result) {
+                    pollingOffset = update.update_id + 1;
+                    handleTelegramUpdate(update, sock);
+                }
+            }
+        } catch (err) {
+            if (err.code !== 'ECONNABORTED') {
+                logError(`Telegram polling loop error: ${err.message}`);
+                await new Promise(r => setTimeout(r, 5000));
+            }
+        }
+    }
+}
+
+async function handleTelegramUpdate(update, sock) {
+    try {
+        const message = update.message || update.edited_message || update.callback_query?.message;
+        if (!message) return;
+
+        const chatId = message.chat.id;
+        const text = update.message?.text || update.callback_query?.data || '';
+
+        if (!text) return;
+
+        // Check command
+        if (text.startsWith('/') || text.startsWith('.')) {
+            const tempSock = sock || createTelegramSock(chatId, message.message_id);
+            await executeCommand(tempSock, chatId, message, text);
+        }
+    } catch (e) {
+        logError(`Error handling update: ${e.message}`);
+    }
+}
+
+// ============================================================
+// 🎯 BUTTONS & MESSAGING UTILITIES
 // ============================================================
 
 async function sendTelegramButtons(chatId, text, buttons, options = {}) {
@@ -120,9 +206,7 @@ async function sendTelegramButtons(chatId, text, buttons, options = {}) {
     if (!token || !chatId) return false;
 
     try {
-        const keyboard = {
-            inline_keyboard: []
-        };
+        const keyboard = { inline_keyboard: [] };
 
         if (Array.isArray(buttons)) {
             let row = [];
@@ -131,7 +215,6 @@ async function sendTelegramButtons(chatId, text, buttons, options = {}) {
                     text: btn.text || btn.label || btn.display_text || 'Button'
                 };
 
-                // Autofix nativeflow button mapping to telegram inline callback
                 if (btn.buttonParamsJson) {
                     try {
                         const parsedParams = JSON.parse(btn.buttonParamsJson);
@@ -148,22 +231,17 @@ async function sendTelegramButtons(chatId, text, buttons, options = {}) {
                     button.callback_data = String(btn.command);
                 } else if (btn.id) {
                     button.callback_data = String(btn.id);
-                } else if (btn.switch_inline_query) {
-                    button.switch_inline_query = btn.switch_inline_query;
                 } else {
                     button.callback_data = 'action_' + (button.text.toLowerCase().replace(/\s+/g, '_'));
                 }
 
                 row.push(button);
-
-                if (row.length === 2) { // 2 Buttons per row looks cleaner on mobile devices
+                if (row.length === 2) {
                     keyboard.inline_keyboard.push(row);
                     row = [];
                 }
             }
-            if (row.length > 0) {
-                keyboard.inline_keyboard.push(row);
-            }
+            if (row.length > 0) keyboard.inline_keyboard.push(row);
         }
 
         const payload = {
@@ -205,118 +283,49 @@ async function sendInteractiveMessage(sock, chatId, content, options = {}) {
     }
 }
 
-// ============================================================
-// 🛠️ ENHANCED TELEGRAM SOCK WITH MORE FEATURES
-// ============================================================
-
 function createTelegramSock(chatId, messageId) {
     const token = settings.telegram?.botToken?.trim();
     const currentChatId = String(chatId);
 
-    const baseSock = {
+    return {
         sendMessage: async (jid, content, options = {}) => {
             try {
                 const id = String(jid || currentChatId);
-                if (!content || typeof content !== 'object') {
-                    throw new Error('Invalid content format');
-                }
-
                 if (content.text) {
                     return await sendTelegramMessage(id, content.text, {}, messageId);
                 } else if (content.image) {
                     const url = content.image.url || content.image;
-                    if (!url) throw new Error('Image URL missing');
                     return await sendTelegramPhoto(id, url, content.caption || '', messageId);
                 } else if (content.audio) {
                     const url = content.audio.url || content.audio;
-                    if (!url) throw new Error('Audio URL missing');
                     return await sendTelegramAudio(id, url, content.caption || '', messageId);
                 } else if (content.video) {
                     const url = content.video.url || content.video;
-                    if (!url) throw new Error('Video URL missing');
                     return await sendTelegramVideo(id, url, content.caption || '', messageId);
                 } else if (content.document) {
                     const url = content.document.url || content.document;
-                    if (!url) throw new Error('Document URL missing');
                     return await sendTelegramDocument(id, url, content.caption || '', messageId);
-                } else if (content.hasOwnProperty('buttons') || content.hasOwnProperty('interactiveButtons')) {
-                    return await sendInteractiveMessage(null, id, content, { quoted: { message_id: messageId } });
-                } else if (content.poll) {
-                    return await sendTelegramPoll(id, content.poll.question, content.poll.options, {
-                        reply_to_message_id: messageId,
-                        ...content.poll
-                    });
                 } else {
                     const text = typeof content === 'string' ? content : JSON.stringify(content);
                     return await sendTelegramMessage(id, text.substring(0, 4000), {}, messageId);
                 }
             } catch (error) {
                 logError(`[Sock.sendMessage] Error: ${error.message}`);
-                try {
-                    await sendTelegramMessage(String(jid || currentChatId), `❌ *Error:* ${error.message.substring(0, 200)}`, {}, messageId);
-                } catch (e) {}
                 return false;
             }
         },
         sendMessageAck: async () => true,
-        react: async (jid, { text }) => {
-            try {
-                return await sendTelegramMessage(String(jid || currentChatId), text, {}, messageId);
-            } catch (error) {
-                return false;
-            }
-        },
-        sendPresenceUpdate: async (presence) => {
-            try {
-                if (!token) return false;
-                const action = presence === 'composing' ? 'typing' : presence === 'recording' ? 'upload_audio' : 'typing';
-                await axios.post(`${TELEGRAM_BASE_URL(token)}/sendChatAction`, {
-                    chat_id: currentChatId,
-                    action: action
-                });
-                return true;
-            } catch (error) {
-                return false;
-            }
-        },
-        readMessages: async (messages) => {
-            try {
-                if (!token) return false;
-                await axios.post(`${TELEGRAM_BASE_URL(token)}/sendChatAction`, {
-                    chat_id: currentChatId,
-                    action: 'typing'
-                });
-                return true;
-            } catch (error) {
-                return false;
-            }
-        },
-        updateMessage: async (jid, message, content) => {
-            try {
-                return await sendTelegramMessage(String(jid || currentChatId), content, {}, messageId);
-            } catch (error) {
-                return false;
-            }
-        },
-        logger: {
-            info: logInfo,
-            error: logError,
-            warn: logWarning,
-            debug: logDebug
-        },
-        // [Autofix] WhatsApp mock properties to prevent breakdown inside native modules
+        react: async (jid, { text }) => sendTelegramMessage(String(jid || currentChatId), text, {}, messageId),
+        sendPresenceUpdate: async () => true,
+        readMessages: async () => true,
         user: { id: 'telegram_bridge@s.whatsapp.net', name: 'Mickey Bridge' },
-        profilePictureUrl: async () => 'https://raw.githubusercontent.com/Mickeydeveloper/water-billing/main/1761205727440.png',
-        groupMetadata: async () => ({ id: currentChatId, subject: 'Telegram Chat Group', participants: [] }),
         getChatId: () => currentChatId,
         getMessageId: () => messageId
     };
-
-    return baseSock;
 }
 
 // ============================================================
-// 📁 COMMAND LOADER WITH HOT RELOAD
+// 📁 COMMAND LOADER
 // ============================================================
 
 function normalizeCommandName(command) {
@@ -345,7 +354,6 @@ function parseCommandText(text) {
 
 function collectCommandEntries(cmdModule, baseName) {
     const entries = [];
-
     const addEntry = (handler, name = baseName, aliases = [], config = {}) => {
         if (typeof handler !== 'function') return;
         const finalName = String(name || baseName || '').trim();
@@ -359,78 +367,23 @@ function collectCommandEntries(cmdModule, baseName) {
         });
     };
 
-    const isLikelyHelper = (name, candidate) => {
-        if (typeof candidate !== 'function') return false;
-        const lower = String(name || '').toLowerCase();
-        const helperPatterns = [
-            'create', 'find', 'get', 'make', 'generate', 'normalize', 'sanitize',
-            'download', 'send', 'build', 'set', 'parse', 'load', 'save', 'format',
-            'check', 'is', 'add', 'remove', 'log', 'ensure', 'extract'
-        ];
-        return helperPatterns.some(pattern => lower.startsWith(pattern)) && lower !== baseName.toLowerCase();
-    };
-
     if (typeof cmdModule === 'function') {
-        const name = cmdModule.name || baseName;
-        if (!isLikelyHelper(name, cmdModule)) addEntry(cmdModule, name);
+        addEntry(cmdModule, baseName);
         return entries;
     }
 
-    if (!cmdModule || typeof cmdModule !== 'object') {
-        return entries;
-    }
-
-    if (typeof cmdModule.execute === 'function') {
-        addEntry(cmdModule.execute, cmdModule.name || baseName, Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [], cmdModule.config || {});
-        return entries;
-    }
-
-    if (cmdModule.default) {
-        if (typeof cmdModule.default === 'function') {
-            const name = cmdModule.name || cmdModule.default.name || baseName;
-            if (!isLikelyHelper(name, cmdModule.default)) addEntry(cmdModule.default, name, Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [], cmdModule.config || {});
-        } else if (typeof cmdModule.default.execute === 'function') {
-            addEntry(
-                cmdModule.default.execute,
-                cmdModule.default.name || cmdModule.name || baseName,
-                Array.isArray(cmdModule.default.aliases) ? cmdModule.default.aliases : [],
-                cmdModule.default.config || {}
-            );
-        }
-        return entries;
-    }
-
-    if (typeof cmdModule.run === 'function') {
-        addEntry(cmdModule.run, cmdModule.name || baseName, Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [], cmdModule.config || {});
-        return entries;
-    }
-
-    if (typeof cmdModule.handler === 'function') {
-        addEntry(cmdModule.handler, cmdModule.name || baseName, Array.isArray(cmdModule.aliases) ? cmdModule.aliases : [], cmdModule.config || {});
-        return entries;
-    }
-
-    for (const [key, value] of Object.entries(cmdModule)) {
-        if (key === 'default' || key === 'config' || key === 'name' || key === 'aliases') continue;
-
-        if (typeof value === 'function') {
-            if (!isLikelyHelper(key, value)) {
-                addEntry(value, key === 'default' ? baseName : key);
-            }
-        } else if (value && typeof value === 'object' && typeof value.execute === 'function') {
-            const entryName = value.name || (key === 'default' ? baseName : key);
-            addEntry(value.execute, entryName, Array.isArray(value.aliases) ? value.aliases : [], value.config || {});
+    if (cmdModule && typeof cmdModule === 'object') {
+        if (typeof cmdModule.execute === 'function') {
+            addEntry(cmdModule.execute, cmdModule.name || baseName, cmdModule.aliases, cmdModule.config);
+        } else if (typeof cmdModule.run === 'function') {
+            addEntry(cmdModule.run, cmdModule.name || baseName, cmdModule.aliases, cmdModule.config);
         }
     }
-
     return entries;
 }
 
 function loadWhatsappCommands() {
-    if (!fs.existsSync(COMMANDS_DIR)) {
-        fs.mkdirSync(COMMANDS_DIR, { recursive: true });
-        return;
-    }
+    if (!fs.existsSync(COMMANDS_DIR)) return;
 
     const files = fs.readdirSync(COMMANDS_DIR).filter(f => f.endsWith('.js'));
     whatsappCommands.clear();
@@ -442,35 +395,16 @@ function loadWhatsappCommands() {
 
             delete require.cache[require.resolve(filePath)];
             const cmdModule = require(filePath);
-
             const commandEntries = collectCommandEntries(cmdModule, baseName);
 
-            if (commandEntries.length > 0) {
-                for (const entry of commandEntries) {
-                    const resolvedName = entry.name || baseName;
-                    const resolvedAliases = Array.isArray(entry.config?.aliases) ? entry.config.aliases : entry.aliases;
-                    const normalizedEntry = {
-                        execute: entry.execute,
-                        config: entry.config || {},
-                        aliases: resolvedAliases,
-                        category: entry.config?.category || null,
-                        description: entry.config?.description || null
-                    };
-
-                    whatsappCommands.set(normalizeCommandName(resolvedName), normalizedEntry);
-                    for (const alias of resolvedAliases) {
-                        if (alias) whatsappCommands.set(normalizeCommandName(alias), normalizedEntry);
-                    }
-                    logDebug(`Loaded command: ${resolvedName}${resolvedAliases.length ? ` (aliases: ${resolvedAliases.join(', ')})` : ''}`);
-                }
-            } else {
-                logWarning(`Could not load command from ${file}: No function found`);
+            for (const entry of commandEntries) {
+                whatsappCommands.set(normalizeCommandName(entry.name), entry);
             }
         } catch (e) {
-            logError(`Failed to load ${file}: ${e.message}`);
+            logError(`Failed to load command ${file}: ${e.message}`);
         }
     }
-    logSuccess(`Loaded ${whatsappCommands.size} commands from /commands folder`);
+    logSuccess(`Loaded ${whatsappCommands.size} commands for Telegram`);
 }
 
 async function sendTelegramMessage(chatId, text, options = {}, replyToMessageId = null) {
@@ -496,47 +430,24 @@ async function sendTelegramMessage(chatId, text, options = {}, replyToMessageId 
     }
 }
 
-async function sendTelegramMedia(chatId, method, media, caption = '', replyToMessageId = null, extra = {}) {
+async function sendTelegramMedia(chatId, method, media, caption = '', replyToMessageId = null) {
     const token = settings?.telegram?.botToken?.trim();
     if (!token || !chatId || !media) return false;
 
     try {
-        let body;
-        const payload = {
+        let body = {
             chat_id: String(chatId),
             caption: String(caption || '').slice(0, 1024),
             parse_mode: 'HTML',
-            ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}),
-            ...extra
+            ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {})
         };
 
         if (typeof media === 'string' && /^https?:\/\//i.test(media)) {
-            payload[method === 'sendPhoto' ? 'photo' : method === 'sendAudio' ? 'audio' : method === 'sendVideo' ? 'video' : method === 'sendDocument' ? 'document' : 'sticker'] = media;
-            body = payload;
-        } else {
-            body = new FormData();
-            body.append('chat_id', String(chatId));
-            if (caption) body.append('caption', String(caption).slice(0, 1024));
-            if (replyToMessageId) body.append('reply_to_message_id', String(replyToMessageId));
-            if (typeof media === 'string' && fs.existsSync(media)) {
-                const stream = fs.createReadStream(media);
-                body.append(method === 'sendPhoto' ? 'photo' : method === 'sendAudio' ? 'audio' : method === 'sendVideo' ? 'video' : method === 'sendDocument' ? 'document' : 'sticker', stream);
-            } else {
-                body.append(method === 'sendPhoto' ? 'photo' : method === 'sendAudio' ? 'audio' : method === 'sendVideo' ? 'video' : method === 'sendDocument' ? 'document' : 'sticker', media);
-            }
+            const field = method === 'sendPhoto' ? 'photo' : method === 'sendAudio' ? 'audio' : 'document';
+            body[field] = media;
         }
 
-        const headers = typeof body === 'object' && body && typeof body.getHeaders === 'function'
-            ? { ...AXIOS_DEFAULTS.headers, ...body.getHeaders() }
-            : AXIOS_DEFAULTS.headers;
-
-        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/${method}`, body, {
-            ...AXIOS_DEFAULTS,
-            headers,
-            maxContentLength: 100 * 1024 * 1024,
-            maxBodyLength: 100 * 1024 * 1024
-        });
-
+        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/${method}`, body, AXIOS_DEFAULTS);
         return response?.data?.ok === true;
     } catch (error) {
         logError(`Telegram ${method} failed: ${error?.message || error}`);
@@ -544,251 +455,20 @@ async function sendTelegramMedia(chatId, method, media, caption = '', replyToMes
     }
 }
 
-async function sendTelegramPhoto(chatId, photo, caption = '', replyToMessageId = null, extra = {}) {
-    return sendTelegramMedia(chatId, 'sendPhoto', photo, caption, replyToMessageId, extra);
+async function sendTelegramPhoto(chatId, photo, caption = '', replyToMessageId = null) {
+    return sendTelegramMedia(chatId, 'sendPhoto', photo, caption, replyToMessageId);
 }
 
-async function sendTelegramAudio(chatId, audio, caption = '', replyToMessageId = null, extra = {}) {
-    return sendTelegramMedia(chatId, 'sendAudio', audio, caption, replyToMessageId, extra);
+async function sendTelegramAudio(chatId, audio, caption = '', replyToMessageId = null) {
+    return sendTelegramMedia(chatId, 'sendAudio', audio, caption, replyToMessageId);
 }
 
-async function sendTelegramVideo(chatId, video, caption = '', replyToMessageId = null, extra = {}) {
-    return sendTelegramMedia(chatId, 'sendVideo', video, caption, replyToMessageId, extra);
+async function sendTelegramVideo(chatId, video, caption = '', replyToMessageId = null) {
+    return sendTelegramMedia(chatId, 'sendVideo', video, caption, replyToMessageId);
 }
 
-async function sendTelegramDocument(chatId, document, caption = '', replyToMessageId = null, extra = {}) {
-    return sendTelegramMedia(chatId, 'sendDocument', document, caption, replyToMessageId, extra);
-}
-
-async function sendTelegramSticker(chatId, sticker, replyToMessageId = null, extra = {}) {
-    const token = settings?.telegram?.botToken?.trim();
-    if (!token || !chatId || !sticker) return false;
-
-    try {
-        const payload = {
-            chat_id: String(chatId),
-            ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}),
-            ...extra
-        };
-
-        let body = payload;
-        if (typeof sticker === 'string' && /^https?:\/\//i.test(sticker)) {
-            body.sticker = sticker;
-        } else {
-            body = new FormData();
-            body.append('chat_id', String(chatId));
-            if (replyToMessageId) body.append('reply_to_message_id', String(replyToMessageId));
-            if (typeof sticker === 'string' && fs.existsSync(sticker)) {
-                body.append('sticker', fs.createReadStream(sticker));
-            } else {
-                body.append('sticker', sticker);
-            }
-        }
-
-        const headers = body && typeof body.getHeaders === 'function'
-            ? { ...AXIOS_DEFAULTS.headers, ...body.getHeaders() }
-            : AXIOS_DEFAULTS.headers;
-
-        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendSticker`, body, { ...AXIOS_DEFAULTS, headers });
-        return response?.data?.ok === true;
-    } catch (error) {
-        logError(`Telegram sendSticker failed: ${error?.message || error}`);
-        return false;
-    }
-}
-
-async function sendTelegramPoll(chatId, question, options = [], config = {}, replyToMessageId = null) {
-    const token = settings?.telegram?.botToken?.trim();
-    if (!token || !chatId) return false;
-
-    try {
-        const payload = {
-            chat_id: String(chatId),
-            question: String(question || 'Question').slice(0, 255),
-            options: Array.isArray(options) ? options.slice(0, 10).map(String) : ['Yes', 'No'],
-            ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}),
-            ...config
-        };
-
-        const response = await axios.post(`${TELEGRAM_BASE_URL(token)}/sendPoll`, payload, AXIOS_DEFAULTS);
-        return response?.data?.ok === true;
-    } catch (error) {
-        logError(`Telegram sendPoll failed: ${error?.message || error}`);
-        return false;
-    }
-}
-
-function ensureTelegramDataFile() {
-    try {
-        if (!fs.existsSync(TELEGRAM_DATA_DIR)) fs.mkdirSync(TELEGRAM_DATA_DIR, { recursive: true });
-        if (!fs.existsSync(TELEGRAM_DATA_FILE)) fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify({ pairs: {}, allowedChats: [], settings: {} }, null, 2));
-    } catch (error) {
-        logError(`Failed to ensure telegram data file: ${error?.message || error}`);
-    }
-}
-
-function loadAllowedChats() {
-    ensureTelegramDataFile();
-    try {
-        const raw = fs.readFileSync(TELEGRAM_DATA_FILE, 'utf8');
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed.allowedChats) ? parsed.allowedChats : [];
-    } catch (error) {
-        return [];
-    }
-}
-
-function saveAllowedChats(chats = []) {
-    ensureTelegramDataFile();
-    try {
-        const raw = fs.readFileSync(TELEGRAM_DATA_FILE, 'utf8');
-        const parsed = JSON.parse(raw);
-        parsed.allowedChats = Array.isArray(chats) ? chats : [];
-        fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify(parsed, null, 2));
-        return true;
-    } catch (error) {
-        logError(`saveAllowedChats failed: ${error?.message || error}`);
-        return false;
-    }
-}
-
-function loadTelegramSettings() {
-    ensureTelegramDataFile();
-    try {
-        const raw = fs.readFileSync(TELEGRAM_DATA_FILE, 'utf8');
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed.settings || {} : {};
-    } catch (error) {
-        return {};
-    }
-}
-
-function saveTelegramSettings(settingsData = {}) {
-    ensureTelegramDataFile();
-    try {
-        const raw = fs.readFileSync(TELEGRAM_DATA_FILE, 'utf8');
-        const parsed = JSON.parse(raw);
-        parsed.settings = settingsData || {};
-        fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify(parsed, null, 2));
-        return true;
-    } catch (error) {
-        logError(`saveTelegramSettings failed: ${error?.message || error}`);
-        return false;
-    }
-}
-
-function isChatAllowed(chatId) {
-    if (!chatId) return false;
-    const allowedChats = loadAllowedChats();
-    const normalized = String(chatId).trim();
-    return allowedChats.some(item => String(item).trim() === normalized) || normalized === 'all';
-}
-
-function addAllowedChat(chatId) {
-    if (!chatId) return false;
-    const chats = loadAllowedChats();
-    const normalized = String(chatId).trim();
-    if (!chats.includes(normalized)) chats.push(normalized);
-    return saveAllowedChats(chats);
-}
-
-function removeAllowedChat(chatId) {
-    if (!chatId) return false;
-    const chats = loadAllowedChats().filter(item => String(item).trim() !== String(chatId).trim());
-    return saveAllowedChats(chats);
-}
-
-function checkRateLimit(chatId, limit = 10, windowMs = 60000) {
-    const key = String(chatId || 'global');
-    const now = Date.now();
-    const bucket = rateLimiter.get(key) || [];
-    const filtered = bucket.filter(ts => now - ts < windowMs);
-    filtered.push(now);
-    rateLimiter.set(key, filtered);
-    return filtered.length <= limit;
-}
-
-function logToFile(fileName, content) {
-    try {
-        const dir = path.join(__dirname, '..', 'logs');
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        const filePath = path.join(dir, fileName);
-        fs.appendFileSync(filePath, `${new Date().toISOString()} ${String(content)}\n`);
-        return true;
-    } catch (error) {
-        return false;
-    }
-}
-
-function createTelegramSafeSock(sock, chatId, message) {
-    const fallbackSend = async (jid, content, options = {}) => {
-        try {
-            if (typeof sock?.sendMessage === 'function') {
-                return await sock.sendMessage(jid, content, options);
-            }
-
-            const text = typeof content === 'string'
-                ? content
-                : (content?.text || content?.caption || JSON.stringify(content || {}));
-
-            if (!text) return false;
-            return await sendTelegramMessage(String(jid || chatId), String(text).slice(0, 4000), {}, message?.message_id || null);
-        } catch (error) {
-            return false;
-        }
-    };
-
-    const fallbackRelay = async (targetJid, payload, options = {}) => {
-        try {
-            if (typeof sock?.relayMessage === 'function') {
-                return await sock.relayMessage(targetJid, payload, options);
-            }
-
-            if (payload && typeof payload === 'object') {
-                if (payload.text || payload.caption) {
-                    return await fallbackSend(targetJid, payload.text || payload.caption, options);
-                }
-
-                if (payload.interactiveResponseMessage) {
-                    const title = payload.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson
-                        ? JSON.parse(payload.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson || '{}')
-                        : {};
-                    const titleText = title?.wa_flow_response_params?.title || 'Mickey Glitch';
-                    await sendTelegramMessage(String(targetJid || chatId), String(titleText).slice(0, 4000), {}, message?.message_id || null);
-                    return { ok: true };
-                }
-
-                if (payload.sticker || payload.image || payload.video || payload.document) {
-                    const text = payload.caption || 'Media sent from WhatsApp-safe fallback';
-                    if (payload.sticker) {
-                        return await sendTelegramSticker(String(targetJid || chatId), payload.sticker, message?.message_id || null);
-                    }
-                    if (payload.image) {
-                        return await sendTelegramPhoto(String(targetJid || chatId), payload.image, text, message?.message_id || null);
-                    }
-                    if (payload.video) {
-                        return await sendTelegramVideo(String(targetJid || chatId), payload.video, text, message?.message_id || null);
-                    }
-                    if (payload.document) {
-                        return await sendTelegramDocument(String(targetJid || chatId), payload.document, text, message?.message_id || null);
-                    }
-                }
-            }
-
-            return { ok: true };
-        } catch (error) {
-            return false;
-        }
-    };
-
-    return {
-        ...sock,
-        sendMessage: fallbackSend,
-        relayMessage: fallbackRelay,
-        user: sock?.user || { id: 'telegram-user' },
-        chatId,
-        message
-    };
+async function sendTelegramDocument(chatId, document, caption = '', replyToMessageId = null) {
+    return sendTelegramMedia(chatId, 'sendDocument', document, caption, replyToMessageId);
 }
 
 async function executeCommand(sock, chatId, message, commandText) {
@@ -796,15 +476,13 @@ async function executeCommand(sock, chatId, message, commandText) {
         const parsed = parseCommandText(commandText || '');
         if (!parsed) return false;
 
-        const target = whatsappCommands.get(parsed.name) || whatsappCommands.get(normalizeCommandName(parsed.name));
+        const target = whatsappCommands.get(parsed.name);
         if (!target || typeof target.execute !== 'function') return false;
 
-        const safeSock = createTelegramSafeSock(sock, chatId, message);
-        const result = await target.execute(safeSock, chatId, message, parsed.args || '', {
-            senderId: message?.from || message?.sender || message?.chat?.id || null,
+        const result = await target.execute(sock, chatId, message, parsed.args || '', {
+            senderId: message?.from?.id || chatId,
             chatId,
-            telegram: true,
-            isTelegramBridge: true
+            telegram: true
         });
         return !!result;
     } catch (error) {
@@ -813,76 +491,12 @@ async function executeCommand(sock, chatId, message, commandText) {
     }
 }
 
-async function getYoutubeAudio(query, options = {}) {
-    try {
-        const results = await yts(query || '', { pages: 1 });
-        const item = results?.all?.[0];
-        if (!item?.url) return null;
-        return { title: item.title, url: item.url, thumbnail: item.image || item.thumbnail || '', author: item.author || 'Unknown' };
-    } catch (error) {
-        logError(`getYoutubeAudio failed: ${error?.message || error}`);
-        return null;
-    }
-}
-
-async function searchYoutubeAudio(query, options = {}) {
-    try {
-        const data = await yts(query || '', { pages: 1 });
-        const items = Array.isArray(data?.all) ? data.all.slice(0, 5) : [];
-        return items.map(item => ({
-            title: item.title,
-            url: item.url,
-            thumbnail: item.image || item.thumbnail || '',
-            author: item.author || 'Unknown'
-        }));
-    } catch (error) {
-        logError(`searchYoutubeAudio failed: ${error?.message || error}`);
-        return [];
-    }
-}
-
-function extractVideoId(url) {
-    if (!url || typeof url !== 'string') return null;
-    const match = url.match(/(?:v=|\/)([A-Za-z0-9_-]{11})(?:[&?]|$)/);
-    return match ? match[1] : null;
-}
-
-async function getAfricanMusicCharts() {
-    return [
-        { title: 'Trending - 1', artist: 'Local', url: 'https://example.com' }
-    ];
-}
-
-async function pairWhatsApp(data = {}) {
-    try {
-        ensureTelegramDataFile();
-        const raw = fs.readFileSync(TELEGRAM_DATA_FILE, 'utf8');
-        const parsed = JSON.parse(raw);
-        parsed.pairs = parsed.pairs || {};
-        if (data && data.whatsappId) parsed.pairs[data.whatsappId] = data;
-        fs.writeFileSync(TELEGRAM_DATA_FILE, JSON.stringify(parsed, null, 2));
-        return true;
-    } catch (error) {
-        logError(`pairWhatsApp failed: ${error?.message || error}`);
-        return false;
-    }
-}
-
-async function startTelegramBot() {
-    logInfo('Telegram bridge ready. Bot startup is being handled by the main process.');
-    return true;
-}
-
 function getBotName() {
     return String(settings?.botName || settings?.botname || 'MICKEY GLITCH');
 }
 
 function getFormattedDate(date = new Date()) {
-    try {
-        return new Date(date).toLocaleString();
-    } catch (error) {
-        return String(date || new Date());
-    }
+    return new Date(date).toLocaleString();
 }
 
 function getNetworkStats() {
@@ -890,15 +504,12 @@ function getNetworkStats() {
         hostname: os.hostname(),
         platform: os.platform(),
         arch: os.arch(),
-        totalmem: os.totalmem(),
-        freemem: os.freemem(),
-        uptime: os.uptime(),
-        loadavg: os.loadavg()
+        uptime: os.uptime()
     };
 }
 
 async function aliveCommand(sock, chatId, message) {
-    const text = `🟢 Telegram bridge is alive\n\nServer: ${os.hostname()}\nUptime: ${formatUptime(os.uptime())}`;
+    const text = `🟢 Telegram bridge is active & listening!\n\nServer: ${os.hostname()}\nUptime: ${formatUptime(os.uptime())}`;
     return sendTelegramMessage(chatId, text, {}, message?.message_id || null);
 }
 
@@ -908,30 +519,12 @@ module.exports = {
     sendTelegramAudio,
     sendTelegramVideo,
     sendTelegramDocument,
-    sendTelegramSticker,
-    sendTelegramPoll,
     sendTelegramButtons,
     sendInteractiveMessage,
     createTelegramSock,
     loadWhatsappCommands,
     executeCommand,
     whatsappCommands,
-    isChatAllowed,
-    addAllowedChat,
-    removeAllowedChat,
-    loadAllowedChats,
-    saveAllowedChats,
-    loadTelegramSettings,
-    saveTelegramSettings,
-    getYoutubeAudio,
-    searchYoutubeAudio,
-    extractVideoId,
-    getAfricanMusicCharts,
-    pairWhatsApp,
-    checkRateLimit,
-    logToFile,
-    parseCommandText,
-    normalizeCommandName,
     startTelegramBot,
     colors,
     logSuccess,
