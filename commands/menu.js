@@ -266,8 +266,25 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
+const sendCommandList = async (sock, chatId, m, menuData) => {
+    const list = new Button(sock)
+        .setTitle('MICKEY GLITCH COMMANDS')
+        .setBody('Chagua category kuona commands zilizopo')
+        .setFooter('Mickey Glitch')
+        .addSelection('📂 Command Categories');
+
+    menuData.forEach((category) => {
+        list.makeSection(`${category.icon} ${category.title}`, `${category.items.length} commands`);
+        category.items.forEach((item) => {
+            list.makeRow('', item.cmd, item.desc || 'Mickey Glitch command', item.cmd);
+        });
+    });
+
+    await list.send(chatId, { quoted: m });
+};
+
 // ==============================================
-// 🚀 MAIN MENU COMMAND (V2 WITH IMAGE & 2 BUTTONS)
+// 🚀 MAIN MENU COMMAND (AIRich Post Card V2)
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
@@ -282,10 +299,9 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const time = now.format('HH:mm:ss');
         const totalCmds = menuData.reduce((total, cat) => total + cat.items.length, 0);
 
-        // Raw Image URL kutoka GitHub Repo yako
-        const menuImage = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png';
+        // Raw Image URL
+        const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png';
 
-        // Caption iliyopangwa vizuri Mfumo wa V2
         const menuText = `╭─── [ *MICKEY GLITCH V3.0.5* ] ───
 │ 👋 *Habari ya ${greeting.text}* ${greeting.emoji}
 │ 👤 *User:* ${userName}
@@ -296,29 +312,34 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 │ 💾 *RAM:* ${stats.memoryUsed} MB
 ╰───────────────────────────
 
-👇 *Bonyeza "📂 Command Categories" hapo chini kuona list zote.*
-
 ❤️ _i love mom_`;
 
-        // Kuunda Button Builder wenye Image + List + URL Button
-        const list = new Button(sock)
-            .setImage(menuImage)
-            .setTitle('🔥 MICKEY GLITCH V2')
-            .setBody(menuText)
-            .setFooter('✨ Quantum Base Dev (TZ) | MICKEY BOT')
-            .addSelection('📂 Command Categories') // Button 1: Selection List
-            .addUrl('🌐 Website', 'https://mickey-pterodacty.vercel.app/'); // Button 2: URL Link Button
+        // Kutumia AIRich pamoja na muundo wa addPost
+        const rich = new AIRich(sock)
+            .setTitle('MICKEY GLITCH MENU')
+            .setSubtitle(`⚡ ${totalCmds} commands`)
+            .setFooter(`⚡ MICKEY BOT | ${date}`)
+            .addText(menuText)
+            .addPost({
+                profile: imageUrl,
+                title: 'Siri ya Uundaji (Behind the Build)',
+                username: 'Mickey',
+                verified: true,
+                caption: 'Bonyeza button ya list ili kuona command zilizokuwepo .',
+                thumbnail: imageUrl,
+                url: 'https://nixel.dev/',
+                source_app: 'INSTAGRAM'
+            })
+            .addFooterAction([
+                { text: 'GitHub', type: 'OPEN_URL', url: 'https://github.com/Mickeydeveloper' },
+                { text: 'Bot Website', type: 'OPEN_URL', url: 'https://mickey-pterodacty.vercel.app/' }
+            ]);
 
-        // Kuweka Categories na Rows kwenye List Button
-        menuData.forEach((category) => {
-            list.makeSection(`${category.icon} ${category.title}`, `${category.items.length} cmds`);
-            category.items.forEach((item) => {
-                list.makeRow('', item.cmd, item.desc || 'Mickey Glitch command', item.cmd);
-            });
-        });
+        // Tuma picha/card ya Rich Menu
+        await rich.send(chatId, { quoted: m });
 
-        // Tuma Ujumbe (Bila fallbackText ili kuzuia error za uongo)
-        await list.send(chatId, { quoted: m });
+        // Tuma List Button ya commands
+        await sendCommandList(sock, chatId, m, menuData);
 
     } catch (e) {
         console.error('Menu Error:', e);
