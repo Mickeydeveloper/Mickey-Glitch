@@ -284,7 +284,7 @@ const sendCommandList = async (sock, chatId, m, menuData) => {
 };
 
 // ==============================================
-// 🚀 MAIN MENU COMMAND (AIRich Post Card V2)
+// 🚀 MAIN MENU COMMAND
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
@@ -293,31 +293,22 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const userName = m.pushName || 'User';
         const greeting = getGreeting(hour);
         const menuData = loadDynamicMenu();
-        const stats = getSystemStats();
 
         const date = now.format('DD MMMM YYYY'); 
         const time = now.format('HH:mm:ss');
-        const totalCmds = menuData.reduce((total, cat) => total + cat.items.length, 0);
-
-        // Raw Image URL
         const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png';
 
-        const menuText = `╭─── [ *MICKEY GLITCH V3.0.5* ] ───
-│ 👋 *Habari ya ${greeting.text}* ${greeting.emoji}
-│ 👤 *User:* ${userName}
-│ 📅 *Tarehe:* ${date}
-│ 🕒 *Saa:* ${time}
-│ ⚡ *Commands:* ${totalCmds}
-│ ⏳ *Uptime:* ${stats.uptime}
-│ 💾 *RAM:* ${stats.memoryUsed} MB
-╰───────────────────────────
+        const menuText = `✨ *MICKEY GLITCH V3.0.5*
+👋 *Habari za ${greeting.text}* ${greeting.emoji}
+👤 *User:* ${userName}
+📅 *Date:* ${date} | 🕒 *Time:* ${time}
 
+👇 *Bonyeza "📂 Menu" kuona command zote*
 ❤️ _i love mom_`;
 
-        // Kutumia AIRich pamoja na muundo wa addPost
         const rich = new AIRich(sock)
             .setTitle('MICKEY GLITCH MENU')
-            .setSubtitle(`⚡ ${totalCmds} commands`)
+            .setSubtitle(`⚡ ${menuData.reduce((total, cat) => total + cat.items.length, 0)} commands`)
             .setFooter(`⚡ MICKEY BOT | ${date}`)
             .addText(menuText)
             .addPost({
@@ -335,10 +326,7 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                 { text: 'Bot Website', type: 'OPEN_URL', url: 'https://mickey-pterodacty.vercel.app/' }
             ]);
 
-        // Tuma picha/card ya Rich Menu
         await rich.send(chatId, { quoted: m });
-
-        // Tuma List Button ya commands
         await sendCommandList(sock, chatId, m, menuData);
 
     } catch (e) {
@@ -378,4 +366,4 @@ if (typeof global !== 'undefined') {
     }, 60000);
 }
 
-console.log(chalk.green('✓ Menu System V2 Loaded Successfully'));
+console.log(chalk.green('✓ Menu System Loaded Successfully'));
