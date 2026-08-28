@@ -1,5 +1,5 @@
 /**
- * @project: MICKEY GLITCH V3.0.5
+ * @project: MICKEY GLITCH V3.0.5 (V2 ENHANCED)
  * @author: Quantum Base Developer (TZ)
  * @version: 3.0.5
  */
@@ -78,21 +78,17 @@ const resolveCommandsDir = () => {
     return path.resolve(__dirname, '..', 'commands');
 };
 
-// FIXED: Remove "command" suffix and clean command names
 const normalizeCommandName = (value, fallback) => {
     if (!value) return fallback;
     const cleaned = String(value).trim();
     if (!cleaned) return fallback;
 
-    // Remove "command" suffix if present (case insensitive)
     let withoutCommand = cleaned.replace(/command$/i, '').trim();
     if (!withoutCommand) return fallback;
 
-    // Ensure it starts with dot
     return withoutCommand.startsWith('.') ? withoutCommand.toLowerCase() : `.${withoutCommand.toLowerCase()}`;
 };
 
-// FIXED: Better validation for command names
 const isLikelyRealCommandName = (value) => {
     if (typeof value !== 'string') return false;
     const cleaned = String(value).trim();
@@ -101,10 +97,7 @@ const isLikelyRealCommandName = (value) => {
     const noPrefix = cleaned.startsWith('.') ? cleaned.slice(1) : cleaned;
     if (!noPrefix) return false;
 
-    // Reject names ending with 'command'
     if (/command$/i.test(noPrefix)) return false;
-
-    // Reject names that are too long or have invalid characters
     if (noPrefix.length > 30) return false;
 
     return /^[a-z0-9._-]+$/i.test(noPrefix);
@@ -114,7 +107,6 @@ const isCommandModule = (mod) => {
     return mod && (typeof mod === 'object' || typeof mod === 'function');
 };
 
-// FIXED: Better command metadata extraction
 const getCommandMeta = (cmdModule, fallbackName) => {
     const fallback = normalizeCommandName(fallbackName, `.${fallbackName}`);
     const moduleValue = isCommandModule(cmdModule) ? cmdModule : null;
@@ -135,19 +127,16 @@ const getCommandMeta = (cmdModule, fallbackName) => {
     const pushCandidate = (value) => {
         if (typeof value === 'string' && value.trim() && isLikelyRealCommandName(value)) {
             const normalized = normalizeCommandName(value, fallback);
-            // Avoid duplicates in candidates
             if (!candidates.includes(normalized)) {
                 candidates.push(normalized);
             }
         }
     };
 
-    // Try different properties where command name might be stored
     pushCandidate(getModuleProp(cmdModule, 'commandName'));
     pushCandidate(getModuleProp(cmdModule, 'command'));
     pushCandidate(getModuleProp(cmdModule, 'name'));
 
-    // Handle aliases
     if (Array.isArray(getModuleProp(cmdModule, 'aliases'))) {
         getModuleProp(cmdModule, 'aliases').forEach(alias => {
             if (isLikelyRealCommandName(alias)) {
@@ -159,7 +148,6 @@ const getCommandMeta = (cmdModule, fallbackName) => {
         });
     }
 
-    // If no valid command name found, use fallback
     const commandId = candidates.length > 0 ? candidates[0] : fallback;
     const description = getModuleProp(cmdModule, 'description') || `Cmd: ${fallbackName}`;
 
@@ -177,7 +165,6 @@ const loadDynamicMenu = (showAll = true) => {
         const category = (cat || 'OTHER').toUpperCase();
         if (!dynamicMenu[category]) dynamicMenu[category] = [];
 
-        // Check if command already exists in this category
         const commandExists = dynamicMenu[category].some(i => i.cmd === item.cmd);
         if (!commandExists) {
             dynamicMenu[category].push({ ...item, category });
@@ -208,7 +195,6 @@ const loadDynamicMenu = (showAll = true) => {
         return files;
     };
 
-    // Track all command names globally to avoid duplicates across categories
     const usedCommandNames = new Set();
 
     if (fs.existsSync(commandsDir)) {
@@ -224,10 +210,7 @@ const loadDynamicMenu = (showAll = true) => {
                 const cmdModule = require(fullPath);
                 const meta = getCommandMeta(cmdModule, baseName);
 
-                // Skip if command name is already used
-                if (usedCommandNames.has(meta.commandId)) {
-                    return;
-                }
+                if (usedCommandNames.has(meta.commandId)) return;
                 usedCommandNames.add(meta.commandId);
 
                 const category = (cmdModule && (cmdModule.category || fileMapping[baseName] || fileMapping[meta.commandId.replace(/^\./, '')])) || 'OTHER';
@@ -236,11 +219,8 @@ const loadDynamicMenu = (showAll = true) => {
                     desc: meta.description
                 });
             } catch (e) {
-                // Skip if command name is already used (error case)
                 const cmdId = normalizeCommandName(baseName, `.${baseName}`);
-                if (usedCommandNames.has(cmdId)) {
-                    return;
-                }
+                if (usedCommandNames.has(cmdId)) return;
                 usedCommandNames.add(cmdId);
 
                 const category = fileMapping[baseName] || 'OTHER';
@@ -252,14 +232,11 @@ const loadDynamicMenu = (showAll = true) => {
         });
     }
 
-    // Also check global commands
     if (global.commands && typeof global.commands === 'object') {
         Object.values(global.commands).forEach(cmd => {
             if (cmd.name) {
                 const cmdId = normalizeCommandName(cmd.name, `.${cmd.name}`);
-                if (usedCommandNames.has(cmdId)) {
-                    return;
-                }
+                if (usedCommandNames.has(cmdId)) return;
                 usedCommandNames.add(cmdId);
 
                 const category = cmd.category || fileMapping[cmd.name] || 'OTHER';
@@ -289,50 +266,8 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
-const buildSections = (menuData) => {
-    return menuData.map(cat => ({
-        title: `${cat.icon} ${cat.title}`,
-        highlight_label: `${cat.items.length} cmd`,
-        rows: cat.items.map(item => ({
-            title: item.cmd,
-            description: item.desc ? item.desc.substring(0, 30) : '',
-            id: item.cmd
-        }))
-    }));
-};
-
-const buildWidgetSections = (menuData) => {
-    return menuData.map(cat => ({
-        title: `${cat.icon} ${cat.title}`,
-        items: cat.items.slice(0, 12).map(item => ({
-            label: item.cmd,
-            value: item.desc || 'Mickey Glitch command'
-        }))
-    }));
-};
-
-const sendCommandList = async (sock, chatId, m, menuData) => {
-    const list = new Button(sock)
-        .setTitle('MICKEY GLITCH COMMANDS')
-        .setBody('Chagua category kuona commands zilizopo')
-        .setFooter('Mickey Glitch')
-        .addSelection('📂 Command Categories');
-
-    menuData.forEach((category) => {
-        list.makeSection(`${category.icon} ${category.title}`, `${category.items.length} commands`);
-        category.items.forEach((item) => {
-            list.makeRow('', item.cmd, item.desc || 'Mickey Glitch command', item.cmd);
-        });
-    });
-
-    await list.send(chatId, {
-        quoted: m,
-        fallbackText: '❌ Command list haipatikani kwa WhatsApp yako.'
-    });
-};
-
 // ==============================================
-// 🚀 MAIN MENU COMMAND
+// 🚀 MAIN MENU COMMAND (V2 WITH IMAGE & 2 BUTTONS)
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
@@ -341,30 +276,52 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const userName = m.pushName || 'User';
         const greeting = getGreeting(hour);
         const menuData = loadDynamicMenu();
+        const stats = getSystemStats();
 
         const date = now.format('DD MMMM YYYY'); 
         const time = now.format('HH:mm:ss');
+        const totalCmds = menuData.reduce((total, cat) => total + cat.items.length, 0);
 
-        const menuText = `✨ *MICKEY GLITCH V3.0.5*
-👋 *Habari za ${greeting.text}* ${greeting.emoji}
-👤 *User:* ${userName}
-📅 *Date:* ${date} | 🕒 *Time:* ${time}
+        // Caption text iliyopangwa vizuri
+        const menuText = `╭─── [ *MICKEY GLITCH V3.0.5* ] ───
+│ 👋 *Habari ya ${greeting.text}* ${greeting.emoji}
+│ 👤 *User:* ${userName}
+│ 📅 *Tarehe:* ${date}
+│ 🕒 *Saa:* ${time}
+│ ⚡ *Commands:* ${totalCmds}
+│ ⏳ *Uptime:* ${stats.uptime}
+│ 💾 *RAM:* ${stats.memoryUsed} MB
+╰───────────────────────────
 
-👇 *Bonyeza "📂 Menu" kuona command zote*
+👇 *Bonyeza "📂 Command Categories" hapo chini kuona list zote.*
+
 ❤️ _i love mom_`;
 
-        const rich = new AIRich(sock)
-            .setTitle('MICKEY GLITCH MENU')
-            .setSubtitle(`⚡ ${menuData.reduce((total, cat) => total + cat.items.length, 0)} commands`)
-            .setFooter(`⚡ MICKEY BOT | ${date}`)
-            .addText(menuText)
-            .addFooterAction([
-                { text: 'GitHub', type: 'OPEN_URL', url: 'https://github.com/Mickeydeveloper' },
-                { text: 'Bot Website', type: 'OPEN_URL', url: 'https://mickey-pterodacty.vercel.app/' }
-            ]);
+        // Tumia Image/Poster Link au Buffer hapa
+        const menuImage = 'https://i.ibb.co/L8G8d12/mickey.jpg'; // Badilisha na Link au Path ya picha yako
 
-        await rich.send(chatId, { quoted: m });
-        await sendCommandList(sock, chatId, m, menuData);
+        // Kutengeneza List Message yenye Button 2 (1 List Button + 1 Quick/Url Action Button)
+        const list = new Button(sock)
+            .setImage(menuImage)
+            .setTitle('🔥 MICKEY GLITCH V2')
+            .setBody(menuText)
+            .setFooter('✨ Quantum Base Dev (TZ) | MICKEY BOT')
+            .addSelection('📂 Command Categories') // Button 1: List Select
+            .addUrl('🌐 Website', 'https://mickey-pterodacty.vercel.app/'); // Button 2: URL/Action Button
+
+        // Kuweka Categories na Rows kwenye List Button
+        menuData.forEach((category) => {
+            list.makeSection(`${category.icon} ${category.title}`, `${category.items.length} cmds`);
+            category.items.forEach((item) => {
+                list.makeRow('', item.cmd, item.desc || 'Mickey Glitch command', item.cmd);
+            });
+        });
+
+        // Tuma Message
+        await list.send(chatId, {
+            quoted: m,
+            fallbackText: '❌ WhatsApp yako haisupport Message za Buttons.'
+        });
 
     } catch (e) {
         console.error('Menu Error:', e);
@@ -403,7 +360,4 @@ if (typeof global !== 'undefined') {
     }, 60000);
 }
 
-console.log(chalk.green('✓ Menu System Loaded Successfully'));
-console.log(chalk.cyan('✓ Using Single Select with Vertical Buttons'));
-console.log(chalk.yellow('✓ Fixed: No duplicate commands with "command" suffix'));
-console.log(chalk.red('✓ Removed: In-app signup button'));
+console.log(chalk.green('✓ Menu System V2 Loaded Successfully'));
