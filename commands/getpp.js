@@ -10,6 +10,10 @@ const { A2UI, sendA2UIWidget } = require('../lib/a2ui');
 // ─── HELPERS ──────────────────────────────────────────────────────────────
 function extractJid(value) {
     if (!value) return null;
+
+    if (typeof value === 'number' || typeof value === 'bigint') {
+        return String(value);
+    }
     
     // If it's already a string with @
     if (typeof value === 'string') {
@@ -90,6 +94,13 @@ function formatJid(jid) {
 // ─── MAIN PROFILE COMMAND ──────────────────────────────────────────────────
 async function profileCommand(sock, chatId, senderId, message, args) {
     try {
+        if (message && typeof message === 'string' && args?.telegram) {
+            const telegramMessage = senderId;
+            senderId = args.senderId || telegramMessage?.sender || chatId;
+            args = message;
+            message = telegramMessage;
+        }
+
         // ─── 1. VALIDATE INPUTS ──────────────────────────────────────────
         if (!sock) throw new Error('Socket not available');
         if (!chatId) throw new Error('Chat ID missing');

@@ -10,11 +10,13 @@ const axios = require('axios');
 const os = require('os');
 const FormData = require('form-data');
 const settings = require('../settings');
+const { createCtx } = require('../lib/messageBuilder');
 
 // ============================================================
 // 📁 DIRECTORIES & CONFIGURATION
 // ============================================================
 const TELEGRAM_DATA_DIR = path.join(__dirname, '..', 'data');
+const TELEGRAM_STATE_FILE = path.join(TELEGRAM_DATA_DIR, 'telegramBot.json');
 const TELEGRAM_BASE_URL = (token) => `https://api.telegram.org/bot${token}`;
 const TEMP_DIR = path.join(__dirname, '..', 'tmp');
 const COMMANDS_DIR = path.join(__dirname, '..', 'commands');
@@ -23,6 +25,19 @@ const whatsappCommands = new Map();
 let isPollingActive = false;
 let pollingOffset = 0;
 let globalSock = null;
+
+function readTelegramState() {
+    try {
+        const state = JSON.parse(fs.readFileSync(TELEGRAM_STATE_FILE, 'utf8'));
+        return { enabled: state.enabled !== false };
+    } catch {
+        return { enabled: true };
+    }
+}
+
+function writeTelegramState(enabled) {
+    fs.writeFileSync(TELEGRAM_STATE_FILE, JSON.stringify({ enabled: !!enabled }, null, 2));
+}
 
 const AXIOS_DEFAULTS = {
     timeout: 60000,
@@ -57,6 +72,8 @@ async function startTelegramBot(providedSock = null) {
 
     if (providedSock) globalSock = providedSock;
 
+    writeTelegramState(true);
+
     if (isPollingActive) {
         logInfo('Ina-restart Polling Engine kuondoa stuck connections...');
         isPollingActive = false;
@@ -84,6 +101,22 @@ async function startTelegramBot(providedSock = null) {
         logError(`Imeshindwa kuanzisha Telegram Bot: ${e.message}`);
         return false;
     }
+}
+
+function isTelegramBotRunning() {
+    return isPollingActive;
+}
+
+function isTelegramBotEnabled() {
+    return readTelegramState().enabled;
+}
+
+async function stopTelegramBot() {
+    writeTelegramState(false);
+    isPollingActive = false;
+    pollingOffset = 0;
+    logInfo('Telegram Bot imezimwa.');
+    return true;
 }
 
 // ============================================================
@@ -140,6 +173,11 @@ async function handleTelegramUpdate(update) {
         if (!message) return;
 
         const chatId = message.chat.id;
+        const ownerId = String(settings.telegram?.ownerId || '').trim();
+        if (ownerId && String(message.from?.id || '') !== ownerId) {
+            logDebug(`Telegram update imekataliwa kwa user ${message.from?.id || 'unknown'}.`);
+            return;
+        }
         const text = callbackData || message.text || message.caption || '';
 
         if (!text) return;
@@ -212,6 +250,25 @@ function createTelegramSock(chatId, messageId) {
         sendMessageAck: async () => true,
         react: async (jid, { text }) => sendTelegramMessage(String(jid || chatId), text, {}, messageId),
         user: { id: 'telegram_bridge@s.whatsapp.net', name: 'Mickey Bridge' },
+        profilePictureUrl: async (jid) => {
+            const token = settings.telegram?.botToken?.trim();
+            const targetId = String(jid || chatId).split('@')[0];
+            if (!token || !targetId) throw new Error('Telegram profile target is missing');
+            const photos = await axios.get(`${TELEGRAM_BASE_URL(token)}/getUserProfilePhotos`, {
+                params: { user_id: targetId, limit: 1 },
+                ...AXIOS_DEFAULTS,
+            });
+            const sizes = photos.data?.result?.photos?.[0];
+            const largest = sizes?.[sizes.length - 1];
+            if (!largest?.file_id) throw new Error('Telegram user has no profile picture');
+            const file = await axios.get(`${TELEGRAM_BASE_URL(token)}/getFile`, {
+                params: { file_id: largest.file_id },
+                ...AXIOS_DEFAULTS,
+            });
+            const filePath = file.data?.result?.file_path;
+            if (!filePath) throw new Error('Telegram profile picture path unavailable');
+            return `https://api.telegram.org/file/bot${token}/${filePath}`;
+        },
         getChatId: () => String(chatId),
         getMessageId: () => messageId
     };
@@ -375,11 +432,20 @@ async function executeCommand(sock, chatId, message, commandText) {
             reply: async (text) => sendTelegramMessage(chatId, text, {}, message.message_id)
         };
 
-        await target.execute(sock, chatId, fakeMessage, parsed.args || '', {
-            senderId: message.from?.id || chatId,
-            chatId,
-            telegram: true
-        });
+        const legacyArgumentOrder = new Set(['pair', 'status', 'unpair']);
+        if (legacyArgumentOrder.has(parsed.name)) {
+            await target.execute(sock, chatId, parsed.args || '', fakeMessage, {
+                senderId: message.from?.id || chatId,
+                chatId,
+                telegram: true,
+            });
+        } else {
+            await target.execute(sock, chatId, fakeMessage, parsed.args || '', {
+                senderId: message.from?.id || chatId,
+                chatId,
+                telegram: true,
+            });
+        }
         return true;
     } catch (error) {
         logError(`Execution Error (.${commandText}): ${error?.message || error}`);
@@ -431,6 +497,16 @@ function loadWhatsappCommands() {
             if (typeof cmdModule === 'function') handler = cmdModule;
             else if (typeof cmdModule?.execute === 'function') handler = cmdModule.execute;
             else if (typeof cmdModule?.run === 'function') handler = cmdModule.run;
+            else if (typeof cmdModule?.handler === 'function') handler = cmdModule.handler;
+            else if (typeof cmdModule?.default === 'function') handler = cmdModule.default;
+            else if (typeof cmdModule?.code === 'function') {
+                handler = async (sock, chatId, message, args, options = {}) => cmdModule.code(
+                    createCtx(sock, chatId, message, {
+                        args: typeof args === 'string' ? args.trim().split(/\s+/).filter(Boolean) : args,
+                        ...options,
+                    }),
+                );
+            }
 
             if (handler) {
                 const entry = { execute: handler };
@@ -477,6 +553,9 @@ async function sendTelegramMessage(chatId, text, options = {}, replyToMessageId 
 
 module.exports = {
     startTelegramBot,
+    stopTelegramBot,
+    isTelegramBotRunning,
+    isTelegramBotEnabled,
     sendTelegramMessage,
     sendTelegramButtons,
     executeCommand,
