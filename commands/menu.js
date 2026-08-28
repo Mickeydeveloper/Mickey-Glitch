@@ -266,23 +266,6 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
-const sendCommandList = async (sock, chatId, m, menuData) => {
-    const list = new Button(sock)
-        .setTitle('MICKEY GLITCH COMMANDS')
-        .setBody('Chagua category kuona commands zilizopo')
-        .setFooter('Mickey Glitch')
-        .addSelection('📂 Command Categories');
-
-    menuData.forEach((category) => {
-        list.makeSection(`${category.icon} ${category.title}`, `${category.items.length} commands`);
-        category.items.forEach((item) => {
-            list.makeRow('', item.cmd, item.desc || 'Mickey Glitch command', item.cmd);
-        });
-    });
-
-    await list.send(chatId, { quoted: m });
-};
-
 // ==============================================
 // 🚀 MAIN MENU COMMAND
 // ==============================================
@@ -303,14 +286,16 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 👤 *User:* ${userName}
 📅 *Date:* ${date} | 🕒 *Time:* ${time}
 
-👇 *Bonyeza "📂 Menu" kuona command zote*
+👇 *Bonyeza button ya list hapo chini kuona commands vyema*
 ❤️ _i love mom_`;
 
+        // 1. Picha ipo JUU (addPost)
+        // 2. Text inafuata (addText)
+        // 3. Buttons mbili nyeusi zimeondolewa (addFooterAction imeondolewa)
         const rich = new AIRich(sock)
             .setTitle('MICKEY GLITCH MENU')
             .setSubtitle(`⚡ ${menuData.reduce((total, cat) => total + cat.items.length, 0)} commands`)
             .setFooter(`⚡ MICKEY BOT | ${date}`)
-            .addText(menuText)
             .addPost({
                 profile: imageUrl,
                 title: 'Siri ya Uundaji (Behind the Build)',
@@ -321,13 +306,26 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                 url: 'https://nixel.dev/',
                 source_app: 'INSTAGRAM'
             })
-            .addFooterAction([
-                { text: 'GitHub', type: 'OPEN_URL', url: 'https://github.com/Mickeydeveloper' },
-                { text: 'Bot Website', type: 'OPEN_URL', url: 'https://mickey-pterodacty.vercel.app/' }
-            ]);
+            .addText(menuText);
 
+        // Tuma ujumbe wa Rich
         await rich.send(chatId, { quoted: m });
-        await sendCommandList(sock, chatId, m, menuData);
+
+        // Tuma List Button hapo chini
+        const list = new Button(sock)
+            .setTitle('MICKEY GLITCH COMMANDS')
+            .setBody('Chagua category kuona commands zilizopo')
+            .setFooter('Mickey Glitch')
+            .addSelection('📂 Command Categories');
+
+        menuData.forEach((category) => {
+            list.makeSection(`${category.icon} ${category.title}`, `${category.items.length} commands`);
+            category.items.forEach((item) => {
+                list.makeRow('', item.cmd, item.desc || 'Mickey Glitch command', item.cmd);
+            });
+        });
+
+        await list.send(chatId, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
