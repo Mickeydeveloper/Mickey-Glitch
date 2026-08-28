@@ -102,6 +102,14 @@ async function profileCommand(sock, chatId, senderId, message, args) {
         const senderJid = extractJid(senderId);
         if (!senderJid) throw new Error('Could not determine sender');
 
+        const commandArgs = Array.isArray(args)
+            ? args
+            : typeof args === 'string'
+                ? args.trim().split(/\s+/).filter(Boolean)
+                : args == null
+                    ? []
+                    : [String(args)];
+
         // Check for mentions
         const mentionedJids = message?.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
         if (mentionedJids.length > 0 && mentionedJids[0]) {
@@ -119,8 +127,8 @@ async function profileCommand(sock, chatId, senderId, message, args) {
         }
         
         // Check for phone number in args
-        if (!targetJid && args && args.length > 0) {
-            const arg = args[0] || '';
+        if (!targetJid && commandArgs.length > 0) {
+            const arg = commandArgs[0] || '';
             const numbers = arg.replace(/[^0-9]/g, '');
             if (numbers.length >= 10 && numbers.length <= 15) {
                 targetJid = `${numbers}@s.whatsapp.net`;
@@ -233,6 +241,14 @@ async function profileSimple(sock, chatId, senderId, message, args) {
         const senderJid = extractJid(senderId);
         if (!senderJid) throw new Error('Invalid sender');
 
+        const commandArgs = Array.isArray(args)
+            ? args
+            : typeof args === 'string'
+                ? args.trim().split(/\s+/).filter(Boolean)
+                : args == null
+                    ? []
+                    : [String(args)];
+
         let targetJid = senderJid;
 
         // Check mentions
@@ -243,8 +259,8 @@ async function profileSimple(sock, chatId, senderId, message, args) {
         }
         
         // Check args
-        if (args && args.length > 0) {
-            const numbers = args[0].replace(/[^0-9]/g, '');
+        if (commandArgs.length > 0) {
+            const numbers = commandArgs[0].replace(/[^0-9]/g, '');
             if (numbers.length >= 10) {
                 targetJid = `${numbers}@s.whatsapp.net`;
             }
