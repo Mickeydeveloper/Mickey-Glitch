@@ -5,6 +5,7 @@
  */
 
 const DEFAULT_AVATAR = 'https://i.imgur.com/6N4H8Xj.png';
+const { A2UI, sendA2UIWidget } = require('../lib/a2ui');
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────
 function extractJid(value) {
@@ -174,11 +175,28 @@ async function profileCommand(sock, chatId, senderId, message, args) {
         caption += `🆔 *JID:* ${targetJid}`;
 
         // ─── 6. SEND MESSAGE ─────────────────────────────────────────────
-        // Send profile picture with caption
-        await sock.sendMessage(chatId, {
-            image: { url: ppUrl },
-            caption: caption
-        }, { quoted: message });
+        // Send the profile picture through A2UI, with a normal image fallback.
+        try {
+            const ui = new A2UI();
+            const profileImage = ui.image(ppUrl, { variant: 'header', fit: 'cover' });
+            const profileTitle = ui.text(displayName, { variant: 'h1' });
+            const profileDetails = ui.text(`${phoneNumber}\n${status}`, { variant: 'body' });
+            const profileCard = ui.card(ui.column([profileImage, profileTitle, profileDetails]));
+            ui.root([profileCard]);
+
+            await sendA2UIWidget(sock, chatId, {
+                a2ui: ui,
+                bodyText: caption,
+                footer: 'Mickey Glitch Profile',
+                quoted: message,
+            });
+        } catch (a2uiError) {
+            console.error('[PROFILE] A2UI send failed, using image fallback:', a2uiError);
+            await sock.sendMessage(chatId, {
+                image: { url: ppUrl },
+                caption,
+            }, { quoted: message });
+        }
 
         // Send success reaction
         await sock.sendMessage(chatId, { 
