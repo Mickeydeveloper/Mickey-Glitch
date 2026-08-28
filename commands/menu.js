@@ -1,5 +1,5 @@
 /**
- * @project: MICKEY GLITCH V3.0.5 (V2 ENHANCED)
+ * @project: MICKEY GLITCH V3.0.5 (SINGLE INTEGRATED MENU)
  * @author: Quantum Base Developer (TZ)
  * @version: 3.0.5
  */
@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { AIRich, Button } = require('../lib/messageBuilder');
+const { Button } = require('../lib/messageBuilder');
 const os = require('os');
 const chalk = require('chalk');
 
@@ -276,56 +276,41 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const userName = m.pushName || 'User';
         const greeting = getGreeting(hour);
         const menuData = loadDynamicMenu();
+        const stats = getSystemStats();
 
         const date = now.format('DD MMMM YYYY'); 
         const time = now.format('HH:mm:ss');
         const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png';
+        const totalCmds = menuData.reduce((total, cat) => total + cat.items.length, 0);
 
+        // Body message safi iliyopangwa vizuri
         const menuText = `✨ *MICKEY GLITCH V3.0.5*
 👋 *Habari za ${greeting.text}* ${greeting.emoji}
 👤 *User:* ${userName}
 📅 *Date:* ${date} | 🕒 *Time:* ${time}
+⚡ *Commands:* ${totalCmds} | 💾 *RAM:* ${stats.memoryUsed} MB
 
-👇 *Bonyeza button ya list hapo chini kuona commands vyema*
+👇 *Bonyeza button ya list hapo chini kuona categories vyema*
 ❤️ _i love mom_`;
 
-        // 1. Picha ipo JUU (addPost)
-        // 2. Text inafuata (addText)
-        // 3. Buttons mbili nyeusi zimeondolewa (addFooterAction imeondolewa)
-        const rich = new AIRich(sock)
-            .setTitle('MICKEY GLITCH MENU')
-            .setSubtitle(`⚡ ${menuData.reduce((total, cat) => total + cat.items.length, 0)} commands`)
+        // Kutengeneza Single Interactive Message (Picha Kubwa Juu + List Button Moja Chini)
+        const singleMenu = new Button(sock)
+            .setImage(imageUrl)
+            .setTitle('🔥 MICKEY GLITCH MENU')
+            .setBody(menuText)
             .setFooter(`⚡ MICKEY BOT | ${date}`)
-            .addPost({
-                profile: imageUrl,
-                title: 'Siri ya Uundaji (Behind the Build)',
-                username: 'Mickey',
-                verified: true,
-                caption: 'Bonyeza button ya list ili kuona command zilizokuwepo .',
-                thumbnail: imageUrl,
-                url: 'https://nixel.dev/',
-                source_app: 'INSTAGRAM'
-            })
-            .addText(menuText);
-
-        // Tuma ujumbe wa Rich
-        await rich.send(chatId, { quoted: m });
-
-        // Tuma List Button hapo chini
-        const list = new Button(sock)
-            .setTitle('MICKEY GLITCH COMMANDS')
-            .setBody('Chagua category kuona commands zilizopo')
-            .setFooter('Mickey Glitch')
             .addSelection('📂 Command Categories');
 
+        // Kuweka Categories zote ndani ya list moja
         menuData.forEach((category) => {
-            list.makeSection(`${category.icon} ${category.title}`, `${category.items.length} commands`);
+            singleMenu.makeSection(`${category.icon} ${category.title}`, `${category.items.length} commands`);
             category.items.forEach((item) => {
-                list.makeRow('', item.cmd, item.desc || 'Mickey Glitch command', item.cmd);
+                singleMenu.makeRow('', item.cmd, item.desc || 'Mickey Glitch command', item.cmd);
             });
         });
 
-        await list.send(chatId, { quoted: m });
+        // Tuma kama ujumbe MMOJA TU bila kupishanisha
+        await singleMenu.send(chatId, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
@@ -364,4 +349,4 @@ if (typeof global !== 'undefined') {
     }, 60000);
 }
 
-console.log(chalk.green('✓ Menu System Loaded Successfully'));
+console.log(chalk.green('✓ Single Unified Menu System Loaded'));
