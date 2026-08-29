@@ -94,9 +94,9 @@ function formatJid(jid) {
 // ─── MAIN PROFILE COMMAND ──────────────────────────────────────────────────
 async function profileCommand(sock, chatId, senderId, message, args) {
     try {
-        if (message && typeof message === 'string' && args?.telegram) {
+        if (senderId && typeof senderId === 'object' && senderId.message && (typeof message === 'string' || Array.isArray(message))) {
             const telegramMessage = senderId;
-            senderId = args.senderId || telegramMessage?.sender || chatId;
+            senderId = telegramMessage.sender || chatId;
             args = message;
             message = telegramMessage;
         }
@@ -195,7 +195,14 @@ async function profileCommand(sock, chatId, senderId, message, args) {
 
         // ─── 6. SEND MESSAGE ─────────────────────────────────────────────
         // Send the profile picture through A2UI, with a normal image fallback.
+        const isTelegram = typeof chatId !== 'string' || !chatId.includes('@');
         try {
+            if (isTelegram) {
+                await sock.sendMessage(chatId, {
+                    image: { url: ppUrl },
+                    caption,
+                }, { quoted: message });
+            } else {
             const ui = new A2UI();
             const profileImage = ui.image(ppUrl, { variant: 'header', fit: 'cover' });
             const profileTitle = ui.text(displayName, { variant: 'h1' });
@@ -209,6 +216,7 @@ async function profileCommand(sock, chatId, senderId, message, args) {
                 footer: 'Mickey Glitch Profile',
                 quoted: message,
             });
+            }
         } catch (a2uiError) {
             console.error('[PROFILE] A2UI send failed, using image fallback:', a2uiError);
             await sock.sendMessage(chatId, {

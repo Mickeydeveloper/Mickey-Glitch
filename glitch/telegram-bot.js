@@ -174,8 +174,9 @@ async function handleTelegramUpdate(update) {
 
         const chatId = message.chat.id;
         const ownerId = String(settings.telegram?.ownerId || '').trim();
-        if (ownerId && String(message.from?.id || '') !== ownerId) {
-            logDebug(`Telegram update imekataliwa kwa user ${message.from?.id || 'unknown'}.`);
+        const actor = update.callback_query?.from || message.from;
+        if (ownerId && String(actor?.id || '') !== ownerId) {
+            logDebug(`Telegram update imekataliwa kwa user ${actor?.id || 'unknown'}.`);
             return;
         }
         const text = callbackData || message.text || message.caption || '';
@@ -427,15 +428,15 @@ async function executeCommand(sock, chatId, message, commandText) {
             },
             message: { conversation: commandText },
             chat: String(chatId),
-            sender: String(message.from?.id || chatId),
-            pushName: message.from?.first_name || 'Telegram User',
+            sender: String(actor?.id || chatId),
+            pushName: actor?.first_name || 'Telegram User',
             reply: async (text) => sendTelegramMessage(chatId, text, {}, message.message_id)
         };
 
         const legacyArgumentOrder = new Set(['pair', 'status', 'unpair']);
         if (legacyArgumentOrder.has(parsed.name)) {
             await target.execute(sock, chatId, parsed.args || '', fakeMessage, {
-                senderId: message.from?.id || chatId,
+                senderId: actor?.id || chatId,
                 chatId,
                 telegram: true,
             });
