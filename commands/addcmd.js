@@ -481,6 +481,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
 
         const input = (rawText || fullText || '').toString();
         const body = input.replace(/^\.run\b/i, '').trim();
+        const previewRequested = /^preview\b/i.test(body) || global.RUN_PREVIEW_MODE === true || process.env.BOT_PREVIEW_MODE === '1' || process.env.BOT_PREVIEW_MODE === 'true';
         const quotedMessage = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
         const quotedCode = quotedMessage?.conversation || 
                           quotedMessage?.extendedTextMessage?.text || 
@@ -576,8 +577,9 @@ Examples:
 
         // ─── Preview command file ──────────────────────────────────────
         const previewMatch = body.match(/^preview\s+(.+)$/i);
-        if (previewMatch) {
-            const previewInput = previewMatch[1].trim();
+        const previewTarget = previewMatch ? previewMatch[1].trim() : (previewRequested && body ? body : '');
+        if (previewTarget) {
+            const previewInput = previewTarget.trim();
             const previewParts = previewInput.split(/\s+/);
             const previewCommandName = previewParts[0].replace(/^\./, '').toLowerCase();
             const previewPath = resolveCommandPath(previewCommandName);
