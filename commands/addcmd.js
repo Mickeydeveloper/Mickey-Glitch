@@ -280,6 +280,17 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
         Set,
         sendMessage: async (content, options = {}) => {
             const msgContent = typeof content === 'string' ? { text: content } : content;
+            if (sandbox.previewMode) {
+                sandbox.__sent = true;
+                const preview = {
+                    preview: true,
+                    payload: msgContent,
+                    options: { quoted: message, ...options },
+                    summary: summarizePreviewPayload(msgContent),
+                };
+                sandbox.__sentMessages.push(preview);
+                return preview;
+            }
             const result = await sock.sendMessage(chatId, msgContent, { quoted: message, ...options });
             sandbox.__sent = true;
             sandbox.__sentMessages.push(result);
@@ -287,6 +298,17 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
         },
         reply: async (content, options = {}) => {
             const msgContent = typeof content === 'string' ? { text: content } : content;
+            if (sandbox.previewMode) {
+                sandbox.__sent = true;
+                const preview = {
+                    preview: true,
+                    payload: msgContent,
+                    options: { quoted: message, ...options },
+                    summary: summarizePreviewPayload(msgContent),
+                };
+                sandbox.__sentMessages.push(preview);
+                return preview;
+            }
             const result = await sock.sendMessage(chatId, msgContent, { quoted: message, ...options });
             sandbox.__sent = true;
             sandbox.__sentMessages.push(result);
@@ -399,12 +421,46 @@ async function safeInvokeHandler(handler, sandbox, args = []) {
     return await handler();
 }
 
+function summarizePreviewPayload(payload) {
+    if (typeof payload === 'string') return payload;
+    if (Buffer.isBuffer(payload)) return `<Buffer ${payload.length} bytes>`;
+    if (Array.isArray(payload)) return payload.map((item) => summarizePreviewPayload(item)).join('\n');
+    if (!payload || typeof payload !== 'object') return util.inspect(payload, { depth: 3, colors: false, maxArrayLength: 10 });
+
+    if (typeof payload.text === 'string' || typeof payload.caption === 'string') {
+        const text = payload.text || payload.caption || '';
+        const meta = Object.keys(payload)
+            .filter((key) => !['text', 'caption'].includes(key))
+            .slice(0, 6);
+
+        if (meta.length === 0) {
+            return text || util.inspect(payload, { depth: 3, colors: false, maxArrayLength: 10 });
+        }
+
+        return `${text || 'Message object'}\n\nMeta: ${meta.map((key) => `${key}: ${util.inspect(payload[key], { depth: 2, colors: false, maxArrayLength: 8 })}`).join(', ')}`;
+    }
+
+    return util.inspect(payload, { depth: 3, colors: false, maxArrayLength: 10 });
+}
+
 function createTrackedSocket(sock, sandbox) {
     return new Proxy(sock, {
         get(target, property, receiver) {
             if (property === 'sendMessage') {
                 return async (...args) => {
                     sandbox.__sent = true;
+                    if (sandbox.previewMode) {
+                        const payload = args[0];
+                        const options = args[1] || {};
+                        const preview = {
+                            preview: true,
+                            payload,
+                            options,
+                            summary: summarizePreviewPayload(payload),
+                        };
+                        sandbox.__sentMessages.push(preview);
+                        return preview;
+                    }
                     const result = await target.sendMessage.apply(target, args);
                     sandbox.__sentMessages.push(result);
                     return result;
@@ -470,6 +526,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
 Usage:
 • .run <javascript code> - Execute inline JavaScript
 • .run <command_name> [args] - Run a custom command
+• .run preview <command_name> [args] - Preview what the command would send without posting it
 • .run list - List all custom commands
 • .run delete <command_name> - Delete a custom command
 • Reply to code with .run - Execute quoted code
@@ -477,6 +534,7 @@ Usage:
 Examples:
 .run console.log('Hello World')
 .run button8
+.run preview button8
 .run list
 .run delete button8`
             }, { quoted: message });
@@ -513,6 +571,68 @@ Examples:
             }
 
             await sock.sendMessage(chatId, { text: response }, { quoted: message });
+            return;
+        }
+
+        // ─── Preview command file ──────────────────────────────────────
+        const previewMatch = body.match(/^preview\s+(.+)$/i);
+        if (previewMatch) {
+            const previewInput = previewMatch[1].trim();
+            const previewParts = previewInput.split(/\s+/);
+            const previewCommandName = previewParts[0].replace(/^\./, '').toLowerCase();
+            const previewPath = resolveCommandPath(previewCommandName);
+
+            if (!previewPath) {
+                await sock.sendMessage(chatId, { text: `❌ No command named .${previewCommandName} was found for preview.` }, { quoted: message });
+                return;
+            }
+
+            let previewModule;
+            try {
+                previewModule = loadCommandModule(previewPath);
+            } catch (loadError) {
+                await sock.sendMessage(chatId, { text: `❌ Failed to load command preview:\n${loadError?.message || loadError}` }, { quoted: message });
+                return;
+            }
+
+            const previewHandler = findHandler(previewModule);
+            if (!previewHandler) {
+                await sock.sendMessage(chatId, { text: `❌ No runnable handler found in ${previewCommandName}.js` }, { quoted: message });
+                return;
+            }
+
+            try {
+                const previewArgs = previewParts.slice(1);
+                const sandbox = createSandbox(sock, chatId, message, previewArgs, senderId, previewCommandName);
+                sandbox.previewMode = true;
+                sandbox.sock = createTrackedSocket(sock, sandbox);
+                sandbox.core = sandbox.sock;
+                const previewResult = await safeInvokeHandler(previewHandler, sandbox, sandbox.args);
+
+                if (sandbox.__sentMessages.length > 0) {
+                    const previewText = sandbox.__sentMessages
+                        .map((entry) => (entry && entry.summary) ? entry.summary : util.inspect(entry, { depth: 3, colors: false }))
+                        .join('\n\n---\n\n');
+
+                    await sock.sendMessage(chatId, { 
+                        text: `🔎 Preview for .${previewCommandName}\n\n${previewText}`
+                    }, { quoted: message });
+                    return;
+                }
+
+                let response;
+                if (previewResult !== undefined) {
+                    response = `🔎 Preview for .${previewCommandName}\nResult:\n${util.inspect(previewResult, { depth: 2, colors: false })}`;
+                } else if (sandbox.__logs.length) {
+                    response = `🔎 Preview for .${previewCommandName}\n\n📋 Logs:\n${sandbox.__logs.join('\n')}`;
+                } else {
+                    response = `🔎 Preview for .${previewCommandName}\nNo message payload was produced.`;
+                }
+
+                await sock.sendMessage(chatId, { text: response }, { quoted: message });
+            } catch (execError) {
+                await sock.sendMessage(chatId, { text: `❌ Preview failed for .${previewCommandName}:\n${execError?.stack || execError?.message || execError}` }, { quoted: message });
+            }
             return;
         }
 
