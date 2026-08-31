@@ -1,6 +1,6 @@
 const { createCtx } = require('../lib/messageBuilder');
 
-// HTML ya Music Player - Sina Mda Nae
+// HTML ya Music Player - Sina Mda Nae (Fixed)
 const musicPlayerHtml = `
 <style>
 
@@ -291,6 +291,7 @@ border-radius:8px;
 background:#222225;
 border:1px solid rgba(255,255,255,.09);
 overflow:visible;
+cursor:pointer;
 }
 
 .musicProgressBar{
@@ -355,11 +356,17 @@ box-shadow:
 transition:
 transform .12s ease,
 background .12s ease;
+cursor:pointer;
 }
 
 .musicButton:active{
 transform:scale(.94);
 background:#d8d8d8;
+}
+
+.musicButton.loading{
+opacity:0.6;
+pointer-events:none;
 }
 
 .musicVolumeBox{
@@ -387,6 +394,7 @@ letter-spacing:.8px;
 width:100%;
 height:4px;
 accent-color:#fff;
+cursor:pointer;
 }
 
 .musicStatus{
@@ -397,6 +405,15 @@ text-align:center;
 color:#ddd;
 font:bold 9px monospace;
 letter-spacing:1.8px;
+min-height:20px;
+}
+
+.musicStatus.error{
+color:#ff6b6b;
+}
+
+.musicStatus.success{
+color:#51cf66;
 }
 
 .musicLine{
@@ -424,6 +441,47 @@ margin-top:10px;
 color:#505055;
 font:8px monospace;
 letter-spacing:.5px;
+}
+
+.musicUrlInput{
+display:flex;
+gap:6px;
+margin-top:10px;
+}
+
+.musicUrlInput input{
+flex:1;
+padding:8px 10px;
+border:1px solid rgba(255,255,255,.1);
+border-radius:10px;
+background:rgba(255,255,255,.05);
+color:#fff;
+font-size:10px;
+outline:none;
+min-width:0;
+}
+
+.musicUrlInput input::placeholder{
+color:#555;
+}
+
+.musicUrlInput input:focus{
+border-color:#fff;
+}
+
+.musicUrlInput button{
+padding:8px 14px;
+border:none;
+border-radius:10px;
+background:#fff;
+color:#000;
+font:bold 10px Arial,sans-serif;
+cursor:pointer;
+transition:transform .1s;
+}
+
+.musicUrlInput button:active{
+transform:scale(.95);
 }
 
 </style>
@@ -575,6 +633,14 @@ value=".8">
 </div>
 
 
+<!-- URL INPUT -->
+
+<div class="musicUrlInput">
+<input type="text" id="urlInput" placeholder="Paste MP3 URL here...">
+<button id="loadBtn">LOAD</button>
+</div>
+
+
 <!-- STATUS -->
 
 <div
@@ -607,46 +673,33 @@ src="">
 <script>
 (function(){
 
-const audio =
-document.getElementById('localMusic')
+const audio = document.getElementById('localMusic')
+const play = document.getElementById('musicPlay')
+const volume = document.getElementById('musicVolume')
+const progress = document.getElementById('musicProgress')
+const progressBar = document.getElementById('musicProgressBar')
+const progressDot = document.getElementById('musicProgressDot')
+const current = document.getElementById('musicCurrent')
+const duration = document.getElementById('musicDuration')
+const status = document.getElementById('musicStatus')
+const visualizer = document.getElementById('visualizer')
+const vinyl = document.getElementById('musicVinyl')
+const urlInput = document.getElementById('urlInput')
+const loadBtn = document.getElementById('loadBtn')
 
-const play =
-document.getElementById('musicPlay')
+// URL ALTERNATIF - Jaribu zote
+const urls = [
+  'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3',
+  'https://cdn.jsdelivr.net/gh/Mickeymozy/Mickey-Vip/sina%20mda%20nae.mp3',
+  'https://mickeymozy.github.io/Mickey-Vip/sina%20mda%20nae.mp3'
+]
 
-const volume =
-document.getElementById('musicVolume')
-
-const progress =
-document.getElementById('musicProgress')
-
-const progressBar =
-document.getElementById('musicProgressBar')
-
-const progressDot =
-document.getElementById('musicProgressDot')
-
-const current =
-document.getElementById('musicCurrent')
-
-const duration =
-document.getElementById('musicDuration')
-
-const status =
-document.getElementById('musicStatus')
-
-const visualizer =
-document.getElementById('visualizer')
-
-const vinyl =
-document.getElementById('musicVinyl')
-
-// Default URL - Sina Mda Nae
-const defaultUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3';
-
-let isLoaded = false;
+let currentUrlIndex = 0
+let isLoaded = false
+let isLoading = false
 
 function formatTime(sec){
-if(!Number.isFinite(sec) || sec < 0){
+if(!Number.isFinite(sec) || sec < 0 || sec === Infinity){
 return '0:00'
 }
 const m = Math.floor(sec / 60)
@@ -659,14 +712,15 @@ if(!isLoaded || !Number.isFinite(audio.duration) || audio.duration <= 0){
 return
 }
 const percent = (audio.currentTime / audio.duration) * 100
-progressBar.style.width = percent + '%'
-progressDot.style.left = percent + '%'
+progressBar.style.width = Math.min(100, percent) + '%'
+progressDot.style.left = Math.min(100, percent) + '%'
 current.textContent = formatTime(audio.currentTime)
 }
 
 function setPlaying(){
 play.innerHTML = '⏸ PAUSE'
 status.textContent = '🎵 NOW PLAYING'
+status.className = 'musicStatus success'
 visualizer.classList.add('playing')
 vinyl.classList.add('playing')
 }
@@ -674,59 +728,127 @@ vinyl.classList.add('playing')
 function setPaused(){
 play.innerHTML = '▶ PLAY'
 status.textContent = '⏸ PAUSED'
+status.className = 'musicStatus'
 visualizer.classList.remove('playing')
 vinyl.classList.remove('playing')
 }
 
+function setStatus(msg, type){
+status.textContent = msg
+status.className = 'musicStatus' + (type ? ' ' + type : '')
+}
+
 function loadAudio(url){
-status.textContent = '⏳ LOADING...'
+if(isLoading) return
+isLoading = true
+play.classList.add('loading')
+setStatus('⏳ LOADING...', '')
+
 audio.src = url
 audio.load()
 
 audio.onloadedmetadata = function(){
 isLoaded = true
+isLoading = false
+play.classList.remove('loading')
 duration.textContent = formatTime(audio.duration)
-status.textContent = '✅ LOADED'
-setTimeout(function(){
-audio.play().catch(function(){
-status.textContent = '❌ CANNOT PLAY'
-})
-}, 300)
+setStatus('✅ LOADED - Tap PLAY', 'success')
+setPaused()
+// Reset progress
+progressBar.style.width = '0%'
+progressDot.style.left = '0%'
+current.textContent = '0:00'
 }
 
 audio.onerror = function(){
-status.textContent = '❌ FAILED TO LOAD'
-isLoaded = false
-visualizer.classList.remove('playing')
-vinyl.classList.remove('playing')
+isLoading = false
+play.classList.remove('loading')
+// Jaribu URL nyingine
+if(currentUrlIndex < urls.length - 1){
+currentUrlIndex++
+setStatus('🔄 TRYING NEXT URL...', '')
+loadAudio(urls[currentUrlIndex])
+} else {
+setStatus('❌ ALL URLS FAILED - Enter URL manually', 'error')
 }
 }
 
+audio.ontimeupdate = function(){
+updateProgress()
+}
+
+audio.onplay = function(){
+setPlaying()
+}
+
+audio.onpause = function(){
+if(!audio.ended){
+setPaused()
+}
+}
+
+audio.onended = function(){
+play.innerHTML = '▶ PLAY'
+setStatus('⏹️ PLAYBACK COMPLETE', '')
+visualizer.classList.remove('playing')
+vinyl.classList.remove('playing')
+progressBar.style.width = '0%'
+progressDot.style.left = '0%'
+current.textContent = '0:00'
+}
+}
+
+// PLAY BUTTON
 play.addEventListener('click', function(){
 try{
 if(!isLoaded){
-loadAudio(defaultUrl)
+// Jaribu load
+if(urlInput.value.trim()){
+loadAudio(urlInput.value.trim())
+} else {
+loadAudio(urls[0])
+}
 return
 }
 if(audio.paused){
 audio.play().then(function(){
 setPlaying()
 }).catch(function(){
-status.textContent = '❌ PLAY ERROR'
+setStatus('❌ PLAY ERROR - Try reload', 'error')
 })
 }else{
 audio.pause()
 setPaused()
 }
 }catch(error){
-status.textContent = '❌ ERROR'
+setStatus('❌ ERROR: ' + error.message, 'error')
 }
 })
 
+// LOAD BUTTON
+loadBtn.addEventListener('click', function(){
+const url = urlInput.value.trim()
+if(url){
+currentUrlIndex = 0
+loadAudio(url)
+} else {
+setStatus('❌ Enter a valid URL', 'error')
+}
+})
+
+// ENTER key on URL input
+urlInput.addEventListener('keydown', function(e){
+if(e.key === 'Enter'){
+loadBtn.click()
+}
+})
+
+// VOLUME
 volume.addEventListener('input', function(){
 audio.volume = Number(volume.value)
 })
 
+// PROGRESS CLICK
 progress.addEventListener('pointerdown', function(e){
 if(!isLoaded || !Number.isFinite(audio.duration) || audio.duration <= 0){
 return
@@ -737,37 +859,11 @@ audio.currentTime = (x / rect.width) * audio.duration
 updateProgress()
 })
 
-audio.addEventListener('loadedmetadata', function(){
-duration.textContent = formatTime(audio.duration)
-})
-
-audio.addEventListener('timeupdate', function(){
-updateProgress()
-})
-
-audio.addEventListener('play', function(){
-setPlaying()
-})
-
-audio.addEventListener('pause', function(){
-if(!audio.ended){
-setPaused()
-}
-})
-
-audio.addEventListener('ended', function(){
-play.innerHTML = '▶ PLAY'
-status.textContent = '⏹️ PLAYBACK COMPLETE'
-visualizer.classList.remove('playing')
-vinyl.classList.remove('playing')
-progressBar.style.width = '0%'
-progressDot.style.left = '0%'
-current.textContent = '0:00'
-})
-
 // Auto-load on start
 setTimeout(function(){
-loadAudio(defaultUrl)
+// Weka default URL kwenye input
+urlInput.value = urls[0]
+loadAudio(urls[0])
 }, 500)
 
 })()
@@ -846,7 +942,7 @@ const sinaCommand = async (sock, chatId, msg, args = []) => {
 
         try {
             await sock.sendMessage(target, {
-                text: `🎵 SINA MDA NAE\n━━━━━━━━━━━━━━━━━━━\n🎤 Mickey Mozy\n━━━━━━━━━━━━━━━━━━━\nType .sina to play!`
+                text: `🎵 SINA MDA NAE\n━━━━━━━━━━━━━━━━━━━\n🎤 Mickey Mozy\n━━━━━━━━━━━━━━━━━━━\nType .sina to play!\n\n📝 If it fails, paste URL:\nhttps://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3`
             }, { quoted: ctx.msg });
             return true;
         } catch (sendErr) {
