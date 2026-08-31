@@ -1,7 +1,16 @@
 const { createCtx } = require('../lib/messageBuilder');
+const { randomUUID } = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
-// HTML ya Music Player - Sina Mda Nae (Fixed)
-const musicPlayerHtml = `
+// HTML ya Music Player - Sina Mda Nae (LevviCode Style)
+function buildMusicHTML(audioBase64 = null) {
+    // If no audio provided, use URL fallback
+    const audioSrc = audioBase64 
+        ? `data:audio/mpeg;base64,${audioBase64}`
+        : '';
+
+    return `
 <style>
 
 *{
@@ -145,11 +154,16 @@ inset 0 0 20px rgba(255,255,255,.035);
 overflow:hidden;
 }
 
+/*
+VINYL
+*/
+
 .musicVinyl{
 position:relative;
 width:61px;
 height:61px;
 border-radius:50%;
+
 background:
 repeating-radial-gradient(
 circle at center,
@@ -158,10 +172,13 @@ circle at center,
 #070707 4px,
 #141414 6px
 );
+
 border:1px solid #444;
+
 box-shadow:
 0 0 13px rgba(255,255,255,.10),
 inset 0 0 8px rgba(255,255,255,.08);
+
 transform:rotate(0deg);
 }
 
@@ -170,6 +187,7 @@ content:'';
 position:absolute;
 inset:5px;
 border-radius:50%;
+
 background:
 repeating-radial-gradient(
 circle at center,
@@ -189,6 +207,7 @@ width:19px;
 height:19px;
 transform:translate(-50%,-50%);
 border-radius:50%;
+
 background:
 radial-gradient(
 circle,
@@ -198,10 +217,16 @@ circle,
 #aaa 66% 72%,
 #111 73% 100%
 );
+
 border:1px solid #ddd;
+
 box-shadow:
 0 0 8px rgba(255,255,255,.25);
 }
+
+/*
+VINYL ROTATE ONLY WHEN PLAYING
+*/
 
 .musicVinyl.playing{
 animation:
@@ -209,12 +234,15 @@ vinylRotate 2.4s linear infinite;
 }
 
 @keyframes vinylRotate{
+
 from{
 transform:rotate(0deg);
 }
+
 to{
 transform:rotate(360deg);
 }
+
 }
 
 .musicDetails{
@@ -237,6 +265,10 @@ font:10px monospace;
 letter-spacing:.3px;
 }
 
+/*
+VISUALIZER
+*/
+
 .visualizer{
 height:27px;
 display:flex;
@@ -258,24 +290,73 @@ animation:
 musicBars .75s ease-in-out infinite alternate;
 }
 
-.visualizer span:nth-child(1){animation-delay:-.70s;}
-.visualizer span:nth-child(2){animation-delay:-.50s;}
-.visualizer span:nth-child(3){animation-delay:-.20s;}
-.visualizer span:nth-child(4){animation-delay:-.60s;}
-.visualizer span:nth-child(5){animation-delay:-.30s;}
-.visualizer span:nth-child(6){animation-delay:-.80s;}
-.visualizer span:nth-child(7){animation-delay:-.40s;}
-.visualizer span:nth-child(8){animation-delay:-.10s;}
-.visualizer span:nth-child(9){animation-delay:-.55s;}
-.visualizer span:nth-child(10){animation-delay:-.25s;}
-.visualizer span:nth-child(11){animation-delay:-.65s;}
-.visualizer span:nth-child(12){animation-delay:-.35s;}
+.visualizer span:nth-child(1){
+animation-delay:-.70s;
+}
+
+.visualizer span:nth-child(2){
+animation-delay:-.50s;
+}
+
+.visualizer span:nth-child(3){
+animation-delay:-.20s;
+}
+
+.visualizer span:nth-child(4){
+animation-delay:-.60s;
+}
+
+.visualizer span:nth-child(5){
+animation-delay:-.30s;
+}
+
+.visualizer span:nth-child(6){
+animation-delay:-.80s;
+}
+
+.visualizer span:nth-child(7){
+animation-delay:-.40s;
+}
+
+.visualizer span:nth-child(8){
+animation-delay:-.10s;
+}
+
+.visualizer span:nth-child(9){
+animation-delay:-.55s;
+}
+
+.visualizer span:nth-child(10){
+animation-delay:-.25s;
+}
+
+.visualizer span:nth-child(11){
+animation-delay:-.65s;
+}
+
+.visualizer span:nth-child(12){
+animation-delay:-.35s;
+}
 
 @keyframes musicBars{
-0%{height:4px;}
-50%{height:13px;}
-100%{height:25px;}
+
+0%{
+height:4px;
 }
+
+50%{
+height:13px;
+}
+
+100%{
+height:25px;
+}
+
+}
+
+/*
+PROGRESS
+*/
 
 .musicProgressArea{
 position:relative;
@@ -291,7 +372,6 @@ border-radius:8px;
 background:#222225;
 border:1px solid rgba(255,255,255,.09);
 overflow:visible;
-cursor:pointer;
 }
 
 .musicProgressBar{
@@ -302,6 +382,7 @@ width:0%;
 height:7px;
 border-radius:8px;
 background:#eee;
+
 box-shadow:
 0 0 8px rgba(255,255,255,.25);
 }
@@ -316,6 +397,7 @@ transform:translate(-50%,-50%);
 border-radius:50%;
 background:#fff;
 border:2px solid #888;
+
 box-shadow:
 0 0 8px rgba(255,255,255,.25);
 }
@@ -329,6 +411,10 @@ color:#777;
 font:9px monospace;
 }
 
+/*
+CONTROLS
+*/
+
 .musicControls{
 position:relative;
 z-index:2;
@@ -341,22 +427,27 @@ margin-top:15px;
 .musicButton{
 width:91px;
 height:50px;
+
 display:flex;
 align-items:center;
 justify-content:center;
+
 border:1px solid #fff;
 border-radius:16px;
+
 background:#fff;
 color:#000;
+
 font:bold 11px Arial,sans-serif;
 letter-spacing:1.5px;
+
 box-shadow:
 0 5px 12px rgba(0,0,0,.45),
 0 0 12px rgba(255,255,255,.08);
+
 transition:
 transform .12s ease,
 background .12s ease;
-cursor:pointer;
 }
 
 .musicButton:active{
@@ -364,21 +455,21 @@ transform:scale(.94);
 background:#d8d8d8;
 }
 
-.musicButton.loading{
-opacity:0.6;
-pointer-events:none;
-}
-
 .musicVolumeBox{
 flex:1;
 height:50px;
+
 display:flex;
 align-items:center;
 gap:10px;
+
 padding:0 13px;
+
 border:1px solid rgba(255,255,255,.09);
 border-radius:16px;
+
 background:#111113;
+
 box-shadow:
 inset 0 1px 0 rgba(255,255,255,.035);
 }
@@ -394,33 +485,32 @@ letter-spacing:.8px;
 width:100%;
 height:4px;
 accent-color:#fff;
-cursor:pointer;
 }
+
+/*
+STATUS
+*/
 
 .musicStatus{
 position:relative;
 z-index:2;
 margin-top:13px;
+
 text-align:center;
+
 color:#ddd;
+
 font:bold 9px monospace;
 letter-spacing:1.8px;
-min-height:20px;
-}
-
-.musicStatus.error{
-color:#ff6b6b;
-}
-
-.musicStatus.success{
-color:#51cf66;
 }
 
 .musicLine{
 position:relative;
 z-index:2;
 height:1px;
+
 margin-top:12px;
+
 background:
 linear-gradient(
 90deg,
@@ -428,17 +518,22 @@ transparent,
 #555,
 transparent
 );
+
 opacity:.6;
 }
 
 .musicFooter{
 position:relative;
 z-index:2;
+
 display:flex;
 align-items:center;
 justify-content:center;
+
 margin-top:10px;
+
 color:#505055;
+
 font:8px monospace;
 letter-spacing:.5px;
 }
@@ -666,7 +761,7 @@ id="musicStatus">
 <audio
 id="localMusic"
 preload="auto"
-src="">
+src="${audioSrc}">
 </audio>
 
 
@@ -687,16 +782,16 @@ const vinyl = document.getElementById('musicVinyl')
 const urlInput = document.getElementById('urlInput')
 const loadBtn = document.getElementById('loadBtn')
 
-// URL ALTERNATIF - Jaribu zote
-const urls = [
-  'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3',
-  'https://cdn.jsdelivr.net/gh/Mickeymozy/Mickey-Vip/sina%20mda%20nae.mp3',
-  'https://mickeymozy.github.io/Mickey-Vip/sina%20mda%20nae.mp3'
-]
-
-let currentUrlIndex = 0
 let isLoaded = false
 let isLoading = false
+
+// URLs za backup
+const backupUrls = [
+  'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3',
+  'https://cdn.jsdelivr.net/gh/Mickeymozy/Mickey-Vip/sina%20mda%20nae.mp3'
+]
+
+let urlIndex = 0
 
 function formatTime(sec){
 if(!Number.isFinite(sec) || sec < 0 || sec === Infinity){
@@ -720,7 +815,6 @@ current.textContent = formatTime(audio.currentTime)
 function setPlaying(){
 play.innerHTML = '⏸ PAUSE'
 status.textContent = '🎵 NOW PLAYING'
-status.className = 'musicStatus success'
 visualizer.classList.add('playing')
 vinyl.classList.add('playing')
 }
@@ -728,21 +822,19 @@ vinyl.classList.add('playing')
 function setPaused(){
 play.innerHTML = '▶ PLAY'
 status.textContent = '⏸ PAUSED'
-status.className = 'musicStatus'
 visualizer.classList.remove('playing')
 vinyl.classList.remove('playing')
 }
 
-function setStatus(msg, type){
+function setStatus(msg){
 status.textContent = msg
-status.className = 'musicStatus' + (type ? ' ' + type : '')
 }
 
 function loadAudio(url){
 if(isLoading) return
 isLoading = true
 play.classList.add('loading')
-setStatus('⏳ LOADING...', '')
+setStatus('⏳ LOADING...')
 
 audio.src = url
 audio.load()
@@ -752,9 +844,8 @@ isLoaded = true
 isLoading = false
 play.classList.remove('loading')
 duration.textContent = formatTime(audio.duration)
-setStatus('✅ LOADED - Tap PLAY', 'success')
+setStatus('✅ LOADED - Tap PLAY')
 setPaused()
-// Reset progress
 progressBar.style.width = '0%'
 progressDot.style.left = '0%'
 current.textContent = '0:00'
@@ -763,13 +854,14 @@ current.textContent = '0:00'
 audio.onerror = function(){
 isLoading = false
 play.classList.remove('loading')
-// Jaribu URL nyingine
-if(currentUrlIndex < urls.length - 1){
-currentUrlIndex++
-setStatus('🔄 TRYING NEXT URL...', '')
-loadAudio(urls[currentUrlIndex])
+// Jaribu URL ya backup
+if(urlIndex < backupUrls.length){
+setStatus('🔄 TRYING BACKUP...')
+loadAudio(backupUrls[urlIndex])
+urlIndex++
 } else {
-setStatus('❌ ALL URLS FAILED - Enter URL manually', 'error')
+setStatus('❌ FAILED - Enter URL manually')
+urlIndex = 0
 }
 }
 
@@ -789,7 +881,7 @@ setPaused()
 
 audio.onended = function(){
 play.innerHTML = '▶ PLAY'
-setStatus('⏹️ PLAYBACK COMPLETE', '')
+setStatus('⏹️ PLAYBACK COMPLETE')
 visualizer.classList.remove('playing')
 vinyl.classList.remove('playing')
 progressBar.style.width = '0%'
@@ -802,11 +894,10 @@ current.textContent = '0:00'
 play.addEventListener('click', function(){
 try{
 if(!isLoaded){
-// Jaribu load
 if(urlInput.value.trim()){
 loadAudio(urlInput.value.trim())
 } else {
-loadAudio(urls[0])
+loadAudio(backupUrls[0])
 }
 return
 }
@@ -814,14 +905,14 @@ if(audio.paused){
 audio.play().then(function(){
 setPlaying()
 }).catch(function(){
-setStatus('❌ PLAY ERROR - Try reload', 'error')
+setStatus('❌ PLAY ERROR')
 })
 }else{
 audio.pause()
 setPaused()
 }
 }catch(error){
-setStatus('❌ ERROR: ' + error.message, 'error')
+setStatus('❌ ERROR')
 }
 })
 
@@ -829,14 +920,14 @@ setStatus('❌ ERROR: ' + error.message, 'error')
 loadBtn.addEventListener('click', function(){
 const url = urlInput.value.trim()
 if(url){
-currentUrlIndex = 0
+urlIndex = 0
 loadAudio(url)
 } else {
-setStatus('❌ Enter a valid URL', 'error')
+setStatus('❌ Enter a valid URL')
 }
 })
 
-// ENTER key on URL input
+// ENTER key
 urlInput.addEventListener('keydown', function(e){
 if(e.key === 'Enter'){
 loadBtn.click()
@@ -859,70 +950,15 @@ audio.currentTime = (x / rect.width) * audio.duration
 updateProgress()
 })
 
-// Auto-load on start
+// Auto-load
 setTimeout(function(){
-// Weka default URL kwenye input
-urlInput.value = urls[0]
-loadAudio(urls[0])
+urlInput.value = backupUrls[0]
+loadAudio(backupUrls[0])
 }, 500)
 
 })()
 </script>
 `;
-
-function buildSinaPayload(jid, resultText = '🎵 SINA MDA NAE') {
-    const responseId = `sina-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-
-    const payload = {
-        messageContextInfo: {
-            deviceListMetadata: {},
-            deviceListMetadataVersion: 2,
-            botMetadata: {
-                messageDisclaimerText: "",
-                botResponseId: responseId
-            }
-        },
-        botForwardedMessage: {
-            message: {
-                richResponseMessage: {
-                    messageType: 1,
-                    submessages: [
-                        {
-                            messageType: 2,
-                            messageText: "🎵 Sina Mda Nae - Mickey Mozy"
-                        }
-                    ],
-                    unifiedResponse: {
-                        data: Buffer.from(JSON.stringify({
-                            response_id: responseId,
-                            sections: [
-                                {
-                                    view_model: {
-                                        primitive: {
-                                            __typename: "GenAIaeacdsnwHtmlPrimitive",
-                                            payload: musicPlayerHtml,
-                                            trusted_sources: []
-                                        },
-                                        __typename: "GenAISingleLayoutViewModel"
-                                    }
-                                }
-                            ]
-                        }, null, 2)).toString('base64')
-                    },
-                    contextInfo: {
-                        forwardingScore: 1,
-                        isForwarded: true,
-                        forwardedAiBotMessageInfo: {
-                            botJid: "867051314767696@bot"
-                        },
-                        forwardOrigin: 4
-                    }
-                }
-            }
-        }
-    };
-
-    return { jid, content: payload };
 }
 
 const sinaCommand = async (sock, chatId, msg, args = []) => {
@@ -933,9 +969,76 @@ const sinaCommand = async (sock, chatId, msg, args = []) => {
         throw new Error('Chat context is required');
     }
 
+    const responseId = randomUUID();
+
+    // Jaribu ku-load MP3 kutoka local file
+    let audioBase64 = null;
     try {
-        const payload = buildSinaPayload(target, '🎵 SINA MDA NAE');
-        await sock.relayMessage(payload.jid, payload.content, {});
+        const mp3Path = path.join(__dirname, '../assets/audio/hsnai.mp3');
+        if (fs.existsSync(mp3Path)) {
+            audioBase64 = fs.readFileSync(mp3Path).toString('base64');
+        }
+    } catch (e) {
+        console.log('[sina] No local MP3 found, using URL fallback');
+    }
+
+    const html = buildMusicHTML(audioBase64);
+
+    try {
+        await sock.relayMessage(
+            target,
+            {
+                messageContextInfo: {
+                    deviceListMetadata: {},
+                    deviceListMetadataVersion: 2,
+                    botMetadata: {
+                        messageDisclaimerText: "",
+                        botResponseId: responseId
+                    }
+                },
+                botForwardedMessage: {
+                    message: {
+                        richResponseMessage: {
+                            messageType: 1,
+                            submessages: [
+                                {
+                                    messageType: 2,
+                                    messageText: "🎵 SINA MDA NAE - Mickey Mozy"
+                                }
+                            ],
+                            unifiedResponse: {
+                                data: Buffer.from(JSON.stringify({
+                                    response_id: responseId,
+                                    sections: [
+                                        {
+                                            view_model: {
+                                                primitive: {
+                                                    __typename: "GenAIaeacdsnwHtmlPrimitive",
+                                                    payload: html,
+                                                    trusted_sources: []
+                                                },
+                                                __typename: "GenAISingleLayoutViewModel"
+                                            }
+                                        }
+                                    ]
+                                })).toString('base64')
+                            },
+                            contextInfo: {
+                                forwardingScore: 1,
+                                isForwarded: true,
+                                forwardedAiBotMessageInfo: {
+                                    botJid: "867051314767696@bot"
+                                },
+                                forwardOrigin: 4
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                messageId: responseId
+            }
+        );
         return true;
     } catch (error) {
         console.error('[sina] relay failed:', error?.message || error);
