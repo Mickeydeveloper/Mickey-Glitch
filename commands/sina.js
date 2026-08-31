@@ -1,194 +1,777 @@
 const { createCtx } = require('../lib/messageBuilder');
 
-// HTML ya Music Player - Simplified
+// HTML ya Music Player - Sina Mda Nae
 const musicPlayerHtml = `
-<!DOCTYPE html>
-<html lang="sw">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>🎵 SINA MDA NAE</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-body{background:transparent;font-family:Arial,sans-serif;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:10px}
-.container{width:100%;max-width:380px;padding:16px;background:linear-gradient(145deg,#1a1a2e,#16213e);border-radius:20px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 20px 60px rgba(0,0,0,0.8)}
-.header{text-align:center;margin-bottom:16px}
-.header-title{font-size:20px;font-weight:700;background:linear-gradient(135deg,#6bcfff,#ff6b6b);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.header-sub{font-size:11px;color:#888;margin-top:2px}
-.album-art{width:100%;aspect-ratio:1;max-height:250px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#2a2a4a,#1a1a2e);display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden}
-.album-art .icon{font-size:60px;opacity:0.5}
-.wave{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:3px;align-items:center;height:25px}
-.wave span{display:block;width:3px;background:#6bcfff;border-radius:2px;animation:wave 0.8s ease-in-out infinite}
-.wave span:nth-child(1){height:8px;animation-delay:0s}
-.wave span:nth-child(2){height:16px;animation-delay:0.1s}
-.wave span:nth-child(3){height:24px;animation-delay:0.2s}
-.wave span:nth-child(4){height:16px;animation-delay:0.3s}
-.wave span:nth-child(5){height:8px;animation-delay:0.4s}
-@keyframes wave{0%,100%{transform:scaleY(1)}50%{transform:scaleY(0.4)}}
-.wave.paused span{animation-play-state:paused;opacity:0.2}
-.song-info{text-align:center;margin-bottom:14px}
-.song-title{font-size:17px;font-weight:600;color:#fff}
-.song-artist{font-size:12px;color:#888;margin-top:3px}
-.progress-container{margin-bottom:12px}
-.progress-bar{width:100%;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;cursor:pointer;position:relative}
-.progress-fill{height:100%;background:linear-gradient(90deg,#6bcfff,#ff6b6b);border-radius:2px;width:0%;transition:width 0.1s}
-.progress-time{display:flex;justify-content:space-between;font-size:10px;color:#666;margin-top:4px}
-.controls{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px}
-.controls button{width:50px;height:50px;border:none;border-radius:50%;font-size:22px;cursor:pointer;touch-action:manipulation;background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center}
-.controls button:active{transform:scale(0.92);background:rgba(255,255,255,0.2)}
-.controls .btn-play{width:64px;height:64px;font-size:28px;background:linear-gradient(135deg,#6bcfff,#4a9eff);border-color:transparent;box-shadow:0 6px 20px rgba(75,158,255,0.3)}
-.controls .btn-play:active{transform:scale(0.9)}
-.controls .btn-play.paused{background:linear-gradient(135deg,#ff6b6b,#ff4a4a);box-shadow:0 6px 20px rgba(255,75,75,0.3)}
-.controls .btn-small{width:40px;height:40px;font-size:16px}
-.volume-control{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:0 4px}
-.volume-control .vol-icon{font-size:16px;color:#666}
-.volume-slider{flex:1;height:3px;-webkit-appearance:none;appearance:none;background:rgba(255,255,255,0.1);border-radius:2px;outline:none}
-.volume-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,#6bcfff,#4a9eff);cursor:pointer;border:2px solid rgba(255,255,255,0.15)}
-.volume-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,#6bcfff,#4a9eff);cursor:pointer;border:2px solid rgba(255,255,255,0.15)}
-.url-input{display:flex;gap:6px;margin-top:8px}
-.url-input input{flex:1;padding:8px 12px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.04);color:#fff;font-size:11px;outline:none;min-width:0}
-.url-input input::placeholder{color:#555}
-.url-input input:focus{border-color:#6bcfff}
-.url-input button{padding:8px 14px;border:none;border-radius:8px;background:linear-gradient(135deg,#6bcfff,#4a9eff);color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
-.url-input button:active{transform:scale(0.95)}
-.status-msg{text-align:center;font-size:10px;color:#555;margin-top:8px;min-height:16px}
-.hidden{display:none}
+
+*{
+box-sizing:border-box;
+-webkit-tap-highlight-color:transparent;
+-webkit-user-select:none;
+user-select:none;
+}
+
+html,
+body{
+margin:0;
+padding:0;
+width:100%;
+overflow:hidden;
+background:transparent;
+font-family:Arial,Helvetica,sans-serif;
+}
+
+.musicWrap{
+width:100%;
+padding:7px;
+border:1px solid rgba(255,255,255,.16);
+border-radius:22px;
+background:#050505;
+box-shadow:
+0 10px 28px rgba(0,0,0,.65),
+inset 0 1px 0 rgba(255,255,255,.07);
+}
+
+.musicFrame{
+position:relative;
+overflow:hidden;
+padding:16px;
+border:1px solid rgba(255,255,255,.16);
+border-radius:18px;
+background:
+linear-gradient(
+145deg,
+#111113 0%,
+#080809 45%,
+#050505 100%
+);
+box-shadow:
+0 0 25px rgba(255,255,255,.025),
+inset 0 1px 0 rgba(255,255,255,.07);
+}
+
+.musicGlow{
+position:absolute;
+width:170px;
+height:170px;
+right:-75px;
+top:-85px;
+border-radius:50%;
+background:rgba(255,255,255,.045);
+filter:blur(50px);
+pointer-events:none;
+}
+
+.musicHeader{
+position:relative;
+z-index:2;
+display:flex;
+align-items:center;
+justify-content:space-between;
+margin-bottom:14px;
+}
+
+.musicBrand{
+display:flex;
+align-items:center;
+gap:9px;
+color:#fff;
+font:bold 15px Arial,sans-serif;
+letter-spacing:1px;
+text-shadow:
+0 2px 5px rgba(0,0,0,.7);
+}
+
+.musicBrandIcon{
+width:30px;
+height:30px;
+display:flex;
+align-items:center;
+justify-content:center;
+border-radius:10px;
+background:#fff;
+color:#000;
+font:bold 13px Arial,sans-serif;
+letter-spacing:0;
+box-shadow:
+0 4px 12px rgba(0,0,0,.45),
+inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.musicLive{
+padding:5px 9px;
+border:1px solid rgba(255,255,255,.22);
+border-radius:9px;
+background:#0d0d0f;
+color:#ddd;
+font:bold 8px monospace;
+letter-spacing:1.2px;
+}
+
+.musicMain{
+position:relative;
+z-index:2;
+display:flex;
+align-items:center;
+gap:15px;
+padding:14px;
+border:1px solid rgba(255,255,255,.09);
+border-radius:16px;
+background:
+linear-gradient(
+145deg,
+#151517,
+#0d0d0f
+);
+box-shadow:
+0 5px 14px rgba(0,0,0,.4),
+inset 0 1px 0 rgba(255,255,255,.045);
+}
+
+.musicCover{
+position:relative;
+flex:none;
+width:78px;
+height:78px;
+display:flex;
+align-items:center;
+justify-content:center;
+border-radius:18px;
+background:#070708;
+border:2px solid #eee;
+box-shadow:
+0 0 17px rgba(255,255,255,.10),
+inset 0 0 20px rgba(255,255,255,.035);
+overflow:hidden;
+}
+
+.musicVinyl{
+position:relative;
+width:61px;
+height:61px;
+border-radius:50%;
+background:
+repeating-radial-gradient(
+circle at center,
+#080808 0px,
+#101010 2px,
+#070707 4px,
+#141414 6px
+);
+border:1px solid #444;
+box-shadow:
+0 0 13px rgba(255,255,255,.10),
+inset 0 0 8px rgba(255,255,255,.08);
+transform:rotate(0deg);
+}
+
+.musicVinyl::before{
+content:'';
+position:absolute;
+inset:5px;
+border-radius:50%;
+background:
+repeating-radial-gradient(
+circle at center,
+transparent 0px,
+transparent 4px,
+rgba(255,255,255,.06) 5px,
+transparent 6px
+);
+}
+
+.musicVinyl::after{
+content:'';
+position:absolute;
+left:50%;
+top:50%;
+width:19px;
+height:19px;
+transform:translate(-50%,-50%);
+border-radius:50%;
+background:
+radial-gradient(
+circle,
+#fff 0 12%,
+#777 13% 28%,
+#202020 29% 65%,
+#aaa 66% 72%,
+#111 73% 100%
+);
+border:1px solid #ddd;
+box-shadow:
+0 0 8px rgba(255,255,255,.25);
+}
+
+.musicVinyl.playing{
+animation:
+vinylRotate 2.4s linear infinite;
+}
+
+@keyframes vinylRotate{
+from{
+transform:rotate(0deg);
+}
+to{
+transform:rotate(360deg);
+}
+}
+
+.musicDetails{
+min-width:0;
+flex:1;
+}
+
+.musicTitle{
+color:#fff;
+font:bold 17px Arial,sans-serif;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis;
+}
+
+.musicSubtitle{
+margin-top:5px;
+color:#777;
+font:10px monospace;
+letter-spacing:.3px;
+}
+
+.visualizer{
+height:27px;
+display:flex;
+align-items:center;
+gap:3px;
+margin-top:9px;
+}
+
+.visualizer span{
+width:3px;
+height:4px;
+border-radius:4px;
+background:#ddd;
+opacity:.85;
+}
+
+.visualizer.playing span{
+animation:
+musicBars .75s ease-in-out infinite alternate;
+}
+
+.visualizer span:nth-child(1){animation-delay:-.70s;}
+.visualizer span:nth-child(2){animation-delay:-.50s;}
+.visualizer span:nth-child(3){animation-delay:-.20s;}
+.visualizer span:nth-child(4){animation-delay:-.60s;}
+.visualizer span:nth-child(5){animation-delay:-.30s;}
+.visualizer span:nth-child(6){animation-delay:-.80s;}
+.visualizer span:nth-child(7){animation-delay:-.40s;}
+.visualizer span:nth-child(8){animation-delay:-.10s;}
+.visualizer span:nth-child(9){animation-delay:-.55s;}
+.visualizer span:nth-child(10){animation-delay:-.25s;}
+.visualizer span:nth-child(11){animation-delay:-.65s;}
+.visualizer span:nth-child(12){animation-delay:-.35s;}
+
+@keyframes musicBars{
+0%{height:4px;}
+50%{height:13px;}
+100%{height:25px;}
+}
+
+.musicProgressArea{
+position:relative;
+z-index:2;
+margin-top:16px;
+}
+
+.musicProgress{
+position:relative;
+width:100%;
+height:7px;
+border-radius:8px;
+background:#222225;
+border:1px solid rgba(255,255,255,.09);
+overflow:visible;
+}
+
+.musicProgressBar{
+position:absolute;
+left:0;
+top:-1px;
+width:0%;
+height:7px;
+border-radius:8px;
+background:#eee;
+box-shadow:
+0 0 8px rgba(255,255,255,.25);
+}
+
+.musicProgressDot{
+position:absolute;
+left:0%;
+top:50%;
+width:14px;
+height:14px;
+transform:translate(-50%,-50%);
+border-radius:50%;
+background:#fff;
+border:2px solid #888;
+box-shadow:
+0 0 8px rgba(255,255,255,.25);
+}
+
+.musicTime{
+display:flex;
+align-items:center;
+justify-content:space-between;
+margin-top:8px;
+color:#777;
+font:9px monospace;
+}
+
+.musicControls{
+position:relative;
+z-index:2;
+display:flex;
+align-items:center;
+gap:13px;
+margin-top:15px;
+}
+
+.musicButton{
+width:91px;
+height:50px;
+display:flex;
+align-items:center;
+justify-content:center;
+border:1px solid #fff;
+border-radius:16px;
+background:#fff;
+color:#000;
+font:bold 11px Arial,sans-serif;
+letter-spacing:1.5px;
+box-shadow:
+0 5px 12px rgba(0,0,0,.45),
+0 0 12px rgba(255,255,255,.08);
+transition:
+transform .12s ease,
+background .12s ease;
+}
+
+.musicButton:active{
+transform:scale(.94);
+background:#d8d8d8;
+}
+
+.musicVolumeBox{
+flex:1;
+height:50px;
+display:flex;
+align-items:center;
+gap:10px;
+padding:0 13px;
+border:1px solid rgba(255,255,255,.09);
+border-radius:16px;
+background:#111113;
+box-shadow:
+inset 0 1px 0 rgba(255,255,255,.035);
+}
+
+.musicVolumeLabel{
+width:32px;
+color:#aaa;
+font:bold 8px monospace;
+letter-spacing:.8px;
+}
+
+.musicVolume{
+width:100%;
+height:4px;
+accent-color:#fff;
+}
+
+.musicStatus{
+position:relative;
+z-index:2;
+margin-top:13px;
+text-align:center;
+color:#ddd;
+font:bold 9px monospace;
+letter-spacing:1.8px;
+}
+
+.musicLine{
+position:relative;
+z-index:2;
+height:1px;
+margin-top:12px;
+background:
+linear-gradient(
+90deg,
+transparent,
+#555,
+transparent
+);
+opacity:.6;
+}
+
+.musicFooter{
+position:relative;
+z-index:2;
+display:flex;
+align-items:center;
+justify-content:center;
+margin-top:10px;
+color:#505055;
+font:8px monospace;
+letter-spacing:.5px;
+}
+
 </style>
-</head>
-<body>
-<div class="container">
-  <div class="header">
-    <div class="header-title">🎵 SINA MDA NAE</div>
-    <div class="header-sub">Mickey Mozy</div>
-  </div>
-  <div class="album-art" id="albumArt">
-    <div class="icon">🎵</div>
-    <div class="wave" id="wave"><span></span><span></span><span></span><span></span><span></span></div>
-  </div>
-  <div class="song-info">
-    <div class="song-title" id="songTitle">Sina Mda Nae</div>
-    <div class="song-artist" id="songArtist">Mickey Mozy</div>
-  </div>
-  <div class="progress-container">
-    <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
-    <div class="progress-time"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
-  </div>
-  <div class="controls">
-    <button class="btn-small" id="btnPrev">⏮</button>
-    <button class="btn-play" id="btnPlay">▶</button>
-    <button class="btn-small" id="btnNext">⏭</button>
-  </div>
-  <div class="volume-control">
-    <span class="vol-icon">🔊</span>
-    <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.01" value="0.8">
-  </div>
-  <div class="url-input">
-    <input type="text" id="urlInput" placeholder="Paste MP3 URL...">
-    <button id="btnLoad">Load</button>
-  </div>
-  <div class="status-msg" id="statusMsg">🎵 Paste URL & tap Load</div>
+
+
+<div class="musicWrap">
+
+<div class="musicFrame">
+
+<div class="musicGlow"></div>
+
+
+<!-- HEADER -->
+
+<div class="musicHeader">
+
+<div class="musicBrand">
+
+<div class="musicBrandIcon">
+🎵
 </div>
+
+SINA MDA NAE
+
+</div>
+
+<div class="musicLive">
+MP3
+</div>
+
+</div>
+
+
+<!-- MAIN -->
+
+<div class="musicMain">
+
+
+<div class="musicCover">
+
+<div
+class="musicVinyl"
+id="musicVinyl">
+</div>
+
+</div>
+
+
+<div class="musicDetails">
+
+<div class="musicTitle">
+Sina Mda Nae
+</div>
+
+<div class="musicSubtitle">
+MICKEY MOZY • MP3
+</div>
+
+
+<div
+class="visualizer"
+id="visualizer">
+
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- PROGRESS -->
+
+<div class="musicProgressArea">
+
+<div
+class="musicProgress"
+id="musicProgress">
+
+<div
+class="musicProgressBar"
+id="musicProgressBar">
+</div>
+
+<div
+class="musicProgressDot"
+id="musicProgressDot">
+</div>
+
+</div>
+
+
+<div class="musicTime">
+
+<span id="musicCurrent">
+0:00
+</span>
+
+<span id="musicDuration">
+0:00
+</span>
+
+</div>
+
+</div>
+
+
+<!-- CONTROLS -->
+
+<div class="musicControls">
+
+
+<button
+class="musicButton"
+id="musicPlay">
+▶ PLAY
+</button>
+
+
+<div class="musicVolumeBox">
+
+<div class="musicVolumeLabel">
+VOL
+</div>
+
+<input
+class="musicVolume"
+id="musicVolume"
+type="range"
+min="0"
+max="1"
+step=".01"
+value=".8">
+
+</div>
+
+</div>
+
+
+<!-- STATUS -->
+
+<div
+class="musicStatus"
+id="musicStatus">
+🎵 READY TO PLAY
+</div>
+
+
+<div class="musicLine"></div>
+
+
+<div class="musicFooter">
+🎵 SINA MDA NAE • MICKEY MOZY
+</div>
+
+
+</div>
+
+</div>
+
+
+<audio
+id="localMusic"
+preload="auto"
+src="">
+</audio>
+
+
 <script>
 (function(){
-  const audio = new Audio();
-  let isPlaying = false, isLoaded = false;
 
-  const playBtn = document.getElementById('btnPlay');
-  const progressFill = document.getElementById('progressFill');
-  const progressBar = document.getElementById('progressBar');
-  const currentTimeEl = document.getElementById('currentTime');
-  const totalTimeEl = document.getElementById('totalTime');
-  const volumeSlider = document.getElementById('volumeSlider');
-  const urlInput = document.getElementById('urlInput');
-  const loadBtn = document.getElementById('btnLoad');
-  const statusMsg = document.getElementById('statusMsg');
-  const songTitle = document.getElementById('songTitle');
-  const songArtist = document.getElementById('songArtist');
-  const wave = document.getElementById('wave');
+const audio =
+document.getElementById('localMusic')
 
-  // Default URL - inaweza kubadilishwa
-  const defaultUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3';
-  urlInput.value = defaultUrl;
+const play =
+document.getElementById('musicPlay')
 
-  function formatTime(s){ if(isNaN(s)||!isFinite(s)) return '0:00'; const m=Math.floor(s/60); const sec=Math.floor(s%60); return m+':'+(sec<10?'0':'')+sec; }
+const volume =
+document.getElementById('musicVolume')
 
-  function updateUI(){
-    if(audio.duration && !isNaN(audio.duration)){
-      progressFill.style.width = ((audio.currentTime/audio.duration)*100)+'%';
-      currentTimeEl.textContent = formatTime(audio.currentTime);
-      totalTimeEl.textContent = formatTime(audio.duration);
-    }
-  }
+const progress =
+document.getElementById('musicProgress')
 
-  function setStatus(msg, err){
-    statusMsg.textContent = msg;
-    statusMsg.style.color = err ? '#ff6b6b' : '#555';
-  }
+const progressBar =
+document.getElementById('musicProgressBar')
 
-  function loadAudio(url){
-    if(!url){ setStatus('❌ No URL', true); return; }
-    setStatus('⏳ Loading...');
-    audio.src = url;
-    audio.load();
-    audio.onloadedmetadata = function(){
-      isLoaded = true;
-      totalTimeEl.textContent = formatTime(audio.duration);
-      setStatus('✅ Loaded');
-      setTimeout(playAudio, 200);
-    };
-    audio.onerror = function(){
-      setStatus('❌ Failed: '+url.substring(0,30)+'...', true);
-      isLoaded = false;
-      playBtn.textContent = '▶';
-      isPlaying = false;
-      wave.classList.add('paused');
-    };
-    audio.ontimeupdate = updateUI;
-    audio.onended = function(){ isPlaying=false; playBtn.textContent='▶'; wave.classList.add('paused'); setStatus('⏹️ Ended'); };
-    audio.onplay = function(){ isPlaying=true; playBtn.textContent='⏸'; wave.classList.remove('paused'); setStatus('▶️ Playing...'); };
-    audio.onpause = function(){ isPlaying=false; playBtn.textContent='▶'; wave.classList.add('paused'); setStatus('⏸️ Paused'); };
-  }
+const progressDot =
+document.getElementById('musicProgressDot')
 
-  function togglePlay(){
-    if(!isLoaded){ const u=urlInput.value.trim(); if(u){ loadAudio(u); return; } setStatus('❌ No audio loaded', true); return; }
-    if(isPlaying){ audio.pause(); } else { audio.play().catch(()=>setStatus('❌ Cannot play', true)); }
-  }
+const current =
+document.getElementById('musicCurrent')
 
-  function playAudio(){ audio.play().catch(()=>setStatus('❌ Cannot play', true)); }
+const duration =
+document.getElementById('musicDuration')
 
-  function seek(e){
-    if(!isLoaded||!audio.duration) return;
-    const rect = progressBar.getBoundingClientRect();
-    const x = (e.clientX||e.touches?.[0]?.clientX||0) - rect.left;
-    audio.currentTime = Math.max(0, Math.min(1, x/rect.width)) * audio.duration;
-    updateUI();
-  }
+const status =
+document.getElementById('musicStatus')
 
-  playBtn.addEventListener('click', togglePlay);
-  progressBar.addEventListener('click', seek);
-  progressBar.addEventListener('touchstart', function(e){ e.preventDefault(); seek(e); });
+const visualizer =
+document.getElementById('visualizer')
 
-  volumeSlider.addEventListener('input', function(){ audio.volume = parseFloat(this.value); });
+const vinyl =
+document.getElementById('musicVinyl')
 
-  loadBtn.addEventListener('click', function(){ const u=urlInput.value.trim(); if(u) loadAudio(u); else setStatus('❌ Enter URL', true); });
-  urlInput.addEventListener('keydown', function(e){ if(e.key==='Enter') loadBtn.click(); });
+// Default URL - Sina Mda Nae
+const defaultUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3';
 
-  document.addEventListener('keydown', function(e){
-    if(e.target.tagName==='INPUT') return;
-    if(e.code==='Space'){ e.preventDefault(); togglePlay(); }
-    if(e.code==='ArrowLeft' && isLoaded){ audio.currentTime = Math.max(0, audio.currentTime-5); updateUI(); }
-    if(e.code==='ArrowRight' && isLoaded){ audio.currentTime = Math.min(audio.duration||0, audio.currentTime+5); updateUI(); }
-  });
+let isLoaded = false;
 
-  // Auto-load on start
-  setTimeout(function(){ if(urlInput.value.trim()) loadAudio(urlInput.value.trim()); }, 500);
-  setInterval(updateUI, 500);
-  wave.classList.add('paused');
-  setStatus('🎵 Loaded. Tap Play');
-})();
+function formatTime(sec){
+if(!Number.isFinite(sec) || sec < 0){
+return '0:00'
+}
+const m = Math.floor(sec / 60)
+const s = Math.floor(sec % 60)
+return m + ':' + String(s).padStart(2,'0')
+}
+
+function updateProgress(){
+if(!isLoaded || !Number.isFinite(audio.duration) || audio.duration <= 0){
+return
+}
+const percent = (audio.currentTime / audio.duration) * 100
+progressBar.style.width = percent + '%'
+progressDot.style.left = percent + '%'
+current.textContent = formatTime(audio.currentTime)
+}
+
+function setPlaying(){
+play.innerHTML = '⏸ PAUSE'
+status.textContent = '🎵 NOW PLAYING'
+visualizer.classList.add('playing')
+vinyl.classList.add('playing')
+}
+
+function setPaused(){
+play.innerHTML = '▶ PLAY'
+status.textContent = '⏸ PAUSED'
+visualizer.classList.remove('playing')
+vinyl.classList.remove('playing')
+}
+
+function loadAudio(url){
+status.textContent = '⏳ LOADING...'
+audio.src = url
+audio.load()
+
+audio.onloadedmetadata = function(){
+isLoaded = true
+duration.textContent = formatTime(audio.duration)
+status.textContent = '✅ LOADED'
+setTimeout(function(){
+audio.play().catch(function(){
+status.textContent = '❌ CANNOT PLAY'
+})
+}, 300)
+}
+
+audio.onerror = function(){
+status.textContent = '❌ FAILED TO LOAD'
+isLoaded = false
+visualizer.classList.remove('playing')
+vinyl.classList.remove('playing')
+}
+}
+
+play.addEventListener('click', function(){
+try{
+if(!isLoaded){
+loadAudio(defaultUrl)
+return
+}
+if(audio.paused){
+audio.play().then(function(){
+setPlaying()
+}).catch(function(){
+status.textContent = '❌ PLAY ERROR'
+})
+}else{
+audio.pause()
+setPaused()
+}
+}catch(error){
+status.textContent = '❌ ERROR'
+}
+})
+
+volume.addEventListener('input', function(){
+audio.volume = Number(volume.value)
+})
+
+progress.addEventListener('pointerdown', function(e){
+if(!isLoaded || !Number.isFinite(audio.duration) || audio.duration <= 0){
+return
+}
+const rect = progress.getBoundingClientRect()
+const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width))
+audio.currentTime = (x / rect.width) * audio.duration
+updateProgress()
+})
+
+audio.addEventListener('loadedmetadata', function(){
+duration.textContent = formatTime(audio.duration)
+})
+
+audio.addEventListener('timeupdate', function(){
+updateProgress()
+})
+
+audio.addEventListener('play', function(){
+setPlaying()
+})
+
+audio.addEventListener('pause', function(){
+if(!audio.ended){
+setPaused()
+}
+})
+
+audio.addEventListener('ended', function(){
+play.innerHTML = '▶ PLAY'
+status.textContent = '⏹️ PLAYBACK COMPLETE'
+visualizer.classList.remove('playing')
+vinyl.classList.remove('playing')
+progressBar.style.width = '0%'
+progressDot.style.left = '0%'
+current.textContent = '0:00'
+})
+
+// Auto-load on start
+setTimeout(function(){
+loadAudio(defaultUrl)
+}, 500)
+
+})()
 </script>
-</body>
-</html>
 `;
 
 function buildSinaPayload(jid, resultText = '🎵 SINA MDA NAE') {
@@ -210,7 +793,7 @@ function buildSinaPayload(jid, resultText = '🎵 SINA MDA NAE') {
                     submessages: [
                         {
                             messageType: 2,
-                            messageText: resultText
+                            messageText: "🎵 Sina Mda Nae - Mickey Mozy"
                         }
                     ],
                     unifiedResponse: {
@@ -222,13 +805,13 @@ function buildSinaPayload(jid, resultText = '🎵 SINA MDA NAE') {
                                         primitive: {
                                             __typename: "GenAIaeacdsnwHtmlPrimitive",
                                             payload: musicPlayerHtml,
-                                            trusted_sources: ["cylic.dev"]
+                                            trusted_sources: []
                                         },
                                         __typename: "GenAISingleLayoutViewModel"
                                     }
                                 }
                             ]
-                        })).toString('base64')
+                        }, null, 2)).toString('base64')
                     },
                     contextInfo: {
                         forwardingScore: 1,
@@ -274,8 +857,8 @@ const sinaCommand = async (sock, chatId, msg, args = []) => {
 };
 
 sinaCommand.name = 'sina';
-sinaCommand.aliases = ['mickey', 'mda'];
+sinaCommand.aliases = ['mickey', 'mda', 'nae'];
 sinaCommand.category = 'fun';
-sinaCommand.description = '🎵 Sina Mda Nae - Mickey Mozy';
+sinaCommand.description = '🎵 Sina Mda Nae - Mickey Mozy Music Player';
 
 module.exports = sinaCommand;
