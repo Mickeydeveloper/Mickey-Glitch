@@ -3,11 +3,11 @@ const { createCtx } = require('../lib/messageBuilder');
 const radioStations = [
   {
     name: 'Mickey FM',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
+    url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/ushauri.mp3'
   },
   {
     name: 'Chill Mix',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3'
+    url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina mda nae.mp3'
   },
   {
     name: 'Night Wave',
