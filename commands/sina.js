@@ -1,16 +1,8 @@
 const { createCtx } = require('../lib/messageBuilder');
 const { randomUUID } = require('crypto');
-const fs = require('fs');
-const path = require('path');
 
-// HTML ya Music Player - Sina Mda Nae (LevviCode Style)
-function buildMusicHTML(audioBase64 = null) {
-    // If no audio provided, use URL fallback
-    const audioSrc = audioBase64 
-        ? `data:audio/mpeg;base64,${audioBase64}`
-        : '';
-
-    return `
+// HTML ya Music Player - Sina Mda Nae (Embedded Audio)
+const musicPlayerHtml = (audioBase64) => `
 <style>
 
 *{
@@ -154,16 +146,11 @@ inset 0 0 20px rgba(255,255,255,.035);
 overflow:hidden;
 }
 
-/*
-VINYL
-*/
-
 .musicVinyl{
 position:relative;
 width:61px;
 height:61px;
 border-radius:50%;
-
 background:
 repeating-radial-gradient(
 circle at center,
@@ -172,13 +159,10 @@ circle at center,
 #070707 4px,
 #141414 6px
 );
-
 border:1px solid #444;
-
 box-shadow:
 0 0 13px rgba(255,255,255,.10),
 inset 0 0 8px rgba(255,255,255,.08);
-
 transform:rotate(0deg);
 }
 
@@ -187,7 +171,6 @@ content:'';
 position:absolute;
 inset:5px;
 border-radius:50%;
-
 background:
 repeating-radial-gradient(
 circle at center,
@@ -207,7 +190,6 @@ width:19px;
 height:19px;
 transform:translate(-50%,-50%);
 border-radius:50%;
-
 background:
 radial-gradient(
 circle,
@@ -217,16 +199,10 @@ circle,
 #aaa 66% 72%,
 #111 73% 100%
 );
-
 border:1px solid #ddd;
-
 box-shadow:
 0 0 8px rgba(255,255,255,.25);
 }
-
-/*
-VINYL ROTATE ONLY WHEN PLAYING
-*/
 
 .musicVinyl.playing{
 animation:
@@ -234,15 +210,12 @@ vinylRotate 2.4s linear infinite;
 }
 
 @keyframes vinylRotate{
-
 from{
 transform:rotate(0deg);
 }
-
 to{
 transform:rotate(360deg);
 }
-
 }
 
 .musicDetails{
@@ -265,10 +238,6 @@ font:10px monospace;
 letter-spacing:.3px;
 }
 
-/*
-VISUALIZER
-*/
-
 .visualizer{
 height:27px;
 display:flex;
@@ -290,73 +259,24 @@ animation:
 musicBars .75s ease-in-out infinite alternate;
 }
 
-.visualizer span:nth-child(1){
-animation-delay:-.70s;
-}
-
-.visualizer span:nth-child(2){
-animation-delay:-.50s;
-}
-
-.visualizer span:nth-child(3){
-animation-delay:-.20s;
-}
-
-.visualizer span:nth-child(4){
-animation-delay:-.60s;
-}
-
-.visualizer span:nth-child(5){
-animation-delay:-.30s;
-}
-
-.visualizer span:nth-child(6){
-animation-delay:-.80s;
-}
-
-.visualizer span:nth-child(7){
-animation-delay:-.40s;
-}
-
-.visualizer span:nth-child(8){
-animation-delay:-.10s;
-}
-
-.visualizer span:nth-child(9){
-animation-delay:-.55s;
-}
-
-.visualizer span:nth-child(10){
-animation-delay:-.25s;
-}
-
-.visualizer span:nth-child(11){
-animation-delay:-.65s;
-}
-
-.visualizer span:nth-child(12){
-animation-delay:-.35s;
-}
+.visualizer span:nth-child(1){animation-delay:-.70s;}
+.visualizer span:nth-child(2){animation-delay:-.50s;}
+.visualizer span:nth-child(3){animation-delay:-.20s;}
+.visualizer span:nth-child(4){animation-delay:-.60s;}
+.visualizer span:nth-child(5){animation-delay:-.30s;}
+.visualizer span:nth-child(6){animation-delay:-.80s;}
+.visualizer span:nth-child(7){animation-delay:-.40s;}
+.visualizer span:nth-child(8){animation-delay:-.10s;}
+.visualizer span:nth-child(9){animation-delay:-.55s;}
+.visualizer span:nth-child(10){animation-delay:-.25s;}
+.visualizer span:nth-child(11){animation-delay:-.65s;}
+.visualizer span:nth-child(12){animation-delay:-.35s;}
 
 @keyframes musicBars{
-
-0%{
-height:4px;
+0%{height:4px;}
+50%{height:13px;}
+100%{height:25px;}
 }
-
-50%{
-height:13px;
-}
-
-100%{
-height:25px;
-}
-
-}
-
-/*
-PROGRESS
-*/
 
 .musicProgressArea{
 position:relative;
@@ -372,6 +292,7 @@ border-radius:8px;
 background:#222225;
 border:1px solid rgba(255,255,255,.09);
 overflow:visible;
+cursor:pointer;
 }
 
 .musicProgressBar{
@@ -382,7 +303,6 @@ width:0%;
 height:7px;
 border-radius:8px;
 background:#eee;
-
 box-shadow:
 0 0 8px rgba(255,255,255,.25);
 }
@@ -397,7 +317,6 @@ transform:translate(-50%,-50%);
 border-radius:50%;
 background:#fff;
 border:2px solid #888;
-
 box-shadow:
 0 0 8px rgba(255,255,255,.25);
 }
@@ -411,10 +330,6 @@ color:#777;
 font:9px monospace;
 }
 
-/*
-CONTROLS
-*/
-
 .musicControls{
 position:relative;
 z-index:2;
@@ -427,27 +342,22 @@ margin-top:15px;
 .musicButton{
 width:91px;
 height:50px;
-
 display:flex;
 align-items:center;
 justify-content:center;
-
 border:1px solid #fff;
 border-radius:16px;
-
 background:#fff;
 color:#000;
-
 font:bold 11px Arial,sans-serif;
 letter-spacing:1.5px;
-
 box-shadow:
 0 5px 12px rgba(0,0,0,.45),
 0 0 12px rgba(255,255,255,.08);
-
 transition:
 transform .12s ease,
 background .12s ease;
+cursor:pointer;
 }
 
 .musicButton:active{
@@ -458,18 +368,13 @@ background:#d8d8d8;
 .musicVolumeBox{
 flex:1;
 height:50px;
-
 display:flex;
 align-items:center;
 gap:10px;
-
 padding:0 13px;
-
 border:1px solid rgba(255,255,255,.09);
 border-radius:16px;
-
 background:#111113;
-
 box-shadow:
 inset 0 1px 0 rgba(255,255,255,.035);
 }
@@ -485,32 +390,33 @@ letter-spacing:.8px;
 width:100%;
 height:4px;
 accent-color:#fff;
+cursor:pointer;
 }
-
-/*
-STATUS
-*/
 
 .musicStatus{
 position:relative;
 z-index:2;
 margin-top:13px;
-
 text-align:center;
-
 color:#ddd;
-
 font:bold 9px monospace;
 letter-spacing:1.8px;
+min-height:20px;
+}
+
+.musicStatus.error{
+color:#ff6b6b;
+}
+
+.musicStatus.success{
+color:#51cf66;
 }
 
 .musicLine{
 position:relative;
 z-index:2;
 height:1px;
-
 margin-top:12px;
-
 background:
 linear-gradient(
 90deg,
@@ -518,22 +424,17 @@ transparent,
 #555,
 transparent
 );
-
 opacity:.6;
 }
 
 .musicFooter{
 position:relative;
 z-index:2;
-
 display:flex;
 align-items:center;
 justify-content:center;
-
 margin-top:10px;
-
 color:#505055;
-
 font:8px monospace;
 letter-spacing:.5px;
 }
@@ -761,7 +662,7 @@ id="musicStatus">
 <audio
 id="localMusic"
 preload="auto"
-src="${audioSrc}">
+src="${audioBase64 ? `data:audio/mpeg;base64,${audioBase64}` : ''}">
 </audio>
 
 
@@ -784,6 +685,7 @@ const loadBtn = document.getElementById('loadBtn')
 
 let isLoaded = false
 let isLoading = false
+let hasEmbeddedAudio = ${audioBase64 ? 'true' : 'false'};
 
 // URLs za backup
 const backupUrls = [
@@ -815,6 +717,7 @@ current.textContent = formatTime(audio.currentTime)
 function setPlaying(){
 play.innerHTML = '⏸ PAUSE'
 status.textContent = '🎵 NOW PLAYING'
+status.className = 'musicStatus success'
 visualizer.classList.add('playing')
 vinyl.classList.add('playing')
 }
@@ -822,19 +725,21 @@ vinyl.classList.add('playing')
 function setPaused(){
 play.innerHTML = '▶ PLAY'
 status.textContent = '⏸ PAUSED'
+status.className = 'musicStatus'
 visualizer.classList.remove('playing')
 vinyl.classList.remove('playing')
 }
 
-function setStatus(msg){
+function setStatus(msg, type){
 status.textContent = msg
+status.className = 'musicStatus' + (type ? ' ' + type : '')
 }
 
 function loadAudio(url){
 if(isLoading) return
 isLoading = true
 play.classList.add('loading')
-setStatus('⏳ LOADING...')
+setStatus('⏳ LOADING...', '')
 
 audio.src = url
 audio.load()
@@ -844,7 +749,7 @@ isLoaded = true
 isLoading = false
 play.classList.remove('loading')
 duration.textContent = formatTime(audio.duration)
-setStatus('✅ LOADED - Tap PLAY')
+setStatus('✅ LOADED - Tap PLAY', 'success')
 setPaused()
 progressBar.style.width = '0%'
 progressDot.style.left = '0%'
@@ -856,11 +761,11 @@ isLoading = false
 play.classList.remove('loading')
 // Jaribu URL ya backup
 if(urlIndex < backupUrls.length){
-setStatus('🔄 TRYING BACKUP...')
+setStatus('🔄 TRYING BACKUP...', '')
 loadAudio(backupUrls[urlIndex])
 urlIndex++
 } else {
-setStatus('❌ FAILED - Enter URL manually')
+setStatus('❌ FAILED - Enter URL manually', 'error')
 urlIndex = 0
 }
 }
@@ -881,7 +786,7 @@ setPaused()
 
 audio.onended = function(){
 play.innerHTML = '▶ PLAY'
-setStatus('⏹️ PLAYBACK COMPLETE')
+setStatus('⏹️ PLAYBACK COMPLETE', '')
 visualizer.classList.remove('playing')
 vinyl.classList.remove('playing')
 progressBar.style.width = '0%'
@@ -894,6 +799,11 @@ current.textContent = '0:00'
 play.addEventListener('click', function(){
 try{
 if(!isLoaded){
+// Jaribu kucheza embedded audio first
+if(hasEmbeddedAudio && audio.src && audio.src.includes('data:audio')){
+loadAudio(audio.src)
+return
+}
 if(urlInput.value.trim()){
 loadAudio(urlInput.value.trim())
 } else {
@@ -905,14 +815,14 @@ if(audio.paused){
 audio.play().then(function(){
 setPlaying()
 }).catch(function(){
-setStatus('❌ PLAY ERROR')
+setStatus('❌ PLAY ERROR', 'error')
 })
 }else{
 audio.pause()
 setPaused()
 }
 }catch(error){
-setStatus('❌ ERROR')
+setStatus('❌ ERROR: ' + error.message, 'error')
 }
 })
 
@@ -923,7 +833,7 @@ if(url){
 urlIndex = 0
 loadAudio(url)
 } else {
-setStatus('❌ Enter a valid URL')
+setStatus('❌ Enter a valid URL', 'error')
 }
 })
 
@@ -950,16 +860,19 @@ audio.currentTime = (x / rect.width) * audio.duration
 updateProgress()
 })
 
-// Auto-load
+// Auto-load - jaribu embedded audio first
 setTimeout(function(){
+if(hasEmbeddedAudio && audio.src && audio.src.includes('data:audio')){
+loadAudio(audio.src)
+} else {
 urlInput.value = backupUrls[0]
 loadAudio(backupUrls[0])
+}
 }, 500)
 
 })()
 </script>
 `;
-}
 
 const sinaCommand = async (sock, chatId, msg, args = []) => {
     const ctx = createCtx(sock, chatId, msg, { args });
@@ -971,18 +884,19 @@ const sinaCommand = async (sock, chatId, msg, args = []) => {
 
     const responseId = randomUUID();
 
-    // Jaribu ku-load MP3 kutoka local file
-    let audioBase64 = null;
-    try {
-        const mp3Path = path.join(__dirname, '../assets/audio/hsnai.mp3');
-        if (fs.existsSync(mp3Path)) {
-            audioBase64 = fs.readFileSync(mp3Path).toString('base64');
-        }
-    } catch (e) {
-        console.log('[sina] No local MP3 found, using URL fallback');
-    }
+    // === JINSI YA KUWEKA AUDIO KATIKA CODE ===
+    // 
+    // NJIA 1: Weka audio base64 moja kwa moja hapa
+    // Nenda kwenye: https://base64.guru/converter/encode/audio/mp3
+    // Weka MP3 yako, nakili base64, na uweke hapa chini:
+    // 
+    // const audioBase64 = 'UKUBWA WA BASE64 YAKO HAPA';
+    // 
+    // NJIA 2: Acha iwe null - itatumia URL za backup
+    // 
+    const audioBase64 = null; // Badilisha kuwa base64 yako ikiwa unayo
 
-    const html = buildMusicHTML(audioBase64);
+    const html = musicPlayerHtml(audioBase64);
 
     try {
         await sock.relayMessage(
@@ -1045,7 +959,7 @@ const sinaCommand = async (sock, chatId, msg, args = []) => {
 
         try {
             await sock.sendMessage(target, {
-                text: `🎵 SINA MDA NAE\n━━━━━━━━━━━━━━━━━━━\n🎤 Mickey Mozy\n━━━━━━━━━━━━━━━━━━━\nType .sina to play!\n\n📝 If it fails, paste URL:\nhttps://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3`
+                text: `🎵 SINA MDA NAE\n━━━━━━━━━━━━━━━━━━━\n🎤 Mickey Mozy\n━━━━━━━━━━━━━━━━━━━\n\n📝 TATIZO: Audio inashindwa ku-load\n\n🔧 SULUHISHO:\n1. Pakua MP3\n2. Nenda base64.guru\n3. Convert MP3 → Base64\n4. Weka kwenye code\n\n📥 URL mbadala:\nhttps://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3`
             }, { quoted: ctx.msg });
             return true;
         } catch (sendErr) {
