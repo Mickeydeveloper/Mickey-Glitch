@@ -228,7 +228,6 @@ body {
 <body>
 
 <div class="container">
-  <!-- Header -->
   <div class="header">
     <div class="header-title">🏎️ CAR RACING</div>
     <div class="header-stats">
@@ -238,10 +237,8 @@ body {
     </div>
   </div>
 
-  <!-- Canvas -->
   <canvas id="gameCanvas" width="360" height="500"></canvas>
 
-  <!-- Controls -->
   <div class="controls">
     <button class="btn-left" id="btnLeft">◀️</button>
     <button class="btn-up" id="btnUp">⬆️</button>
@@ -250,7 +247,6 @@ body {
     <button class="btn-reset" id="btnReset">🔄 RESET</button>
   </div>
 
-  <!-- Status -->
   <div class="status-bar" id="statusBar">
     <span class="live"></span>
     <span id="statusText">🚗 Drive & avoid obstacles!</span>
@@ -263,13 +259,11 @@ body {
   const ctx = canvas.getContext('2d');
   const W = 360, H = 500;
 
-  // DOM elements
   const scoreDisplay = document.getElementById('scoreDisplay');
   const speedDisplay = document.getElementById('speedDisplay');
   const livesDisplay = document.getElementById('livesDisplay');
   const statusText = document.getElementById('statusText');
 
-  // Game state
   const state = {
     car: { x: 160, y: 410, w: 40, h: 55 },
     obstacles: [],
@@ -287,19 +281,14 @@ body {
     roadLines: []
   };
 
-  // Road lines
   for (let i = 0; i < 15; i++) {
     state.roadLines.push({ y: i * 35 });
   }
 
-  // Car colors
   const carColors = ['#ff6b6b', '#ffd93d', '#6bcfff', '#51cf66', '#cc5de8'];
   let carColor = carColors[Math.floor(Math.random() * carColors.length)];
-
-  // Obstacle colors
   const obsColors = ['#ff6b6b', '#ff922b', '#fcc419', '#20c997', '#5c7cfa'];
 
-  // Sound (simple beep)
   let audioCtx = null;
 
   function getAudio() {
@@ -332,7 +321,6 @@ body {
     } catch(e) {}
   }
 
-  // Game functions
   function resetGame() {
     state.car.x = 160;
     state.car.y = 410;
@@ -402,7 +390,6 @@ body {
   function hitObstacle(obs) {
     state.lives--;
     playBeep(300, 0.3, 'square');
-    // Remove obstacle
     const idx = state.obstacles.indexOf(obs);
     if (idx > -1) state.obstacles.splice(idx, 1);
     updateUI();
@@ -418,18 +405,14 @@ body {
     }
   }
 
-  // Update game
   function update() {
     if (state.gameOver) return;
 
     state.frame++;
-
-    // Difficulty scaling
     state.difficulty = 1 + Math.floor(state.score / 100) * 0.5;
     state.maxSpeed = Math.min(12, 3 + state.difficulty * 0.8);
     state.speed = Math.min(state.maxSpeed, state.speed + 0.002);
 
-    // Car movement with keys
     const moveSpeed = state.speed * 1.2;
     if (state.keys.left && state.car.x > 10) {
       state.car.x -= moveSpeed;
@@ -444,58 +427,47 @@ body {
       state.car.y += moveSpeed * 0.8;
     }
 
-    // Road movement
     state.roadOffset = (state.roadOffset + state.speed) % 70;
 
-    // Spawn obstacles
     state.spawnCounter++;
     const spawnRate = Math.max(12, 30 - state.difficulty * 2);
     if (state.spawnCounter >= spawnRate) {
       state.spawnCounter = 0;
       if (Math.random() < 0.6 + state.difficulty * 0.03) {
         spawnObstacle();
-        // Sometimes spawn 2 at once
         if (Math.random() < 0.2 + state.difficulty * 0.02) {
           spawnObstacle();
         }
       }
     }
 
-    // Update obstacles
     for (let i = state.obstacles.length - 1; i >= 0; i--) {
       const obs = state.obstacles[i];
       obs.y += state.speed + obs.speed * 0.3;
 
-      // Check collision
       if (!state.gameOver && checkCollision(state.car, obs)) {
         hitObstacle(obs);
         continue;
       }
 
-      // Remove if off screen
       if (obs.y > H + 50) {
         state.obstacles.splice(i, 1);
         state.score += 5 + state.difficulty * 2;
         updateUI();
-        // Speed up slowly
         if (state.speed < state.maxSpeed) {
           state.speed += 0.003;
         }
       }
     }
 
-    // Score over time
     state.score += 0.1 * state.difficulty;
     updateUI();
   }
 
-  // Drawing functions
   function drawRoad() {
-    // Road base
     ctx.fillStyle = '#2d2d44';
     ctx.fillRect(0, 0, W, H);
 
-    // Road lanes
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.lineWidth = 2;
     ctx.setLineDash([20, 30]);
@@ -506,7 +478,6 @@ body {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Side lines
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -516,7 +487,6 @@ body {
     ctx.lineTo(W - 15, H);
     ctx.stroke();
 
-    // Road edge glow
     const grad = ctx.createLinearGradient(0, 0, 15, 0);
     grad.addColorStop(0, 'rgba(255,255,255,0.03)');
     grad.addColorStop(1, 'rgba(255,255,255,0)');
@@ -526,12 +496,10 @@ body {
   }
 
   function drawCar(x, y, w, h, color) {
-    // Shadow
     ctx.shadowColor = 'rgba(0,0,0,0.3)';
     ctx.shadowBlur = 15;
     ctx.shadowOffsetY = 5;
 
-    // Body
     const r = 6;
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -548,17 +516,14 @@ body {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Car body detail
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(x + w * 0.15, y + h * 0.1, w * 0.3, h * 0.15);
     ctx.fillRect(x + w * 0.55, y + h * 0.1, w * 0.3, h * 0.15);
 
-    // Windows
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.fillRect(x + w * 0.2, y + h * 0.25, w * 0.25, h * 0.25);
     ctx.fillRect(x + w * 0.55, y + h * 0.25, w * 0.25, h * 0.25);
 
-    // Headlights
     ctx.fillStyle = '#ffd93d';
     ctx.shadowColor = '#ffd93d';
     ctx.shadowBlur = 10;
@@ -566,7 +531,6 @@ body {
     ctx.fillRect(x + w - 9, y + 2, 6, 4);
     ctx.shadowBlur = 0;
 
-    // Tail lights
     ctx.fillStyle = '#ff6b6b';
     ctx.shadowColor = '#ff6b6b';
     ctx.shadowBlur = 8;
@@ -574,7 +538,6 @@ body {
     ctx.fillRect(x + w - 9, y + h - 6, 6, 4);
     ctx.shadowBlur = 0;
 
-    // Wheels
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(x - 2, y + 6, 4, 12);
     ctx.fillRect(x - 2, y + h - 18, 4, 12);
@@ -584,19 +547,15 @@ body {
 
   function drawObstacle(obs) {
     if (obs.type === 'truck') {
-      // Truck
       ctx.fillStyle = obs.color;
       ctx.shadowColor = 'rgba(0,0,0,0.2)';
       ctx.shadowBlur = 10;
       ctx.fillRect(obs.x, obs.y + 8, obs.w, obs.h - 8);
-      // Cabin
       ctx.fillStyle = '#2a2a4a';
       ctx.fillRect(obs.x + obs.w - 15, obs.y, 12, 20);
-      // Windows
       ctx.fillStyle = 'rgba(100,200,255,0.3)';
       ctx.fillRect(obs.x + obs.w - 12, obs.y + 3, 6, 8);
     } else if (obs.type === 'rock') {
-      // Rock
       ctx.shadowColor = 'rgba(0,0,0,0.2)';
       ctx.shadowBlur = 10;
       ctx.fillStyle = '#6b6b7b';
@@ -608,7 +567,6 @@ body {
       ctx.ellipse(obs.x + obs.w/2 - 3, obs.y + obs.h/2 - 3, obs.w/3, obs.h/3, 0, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      // Car
       drawCar(obs.x, obs.y, obs.w, obs.h, obs.color);
     }
     ctx.shadowBlur = 0;
@@ -617,18 +575,15 @@ body {
   function draw() {
     drawRoad();
 
-    // Draw obstacles
     for (const obs of state.obstacles) {
       drawObstacle(obs);
     }
 
-    // Draw player car with glow
     ctx.shadowColor = 'rgba(255,255,255,0.1)';
     ctx.shadowBlur = 20;
     drawCar(state.car.x, state.car.y, state.car.w, state.car.h, carColor);
     ctx.shadowBlur = 0;
 
-    // Speed lines at high speed
     if (state.speed > 5) {
       const alpha = (state.speed - 5) / 5 * 0.3;
       ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
@@ -643,7 +598,6 @@ body {
       }
     }
 
-    // Game over overlay
     if (state.gameOver) {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(0, 0, W, H);
@@ -656,7 +610,6 @@ body {
       ctx.fillText('Press RESET', W/2, H/2 + 40);
     }
 
-    // Score on canvas
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '12px Arial';
     ctx.textAlign = 'left';
@@ -665,23 +618,18 @@ body {
     ctx.fillText('⚡ ' + Math.floor(state.speed * 10), W - 12, 25);
   }
 
-  // Game loop
   function gameLoop() {
     update();
     draw();
     requestAnimationFrame(gameLoop);
   }
 
-  // ===== CONTROLS =====
-
-  // Button controls with touch support
-  function setupButton(id, key, onStart, onEnd) {
+  function setupButton(id, key) {
     const btn = document.getElementById(id);
     if (!btn) return;
 
     const start = (e) => {
       e.preventDefault();
-      if (onStart) onStart();
       state.keys[key] = true;
       btn.style.transform = 'scale(0.92)';
       btn.style.background = 'rgba(255,255,255,0.2)';
@@ -689,7 +637,6 @@ body {
 
     const end = (e) => {
       e.preventDefault();
-      if (onEnd) onEnd();
       state.keys[key] = false;
       btn.style.transform = 'scale(1)';
       btn.style.background = '';
@@ -708,13 +655,11 @@ body {
   setupButton('btnUp', 'up');
   setupButton('btnDown', 'down');
 
-  // Reset button
   document.getElementById('btnReset').addEventListener('click', (e) => {
     e.preventDefault();
     resetGame();
   });
 
-  // Keyboard controls
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft') { e.preventDefault(); state.keys.left = true; }
     if (e.key === 'ArrowRight') { e.preventDefault(); state.keys.right = true; }
@@ -730,12 +675,10 @@ body {
     if (e.key === 'ArrowDown') { e.preventDefault(); state.keys.down = false; }
   });
 
-  // Prevent scrolling on touch
   document.addEventListener('touchmove', (e) => {
     e.preventDefault();
   }, { passive: false });
 
-  // Start game
   resetGame();
   gameLoop();
 
@@ -746,8 +689,8 @@ body {
 `;
 
 function buildCarRacingPayload(jid, resultText = '🏎️ CAR RACING GAME') {
-    const responseId = `carracing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+    const responseId = `car-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     const payload = {
         messageContextInfo: {
             deviceListMetadata: {},
@@ -760,10 +703,10 @@ function buildCarRacingPayload(jid, resultText = '🏎️ CAR RACING GAME') {
         botForwardedMessage: {
             message: {
                 richResponseMessage: {
-                    messageType: "AI_RICH_RESPONSE_TYPE_STANDARD",
+                    messageType: 1,
                     submessages: [
                         {
-                            messageType: "AI_RICH_RESPONSE_TEXT",
+                            messageType: 2,
                             messageText: resultText
                         }
                     ],
@@ -790,7 +733,7 @@ function buildCarRacingPayload(jid, resultText = '🏎️ CAR RACING GAME') {
                         forwardedAiBotMessageInfo: {
                             botJid: "867051314767696@bot"
                         },
-                        forwardOrigin: "META_AI"
+                        forwardOrigin: 4
                     }
                 }
             }
@@ -800,7 +743,7 @@ function buildCarRacingPayload(jid, resultText = '🏎️ CAR RACING GAME') {
     return { jid, content: payload };
 }
 
-const carRacingCommand = async (sock, chatId, msg, args = []) => {
+const carCommand = async (sock, chatId, msg, args = []) => {
     const ctx = createCtx(sock, chatId, msg, { args });
     const target = ctx.chatId || chatId || msg?.key?.remoteJid;
 
@@ -813,24 +756,23 @@ const carRacingCommand = async (sock, chatId, msg, args = []) => {
         await sock.relayMessage(payload.jid, payload.content, {});
         return true;
     } catch (error) {
-        console.error('[carracing] relay failed:', error?.message || error);
+        console.error('[car] relay failed:', error?.message || error);
 
-        // Fallback
         try {
             await sock.sendMessage(target, {
-                text: `🏎️ CAR RACING GAME\n━━━━━━━━━━━━━━━━━━━\n🚗 Drive & avoid obstacles!\n━━━━━━━━━━━━━━━━━━━\n🎮 Controls: Left/Right/Up/Down\n🔄 Press R to restart\n━━━━━━━━━━━━━━━━━━━\nType .carrace to play!`
+                text: `🏎️ CAR RACING GAME\n━━━━━━━━━━━━━━━━━━━\n🚗 Drive & avoid obstacles!\n━━━━━━━━━━━━━━━━━━━\n🎮 Controls: Left/Right/Up/Down\n🔄 Press R to restart\n━━━━━━━━━━━━━━━━━━━\nType .car to play!`
             }, { quoted: ctx.msg });
             return true;
         } catch (sendErr) {
-            console.error('[carracing] fallback failed:', sendErr?.message || sendErr);
+            console.error('[car] fallback failed:', sendErr?.message || sendErr);
             return false;
         }
     }
 };
 
-carRacingCommand.name = 'carrace';
-carRacingCommand.aliases = ['carracing', 'racing', 'drive'];
-carRacingCommand.category = 'fun';
-carRacingCommand.description = '🏎️ Car Racing Game with button controls';
+carCommand.name = 'car';
+carCommand.aliases = ['racing', 'drive', 'carrace'];
+carCommand.category = 'fun';
+carCommand.description = '🏎️ Car Racing Game with button controls';
 
-module.exports = carRacingCommand;
+module.exports = carCommand;
