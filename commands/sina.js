@@ -1,878 +1,762 @@
 const { createCtx } = require('../lib/messageBuilder');
 const { randomUUID } = require('crypto');
 
-// HTML ya Music Player - Sina Mda Nae (Embedded Audio)
-const musicPlayerHtml = (audioBase64) => `
+// HTML ya Mickey Advice - Music Player
+const musicPlayerHtml = `
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🎵 Mickey Advice</title>
 <style>
-
-*{
-box-sizing:border-box;
--webkit-tap-highlight-color:transparent;
--webkit-user-select:none;
-user-select:none;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-html,
-body{
-margin:0;
-padding:0;
-width:100%;
-overflow:hidden;
-background:transparent;
-font-family:Arial,Helvetica,sans-serif;
+body {
+  background: transparent;
+  font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
 }
 
-.musicWrap{
-width:100%;
-padding:7px;
-border:1px solid rgba(255,255,255,.16);
-border-radius:22px;
-background:#050505;
-box-shadow:
-0 10px 28px rgba(0,0,0,.65),
-inset 0 1px 0 rgba(255,255,255,.07);
+.container {
+  width: 100%;
+  max-width: 420px;
+  margin: auto;
+  padding: 20px;
+  background: linear-gradient(145deg, #0f0c29, #302b63, #24243e);
+  border-radius: 28px;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 25px 70px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.05);
+  position: relative;
+  overflow: hidden;
 }
 
-.musicFrame{
-position:relative;
-overflow:hidden;
-padding:16px;
-border:1px solid rgba(255,255,255,.16);
-border-radius:18px;
-background:
-linear-gradient(
-145deg,
-#111113 0%,
-#080809 45%,
-#050505 100%
-);
-box-shadow:
-0 0 25px rgba(255,255,255,.025),
-inset 0 1px 0 rgba(255,255,255,.07);
+.container::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(ellipse at 30% 20%, rgba(108, 92, 231, 0.08), transparent 60%);
+  pointer-events: none;
 }
 
-.musicGlow{
-position:absolute;
-width:170px;
-height:170px;
-right:-75px;
-top:-85px;
-border-radius:50%;
-background:rgba(255,255,255,.045);
-filter:blur(50px);
-pointer-events:none;
+.header {
+  text-align: center;
+  margin-bottom: 18px;
+  position: relative;
+  z-index: 1;
 }
 
-.musicHeader{
-position:relative;
-z-index:2;
-display:flex;
-align-items:center;
-justify-content:space-between;
-margin-bottom:14px;
+.header-title {
+  font-size: 26px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #f7971e, #ffd200);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 40px rgba(255, 210, 0, 0.15);
+  letter-spacing: -0.5px;
 }
 
-.musicBrand{
-display:flex;
-align-items:center;
-gap:9px;
-color:#fff;
-font:bold 15px Arial,sans-serif;
-letter-spacing:1px;
-text-shadow:
-0 2px 5px rgba(0,0,0,.7);
+.header-sub {
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+  margin-top: 4px;
+  letter-spacing: 2px;
+  font-weight: 300;
 }
 
-.musicBrandIcon{
-width:30px;
-height:30px;
-display:flex;
-align-items:center;
-justify-content:center;
-border-radius:10px;
-background:#fff;
-color:#000;
-font:bold 13px Arial,sans-serif;
-letter-spacing:0;
-box-shadow:
-0 4px 12px rgba(0,0,0,.45),
-inset 0 1px 0 rgba(255,255,255,.9);
+.header-sub span {
+  color: #f7971e;
+  font-weight: 600;
 }
 
-.musicLive{
-padding:5px 9px;
-border:1px solid rgba(255,255,255,.22);
-border-radius:9px;
-background:#0d0d0f;
-color:#ddd;
-font:bold 8px monospace;
-letter-spacing:1.2px;
+.album-art {
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 300px;
+  margin: 0 auto 18px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #1a1a3e, #2d2b55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255,215,0,0.15);
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5), inset 0 0 60px rgba(255,215,0,0.03);
 }
 
-.musicMain{
-position:relative;
-z-index:2;
-display:flex;
-align-items:center;
-gap:15px;
-padding:14px;
-border:1px solid rgba(255,255,255,.09);
-border-radius:16px;
-background:
-linear-gradient(
-145deg,
-#151517,
-#0d0d0f
-);
-box-shadow:
-0 5px 14px rgba(0,0,0,.4),
-inset 0 1px 0 rgba(255,255,255,.045);
+.album-art .icon {
+  font-size: 90px;
+  opacity: 0.5;
+  filter: drop-shadow(0 0 30px rgba(255,215,0,0.2));
+  animation: float 3s ease-in-out infinite;
 }
 
-.musicCover{
-position:relative;
-flex:none;
-width:78px;
-height:78px;
-display:flex;
-align-items:center;
-justify-content:center;
-border-radius:18px;
-background:#070708;
-border:2px solid #eee;
-box-shadow:
-0 0 17px rgba(255,255,255,.10),
-inset 0 0 20px rgba(255,255,255,.035);
-overflow:hidden;
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
 }
 
-.musicVinyl{
-position:relative;
-width:61px;
-height:61px;
-border-radius:50%;
-background:
-repeating-radial-gradient(
-circle at center,
-#080808 0px,
-#101010 2px,
-#070707 4px,
-#141414 6px
-);
-border:1px solid #444;
-box-shadow:
-0 0 13px rgba(255,255,255,.10),
-inset 0 0 8px rgba(255,255,255,.08);
-transform:rotate(0deg);
+.album-art .wave {
+  position: absolute;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  height: 35px;
 }
 
-.musicVinyl::before{
-content:'';
-position:absolute;
-inset:5px;
-border-radius:50%;
-background:
-repeating-radial-gradient(
-circle at center,
-transparent 0px,
-transparent 4px,
-rgba(255,255,255,.06) 5px,
-transparent 6px
-);
+.album-art .wave span {
+  display: block;
+  width: 5px;
+  background: linear-gradient(to top, #f7971e, #ffd200);
+  border-radius: 3px;
+  animation: wave 0.8s ease-in-out infinite;
+  box-shadow: 0 0 10px rgba(255,210,0,0.2);
 }
 
-.musicVinyl::after{
-content:'';
-position:absolute;
-left:50%;
-top:50%;
-width:19px;
-height:19px;
-transform:translate(-50%,-50%);
-border-radius:50%;
-background:
-radial-gradient(
-circle,
-#fff 0 12%,
-#777 13% 28%,
-#202020 29% 65%,
-#aaa 66% 72%,
-#111 73% 100%
-);
-border:1px solid #ddd;
-box-shadow:
-0 0 8px rgba(255,255,255,.25);
+.album-art .wave span:nth-child(1) { height: 12px; animation-delay: 0s; }
+.album-art .wave span:nth-child(2) { height: 22px; animation-delay: 0.1s; }
+.album-art .wave span:nth-child(3) { height: 32px; animation-delay: 0.2s; }
+.album-art .wave span:nth-child(4) { height: 22px; animation-delay: 0.3s; }
+.album-art .wave span:nth-child(5) { height: 12px; animation-delay: 0.4s; }
+
+@keyframes wave {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.3); }
 }
 
-.musicVinyl.playing{
-animation:
-vinylRotate 2.4s linear infinite;
+.album-art .wave.paused span {
+  animation-play-state: paused;
+  opacity: 0.2;
 }
 
-@keyframes vinylRotate{
-from{
-transform:rotate(0deg);
-}
-to{
-transform:rotate(360deg);
-}
+.song-info {
+  text-align: center;
+  margin-bottom: 18px;
+  position: relative;
+  z-index: 1;
 }
 
-.musicDetails{
-min-width:0;
-flex:1;
+.song-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 
-.musicTitle{
-color:#fff;
-font:bold 17px Arial,sans-serif;
-white-space:nowrap;
-overflow:hidden;
-text-overflow:ellipsis;
+.song-artist {
+  font-size: 14px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 4px;
+  font-weight: 300;
+  letter-spacing: 1px;
 }
 
-.musicSubtitle{
-margin-top:5px;
-color:#777;
-font:10px monospace;
-letter-spacing:.3px;
+.progress-container {
+  width: 100%;
+  margin-bottom: 14px;
+  position: relative;
+  z-index: 1;
 }
 
-.visualizer{
-height:27px;
-display:flex;
-align-items:center;
-gap:3px;
-margin-top:9px;
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  cursor: pointer;
+  position: relative;
+  touch-action: none;
+  overflow: visible;
 }
 
-.visualizer span{
-width:3px;
-height:4px;
-border-radius:4px;
-background:#ddd;
-opacity:.85;
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f7971e, #ffd200);
+  border-radius: 4px;
+  width: 0%;
+  transition: width 0.1s linear;
+  box-shadow: 0 0 15px rgba(255,210,0,0.2);
+  position: relative;
 }
 
-.visualizer.playing span{
-animation:
-musicBars .75s ease-in-out infinite alternate;
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  background: radial-gradient(circle, #ffd200, #f7971e);
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.2);
+  box-shadow: 0 0 20px rgba(255,210,0,0.3);
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
-.visualizer span:nth-child(1){animation-delay:-.70s;}
-.visualizer span:nth-child(2){animation-delay:-.50s;}
-.visualizer span:nth-child(3){animation-delay:-.20s;}
-.visualizer span:nth-child(4){animation-delay:-.60s;}
-.visualizer span:nth-child(5){animation-delay:-.30s;}
-.visualizer span:nth-child(6){animation-delay:-.80s;}
-.visualizer span:nth-child(7){animation-delay:-.40s;}
-.visualizer span:nth-child(8){animation-delay:-.10s;}
-.visualizer span:nth-child(9){animation-delay:-.55s;}
-.visualizer span:nth-child(10){animation-delay:-.25s;}
-.visualizer span:nth-child(11){animation-delay:-.65s;}
-.visualizer span:nth-child(12){animation-delay:-.35s;}
-
-@keyframes musicBars{
-0%{height:4px;}
-50%{height:13px;}
-100%{height:25px;}
+.progress-bar:hover .progress-fill::after {
+  opacity: 1;
 }
 
-.musicProgressArea{
-position:relative;
-z-index:2;
-margin-top:16px;
+.progress-time {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  margin-top: 6px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
-.musicProgress{
-position:relative;
-width:100%;
-height:7px;
-border-radius:8px;
-background:#222225;
-border:1px solid rgba(255,255,255,.09);
-overflow:visible;
-cursor:pointer;
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  margin-bottom: 14px;
+  position: relative;
+  z-index: 1;
 }
 
-.musicProgressBar{
-position:absolute;
-left:0;
-top:-1px;
-width:0%;
-height:7px;
-border-radius:8px;
-background:#eee;
-box-shadow:
-0 0 8px rgba(255,255,255,.25);
+.controls button {
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
 }
 
-.musicProgressDot{
-position:absolute;
-left:0%;
-top:50%;
-width:14px;
-height:14px;
-transform:translate(-50%,-50%);
-border-radius:50%;
-background:#fff;
-border:2px solid #888;
-box-shadow:
-0 0 8px rgba(255,255,255,.25);
+.controls button:active {
+  transform: scale(0.88);
+  background: rgba(255,255,255,0.12);
 }
 
-.musicTime{
-display:flex;
-align-items:center;
-justify-content:space-between;
-margin-top:8px;
-color:#777;
-font:9px monospace;
+.controls .btn-play {
+  width: 72px;
+  height: 72px;
+  font-size: 34px;
+  background: linear-gradient(135deg, #f7971e, #ffd200);
+  border-color: transparent;
+  box-shadow: 0 8px 30px rgba(255,210,0,0.25);
+  color: #1a1a2e;
 }
 
-.musicControls{
-position:relative;
-z-index:2;
-display:flex;
-align-items:center;
-gap:13px;
-margin-top:15px;
+.controls .btn-play:active {
+  transform: scale(0.88);
+  box-shadow: 0 4px 15px rgba(255,210,0,0.15);
 }
 
-.musicButton{
-width:91px;
-height:50px;
-display:flex;
-align-items:center;
-justify-content:center;
-border:1px solid #fff;
-border-radius:16px;
-background:#fff;
-color:#000;
-font:bold 11px Arial,sans-serif;
-letter-spacing:1.5px;
-box-shadow:
-0 5px 12px rgba(0,0,0,.45),
-0 0 12px rgba(255,255,255,.08);
-transition:
-transform .12s ease,
-background .12s ease;
-cursor:pointer;
+.controls .btn-play.paused {
+  background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+  box-shadow: 0 8px 30px rgba(255,75,75,0.25);
+  color: #fff;
 }
 
-.musicButton:active{
-transform:scale(.94);
-background:#d8d8d8;
+.controls .btn-small {
+  width: 48px;
+  height: 48px;
+  font-size: 18px;
 }
 
-.musicVolumeBox{
-flex:1;
-height:50px;
-display:flex;
-align-items:center;
-gap:10px;
-padding:0 13px;
-border:1px solid rgba(255,255,255,.09);
-border-radius:16px;
-background:#111113;
-box-shadow:
-inset 0 1px 0 rgba(255,255,255,.035);
+.controls .btn-small:active {
+  transform: scale(0.88);
 }
 
-.musicVolumeLabel{
-width:32px;
-color:#aaa;
-font:bold 8px monospace;
-letter-spacing:.8px;
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 0 4px;
+  position: relative;
+  z-index: 1;
 }
 
-.musicVolume{
-width:100%;
-height:4px;
-accent-color:#fff;
-cursor:pointer;
+.volume-control .vol-icon {
+  font-size: 16px;
+  color: rgba(255,255,255,0.3);
 }
 
-.musicStatus{
-position:relative;
-z-index:2;
-margin-top:13px;
-text-align:center;
-color:#ddd;
-font:bold 9px monospace;
-letter-spacing:1.8px;
-min-height:20px;
+.volume-slider {
+  flex: 1;
+  height: 3px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  outline: none;
 }
 
-.musicStatus.error{
-color:#ff6b6b;
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f7971e, #ffd200);
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.15);
+  box-shadow: 0 0 15px rgba(255,210,0,0.15);
 }
 
-.musicStatus.success{
-color:#51cf66;
+.volume-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f7971e, #ffd200);
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.15);
 }
 
-.musicLine{
-position:relative;
-z-index:2;
-height:1px;
-margin-top:12px;
-background:
-linear-gradient(
-90deg,
-transparent,
-#555,
-transparent
-);
-opacity:.6;
+.url-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  position: relative;
+  z-index: 1;
 }
 
-.musicFooter{
-position:relative;
-z-index:2;
-display:flex;
-align-items:center;
-justify-content:center;
-margin-top:10px;
-color:#505055;
-font:8px monospace;
-letter-spacing:.5px;
+.url-input input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  color: #fff;
+  font-size: 12px;
+  outline: none;
+  min-width: 0;
+  backdrop-filter: blur(10px);
+  transition: border-color 0.3s;
 }
 
-.musicUrlInput{
-display:flex;
-gap:6px;
-margin-top:10px;
+.url-input input::placeholder {
+  color: rgba(255,255,255,0.2);
 }
 
-.musicUrlInput input{
-flex:1;
-padding:8px 10px;
-border:1px solid rgba(255,255,255,.1);
-border-radius:10px;
-background:rgba(255,255,255,.05);
-color:#fff;
-font-size:10px;
-outline:none;
-min-width:0;
+.url-input input:focus {
+  border-color: rgba(255,210,0,0.3);
 }
 
-.musicUrlInput input::placeholder{
-color:#555;
+.url-input button {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f7971e, #ffd200);
+  color: #1a1a2e;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition: all 0.15s;
 }
 
-.musicUrlInput input:focus{
-border-color:#fff;
+.url-input button:active {
+  transform: scale(0.95);
 }
 
-.musicUrlInput button{
-padding:8px 14px;
-border:none;
-border-radius:10px;
-background:#fff;
-color:#000;
-font:bold 10px Arial,sans-serif;
-cursor:pointer;
-transition:transform .1s;
+.status-msg {
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255,255,255,0.2);
+  margin-top: 12px;
+  min-height: 20px;
+  position: relative;
+  z-index: 1;
+  letter-spacing: 0.5px;
+  font-weight: 300;
 }
 
-.musicUrlInput button:active{
-transform:scale(.95);
+.status-msg.error {
+  color: #ff6b6b;
 }
 
+.status-msg.success {
+  color: #ffd200;
+}
+
+@media (max-width: 380px) {
+  .controls button {
+    width: 46px;
+    height: 46px;
+    font-size: 18px;
+  }
+  .controls .btn-play {
+    width: 60px;
+    height: 60px;
+    font-size: 26px;
+  }
+  .controls .btn-small {
+    width: 38px;
+    height: 38px;
+    font-size: 14px;
+  }
+  .header-title { font-size: 22px; }
+  .song-title { font-size: 17px; }
+  .container { padding: 14px; }
+}
 </style>
+</head>
+<body>
 
+<div class="container">
+  <div class="header">
+    <div class="header-title">🎵 Mickey Advice</div>
+    <div class="header-sub">🎧 <span>Ushauri</span> • Mickey Mozy</div>
+  </div>
 
-<div class="musicWrap">
+  <div class="album-art" id="albumArt">
+    <div class="icon">🎵</div>
+    <div class="wave" id="wave">
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+  </div>
 
-<div class="musicFrame">
+  <div class="song-info">
+    <div class="song-title" id="songTitle">Ushauri</div>
+    <div class="song-artist" id="songArtist">Mickey Mozy</div>
+  </div>
 
-<div class="musicGlow"></div>
+  <div class="progress-container">
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-time">
+      <span id="currentTime">0:00</span>
+      <span id="totalTime">0:00</span>
+    </div>
+  </div>
 
+  <div class="controls">
+    <button class="btn-small" id="btnPrev">⏮</button>
+    <button class="btn-play" id="btnPlay">▶</button>
+    <button class="btn-small" id="btnNext">⏭</button>
+  </div>
 
-<!-- HEADER -->
+  <div class="volume-control">
+    <span class="vol-icon">🔊</span>
+    <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.01" value="0.8">
+  </div>
 
-<div class="musicHeader">
+  <div class="url-input">
+    <input type="text" id="urlInput" placeholder="Paste MP3 URL here...">
+    <button id="btnLoad">Load</button>
+  </div>
 
-<div class="musicBrand">
-
-<div class="musicBrandIcon">
-🎵
+  <div class="status-msg" id="statusMsg">🎵 Tap Load or Play to start</div>
 </div>
-
-SINA MDA NAE
-
-</div>
-
-<div class="musicLive">
-MP3
-</div>
-
-</div>
-
-
-<!-- MAIN -->
-
-<div class="musicMain">
-
-
-<div class="musicCover">
-
-<div
-class="musicVinyl"
-id="musicVinyl">
-</div>
-
-</div>
-
-
-<div class="musicDetails">
-
-<div class="musicTitle">
-Sina Mda Nae
-</div>
-
-<div class="musicSubtitle">
-MICKEY MOZY • MP3
-</div>
-
-
-<div
-class="visualizer"
-id="visualizer">
-
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-
-</div>
-
-</div>
-
-</div>
-
-
-<!-- PROGRESS -->
-
-<div class="musicProgressArea">
-
-<div
-class="musicProgress"
-id="musicProgress">
-
-<div
-class="musicProgressBar"
-id="musicProgressBar">
-</div>
-
-<div
-class="musicProgressDot"
-id="musicProgressDot">
-</div>
-
-</div>
-
-
-<div class="musicTime">
-
-<span id="musicCurrent">
-0:00
-</span>
-
-<span id="musicDuration">
-0:00
-</span>
-
-</div>
-
-</div>
-
-
-<!-- CONTROLS -->
-
-<div class="musicControls">
-
-
-<button
-class="musicButton"
-id="musicPlay">
-▶ PLAY
-</button>
-
-
-<div class="musicVolumeBox">
-
-<div class="musicVolumeLabel">
-VOL
-</div>
-
-<input
-class="musicVolume"
-id="musicVolume"
-type="range"
-min="0"
-max="1"
-step=".01"
-value=".8">
-
-</div>
-
-</div>
-
-
-<!-- URL INPUT -->
-
-<div class="musicUrlInput">
-<input type="text" id="urlInput" placeholder="Paste MP3 URL here...">
-<button id="loadBtn">LOAD</button>
-</div>
-
-
-<!-- STATUS -->
-
-<div
-class="musicStatus"
-id="musicStatus">
-🎵 READY TO PLAY
-</div>
-
-
-<div class="musicLine"></div>
-
-
-<div class="musicFooter">
-🎵 SINA MDA NAE • MICKEY MOZY
-</div>
-
-
-</div>
-
-</div>
-
-
-<audio
-id="localMusic"
-preload="auto"
-src="${audioBase64 ? `data:audio/mpeg;base64,${audioBase64}` : ''}">
-</audio>
-
 
 <script>
-(function(){
+(function() {
+  const audio = new Audio();
+  let isPlaying = false;
+  let isLoaded = false;
 
-const audio = document.getElementById('localMusic')
-const play = document.getElementById('musicPlay')
-const volume = document.getElementById('musicVolume')
-const progress = document.getElementById('musicProgress')
-const progressBar = document.getElementById('musicProgressBar')
-const progressDot = document.getElementById('musicProgressDot')
-const current = document.getElementById('musicCurrent')
-const duration = document.getElementById('musicDuration')
-const status = document.getElementById('musicStatus')
-const visualizer = document.getElementById('visualizer')
-const vinyl = document.getElementById('musicVinyl')
-const urlInput = document.getElementById('urlInput')
-const loadBtn = document.getElementById('loadBtn')
+  const playBtn = document.getElementById('btnPlay');
+  const prevBtn = document.getElementById('btnPrev');
+  const nextBtn = document.getElementById('btnNext');
+  const progressFill = document.getElementById('progressFill');
+  const progressBar = document.getElementById('progressBar');
+  const currentTimeEl = document.getElementById('currentTime');
+  const totalTimeEl = document.getElementById('totalTime');
+  const volumeSlider = document.getElementById('volumeSlider');
+  const urlInput = document.getElementById('urlInput');
+  const loadBtn = document.getElementById('btnLoad');
+  const statusMsg = document.getElementById('statusMsg');
+  const songTitle = document.getElementById('songTitle');
+  const songArtist = document.getElementById('songArtist');
+  const wave = document.getElementById('wave');
 
-let isLoaded = false
-let isLoading = false
-let hasEmbeddedAudio = ${audioBase64 ? 'true' : 'false'};
+  // Default URL - Ushauri by Mickey Mozy
+  const defaultUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/ushauri.mp3';
 
-// URLs za backup
-const backupUrls = [
-  'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3',
-  'https://cdn.jsdelivr.net/gh/Mickeymozy/Mickey-Vip/sina%20mda%20nae.mp3'
-]
+  function formatTime(seconds) {
+    if (isNaN(seconds) || !isFinite(seconds) || seconds < 0) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return mins + ':' + (secs < 10 ? '0' : '') + secs;
+  }
 
-let urlIndex = 0
+  function updateUI() {
+    if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+      const progress = (audio.currentTime / audio.duration) * 100;
+      progressFill.style.width = Math.min(100, progress) + '%';
+      currentTimeEl.textContent = formatTime(audio.currentTime);
+      totalTimeEl.textContent = formatTime(audio.duration);
+    }
+  }
 
-function formatTime(sec){
-if(!Number.isFinite(sec) || sec < 0 || sec === Infinity){
-return '0:00'
-}
-const m = Math.floor(sec / 60)
-const s = Math.floor(sec % 60)
-return m + ':' + String(s).padStart(2,'0')
-}
+  function setStatus(msg, type) {
+    statusMsg.textContent = msg;
+    statusMsg.className = 'status-msg' + (type ? ' ' + type : '');
+  }
 
-function updateProgress(){
-if(!isLoaded || !Number.isFinite(audio.duration) || audio.duration <= 0){
-return
-}
-const percent = (audio.currentTime / audio.duration) * 100
-progressBar.style.width = Math.min(100, percent) + '%'
-progressDot.style.left = Math.min(100, percent) + '%'
-current.textContent = formatTime(audio.currentTime)
-}
+  function loadAudio(url, title, artist) {
+    if (!url) {
+      setStatus('❌ No URL provided', 'error');
+      return;
+    }
 
-function setPlaying(){
-play.innerHTML = '⏸ PAUSE'
-status.textContent = '🎵 NOW PLAYING'
-status.className = 'musicStatus success'
-visualizer.classList.add('playing')
-vinyl.classList.add('playing')
-}
+    setStatus('⏳ Loading...', '');
+    audio.src = url;
+    audio.load();
 
-function setPaused(){
-play.innerHTML = '▶ PLAY'
-status.textContent = '⏸ PAUSED'
-status.className = 'musicStatus'
-visualizer.classList.remove('playing')
-vinyl.classList.remove('playing')
-}
+    audio.onloadedmetadata = function() {
+      isLoaded = true;
+      if (title) songTitle.textContent = title;
+      if (artist) songArtist.textContent = artist;
+      totalTimeEl.textContent = formatTime(audio.duration);
+      setStatus('✅ Loaded: ' + (title || 'Unknown'), 'success');
+      setTimeout(playAudio, 300);
+    };
 
-function setStatus(msg, type){
-status.textContent = msg
-status.className = 'musicStatus' + (type ? ' ' + type : '')
-}
+    audio.onerror = function() {
+      setStatus('❌ Failed to load. Check URL or try again', 'error');
+      isLoaded = false;
+      playBtn.textContent = '▶';
+      isPlaying = false;
+      wave.classList.add('paused');
+      playBtn.classList.add('paused');
+    };
 
-function loadAudio(url){
-if(isLoading) return
-isLoading = true
-play.classList.add('loading')
-setStatus('⏳ LOADING...', '')
+    audio.ontimeupdate = function() {
+      updateUI();
+    };
 
-audio.src = url
-audio.load()
+    audio.onended = function() {
+      isPlaying = false;
+      playBtn.textContent = '▶';
+      wave.classList.add('paused');
+      playBtn.classList.add('paused');
+      setStatus('⏹️ Playback complete', '');
+    };
 
-audio.onloadedmetadata = function(){
-isLoaded = true
-isLoading = false
-play.classList.remove('loading')
-duration.textContent = formatTime(audio.duration)
-setStatus('✅ LOADED - Tap PLAY', 'success')
-setPaused()
-progressBar.style.width = '0%'
-progressDot.style.left = '0%'
-current.textContent = '0:00'
-}
+    audio.onplay = function() {
+      isPlaying = true;
+      playBtn.textContent = '⏸';
+      wave.classList.remove('paused');
+      playBtn.classList.remove('paused');
+      setStatus('▶️ Playing...', 'success');
+    };
 
-audio.onerror = function(){
-isLoading = false
-play.classList.remove('loading')
-// Jaribu URL ya backup
-if(urlIndex < backupUrls.length){
-setStatus('🔄 TRYING BACKUP...', '')
-loadAudio(backupUrls[urlIndex])
-urlIndex++
-} else {
-setStatus('❌ FAILED - Enter URL manually', 'error')
-urlIndex = 0
-}
-}
+    audio.onpause = function() {
+      if (!audio.ended) {
+        isPlaying = false;
+        playBtn.textContent = '▶';
+        wave.classList.add('paused');
+        playBtn.classList.add('paused');
+        setStatus('⏸️ Paused', '');
+      }
+    };
+  }
 
-audio.ontimeupdate = function(){
-updateProgress()
-}
+  function togglePlay() {
+    if (!isLoaded) {
+      const url = urlInput.value.trim() || defaultUrl;
+      if (url) {
+        urlInput.value = url;
+        loadAudio(url, 'Ushauri', 'Mickey Mozy');
+        return;
+      }
+      setStatus('❌ No audio loaded. Paste URL or tap Load', 'error');
+      return;
+    }
 
-audio.onplay = function(){
-setPlaying()
-}
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play().catch(() => {
+        setStatus('❌ Playback error. Try reloading', 'error');
+      });
+    }
+  }
 
-audio.onpause = function(){
-if(!audio.ended){
-setPaused()
-}
-}
+  function playAudio() {
+    audio.play().catch(() => {
+      setStatus('❌ Auto-play blocked. Tap Play', 'error');
+    });
+  }
 
-audio.onended = function(){
-play.innerHTML = '▶ PLAY'
-setStatus('⏹️ PLAYBACK COMPLETE', '')
-visualizer.classList.remove('playing')
-vinyl.classList.remove('playing')
-progressBar.style.width = '0%'
-progressDot.style.left = '0%'
-current.textContent = '0:00'
-}
-}
+  function setVolume(value) {
+    audio.volume = parseFloat(value);
+  }
 
-// PLAY BUTTON
-play.addEventListener('click', function(){
-try{
-if(!isLoaded){
-// Jaribu kucheza embedded audio first
-if(hasEmbeddedAudio && audio.src && audio.src.includes('data:audio')){
-loadAudio(audio.src)
-return
-}
-if(urlInput.value.trim()){
-loadAudio(urlInput.value.trim())
-} else {
-loadAudio(backupUrls[0])
-}
-return
-}
-if(audio.paused){
-audio.play().then(function(){
-setPlaying()
-}).catch(function(){
-setStatus('❌ PLAY ERROR', 'error')
-})
-}else{
-audio.pause()
-setPaused()
-}
-}catch(error){
-setStatus('❌ ERROR: ' + error.message, 'error')
-}
-})
+  function seek(e) {
+    if (!isLoaded || !audio.duration || audio.duration <= 0) return;
+    const rect = progressBar.getBoundingClientRect();
+    const x = (e.clientX || e.touches?.[0]?.clientX || 0) - rect.left;
+    const percent = Math.max(0, Math.min(1, x / rect.width));
+    audio.currentTime = percent * audio.duration;
+    updateUI();
+  }
 
-// LOAD BUTTON
-loadBtn.addEventListener('click', function(){
-const url = urlInput.value.trim()
-if(url){
-urlIndex = 0
-loadAudio(url)
-} else {
-setStatus('❌ Enter a valid URL', 'error')
-}
-})
+  // ===== EVENT LISTENERS =====
 
-// ENTER key
-urlInput.addEventListener('keydown', function(e){
-if(e.key === 'Enter'){
-loadBtn.click()
-}
-})
+  playBtn.addEventListener('click', togglePlay);
 
-// VOLUME
-volume.addEventListener('input', function(){
-audio.volume = Number(volume.value)
-})
+  prevBtn.addEventListener('click', function() {
+    if (isLoaded) {
+      audio.currentTime = Math.max(0, audio.currentTime - 10);
+      updateUI();
+      setStatus('⏮️ -10s', '');
+    }
+  });
 
-// PROGRESS CLICK
-progress.addEventListener('pointerdown', function(e){
-if(!isLoaded || !Number.isFinite(audio.duration) || audio.duration <= 0){
-return
-}
-const rect = progress.getBoundingClientRect()
-const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width))
-audio.currentTime = (x / rect.width) * audio.duration
-updateProgress()
-})
+  nextBtn.addEventListener('click', function() {
+    if (isLoaded) {
+      audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 10);
+      updateUI();
+      setStatus('⏭️ +10s', '');
+    }
+  });
 
-// Auto-load - jaribu embedded audio first
-setTimeout(function(){
-if(hasEmbeddedAudio && audio.src && audio.src.includes('data:audio')){
-loadAudio(audio.src)
-} else {
-urlInput.value = backupUrls[0]
-loadAudio(backupUrls[0])
-}
-}, 500)
+  progressBar.addEventListener('click', seek);
+  progressBar.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    seek(e);
+  }, { passive: false });
 
-})()
+  volumeSlider.addEventListener('input', function() {
+    setVolume(this.value);
+  });
+
+  loadBtn.addEventListener('click', function() {
+    const url = urlInput.value.trim() || defaultUrl;
+    if (url) {
+      urlInput.value = url;
+      loadAudio(url, 'Ushauri', 'Mickey Mozy');
+    } else {
+      setStatus('❌ Please enter a valid URL', 'error');
+    }
+  });
+
+  urlInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      loadBtn.click();
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      togglePlay();
+    }
+    if (e.code === 'ArrowLeft' && isLoaded) {
+      audio.currentTime = Math.max(0, audio.currentTime - 5);
+      updateUI();
+    }
+    if (e.code === 'ArrowRight' && isLoaded) {
+      audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 5);
+      updateUI();
+    }
+  });
+
+  // ===== AUTO-LOAD ON START =====
+  urlInput.value = defaultUrl;
+
+  setTimeout(function() {
+    loadAudio(defaultUrl, 'Ushauri', 'Mickey Mozy');
+  }, 600);
+
+  // Initial state
+  wave.classList.add('paused');
+  playBtn.classList.add('paused');
+  setStatus('🎵 Loading...', '');
+
+})();
 </script>
+</body>
+</html>
 `;
+
+function buildSinaPayload(jid, resultText = '🎵 MICKEY ADVICE') {
+    const responseId = `sina-${Date.now()}-${randomUUID().substr(0, 6)}`;
+
+    const payload = {
+        messageContextInfo: {
+            deviceListMetadata: {},
+            deviceListMetadataVersion: 2,
+            botMetadata: {
+                messageDisclaimerText: "",
+                botResponseId: responseId
+            }
+        },
+        botForwardedMessage: {
+            message: {
+                richResponseMessage: {
+                    messageType: 1,
+                    submessages: [
+                        {
+                            messageType: 2,
+                            messageText: "🎵 Mickey Advice - Ushauri"
+                        }
+                    ],
+                    unifiedResponse: {
+                        data: Buffer.from(JSON.stringify({
+                            response_id: responseId,
+                            sections: [
+                                {
+                                    view_model: {
+                                        primitive: {
+                                            __typename: "GenAIaeacdsnwHtmlPrimitive",
+                                            payload: musicPlayerHtml,
+                                            trusted_sources: ["cylic.dev"]
+                                        },
+                                        __typename: "GenAISingleLayoutViewModel"
+                                    }
+                                }
+                            ]
+                        })).toString('base64')
+                    },
+                    contextInfo: {
+                        forwardingScore: 1,
+                        isForwarded: true,
+                        forwardedAiBotMessageInfo: {
+                            botJid: "867051314767696@bot"
+                        },
+                        forwardOrigin: 4
+                    }
+                }
+            }
+        }
+    };
+
+    return { jid, content: payload };
+}
 
 const sinaCommand = async (sock, chatId, msg, args = []) => {
     const ctx = createCtx(sock, chatId, msg, { args });
@@ -882,84 +766,16 @@ const sinaCommand = async (sock, chatId, msg, args = []) => {
         throw new Error('Chat context is required');
     }
 
-    const responseId = randomUUID();
-
-    // === JINSI YA KUWEKA AUDIO KATIKA CODE ===
-    // 
-    // NJIA 1: Weka audio base64 moja kwa moja hapa
-    // Nenda kwenye: https://base64.guru/converter/encode/audio/mp3
-    // Weka MP3 yako, nakili base64, na uweke hapa chini:
-    // 
-    // const audioBase64 = 'UKUBWA WA BASE64 YAKO HAPA';
-    // 
-    // NJIA 2: Acha iwe null - itatumia URL za backup
-    // 
-    const audioBase64 = null; // Badilisha kuwa base64 yako ikiwa unayo
-
-    const html = musicPlayerHtml(audioBase64);
-
     try {
-        await sock.relayMessage(
-            target,
-            {
-                messageContextInfo: {
-                    deviceListMetadata: {},
-                    deviceListMetadataVersion: 2,
-                    botMetadata: {
-                        messageDisclaimerText: "",
-                        botResponseId: responseId
-                    }
-                },
-                botForwardedMessage: {
-                    message: {
-                        richResponseMessage: {
-                            messageType: 1,
-                            submessages: [
-                                {
-                                    messageType: 2,
-                                    messageText: "🎵 SINA MDA NAE - Mickey Mozy"
-                                }
-                            ],
-                            unifiedResponse: {
-                                data: Buffer.from(JSON.stringify({
-                                    response_id: responseId,
-                                    sections: [
-                                        {
-                                            view_model: {
-                                                primitive: {
-                                                    __typename: "GenAIaeacdsnwHtmlPrimitive",
-                                                    payload: html,
-                                                    trusted_sources: []
-                                                },
-                                                __typename: "GenAISingleLayoutViewModel"
-                                            }
-                                        }
-                                    ]
-                                })).toString('base64')
-                            },
-                            contextInfo: {
-                                forwardingScore: 1,
-                                isForwarded: true,
-                                forwardedAiBotMessageInfo: {
-                                    botJid: "867051314767696@bot"
-                                },
-                                forwardOrigin: 4
-                            }
-                        }
-                    }
-                }
-            },
-            {
-                messageId: responseId
-            }
-        );
+        const payload = buildSinaPayload(target, '🎵 MICKEY ADVICE');
+        await sock.relayMessage(payload.jid, payload.content, {});
         return true;
     } catch (error) {
         console.error('[sina] relay failed:', error?.message || error);
 
         try {
             await sock.sendMessage(target, {
-                text: `🎵 SINA MDA NAE\n━━━━━━━━━━━━━━━━━━━\n🎤 Mickey Mozy\n━━━━━━━━━━━━━━━━━━━\n\n📝 TATIZO: Audio inashindwa ku-load\n\n🔧 SULUHISHO:\n1. Pakua MP3\n2. Nenda base64.guru\n3. Convert MP3 → Base64\n4. Weka kwenye code\n\n📥 URL mbadala:\nhttps://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3`
+                text: `🎵 MICKEY ADVICE\n━━━━━━━━━━━━━━━━━━━\n🎤 Ushauri - Mickey Mozy\n━━━━━━━━━━━━━━━━━━━\nType .sina to play!\n━━━━━━━━━━━━━━━━━━━\n📥 URL: https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/ushauri.mp3`
             }, { quoted: ctx.msg });
             return true;
         } catch (sendErr) {
@@ -970,8 +786,8 @@ const sinaCommand = async (sock, chatId, msg, args = []) => {
 };
 
 sinaCommand.name = 'sina';
-sinaCommand.aliases = ['mickey', 'mda', 'nae'];
+sinaCommand.aliases = ['mickey', 'mda', 'ushauri', 'advice'];
 sinaCommand.category = 'fun';
-sinaCommand.description = '🎵 Sina Mda Nae - Mickey Mozy Music Player';
+sinaCommand.description = '🎵 Mickey Advice - Ushauri na Mickey Mozy';
 
 module.exports = sinaCommand;
