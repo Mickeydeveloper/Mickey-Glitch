@@ -64,6 +64,92 @@ async function extractZipFile(zipPath, extractPath) {
     });
 }
 
+function gatherSourceFiles(baseDir, ignoreSet) {
+    const files = new Set();
+    const dirs = new Set();
+
+    const walk = (currentDir) => {
+        const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+
+        for (const entry of entries) {
+            if (ignoreSet.has(entry.name)) continue;
+
+            const fullPath = path.join(currentDir, entry.name);
+            const relativePath = path.relative(baseDir, fullPath).split(path.sep).join('/');
+
+            if (entry.isDirectory()) {
+                dirs.add(relativePath);
+                walk(fullPath);
+            } else {
+                files.add(relativePath);
+            }
+        }
+    };
+
+    walk(baseDir);
+    return { files, dirs };
+}
+
+function syncExtractedRepo(sourceRoot, targetRoot, ignoreSet) {
+    const deletedFiles = [];
+    const { files: sourceFiles, dirs: sourceDirs } = gatherSourceFiles(sourceRoot, ignoreSet);
+
+    const walkTarget = (currentDir) => {
+        const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+
+        for (const entry of entries) {
+            if (ignoreSet.has(entry.name)) continue;
+
+            const fullPath = path.join(currentDir, entry.name);
+            const relativePath = path.relative(targetRoot, fullPath).split(path.sep).join('/');
+
+            if (entry.isDirectory()) {
+                const hasMatchingDir = sourceDirs.has(relativePath);
+                const hasMatchingChild = Array.from(sourceFiles).some((file) => file.startsWith(relativePath + '/'));
+
+                if (!hasMatchingDir && !hasMatchingChild) {
+                    fs.removeSync(fullPath);
+                    deletedFiles.push(relativePath + '/');
+                    continue;
+                }
+
+                walkTarget(fullPath);
+                continue;
+            }
+
+            if (!sourceFiles.has(relativePath)) {
+                fs.removeSync(fullPath);
+                deletedFiles.push(relativePath);
+            }
+        }
+    };
+
+    const walkSource = (currentDir) => {
+        const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+
+        for (const entry of entries) {
+            if (ignoreSet.has(entry.name)) continue;
+
+            const fullPath = path.join(currentDir, entry.name);
+            const relativePath = path.relative(sourceRoot, fullPath).split(path.sep).join('/');
+            const targetPath = path.join(targetRoot, relativePath);
+
+            if (entry.isDirectory()) {
+                fs.ensureDirSync(targetPath);
+                walkSource(fullPath);
+            } else {
+                fs.ensureDirSync(path.dirname(targetPath));
+                fs.copySync(fullPath, targetPath, { overwrite: true });
+            }
+        }
+    };
+
+    walkTarget(targetRoot);
+    walkSource(sourceRoot);
+
+    return deletedFiles;
+}
+
 async function updateCommand(sock, chatId, message, zipUrl) {
     try {
         const isOwner = message.key.fromMe;
@@ -123,21 +209,39 @@ async function updateCommand(sock, chatId, message, zipUrl) {
                 throw new Error('Extracted folder is empty');
             }
 
-            const rootFolder = path.join(extractPath, folders[0]); 
-            
-            // Hapa ndipo mafaili yanaporukwa (yasi-update-we)
-            const ignore = ['node_modules', 'session', 'auth_info_baileys', '.git', 'settings.js', 'config.js', '.env', 'index.js', 'main.js'];
+            const rootFolder = path.join(extractPath, folders[0]);
+            const repoRoot = fs.existsSync(path.join(rootFolder, 'package.json'))
+                ? rootFolder
+                : fs.readdirSync(rootFolder).find(item => {
+                    const itemPath = path.join(rootFolder, item);
+                    return fs.existsSync(itemPath) && fs.statSync(itemPath).isDirectory() && fs.existsSync(path.join(itemPath, 'package.json'));
+                })
+                    ? path.join(rootFolder, fs.readdirSync(rootFolder).find(item => {
+                        const itemPath = path.join(rootFolder, item);
+                        return fs.existsSync(itemPath) && fs.statSync(itemPath).isDirectory() && fs.existsSync(path.join(itemPath, 'package.json'));
+                    }))
+                    : rootFolder;
 
-            const files = fs.readdirSync(rootFolder);
-            for (const file of files) {
-                if (!ignore.includes(file)) {
-                    fs.copySync(path.join(rootFolder, file), path.join(process.cwd(), file), { overwrite: true });
+            const ignore = new Set(['node_modules', 'session', 'auth_info_baileys', '.git', 'settings.js', 'config.js', '.env', 'index.js', 'main.js', 'temp_update']);
+
+            const deletedFiles = syncExtractedRepo(repoRoot, process.cwd(), ignore);
+
+            if (deletedFiles.length > 0) {
+                console.log(chalk.red(`[Update] Deleted stale files (${deletedFiles.length}):`));
+                for (const file of deletedFiles) {
+                    console.log(chalk.red(`  - ${file}`));
                 }
+            } else {
+                console.log(chalk.green('[Update] No stale files were deleted.'));
             }
 
             fs.removeSync(tmpDir);
 
-            await sock.sendMessage(chatId, { text: "✅ *Update Imekamilika kwa mafanikio!*\n\nBot inajizima na kuwaka upya." });
+            const deletedSummary = deletedFiles.length > 0
+                ? `\n\n🗑️ *Files zilizofutwa:*\n${deletedFiles.slice(0, 10).map(f => `• ${f}`).join('\n')}${deletedFiles.length > 10 ? '\n... na zaidi' : ''}`
+                : '';
+
+            await sock.sendMessage(chatId, { text: `✅ *Update Imekamilika kwa mafanikio!*\n\nBot inajizima na kuwaka upya.${deletedSummary}` });
             console.log(chalk.green.bold('📢 UPDATE SUCCESSFUL!'));
 
             setTimeout(() => {

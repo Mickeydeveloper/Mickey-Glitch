@@ -1,106 +1,207 @@
 const fs = require('fs/promises');
 const path = require('path');
+const { randomUUID } = require('crypto');
 const { createCtx } = require('../lib/messageBuilder');
 
-async function getAudioSource() {
-  const localPath = path.join(process.cwd(), 'glitch', 'ushauri.mp3');
+async function resolveAudioSource() {
+  const candidates = [
+    path.join(process.cwd(), 'lib', 'menu.mp3'),
+    path.join(process.cwd(), 'lib', 'ushauri.mp3'),
+    path.join(process.cwd(), 'glitch', 'ushauri.mp3'),
+    path.join(process.cwd(), 'src', 'audio', 'menu.mp3')
+  ];
 
-  try {
-    const data = await fs.readFile(localPath);
-    return `data:audio/mpeg;base64,${data.toString('base64')}`;
-  } catch (error) {
-    console.warn('[radio] local mp3 not found, using fallback URL:', error?.message || error);
-    return 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/ushauri.mp3';
+  for (const filePath of candidates) {
+    try {
+      const data = await fs.readFile(filePath);
+      return `data:audio/mpeg;base64,${data.toString('base64')}`;
+    } catch (err) {
+      // continue to next candidate
+    }
   }
+
+  return 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/ushauri.mp3';
 }
 
-async function buildRadioPayload(jid, titleText = '🎧 RADIO PLAYER') {
-  const responseId = `radio-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const audioSrc = await getAudioSource();
+async function buildRadioPayload(jid, titleText = 'LevviCode Music Player') {
+  const responseId = randomUUID();
+  const audioSrc = await resolveAudioSource();
 
   const html = `
 <style>
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
-html, body {
-  margin: 0; padding: 0; width: 100%; overflow: hidden; background: transparent; font-family: Arial, Helvetica, sans-serif;
+*{
+  box-sizing:border-box;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;
+  user-select:none;
 }
-.musicWrap {
-  width: 100%; max-width: 620px; margin: 0 auto; padding: 12px; border: 1px solid rgba(255,255,255,.16); border-radius: 22px;
-  background: #050505; box-shadow: 0 10px 28px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.07);
+html,
+body{
+  margin:0;
+  padding:0;
+  width:100%;
+  overflow:hidden;
+  background:transparent;
+  font-family:Arial,Helvetica,sans-serif;
 }
-.musicFrame {
-  position: relative; overflow: hidden; padding: 16px; border: 1px solid rgba(255,255,255,.16); border-radius: 18px;
-  background: linear-gradient(145deg, #111113 0%, #080809 45%, #050505 100%);
-  box-shadow: 0 0 25px rgba(255,255,255,.025), inset 0 1px 0 rgba(255,255,255,.07);
+
+.musicWrap{
+  width:100%;
+  padding:7px;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:22px;
+  background:#050505;
+  box-shadow:0 10px 28px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.07);
 }
-.musicGlow {
-  position: absolute; width: 170px; height: 170px; right: -75px; top: -85px; border-radius: 50%;
-  background: rgba(255,255,255,.045); filter: blur(50px); pointer-events: none;
+.musicFrame{
+  position:relative;
+  overflow:hidden;
+  padding:16px;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:18px;
+  background:linear-gradient(145deg,#111113 0%,#080809 45%,#050505 100%);
+  box-shadow:0 0 25px rgba(255,255,255,.025), inset 0 1px 0 rgba(255,255,255,.07);
 }
-.musicHeader {
-  position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+.musicGlow{
+  position:absolute;
+  width:170px;
+  height:170px;
+  right:-75px;
+  top:-85px;
+  border-radius:50%;
+  background:rgba(255,255,255,.045);
+  filter:blur(50px);
+  pointer-events:none;
 }
-.musicBrand {
-  display: flex; align-items: center; gap: 9px; color: #fff; font: bold 15px Arial,sans-serif; letter-spacing: 1px;
-  text-shadow: 0 2px 5px rgba(0,0,0,.7);
+.musicHeader{
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:14px;
 }
-.musicBrandIcon {
-  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 10px;
-  background: #fff; color: #000; font: bold 13px Arial,sans-serif; letter-spacing: 0;
-  box-shadow: 0 4px 12px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.9);
+.musicBrand{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  color:#fff;
+  font:bold 15px Arial,sans-serif;
+  letter-spacing:1px;
+  text-shadow:0 2px 5px rgba(0,0,0,.7);
 }
-.musicLive {
-  padding: 5px 9px; border: 1px solid rgba(255,255,255,.22); border-radius: 9px; background: #0d0d0f;
-  color: #ddd; font: bold 8px monospace; letter-spacing: 1.2px;
+.musicBrandIcon{
+  width:30px;
+  height:30px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:10px;
+  background:#fff;
+  color:#000;
+  font:bold 13px Arial,sans-serif;
+  box-shadow:0 4px 12px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.9);
 }
-.musicMain {
-  position: relative; z-index: 2; display: flex; align-items: center; gap: 15px; padding: 14px;
-  border: 1px solid rgba(255,255,255,.09); border-radius: 16px; background: linear-gradient(145deg, #151517, #0d0d0f);
-  box-shadow: 0 5px 14px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.045);
+.musicLive{
+  padding:5px 9px;
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:9px;
+  background:#0d0d0f;
+  color:#ddd;
+  font:bold 8px monospace;
+  letter-spacing:1.2px;
 }
-.musicCover {
-  position: relative; flex: none; width: 78px; height: 78px; display: flex; align-items: center; justify-content: center;
-  border-radius: 18px; background: #070708; border: 2px solid #eee; box-shadow: 0 0 17px rgba(255,255,255,.10), inset 0 0 20px rgba(255,255,255,.035); overflow: hidden;
+.musicMain{
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  gap:15px;
+  padding:14px;
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:16px;
+  background:linear-gradient(145deg,#151517,#0d0d0f);
+  box-shadow:0 5px 14px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.045);
 }
-.musicVinyl {
-  position: relative; width: 61px; height: 61px; border-radius: 50%;
-  background: repeating-radial-gradient(circle at center, #080808 0px, #101010 2px, #070707 4px, #141414 6px);
-  border: 1px solid #444; box-shadow: 0 0 13px rgba(255,255,255,.10), inset 0 0 8px rgba(255,255,255,.08);
-  transform: rotate(0deg);
+.musicCover{
+  position:relative;
+  flex:none;
+  width:78px;
+  height:78px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:18px;
+  background:#070708;
+  border:2px solid #eee;
+  box-shadow:0 0 17px rgba(255,255,255,.10), inset 0 0 20px rgba(255,255,255,.035);
+  overflow:hidden;
 }
-.musicVinyl::before {
-  content: ''; position: absolute; inset: 5px; border-radius: 50%;
-  background: repeating-radial-gradient(circle at center, transparent 0px, transparent 4px, rgba(255,255,255,.06) 5px, transparent 6px);
+.musicVinyl{
+  position:relative;
+  width:61px;
+  height:61px;
+  border-radius:50%;
+  background:repeating-radial-gradient(circle at center,#080808 0px,#101010 2px,#070707 4px,#141414 6px);
+  border:1px solid #444;
+  box-shadow:0 0 13px rgba(255,255,255,.10), inset 0 0 8px rgba(255,255,255,.08);
+  transform:rotate(0deg);
 }
-.musicVinyl::after {
-  content: ''; position: absolute; left: 50%; top: 50%; width: 19px; height: 19px; transform: translate(-50%,-50%);
-  border-radius: 50%; background: radial-gradient(circle, #fff 0 12%, #777 13% 28%, #202020 29% 65%, #aaa 66% 72%, #111 73% 100%);
-  border: 1px solid #ddd; box-shadow: 0 0 8px rgba(255,255,255,.25);
+.musicVinyl::before{
+  content:'';
+  position:absolute;
+  inset:5px;
+  border-radius:50%;
+  background:repeating-radial-gradient(circle at center,transparent 0px,transparent 4px,rgba(255,255,255,.06) 5px,transparent 6px);
 }
-.musicVinyl.playing { animation: vinylRotate 2.4s linear infinite; }
-@keyframes vinylRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.musicDetails { min-width: 0; flex: 1; }
-.musicTitle { color: #fff; font: bold 17px Arial,sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.musicSubtitle { margin-top: 5px; color: #777; font: 10px monospace; letter-spacing: .3px; }
-.visualizer { height: 27px; display: flex; align-items: center; gap: 3px; margin-top: 9px; }
-.visualizer span { width: 3px; height: 4px; border-radius: 4px; background: #ddd; opacity: .85; }
-.visualizer.playing span { animation: musicBars .75s ease-in-out infinite alternate; }
-.visualizer span:nth-child(1){animation-delay:-.70s} .visualizer span:nth-child(2){animation-delay:-.50s} .visualizer span:nth-child(3){animation-delay:-.20s} .visualizer span:nth-child(4){animation-delay:-.60s} .visualizer span:nth-child(5){animation-delay:-.30s} .visualizer span:nth-child(6){animation-delay:-.80s} .visualizer span:nth-child(7){animation-delay:-.40s} .visualizer span:nth-child(8){animation-delay:-.10s} .visualizer span:nth-child(9){animation-delay:-.55s} .visualizer span:nth-child(10){animation-delay:-.25s} .visualizer span:nth-child(11){animation-delay:-.65s} .visualizer span:nth-child(12){animation-delay:-.35s}
-@keyframes musicBars { 0% { height: 4px; } 50% { height: 13px; } 100% { height: 25px; } }
-.musicProgressArea { position: relative; z-index: 2; margin-top: 16px; }
-.musicProgress { position: relative; width: 100%; height: 7px; border-radius: 8px; background: #222225; border: 1px solid rgba(255,255,255,.09); overflow: visible; }
-.musicProgressBar { position: absolute; left: 0; top: -1px; width: 0%; height: 7px; border-radius: 8px; background: #eee; box-shadow: 0 0 8px rgba(255,255,255,.25); }
-.musicProgressDot { position: absolute; left: 0%; top: 50%; width: 14px; height: 14px; transform: translate(-50%,-50%); border-radius: 50%; background: #fff; border: 2px solid #888; box-shadow: 0 0 8px rgba(255,255,255,.25); }
-.musicTime { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; color: #777; font: 9px monospace; }
-.musicControls { position: relative; z-index: 2; display: flex; align-items: center; gap: 13px; margin-top: 15px; }
-.musicButton { width: 91px; height: 50px; display: flex; align-items: center; justify-content: center; border: 1px solid #fff; border-radius: 16px; background: #fff; color: #000; font: bold 11px Arial,sans-serif; letter-spacing: 1.5px; box-shadow: 0 5px 12px rgba(0,0,0,.45), 0 0 12px rgba(255,255,255,.08); transition: transform .12s ease, background .12s ease; }
-.musicButton:active { transform: scale(.94); background: #d8d8d8; }
-.musicVolumeBox { flex: 1; height: 50px; display: flex; align-items: center; gap: 10px; padding: 0 13px; border: 1px solid rgba(255,255,255,.09); border-radius: 16px; background: #111113; box-shadow: inset 0 1px 0 rgba(255,255,255,.035); }
-.musicVolumeLabel { width: 32px; color: #aaa; font: bold 8px monospace; letter-spacing: .8px; }
-.musicVolume { width: 100%; height: 4px; accent-color: #fff; }
-.musicStatus { position: relative; z-index: 2; margin-top: 13px; text-align: center; color: #ddd; font: bold 9px monospace; letter-spacing: 1.8px; }
-.musicLine { position: relative; z-index: 2; height: 1px; margin-top: 12px; background: linear-gradient(90deg, transparent, #555, transparent); opacity: .6; }
-.musicFooter { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; margin-top: 10px; color: #505055; font: 8px monospace; letter-spacing: .5px; }
+.musicVinyl::after{
+  content:'';
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:19px;
+  height:19px;
+  transform:translate(-50%,-50%);
+  border-radius:50%;
+  background:radial-gradient(circle,#fff 0 12%,#777 13% 28%,#202020 29% 65%,#aaa 66% 72%,#111 73% 100%);
+  border:1px solid #ddd;
+  box-shadow:0 0 8px rgba(255,255,255,.25);
+}
+.musicVinyl.playing{ animation:vinylRotate 2.4s linear infinite; }
+@keyframes vinylRotate{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+.musicDetails{ min-width:0; flex:1; }
+.musicTitle{ color:#fff; font:bold 17px Arial,sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.musicSubtitle{ margin-top:5px; color:#777; font:10px monospace; letter-spacing:.3px; }
+.visualizer{ height:27px; display:flex; align-items:center; gap:3px; margin-top:9px; }
+.visualizer span{ width:3px; height:4px; border-radius:4px; background:#ddd; opacity:.85; }
+.visualizer.playing span{ animation:musicBars .75s ease-in-out infinite alternate; }
+.visualizer span:nth-child(1){ animation-delay:-.70s; }
+.visualizer span:nth-child(2){ animation-delay:-.50s; }
+.visualizer span:nth-child(3){ animation-delay:-.20s; }
+.visualizer span:nth-child(4){ animation-delay:-.60s; }
+.visualizer span:nth-child(5){ animation-delay:-.30s; }
+.visualizer span:nth-child(6){ animation-delay:-.80s; }
+.visualizer span:nth-child(7){ animation-delay:-.40s; }
+.visualizer span:nth-child(8){ animation-delay:-.10s; }
+.visualizer span:nth-child(9){ animation-delay:-.55s; }
+.visualizer span:nth-child(10){ animation-delay:-.25s; }
+.visualizer span:nth-child(11){ animation-delay:-.65s; }
+.visualizer span:nth-child(12){ animation-delay:-.35s; }
+@keyframes musicBars{ 0%{ height:4px; } 50%{ height:13px; } 100%{ height:25px; } }
+.musicProgressArea{ position:relative; z-index:2; margin-top:16px; }
+.musicProgress{ position:relative; width:100%; height:7px; border-radius:8px; background:#222225; border:1px solid rgba(255,255,255,.09); overflow:visible; }
+.musicProgressBar{ position:absolute; left:0; top:-1px; width:0%; height:7px; border-radius:8px; background:#eee; box-shadow:0 0 8px rgba(255,255,255,.25); }
+.musicProgressDot{ position:absolute; left:0%; top:50%; width:14px; height:14px; transform:translate(-50%,-50%); border-radius:50%; background:#fff; border:2px solid #888; box-shadow:0 0 8px rgba(255,255,255,.25); }
+.musicTime{ display:flex; align-items:center; justify-content:space-between; margin-top:8px; color:#777; font:9px monospace; }
+.musicControls{ position:relative; z-index:2; display:flex; align-items:center; gap:13px; margin-top:15px; }
+.musicButton{ width:91px; height:50px; display:flex; align-items:center; justify-content:center; border:1px solid #fff; border-radius:16px; background:#fff; color:#000; font:bold 11px Arial,sans-serif; letter-spacing:1.5px; box-shadow:0 5px 12px rgba(0,0,0,.45),0 0 12px rgba(255,255,255,.08); transition:transform .12s ease, background .12s ease; }
+.musicButton:active{ transform:scale(.94); background:#d8d8d8; }
+.musicVolumeBox{ flex:1; height:50px; display:flex; align-items:center; gap:10px; padding:0 13px; border:1px solid rgba(255,255,255,.09); border-radius:16px; background:#111113; box-shadow:inset 0 1px 0 rgba(255,255,255,.035); }
+.musicVolumeLabel{ width:32px; color:#aaa; font:bold 8px monospace; letter-spacing:.8px; }
+.musicVolume{ width:100%; height:4px; accent-color:#fff; }
+.musicStatus{ position:relative; z-index:2; margin-top:13px; text-align:center; color:#ddd; font:bold 9px monospace; letter-spacing:1.8px; }
+.musicLine{ position:relative; z-index:2; height:1px; margin-top:12px; background:linear-gradient(90deg,transparent,#555,transparent); opacity:.6; }
+.musicFooter{ position:relative; z-index:2; display:flex; align-items:center; justify-content:center; margin-top:10px; color:#505055; font:8px monospace; letter-spacing:.5px; }
 </style>
 <div class="musicWrap">
   <div class="musicFrame">
@@ -118,7 +219,7 @@ html, body {
         <div class="musicVinyl" id="musicVinyl"></div>
       </div>
       <div class="musicDetails">
-        <div class="musicTitle">Ushauri</div>
+        <div class="musicTitle">Menu Music</div>
         <div class="musicSubtitle">LEVVICODE • MP3</div>
         <div class="visualizer" id="visualizer">
           <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
@@ -166,29 +267,31 @@ html, body {
   const visualizer = document.getElementById('visualizer');
   const vinyl = document.getElementById('musicVinyl');
 
-  function formatTime(sec) {
-    if (!Number.isFinite(sec)) return '0:00';
+  audio.volume = .8;
+
+  function formatTime(sec){
+    if(!Number.isFinite(sec)) return '0:00';
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
-    return m + ':' + String(s).padStart(2, '0');
+    return m + ':' + String(s).padStart(2,'0');
   }
 
-  function updateProgress() {
-    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  function updateProgress(){
+    if(!Number.isFinite(audio.duration) || audio.duration <= 0) return;
     const percent = (audio.currentTime / audio.duration) * 100;
     progressBar.style.width = percent + '%';
     progressDot.style.left = percent + '%';
     current.textContent = formatTime(audio.currentTime);
   }
 
-  function setPlaying() {
+  function setPlaying(){
     play.textContent = 'PAUSE';
     status.textContent = 'NOW PLAYING';
     visualizer.classList.add('playing');
     vinyl.classList.add('playing');
   }
 
-  function setPaused() {
+  function setPaused(){
     play.textContent = 'PLAY';
     status.textContent = 'PAUSED';
     visualizer.classList.remove('playing');
@@ -197,7 +300,7 @@ html, body {
 
   play.addEventListener('click', async function(){
     try {
-      if (audio.paused) {
+      if(audio.paused){
         await audio.play();
         setPlaying();
       } else {
@@ -216,7 +319,7 @@ html, body {
   });
 
   progress.addEventListener('pointerdown', function(e){
-    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    if(!Number.isFinite(audio.duration) || audio.duration <= 0) return;
     const rect = progress.getBoundingClientRect();
     const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
     audio.currentTime = (x / rect.width) * audio.duration;
@@ -231,8 +334,16 @@ html, body {
     updateProgress();
   });
 
-  audio.addEventListener('play', function(){ setPlaying(); });
-  audio.addEventListener('pause', function(){ if (!audio.ended) setPaused(); });
+  audio.addEventListener('play', function(){
+    setPlaying();
+  });
+
+  audio.addEventListener('pause', function(){
+    if(!audio.ended){
+      setPaused();
+    }
+  });
+
   audio.addEventListener('ended', function(){
     play.textContent = 'PLAY';
     status.textContent = 'PLAYBACK COMPLETE';
@@ -242,8 +353,6 @@ html, body {
     progressDot.style.left = '0%';
     current.textContent = '0:00';
   });
-
-  audio.volume = 0.8;
 })();
 </script>`;
 
@@ -253,7 +362,7 @@ html, body {
       deviceListMetadataVersion: 2,
       botMetadata: {
         messageDisclaimerText: '',
-        botResponseId: responseId,
+        botResponseId: responseId
       }
     },
     botForwardedMessage: {
@@ -279,7 +388,9 @@ html, body {
           contextInfo: {
             forwardingScore: 1,
             isForwarded: true,
-            forwardedAiBotMessageInfo: { botJid: '867051314767696@bot' },
+            forwardedAiBotMessageInfo: {
+              botJid: '867051314767696@bot'
+            },
             forwardOrigin: 4
           }
         }
@@ -294,10 +405,12 @@ const radioCommand = async (sock, chatId, msg, args = []) => {
   const ctx = createCtx(sock, chatId, msg, { args });
   const target = ctx.chatId || chatId || msg?.key?.remoteJid;
 
-  if (!sock || !target) throw new Error('Chat context is required');
+  if (!sock || !target) {
+    throw new Error('Chat context is required');
+  }
 
   try {
-    const payload = await buildRadioPayload(target, '🎧 RADIO');
+    const payload = await buildRadioPayload(target, 'LevviCode Music Player');
     await sock.relayMessage(payload.jid, payload.content, {});
     return true;
   } catch (error) {
@@ -305,7 +418,7 @@ const radioCommand = async (sock, chatId, msg, args = []) => {
 
     try {
       await sock.sendMessage(target, {
-        text: '🎧 RADIO\n━━━━━━━━━━━━━━━━━━━\nAudio source: glitch/ushauri.mp3\nIf the file is missing, it will fall back to the GitHub MP3 URL.'
+        text: '🎵 Radio player failed to load. Please retry.'
       }, { quoted: ctx.msg });
       return true;
     } catch (sendErr) {
@@ -318,6 +431,6 @@ const radioCommand = async (sock, chatId, msg, args = []) => {
 radioCommand.name = 'radio';
 radioCommand.aliases = ['music', 'player', 'ushauri', 'audio'];
 radioCommand.category = 'fun';
-radioCommand.description = '🎧 Local MP3 radio/music player using glitch/ushauri.mp3';
+radioCommand.description = '🎧 Rich HTML radio/music player using local lib MP3 when available';
 
 module.exports = radioCommand;
