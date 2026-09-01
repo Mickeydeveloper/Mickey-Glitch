@@ -1,202 +1,251 @@
+const fs = require('fs/promises');
+const path = require('path');
 const { createCtx } = require('../lib/messageBuilder');
 
-const radioStations = [
-  {
-    name: 'Mickey FM',
-    url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/ushauri.mp3'
-  },
-  {
-    name: 'Chill Mix',
-    url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina mda nae.mp3'
-  },
-  {
-    name: 'Night Wave',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3'
-  }
-];
+async function getAudioSource() {
+  const localPath = path.join(process.cwd(), 'glitch', 'ushauri.mp3');
 
-const radioHtml = `
+  try {
+    const data = await fs.readFile(localPath);
+    return `data:audio/mpeg;base64,${data.toString('base64')}`;
+  } catch (error) {
+    console.warn('[radio] local mp3 not found, using fallback URL:', error?.message || error);
+    return 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/ushauri.mp3';
+  }
+}
+
+async function buildRadioPayload(jid, titleText = '🎧 RADIO PLAYER') {
+  const responseId = `radio-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const audioSrc = await getAudioSource();
+
+  const html = `
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body {
-    margin: 0; padding: 0; background: transparent; font-family: Arial, sans-serif;
-    user-select: none; -webkit-user-select: none; touch-action: manipulation;
-  }
-  .radio-wrap {
-    width: 100%; max-width: 620px; margin: 0 auto; padding: 18px; background: rgba(12, 15, 25, 0.8);
-    border: 1px solid rgba(255,255,255,.09); border-radius: 18px; box-shadow: 0 12px 28px rgba(0,0,0,.26);
-  }
-  .radio-box {
-    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
-    border: 1px solid rgba(255,255,255,.06); border-radius: 18px; overflow: hidden;
-  }
-  .radio-head {
-    display: flex; justify-content: space-between; align-items: center; padding: 18px 18px 10px;
-    color: white;
-  }
-  .radio-title {
-    font-size: 20px; font-weight: 800; letter-spacing: 1.1px;
-  }
-  .radio-live {
-    background: rgba(239,68,68,.15); color: #fecaca; border: 1px solid rgba(239,68,68,.4);
-    border-radius: 999px; padding: 6px 10px; font-size: 10px; font-weight: 800; letter-spacing: 1px;
-  }
-  .radio-screen {
-    margin: 0 18px; height: 220px; border-radius: 18px; position: relative; overflow: hidden;
-    background: radial-gradient(circle at 50% 30%, rgba(59,130,246,.38), transparent 25%),
-      linear-gradient(145deg, #111827 0%, #0f172a 28%, #111827 100%);
-    border: 1px solid rgba(255,255,255,.06);
-  }
-  .radio-screen::before {
-    content: '📻'; position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%);
-    font-size: 78px; filter: drop-shadow(0 10px 20px rgba(0,0,0,.38));
-  }
-  .radio-screen::after {
-    content: ''; position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
-    width: 128px; height: 18px; border-radius: 999px; background: rgba(255,255,255,.1);
-    box-shadow: 0 0 20px rgba(96,165,250,.4);
-  }
-  .radio-body { padding: 18px; }
-  .station-name {
-    color: white; font-size: 18px; font-weight: 800; margin-bottom: 12px;
-  }
-  .controls {
-    display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 16px;
-    flex-wrap: wrap;
-  }
-  .btn {
-    border: 0; border-radius: 12px; color: white; font-weight: 800; cursor: pointer;
-    min-width: 58px; height: 46px; background: rgba(255,255,255,.08);
-  }
-  .btn.primary {
-    min-width: 120px; background: linear-gradient(135deg, #ef4444, #f59e0b);
-    box-shadow: 0 10px 18px rgba(239,68,68,.2);
-  }
-  .station-list {
-    display: grid; gap: 8px;
-  }
-  .station-item {
-    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); border-radius: 10px;
-    color: rgba(255,255,255,.9); font-size: 12px; font-weight: 700; padding: 10px 12px; cursor: pointer; text-align: left;
-  }
-  .station-item.active {
-    background: rgba(96,165,250,.12); border-color: rgba(96,165,250,.3);
-    color: #dbeafe;
-  }
-  .volume-box {
-    display: flex; align-items: center; gap: 10px; margin-top: 14px; color: rgba(255,255,255,.7); font-size: 12px;
-  }
-  .volume-box input { flex: 1; accent-color: #34d399; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+html, body {
+  margin: 0; padding: 0; width: 100%; overflow: hidden; background: transparent; font-family: Arial, Helvetica, sans-serif;
+}
+.musicWrap {
+  width: 100%; max-width: 620px; margin: 0 auto; padding: 12px; border: 1px solid rgba(255,255,255,.16); border-radius: 22px;
+  background: #050505; box-shadow: 0 10px 28px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.musicFrame {
+  position: relative; overflow: hidden; padding: 16px; border: 1px solid rgba(255,255,255,.16); border-radius: 18px;
+  background: linear-gradient(145deg, #111113 0%, #080809 45%, #050505 100%);
+  box-shadow: 0 0 25px rgba(255,255,255,.025), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.musicGlow {
+  position: absolute; width: 170px; height: 170px; right: -75px; top: -85px; border-radius: 50%;
+  background: rgba(255,255,255,.045); filter: blur(50px); pointer-events: none;
+}
+.musicHeader {
+  position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+}
+.musicBrand {
+  display: flex; align-items: center; gap: 9px; color: #fff; font: bold 15px Arial,sans-serif; letter-spacing: 1px;
+  text-shadow: 0 2px 5px rgba(0,0,0,.7);
+}
+.musicBrandIcon {
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 10px;
+  background: #fff; color: #000; font: bold 13px Arial,sans-serif; letter-spacing: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.9);
+}
+.musicLive {
+  padding: 5px 9px; border: 1px solid rgba(255,255,255,.22); border-radius: 9px; background: #0d0d0f;
+  color: #ddd; font: bold 8px monospace; letter-spacing: 1.2px;
+}
+.musicMain {
+  position: relative; z-index: 2; display: flex; align-items: center; gap: 15px; padding: 14px;
+  border: 1px solid rgba(255,255,255,.09); border-radius: 16px; background: linear-gradient(145deg, #151517, #0d0d0f);
+  box-shadow: 0 5px 14px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.045);
+}
+.musicCover {
+  position: relative; flex: none; width: 78px; height: 78px; display: flex; align-items: center; justify-content: center;
+  border-radius: 18px; background: #070708; border: 2px solid #eee; box-shadow: 0 0 17px rgba(255,255,255,.10), inset 0 0 20px rgba(255,255,255,.035); overflow: hidden;
+}
+.musicVinyl {
+  position: relative; width: 61px; height: 61px; border-radius: 50%;
+  background: repeating-radial-gradient(circle at center, #080808 0px, #101010 2px, #070707 4px, #141414 6px);
+  border: 1px solid #444; box-shadow: 0 0 13px rgba(255,255,255,.10), inset 0 0 8px rgba(255,255,255,.08);
+  transform: rotate(0deg);
+}
+.musicVinyl::before {
+  content: ''; position: absolute; inset: 5px; border-radius: 50%;
+  background: repeating-radial-gradient(circle at center, transparent 0px, transparent 4px, rgba(255,255,255,.06) 5px, transparent 6px);
+}
+.musicVinyl::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 19px; height: 19px; transform: translate(-50%,-50%);
+  border-radius: 50%; background: radial-gradient(circle, #fff 0 12%, #777 13% 28%, #202020 29% 65%, #aaa 66% 72%, #111 73% 100%);
+  border: 1px solid #ddd; box-shadow: 0 0 8px rgba(255,255,255,.25);
+}
+.musicVinyl.playing { animation: vinylRotate 2.4s linear infinite; }
+@keyframes vinylRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.musicDetails { min-width: 0; flex: 1; }
+.musicTitle { color: #fff; font: bold 17px Arial,sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.musicSubtitle { margin-top: 5px; color: #777; font: 10px monospace; letter-spacing: .3px; }
+.visualizer { height: 27px; display: flex; align-items: center; gap: 3px; margin-top: 9px; }
+.visualizer span { width: 3px; height: 4px; border-radius: 4px; background: #ddd; opacity: .85; }
+.visualizer.playing span { animation: musicBars .75s ease-in-out infinite alternate; }
+.visualizer span:nth-child(1){animation-delay:-.70s} .visualizer span:nth-child(2){animation-delay:-.50s} .visualizer span:nth-child(3){animation-delay:-.20s} .visualizer span:nth-child(4){animation-delay:-.60s} .visualizer span:nth-child(5){animation-delay:-.30s} .visualizer span:nth-child(6){animation-delay:-.80s} .visualizer span:nth-child(7){animation-delay:-.40s} .visualizer span:nth-child(8){animation-delay:-.10s} .visualizer span:nth-child(9){animation-delay:-.55s} .visualizer span:nth-child(10){animation-delay:-.25s} .visualizer span:nth-child(11){animation-delay:-.65s} .visualizer span:nth-child(12){animation-delay:-.35s}
+@keyframes musicBars { 0% { height: 4px; } 50% { height: 13px; } 100% { height: 25px; } }
+.musicProgressArea { position: relative; z-index: 2; margin-top: 16px; }
+.musicProgress { position: relative; width: 100%; height: 7px; border-radius: 8px; background: #222225; border: 1px solid rgba(255,255,255,.09); overflow: visible; }
+.musicProgressBar { position: absolute; left: 0; top: -1px; width: 0%; height: 7px; border-radius: 8px; background: #eee; box-shadow: 0 0 8px rgba(255,255,255,.25); }
+.musicProgressDot { position: absolute; left: 0%; top: 50%; width: 14px; height: 14px; transform: translate(-50%,-50%); border-radius: 50%; background: #fff; border: 2px solid #888; box-shadow: 0 0 8px rgba(255,255,255,.25); }
+.musicTime { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; color: #777; font: 9px monospace; }
+.musicControls { position: relative; z-index: 2; display: flex; align-items: center; gap: 13px; margin-top: 15px; }
+.musicButton { width: 91px; height: 50px; display: flex; align-items: center; justify-content: center; border: 1px solid #fff; border-radius: 16px; background: #fff; color: #000; font: bold 11px Arial,sans-serif; letter-spacing: 1.5px; box-shadow: 0 5px 12px rgba(0,0,0,.45), 0 0 12px rgba(255,255,255,.08); transition: transform .12s ease, background .12s ease; }
+.musicButton:active { transform: scale(.94); background: #d8d8d8; }
+.musicVolumeBox { flex: 1; height: 50px; display: flex; align-items: center; gap: 10px; padding: 0 13px; border: 1px solid rgba(255,255,255,.09); border-radius: 16px; background: #111113; box-shadow: inset 0 1px 0 rgba(255,255,255,.035); }
+.musicVolumeLabel { width: 32px; color: #aaa; font: bold 8px monospace; letter-spacing: .8px; }
+.musicVolume { width: 100%; height: 4px; accent-color: #fff; }
+.musicStatus { position: relative; z-index: 2; margin-top: 13px; text-align: center; color: #ddd; font: bold 9px monospace; letter-spacing: 1.8px; }
+.musicLine { position: relative; z-index: 2; height: 1px; margin-top: 12px; background: linear-gradient(90deg, transparent, #555, transparent); opacity: .6; }
+.musicFooter { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; margin-top: 10px; color: #505055; font: 8px monospace; letter-spacing: .5px; }
 </style>
-
-<div class="radio-wrap">
-  <div class="radio-box">
-    <div class="radio-head">
-      <div class="radio-title">📻 RADIO</div>
-      <div class="radio-live">LIVE</div>
+<div class="musicWrap">
+  <div class="musicFrame">
+    <div class="musicGlow"></div>
+    <div class="musicHeader">
+      <div class="musicBrand">
+        <div class="musicBrandIcon">LC</div>
+        LevviCode MUSIC
+      </div>
+      <div class="musicLive">MP3</div>
     </div>
 
-    <div class="radio-screen"></div>
-
-    <div class="radio-body">
-      <div class="station-name" id="stationName">Mickey FM</div>
-
-      <div class="controls">
-        <button class="btn" id="prevBtn">⏮</button>
-        <button class="btn primary" id="playBtn">▶ Play</button>
-        <button class="btn" id="nextBtn">⏭</button>
+    <div class="musicMain">
+      <div class="musicCover">
+        <div class="musicVinyl" id="musicVinyl"></div>
       </div>
-
-      <div class="station-list" id="stationList"></div>
-
-      <div class="volume-box">
-        <span>🔊</span>
-        <input id="volumeBar" type="range" min="0" max="1" step="0.01" value="0.7">
+      <div class="musicDetails">
+        <div class="musicTitle">Ushauri</div>
+        <div class="musicSubtitle">LEVVICODE • MP3</div>
+        <div class="visualizer" id="visualizer">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
       </div>
     </div>
+
+    <div class="musicProgressArea">
+      <div class="musicProgress" id="musicProgress">
+        <div class="musicProgressBar" id="musicProgressBar"></div>
+        <div class="musicProgressDot" id="musicProgressDot"></div>
+      </div>
+      <div class="musicTime">
+        <span id="musicCurrent">0:00</span>
+        <span id="musicDuration">0:00</span>
+      </div>
+    </div>
+
+    <div class="musicControls">
+      <button class="musicButton" id="musicPlay">PLAY</button>
+      <div class="musicVolumeBox">
+        <div class="musicVolumeLabel">VOL</div>
+        <input class="musicVolume" id="musicVolume" type="range" min="0" max="1" step=".01" value=".8">
+      </div>
+    </div>
+
+    <div class="musicStatus" id="musicStatus">READY TO PLAY</div>
+    <div class="musicLine"></div>
+    <div class="musicFooter">TAP PLAY TO START • LEVVICODE PLAYER</div>
   </div>
 </div>
 
-<audio id="radioPlayer" preload="auto"></audio>
-
+<audio id="localMusic" preload="auto" src="${audioSrc}"></audio>
 <script>
-(() => {
-  const stations = ${JSON.stringify(radioStations)};
-  const audio = document.getElementById('radioPlayer');
-  const playBtn = document.getElementById('playBtn');
-  const stationName = document.getElementById('stationName');
-  const stationList = document.getElementById('stationList');
-  const volumeBar = document.getElementById('volumeBar');
-  const prevBtn = document.getElementById('prevBtn');
-  const nextBtn = document.getElementById('nextBtn');
+(function(){
+  const audio = document.getElementById('localMusic');
+  const play = document.getElementById('musicPlay');
+  const volume = document.getElementById('musicVolume');
+  const progress = document.getElementById('musicProgress');
+  const progressBar = document.getElementById('musicProgressBar');
+  const progressDot = document.getElementById('musicProgressDot');
+  const current = document.getElementById('musicCurrent');
+  const duration = document.getElementById('musicDuration');
+  const status = document.getElementById('musicStatus');
+  const visualizer = document.getElementById('visualizer');
+  const vinyl = document.getElementById('musicVinyl');
 
-  let currentIndex = 0;
-
-  function renderStations() {
-    stationList.innerHTML = '';
-    stations.forEach((station, index) => {
-      const btn = document.createElement('button');
-      btn.className = 'station-item' + (index === currentIndex ? ' active' : '');
-      btn.textContent = station.name;
-      btn.addEventListener('click', () => {
-        currentIndex = index;
-        loadStation();
-      });
-      stationList.appendChild(btn);
-    });
+  function formatTime(sec) {
+    if (!Number.isFinite(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ':' + String(s).padStart(2, '0');
   }
 
-  function loadStation() {
-    const station = stations[currentIndex];
-    stationName.textContent = station.name;
-    audio.src = station.url;
-    audio.volume = Number(volumeBar.value);
-    renderStations();
-    if (!audio.paused) {
-      audio.play().catch(() => {});
+  function updateProgress() {
+    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    const percent = (audio.currentTime / audio.duration) * 100;
+    progressBar.style.width = percent + '%';
+    progressDot.style.left = percent + '%';
+    current.textContent = formatTime(audio.currentTime);
+  }
+
+  function setPlaying() {
+    play.textContent = 'PAUSE';
+    status.textContent = 'NOW PLAYING';
+    visualizer.classList.add('playing');
+    vinyl.classList.add('playing');
+  }
+
+  function setPaused() {
+    play.textContent = 'PLAY';
+    status.textContent = 'PAUSED';
+    visualizer.classList.remove('playing');
+    vinyl.classList.remove('playing');
+  }
+
+  play.addEventListener('click', async function(){
+    try {
+      if (audio.paused) {
+        await audio.play();
+        setPlaying();
+      } else {
+        audio.pause();
+        setPaused();
+      }
+    } catch (error) {
+      status.textContent = 'PLAY ERROR';
+      visualizer.classList.remove('playing');
+      vinyl.classList.remove('playing');
     }
-  }
-
-  function togglePlay() {
-    if (audio.paused) {
-      audio.play().catch(() => {});
-    } else {
-      audio.pause();
-    }
-  }
-
-  audio.addEventListener('play', () => {
-    playBtn.textContent = '⏸ Pause';
   });
 
-  audio.addEventListener('pause', () => {
-    playBtn.textContent = '▶ Play';
+  volume.addEventListener('input', function(){
+    audio.volume = Number(volume.value);
   });
 
-  volumeBar.addEventListener('input', () => {
-    audio.volume = Number(volumeBar.value);
+  progress.addEventListener('pointerdown', function(e){
+    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    const rect = progress.getBoundingClientRect();
+    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    audio.currentTime = (x / rect.width) * audio.duration;
+    updateProgress();
   });
 
-  prevBtn.addEventListener('click', () => {
-    currentIndex = (currentIndex - 1 + stations.length) % stations.length;
-    loadStation();
+  audio.addEventListener('loadedmetadata', function(){
+    duration.textContent = formatTime(audio.duration);
   });
 
-  nextBtn.addEventListener('click', () => {
-    currentIndex = (currentIndex + 1) % stations.length;
-    loadStation();
+  audio.addEventListener('timeupdate', function(){
+    updateProgress();
   });
 
-  playBtn.addEventListener('click', togglePlay);
-  audio.volume = Number(volumeBar.value);
-  renderStations();
-  loadStation();
+  audio.addEventListener('play', function(){ setPlaying(); });
+  audio.addEventListener('pause', function(){ if (!audio.ended) setPaused(); });
+  audio.addEventListener('ended', function(){
+    play.textContent = 'PLAY';
+    status.textContent = 'PLAYBACK COMPLETE';
+    visualizer.classList.remove('playing');
+    vinyl.classList.remove('playing');
+    progressBar.style.width = '0%';
+    progressDot.style.left = '0%';
+    current.textContent = '0:00';
+  });
+
+  audio.volume = 0.8;
 })();
-</script>
-`;
-
-function buildRadioPayload(jid, titleText = '📻 RADIO') {
-  const responseId = `radio-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+</script>`;
 
   const payload = {
     messageContextInfo: {
@@ -204,16 +253,14 @@ function buildRadioPayload(jid, titleText = '📻 RADIO') {
       deviceListMetadataVersion: 2,
       botMetadata: {
         messageDisclaimerText: '',
-        botResponseId: responseId
+        botResponseId: responseId,
       }
     },
     botForwardedMessage: {
       message: {
         richResponseMessage: {
           messageType: 1,
-          submessages: [
-            { messageType: 2, messageText: titleText }
-          ],
+          submessages: [{ messageType: 2, messageText: titleText }],
           unifiedResponse: {
             data: Buffer.from(JSON.stringify({
               response_id: responseId,
@@ -221,8 +268,8 @@ function buildRadioPayload(jid, titleText = '📻 RADIO') {
                 view_model: {
                   primitive: {
                     __typename: 'GenAIaeacdsnwHtmlPrimitive',
-                    payload: radioHtml,
-                    trusted_sources: ['nixel.dev']
+                    payload: html,
+                    trusted_sources: []
                   },
                   __typename: 'GenAISingleLayoutViewModel'
                 }
@@ -247,12 +294,10 @@ const radioCommand = async (sock, chatId, msg, args = []) => {
   const ctx = createCtx(sock, chatId, msg, { args });
   const target = ctx.chatId || chatId || msg?.key?.remoteJid;
 
-  if (!sock || !target) {
-    throw new Error('Chat context is required');
-  }
+  if (!sock || !target) throw new Error('Chat context is required');
 
   try {
-    const payload = buildRadioPayload(target, '📻 RADIO');
+    const payload = await buildRadioPayload(target, '🎧 RADIO');
     await sock.relayMessage(payload.jid, payload.content, {});
     return true;
   } catch (error) {
@@ -260,7 +305,7 @@ const radioCommand = async (sock, chatId, msg, args = []) => {
 
     try {
       await sock.sendMessage(target, {
-        text: '📻 RADIO\n━━━━━━━━━━━━━━━━━━━\nPlay live station stream from the bot UI.'
+        text: '🎧 RADIO\n━━━━━━━━━━━━━━━━━━━\nAudio source: glitch/ushauri.mp3\nIf the file is missing, it will fall back to the GitHub MP3 URL.'
       }, { quoted: ctx.msg });
       return true;
     } catch (sendErr) {
@@ -271,8 +316,8 @@ const radioCommand = async (sock, chatId, msg, args = []) => {
 };
 
 radioCommand.name = 'radio';
-radioCommand.aliases = ['fm', 'live', 'station'];
+radioCommand.aliases = ['music', 'player', 'ushauri', 'audio'];
 radioCommand.category = 'fun';
-radioCommand.description = '📻 Radio player interface with station switching';
+radioCommand.description = '🎧 Local MP3 radio/music player using glitch/ushauri.mp3';
 
 module.exports = radioCommand;
