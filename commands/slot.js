@@ -333,10 +333,10 @@ html,body{
     
     <div class="header">
       <div class="brand">
-        <div class="logo">777</div>
+        <div class="logo">MICK</div>
         <div>
-          <div class="mini">CYLICDEV GAME CENTER</div>
-          <div class="title">Slot 777</div>
+          <div class="mini">MICKEY GLITCH GAME</div>
+          <div class="title">Mickey slot</div>
         </div>
       </div>
       <div class="balance">
@@ -389,9 +389,9 @@ html,body{
 
     <div class="footer">
       <span class="dot"></span>
-      <span>CYLICDEV</span>
+      <span>MICKEY GLITCH</span>
       <span>•</span>
-      <span>SLOT 777</span>
+      <span>MICKEY SLOT</span>
     </div>
   </div>
 </div>

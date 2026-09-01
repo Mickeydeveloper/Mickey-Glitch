@@ -22,7 +22,7 @@ canvas{width:100%;height:auto;background:rgba(255,255,255,.03);border:1px solid 
   <div class="card">
     <div class="header">
       <div>
-        <div class="header-left">NIXEL DINO</div>
+        <div class="header-left">MICKEY DINO</div>
         <div class="header-title">Dino Runner</div>
       </div>
       <div class="header-right">

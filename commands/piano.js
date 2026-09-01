@@ -50,8 +50,8 @@ body{padding:20px 0;}
 </div>
 </div>
 <div id="note">🎵 Tekan piano</div>
-<button class="record-btn" id="recordBtn">🎙️ Rekam</button>
-<div class="footer">Tap keys to play • Piano by Nixel</div>
+<button class="record-btn" id="recordBtn">🎙️ RECORD</button>
+<div class="footer">Tap keys to play • Piano by Mickey</div>
 
 <script>
 let audioContext = null;
