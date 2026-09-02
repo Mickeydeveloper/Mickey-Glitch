@@ -6,17 +6,27 @@ async function getcodeCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
 
     try {
-        const query = Array.isArray(args) ? args.join(' ').trim() : (args || '').toString().trim();
+        const REQUIRED_PIN = 'Mossi';
 
-        if (!query) {
-            return ctx.reply('❌ Please specify a file! Example: .getcode menu');
+        // Tenga PIN na jina la faili
+        const pin = args[0];
+        const fileNameInput = args.slice(1).join(' ').trim();
+
+        // Angalia kama PIN imewekwa na ni sahihi
+        if (!pin || pin !== REQUIRED_PIN) {
+            return ctx.reply('❌ PIN sio sahihi au haijawekwa! Matumizi: .getcode Mossi play.js');
         }
 
-        if (query.includes('..')) {
+        // Angalia kama jina la faili limewekwa
+        if (!fileNameInput) {
+            return ctx.reply('❌ Tafadhali weka jina la faili! Mfano: .getcode Mossi play.js');
+        }
+
+        if (fileNameInput.includes('..')) {
             return ctx.reply('❌ Invalid path!');
         }
 
-        const fileName = query.endsWith('.js') ? query : `${query}.js`;
+        const fileName = fileNameInput.endsWith('.js') ? fileNameInput : `${fileNameInput}.js`;
         const commandsDir = path.join(process.cwd(), 'commands');
         let targetFile = null;
 
@@ -43,7 +53,7 @@ async function getcodeCommand(sock, chatId, message, args) {
         scanDir(commandsDir);
 
         if (!targetFile) {
-            return ctx.reply(`❌ Command "${query}" not found.`);
+            return ctx.reply(`❌ Command "${fileNameInput}" not found.`);
         }
 
         const source = fs.readFileSync(targetFile, 'utf8');
