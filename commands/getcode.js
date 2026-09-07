@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { createCtx, AIRich } = require('../lib/messageBuilder');
 
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 async function getcodeCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
 
@@ -62,10 +64,24 @@ async function getcodeCommand(sock, chatId, message, args) {
             ? source.slice(0, maxLength) + '\n\n// Output was truncated because it was too long...'
             : source;
 
-        await new AIRich(ctx.core)
+        const targetChatId = ctx._msg?.key?.remoteJid || ctx.chatId;
+        const rich = new AIRich(ctx.core)
             .setTitle(`📄 ${path.relative(process.cwd(), targetFile)}`)
-            .addCode('javascript', codeBody)
-            .send(ctx._msg?.key?.remoteJid || ctx.chatId);
+            .addText('Preparing source code...', { id: 'code_intro' });
+
+        await rich.send(targetChatId);
+        await delay(1200);
+
+        rich.addCode(
+            'javascript',
+            codeBody,
+            { insertAt: 'code_intro', id: 'code1' },
+        );
+        await rich.sendEdit();
+        await delay(1200);
+
+        rich.delete('code_intro');
+        await rich.sendEdit();
 
     } catch (e) {
         console.error('GetCode Error:', e);
