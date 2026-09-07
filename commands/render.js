@@ -1,4 +1,4 @@
-const { createCtx } = require('../../lib/messageBuilder');
+const { createCtx } = require('../lib/messageBuilder');
 const { randomUUID } = require('crypto');
 
 // Function ya HTML Renderer
