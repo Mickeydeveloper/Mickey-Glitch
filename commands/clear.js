@@ -1,14 +1,34 @@
-async function clearCommand(sock, chatId) {
+async function clearCommand(sock, chatId, message, args = [], options = {}) {
+    const targetChatId = chatId || message?.key?.remoteJid || options.chatId;
+    const quoted = message?.quoted;
+    const quotedContext = message?.message?.extendedTextMessage?.contextInfo
+        || message?.message?.imageMessage?.contextInfo
+        || message?.message?.videoMessage?.contextInfo
+        || message?.contextInfo;
+
+    const quotedKey = quoted?.key || {
+        remoteJid: targetChatId,
+        id: quoted?.stanzaId || quotedContext?.stanzaId,
+        participant: quoted?.participant || quotedContext?.participant,
+        fromMe: Boolean(quoted?.fromMe),
+    };
+
+    if (!targetChatId || !quotedKey.id) {
+        await sock.sendMessage(targetChatId, {
+            text: 'Reply kwenye text unayotaka kufuta, kisha tumia .clear',
+        }, { quoted: message });
+        return false;
+    }
+
     try {
-        const message = await sock.sendMessage(chatId, { text: 'Clearing bot messages...' });
-        const messageKey = message.key; // Get the key of the message the bot just sent
-        
-        // Now delete the bot's message
-        await sock.sendMessage(chatId, { delete: messageKey });
-        
+        await sock.sendMessage(targetChatId, { delete: quotedKey });
+        return true;
     } catch (error) {
-        console.error('Error clearing messages:', error);
-        await sock.sendMessage(chatId, { text: 'An error occurred while clearing messages.' });
+        console.error('[clear] Failed to delete replied message:', error);
+        await sock.sendMessage(targetChatId, {
+            text: 'Imeshindikana kufuta hiyo text. Hakikisha ume-reply ujumbe sahihi.',
+        }, { quoted: message });
+        return false;
     }
 }
 
