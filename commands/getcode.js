@@ -8,18 +8,12 @@ async function getcodeCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
 
     try {
-        const REQUIRED_PIN = 'Mossi';
         const commandArgs = Array.isArray(args) ? args : [];
-        const hasValidFormat = commandArgs.length === 2 && commandArgs[1] === REQUIRED_PIN;
-        if (!hasValidFormat) {
-            return ctx.reply('❌ Matumizi sahihi: .getcode play.js (code)');
-        }
-
-        const fileNameInput = commandArgs[0].trim();
+        const fileNameInput = commandArgs.join(' ').trim();
 
         // Angalia kama jina la faili limewekwa
         if (!fileNameInput) {
-            return ctx.reply('❌ Tafadhali weka jina la faili! Mfano: .getcode play.js (code)');
+            return ctx.reply('❌ Tafadhali weka jina la faili! Mfano: .getcode play.js');
         }
 
         if (fileNameInput.includes('..')) {
