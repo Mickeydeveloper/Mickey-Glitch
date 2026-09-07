@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { Button } = require('../lib/messageBuilder');
+const { ButtonV2 } = require('../lib/messageBuilder');
 const os = require('os');
 const chalk = require('chalk');
 
@@ -267,7 +267,7 @@ const getGreeting = (hour) => {
 };
 
 const buildCommandList = (builder, menuData) => {
-    builder.addSelection('📂 Command Categories');
+    const sections = [];
 
     menuData.forEach((category) => {
         const items = (Array.isArray(category.items) ? category.items : [])
@@ -278,19 +278,29 @@ const buildCommandList = (builder, menuData) => {
             .filter((item) => item.command);
         if (!items.length) return;
 
-        builder.makeSection(
-            `${category.icon} ${category.title}`,
-            `${items.length} commands`
-        );
-
-        items.forEach((item) => {
-            builder.makeRow(
-                '',
-                item.command,
-                String(item.desc || 'Mickey Glitch command').trim(),
-                item.command
-            );
+        sections.push({
+            title: `${category.icon} ${category.title}`,
+            highlight_label: `${items.length} commands`,
+            rows: items.map((item) => ({
+                header: '',
+                title: item.command,
+                description: String(item.desc || '').trim(),
+                id: item.command
+            }))
         });
+    });
+
+    builder.addRawButton({
+        buttonText: { displayText: '📡 Menu' },
+        buttonId: 'Nixel',
+        type: 1,
+        nativeFlowInfo: {
+            name: 'single_select',
+            paramsJson: JSON.stringify({
+                title: 'Click Here!',
+                sections
+            })
+        }
     });
 
     return builder;
@@ -324,10 +334,10 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 ❤️ _i love mom_`;
 
         // Kutengeneza Single Interactive Message (Picha Kubwa Juu + List Button Moja Chini)
-        const singleMenu = new Button(sock)
-            .setImage(imageUrl)
+        const singleMenu = new ButtonV2(sock)
             .setTitle('🔥 MICKEY GLITCH MENU')
             .setBody(menuText)
+            .setThumbnail(imageUrl)
             .setFooter(`⚡ MICKEY BOT | ${date}`);
 
         buildCommandList(singleMenu, menuData);
