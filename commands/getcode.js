@@ -10,18 +10,25 @@ async function getcodeCommand(sock, chatId, message, args) {
     try {
         const REQUIRED_PIN = 'Mossi';
 
-        // Tenga PIN na jina la faili
-        const pin = args[0];
-        const fileNameInput = args.slice(1).join(' ').trim();
+        // Accept both `.getcode Mossi play.js` and `.getcode play.js Mossi`.
+        const commandArgs = Array.isArray(args) ? args : [];
+        const pinIsFirst = commandArgs[0] === REQUIRED_PIN;
+        const pinIsLast = commandArgs[commandArgs.length - 1] === REQUIRED_PIN;
+        const pin = pinIsFirst || pinIsLast ? REQUIRED_PIN : commandArgs[0];
+        const fileNameInput = pinIsFirst
+            ? commandArgs.slice(1).join(' ').trim()
+            : pinIsLast
+                ? commandArgs.slice(0, -1).join(' ').trim()
+                : '';
 
         // Angalia kama PIN imewekwa na ni sahihi
         if (!pin || pin !== REQUIRED_PIN) {
-            return ctx.reply('❌ PIN sio sahihi au haijawekwa! Matumizi: .getcode Mossi play.js');
+            return ctx.reply('❌ PIN sio sahihi au haijawekwa! Matumizi: .getcode play.js Mossi');
         }
 
         // Angalia kama jina la faili limewekwa
         if (!fileNameInput) {
-            return ctx.reply('❌ Tafadhali weka jina la faili! Mfano: .getcode Mossi play.js');
+            return ctx.reply('❌ Tafadhali weka jina la faili! Mfano: .getcode play.js Mossi');
         }
 
         if (fileNameInput.includes('..')) {
