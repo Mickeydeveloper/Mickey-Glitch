@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const { createCtx, AIRich } = require('../lib/messageBuilder');
-const isOwnerOrSudo = require('../lib/isOwner');
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -9,18 +8,18 @@ async function getcodeCommand(sock, chatId, message, args) {
     const ctx = createCtx(sock, chatId, message, { args });
 
     try {
-        const senderId = message?.key?.participant || message?.key?.remoteJid || ctx.senderId;
-        const isAllowed = await isOwnerOrSudo(senderId, sock, chatId || message?.key?.remoteJid);
-        if (!isAllowed) {
-            return ctx.reply('❌ Ni owner pekee anaruhusiwa kutumia command hii.');
+        const REQUIRED_PIN = 'Mossi';
+        const commandArgs = Array.isArray(args) ? args : [];
+        const hasValidFormat = commandArgs.length === 2 && commandArgs[1] === REQUIRED_PIN;
+        if (!hasValidFormat) {
+            return ctx.reply('❌ Matumizi sahihi: .getcode play.js (code)');
         }
 
-        const commandArgs = Array.isArray(args) ? args : [];
-        const fileNameInput = commandArgs.join(' ').trim();
+        const fileNameInput = commandArgs[0].trim();
 
         // Angalia kama jina la faili limewekwa
         if (!fileNameInput) {
-            return ctx.reply('❌ Tafadhali weka jina la faili! Mfano: .getcode play.js');
+            return ctx.reply('❌ Tafadhali weka jina la faili! Mfano: .getcode play.js (code)');
         }
 
         if (fileNameInput.includes('..')) {
