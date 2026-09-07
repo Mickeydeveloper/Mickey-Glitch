@@ -328,17 +328,16 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 👋 *Habari za ${greeting.text}* ${greeting.emoji}
 👤 *User:* ${userName}
 📅 *Date:* ${date} | 🕒 *Time:* ${time}
-⚡ *Commands:* ${totalCmds} | 💾 *RAM:* ${stats.memoryUsed} MB
 
 👇 *Bonyeza button ya list hapo chini kuona categories vyema*
 ❤️ _i love mom_`;
 
         // Kutengeneza Single Interactive Message (Picha Kubwa Juu + List Button Moja Chini)
         const singleMenu = new ButtonV2(sock)
-            .setTitle('🔥 MICKEY GLITCH MENU')
+            .setTitle('🔥 MICKEY GLITCH ')
             .setBody(menuText)
             .setThumbnail(imageUrl)
-            .setFooter(`⚡ MICKEY BOT | ${date}`);
+            .setFooter(`⚡ Mickey | ${date}`);
 
         buildCommandList(singleMenu, menuData);
 
