@@ -1,6 +1,20 @@
 const { createCtx } = require('../../lib/messageBuilder');
 const { randomUUID } = require('crypto');
 
+function resolveBotSocketUrl(rawUrl) {
+  if (rawUrl) return rawUrl;
+
+  const envUrl = process.env.BOT_WS_URL || process.env.WS_URL || process.env.WEBSOCKET_URL;
+  if (envUrl) return envUrl;
+
+  const globalUrl = globalThis.__MICKY_BOT_WS_URL__ || globalThis.__BOT_WS_URL__;
+  if (globalUrl) return globalUrl;
+
+  const port = process.env.PORT || 3000;
+  const protocol = (process.env.HTTPS === 'true' || process.env.NODE_ENV === 'production') ? 'wss' : 'ws';
+  return `${protocol}://localhost:${port}/ws`;
+}
+
 // HTML ya WebSocket Group Chat - Real WebSocket
 function buildChatHTML(wsUrl, room, name) {
   return `<!DOCTYPE html>
@@ -155,8 +169,8 @@ const wsgCommand = async (sock, chatId, msg, args = []) => {
     // Get user name
     const userName = msg?.pushName || 'User';
 
-    // WebSocket URL - default to echo server if no args
-    const wsUrl = args[0] || 'wss://echo.websocket.org';
+    // WebSocket URL - default to the bot's own socket endpoint if no args are passed
+    const wsUrl = resolveBotSocketUrl(args[0]);
 
     const html = buildChatHTML(wsUrl, room, userName);
 
@@ -217,7 +231,7 @@ const wsgCommand = async (sock, chatId, msg, args = []) => {
 
         try {
             await sock.sendMessage(target, {
-                text: `💬 WEBSOCKET GROUP CHAT\n━━━━━━━━━━━━━━━━━━━\n🌐 Server: ${wsUrl}\n📝 Room: ${room}\n👤 Name: ${userName}\n━━━━━━━━━━━━━━━━━━━\nType .wsg [ws_url] to connect!\n━━━━━━━━━━━━━━━━━━━\nExample: .wsg wss://echo.websocket.org`
+                text: `💬 WEBSOCKET GROUP CHAT\n━━━━━━━━━━━━━━━━━━━\n🌐 Server: ${wsUrl}\n📝 Room: ${room}\n👤 Name: ${userName}\n━━━━━━━━━━━━━━━━━━━\nType .wsg [ws_url] to connect!\n━━━━━━━━━━━━━━━━━━━\nExample: .wsg ${wsUrl}`
             }, { quoted: ctx.msg });
             return true;
         } catch (sendErr) {
@@ -227,9 +241,9 @@ const wsgCommand = async (sock, chatId, msg, args = []) => {
     }
 };
 
-wsgCommand.name = 'wsg';
-wsgCommand.aliases = ['websocketgroup', 'wsgroup', 'websocket'];
+wsgCommand.name = 'wasocket';
+wsgCommand.aliases = ['wsg', 'websocketgroup', 'wsgroup', 'websocket'];
 wsgCommand.category = 'fun';
-wsgCommand.description = '💬 WebSocket Group Chat - Real WebSocket';
+wsgCommand.description = '💬 WebSocket Group Chat - Real Bot Socket';
 
 module.exports = wsgCommand;
