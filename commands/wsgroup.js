@@ -78,6 +78,17 @@ var $=function(id){return document.getElementById(id)};
 var ml=$("ml"),ii=$("i"),bb=$("b"),dd=$("d"),mc=$("mc"),ob=$("ob");
 var ws,sid=SID,mcnt=0;
 
+function setStatus(isOnline, text){
+  dd.className = isOnline ? 'dot on' : 'dot';
+  if (text) {
+    ob.style.display = 'block';
+    ob.textContent = text;
+  } else {
+    ob.style.display = 'none';
+    ob.textContent = '';
+  }
+}
+
 function ts(t){var dt=new Date(t);return("0"+dt.getHours()).slice(-2)+":"+("0"+dt.getMinutes()).slice(-2)}
 function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
 
@@ -102,10 +113,11 @@ ii.onkeydown=function(e){if(e.key==="Enter")sendMsg()};
 
 function connect(){
   if(ws){try{ws.onclose=null;ws.close()}catch(e){}}
+  setStatus(false, '⏳ Menghubungkan...');
   try{ws=new WebSocket(URL)}catch(e){if(!document.hidden)setTimeout(connect,3e3);return}
-  ws.onopen=function(){dd.className="dot on";ob.style.display="none";ws.send(JSON.stringify({type:"chat:join",room:ROOM,name:NAME,sid:SID}))};
-  ws.onclose=function(){dd.className="dot";ob.style.display="block";if(!document.hidden)setTimeout(connect,3e3)};
-  ws.onerror=function(){};
+  ws.onopen=function(){setStatus(true);ws.send(JSON.stringify({type:"chat:join",room:ROOM,name:NAME,sid:SID}))};
+  ws.onclose=function(){setStatus(false,'⏳ Reconnecting...');if(!document.hidden)setTimeout(connect,3e3)};
+  ws.onerror=function(){setStatus(false,'⚠️ Koneksi error');};
   ws.onmessage=function(e){
     var m;try{m=JSON.parse(e.data)}catch(err){return}
     if(m.type==="chat:welcome"){sid=m.sid||SID;mcnt=m.members.length;mc.textContent=mcnt;m.history.forEach(add)}
