@@ -14,8 +14,15 @@ function escJs(s) {
 function resolveBotSocketUrl(rawUrl) {
   if (rawUrl) return rawUrl;
 
-  const envUrl = process.env.BOT_WS_URL || process.env.WS_URL || process.env.WEBSOCKET_URL;
-  if (envUrl) return envUrl;
+  const explicit = process.env.BOT_WS_URL || process.env.WS_URL || process.env.WEBSOCKET_URL || process.env.PUBLIC_URL || process.env.APP_URL || process.env.URL || process.env.RENDER_EXTERNAL_URL || process.env.VERCEL_URL || process.env.PROJECT_DOMAIN;
+  if (explicit) {
+    const normalized = explicit.trim();
+    const withProtocol = /^wss?:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
+    const url = new URL(withProtocol);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    if (!url.pathname || url.pathname === '/') url.pathname = '/ws';
+    return url.toString();
+  }
 
   const globalUrl = globalThis.__MICKY_BOT_WS_URL__ || globalThis.__BOT_WS_URL__;
   if (globalUrl) return globalUrl;
@@ -115,8 +122,14 @@ function connect(){
   if(ws){try{ws.onclose=null;ws.close()}catch(e){}}
   setStatus(false, '⏳ Menghubungkan...');
   try{ws=new WebSocket(URL)}catch(e){if(!document.hidden)setTimeout(connect,3e3);return}
-  ws.onopen=function(){setStatus(true);ws.send(JSON.stringify({type:"chat:join",room:ROOM,name:NAME,sid:SID}))};
-  ws.onclose=function(){setStatus(false,'⏳ Reconnecting...');if(!document.hidden)setTimeout(connect,3e3)};
+  ws.onopen=function(){
+    if (ws && ws.readyState === 1) setStatus(true);
+    ws.send(JSON.stringify({type:"chat:join",room:ROOM,name:NAME,sid:SID}));
+  };
+  ws.onclose=function(){
+    setStatus(false,'⏳ Reconnecting...');
+    if(!document.hidden)setTimeout(connect,3e3)
+  };
   ws.onerror=function(){setStatus(false,'⚠️ Koneksi error');};
   ws.onmessage=function(e){
     var m;try{m=JSON.parse(e.data)}catch(err){return}

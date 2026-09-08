@@ -236,7 +236,19 @@ const server = http.createServer(async (req, res) => {
 });
 
 const port = process.env.PORT || 3000
-const wsUrl = `ws://localhost:${port}/ws`
+const envHost = process.env.PUBLIC_URL || process.env.APP_URL || process.env.URL || process.env.RENDER_EXTERNAL_URL || process.env.VERCEL_URL || process.env.PROJECT_DOMAIN || `localhost:${port}`
+const wsBase = /^https?:\/\//i.test(envHost) ? envHost : `http://${envHost}`
+const wsUrl = (() => {
+  try {
+    const base = new URL(wsBase)
+    base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:'
+    base.pathname = '/ws'
+    return base.toString()
+  } catch (err) {
+    return `ws://${envHost}/ws`
+  }
+})()
+
 globalThis.__MICKY_BOT_WS_URL__ = wsUrl
 globalThis.__BOT_WS_URL__ = wsUrl
 
