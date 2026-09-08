@@ -1,8 +1,8 @@
 const { createCtx } = require('../../lib/messageBuilder');
 const { randomUUID } = require('crypto');
 
-// HTML ya WebSocket Group Chat - Simplified
-function buildChatHTML(room, name) {
+// HTML ya WebSocket Group Chat - Real WebSocket
+function buildChatHTML(wsUrl, room, name) {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -48,106 +48,93 @@ html,body{background:transparent;color:var(--ink);font-family:-apple-system,Blin
 <div class="ob" id="ob" style="display:none">⏳ Menghubungkan...</div>
 
 <script>
-var ROOM="${room}",NAME="${name}";
-var ml=document.getElementById("ml"),ii=document.getElementById("i"),bb=document.getElementById("b");
-var dd=document.getElementById("d"),mc=document.getElementById("mc"),ob=document.getElementById("ob");
-var ws=null,messages=[],mcnt=0;
+var ROOM="${room}", NAME="${name}", WS_URL="${wsUrl}";
+var ml=document.getElementById("ml"), ii=document.getElementById("i"), bb=document.getElementById("b");
+var dd=document.getElementById("d"), mc=document.getElementById("mc"), ob=document.getElementById("ob");
+var ws=null, sid="u_"+Math.random().toString(36).slice(2)+Date.now().toString(36);
+var mcnt=0;
 
 function ts(t){var d=new Date(t);return String(d.getHours()).padStart(2,'0')+":"+String(d.getMinutes()).padStart(2,'0')}
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
 
 function add(m){
   var el=document.createElement("div");
-  var isMe=(m.sender===NAME);
-  if(m.type==="system"){el.className="m sys";el.textContent=m.text}
-  else if(isMe){el.className="m me";el.innerHTML='<div class="mt">'+m.text+'</div><div class="ts">'+ts(m.time)+'</div>'}
-  else{el.className="m ot";el.innerHTML='<div class="mn">'+m.sender+'</div><div class="mt">'+m.text+'</div><div class="ts">'+ts(m.time)+'</div>'}
+  var isMe=(m.sid===sid)||(m.name===NAME);
+  if(m.type==="chat:system"){el.className="m sys";el.textContent=m.text}
+  else if(isMe){el.className="m me";el.innerHTML='<div class="mt">'+esc(m.text)+'</div><div class="ts">'+ts(m.ts)+'</div>'}
+  else{el.className="m ot";el.innerHTML='<div class="mn">'+esc(m.name)+'</div><div class="mt">'+esc(m.text)+'</div><div class="ts">'+ts(m.ts)+'</div>'}
   ml.appendChild(el);ml.scrollTop=ml.scrollHeight;
 }
 
 function sendMsg(){
   var t=ii.value.trim();
-  if(!t)return;
-  var msg={sender:NAME,text:t,time:Date.now(),type:"message"};
-  messages.push(msg);
-  add(msg);
-  // Broadcast to other users via localStorage (simulated)
-  localStorage.setItem('wsg_'+ROOM, JSON.stringify({messages:messages,members:mcnt+1}));
+  if(!t||!ws||ws.readyState!==1)return;
+  ws.send(JSON.stringify({type:"chat:msg", room:ROOM, text:t, name:NAME}));
   ii.value="";ii.focus();
-  // Simulate reply
-  setTimeout(function(){
-    var reply={sender:"Bot",text:"📩 Received: "+t,time:Date.now(),type:"message"};
-    messages.push(reply);
-    add(reply);
-    localStorage.setItem('wsg_'+ROOM, JSON.stringify({messages:messages,members:mcnt+1}));
-  }, 500);
 }
 
 bb.onclick=sendMsg;
 ii.onkeydown=function(e){if(e.key==="Enter")sendMsg()};
 
-// Load saved messages
-function loadMessages(){
+function connect(){
+  if(ws){try{ws.onclose=null;ws.close()}catch(e){}}
   try{
-    var data=localStorage.getItem('wsg_'+ROOM);
-    if(data){
-      var parsed=JSON.parse(data);
-      messages=parsed.messages||[];
-      mcnt=parsed.members||0;
-      mc.textContent=mcnt;
-      ml.innerHTML="";
-      messages.forEach(add);
-      dd.className="dot on";
-      ob.style.display="none";
-    }
-  }catch(e){}
-}
-
-// Simulate other users
-function simulateUser(){
-  var users=["Mtu 1","Mtu 2","Mtu 3","Mtu 4"];
-  var user=users[Math.floor(Math.random()*users.length)];
-  var msgs=["Halo!", "Habari?", "Mambo?", "Poa!", "Safi!", "Nzuri!", "Vipi?"];
-  var msg=msgs[Math.floor(Math.random()*msgs.length)];
-  var newMsg={sender:user,text:msg,time:Date.now(),type:"message"};
-  messages.push(newMsg);
-  add(newMsg);
-  localStorage.setItem('wsg_'+ROOM, JSON.stringify({messages:messages,members:mcnt+1}));
-}
-
-// Auto-load
-loadMessages();
-
-// Simulate new users joining
-setTimeout(function(){
-  mcnt=Math.floor(Math.random()*5)+1;
-  mc.textContent=mcnt;
-  var sysMsg={type:"system",text:"👤 "+(mcnt-1)+" new member(s) joined"};
-  add(sysMsg);
-  localStorage.setItem('wsg_'+ROOM, JSON.stringify({messages:messages,members:mcnt}));
-}, 1000);
-
-// Simulate random messages
-setInterval(function(){
-  if(Math.random()>0.4){
-    simulateUser();
+    ws=new WebSocket(WS_URL);
+  }catch(e){
+    ob.style.display="block";
+    ob.textContent="❌ Connection failed";
+    setTimeout(connect, 5000);
+    return;
   }
-}, 8000);
-
-// Simulate disconnection
-setInterval(function(){
-  if(Math.random()>0.9){
+  
+  ws.onopen=function(){
+    dd.className="dot on";
+    ob.style.display="none";
+    ws.send(JSON.stringify({type:"chat:join", room:ROOM, name:NAME, sid:sid}));
+  };
+  
+  ws.onclose=function(){
     dd.className="dot";
     ob.style.display="block";
     ob.textContent="⏳ Reconnecting...";
-    setTimeout(function(){
-      dd.className="dot on";
-      ob.style.display="none";
-      var sysMsg={type:"system",text:"✅ Reconnected"};
-      add(sysMsg);
-    }, 2000);
-  }
-}, 30000);
+    setTimeout(connect, 3000);
+  };
+  
+  ws.onerror=function(err){
+    console.error("WebSocket error:", err);
+    ob.style.display="block";
+    ob.textContent="⚠️ Connection error";
+  };
+  
+  ws.onmessage=function(e){
+    var m;
+    try{m=JSON.parse(e.data)}catch(err){return}
+    if(m.type==="chat:welcome"){
+      sid=m.sid||sid;
+      mcnt=m.members?m.members.length:0;
+      mc.textContent=mcnt;
+      if(m.history) m.history.forEach(add);
+    }else if(m.type==="chat:msg"){
+      add(m);
+    }else if(m.type==="chat:system"){
+      add(m);
+      if(m.text.indexOf("masuk")>-1){mcnt++;mc.textContent=mcnt}
+      else if(m.text.indexOf("keluar")>-1){mcnt=Math.max(0,mcnt-1);mc.textContent=mcnt}
+    }
+  };
+}
 
+connect();
+
+document.addEventListener("visibilitychange", function(){
+  if(!document.hidden && (!ws || ws.readyState>1)){
+    connect();
+  }
+});
+
+window.onpagehide=function(){
+  if(ws) ws.close();
+};
 </script>
 </body>
 </html>`;
@@ -168,7 +155,10 @@ const wsgCommand = async (sock, chatId, msg, args = []) => {
     // Get user name
     const userName = msg?.pushName || 'User';
 
-    const html = buildChatHTML(room, userName);
+    // WebSocket URL - default to echo server if no args
+    const wsUrl = args[0] || 'wss://echo.websocket.org';
+
+    const html = buildChatHTML(wsUrl, room, userName);
 
     const payload = {
         messageContextInfo: {
@@ -186,7 +176,7 @@ const wsgCommand = async (sock, chatId, msg, args = []) => {
                     submessages: [
                         {
                             messageType: 2,
-                            messageText: "💬 Group Chat"
+                            messageText: "💬 WebSocket Group Chat"
                         }
                     ],
                     unifiedResponse: {
@@ -227,7 +217,7 @@ const wsgCommand = async (sock, chatId, msg, args = []) => {
 
         try {
             await sock.sendMessage(target, {
-                text: `💬 GROUP CHAT\n━━━━━━━━━━━━━━━━━━━\n📝 Chat room imeundwa!\n👤 Jina: ${userName}\n🆔 Room: ${room}\n━━━━━━━━━━━━━━━━━━━\nType .wsg to open chat!`
+                text: `💬 WEBSOCKET GROUP CHAT\n━━━━━━━━━━━━━━━━━━━\n🌐 Server: ${wsUrl}\n📝 Room: ${room}\n👤 Name: ${userName}\n━━━━━━━━━━━━━━━━━━━\nType .wsg [ws_url] to connect!\n━━━━━━━━━━━━━━━━━━━\nExample: .wsg wss://echo.websocket.org`
             }, { quoted: ctx.msg });
             return true;
         } catch (sendErr) {
@@ -238,8 +228,8 @@ const wsgCommand = async (sock, chatId, msg, args = []) => {
 };
 
 wsgCommand.name = 'wsg';
-wsgCommand.aliases = ['websocketgroup', 'wsgroup', 'chat'];
+wsgCommand.aliases = ['websocketgroup', 'wsgroup', 'websocket'];
 wsgCommand.category = 'fun';
-wsgCommand.description = '💬 Group Chat - Chat room';
+wsgCommand.description = '💬 WebSocket Group Chat - Real WebSocket';
 
 module.exports = wsgCommand;
