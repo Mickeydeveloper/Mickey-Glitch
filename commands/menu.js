@@ -7,7 +7,6 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { ButtonV2 } = require('../lib/messageBuilder');
 const os = require('os');
 const chalk = require('chalk');
 
@@ -266,48 +265,8 @@ const getGreeting = (hour) => {
     return { text: 'Usiku', emoji: '🌙' };
 };
 
-const buildCommandList = (builder, menuData) => {
-    const sections = [];
-
-    menuData.forEach((category) => {
-        const items = (Array.isArray(category.items) ? category.items : [])
-            .map((item) => ({
-                ...item,
-                command: String(item?.cmd || '').trim()
-            }))
-            .filter((item) => item.command);
-        if (!items.length) return;
-
-        sections.push({
-            title: `${category.icon} ${category.title}`,
-            highlight_label: `${items.length} commands`,
-            rows: items.map((item) => ({
-                header: '',
-                title: item.command,
-                description: String(item.desc || '').trim(),
-                id: item.command
-            }))
-        });
-    });
-
-    builder.addRawButton({
-        buttonText: { displayText: '📡 Menu' },
-        buttonId: 'Nixel',
-        type: 1,
-        nativeFlowInfo: {
-            name: 'single_select',
-            paramsJson: JSON.stringify({
-                title: 'Click Here!',
-                sections
-            })
-        }
-    });
-
-    return builder;
-};
-
 // ==============================================
-// 🚀 MAIN MENU COMMAND
+// 🚀 MAIN MENU COMMAND (RELAY MESSAGE SYSTEM)
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
@@ -320,32 +279,108 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
 
         const date = now.format('DD MMMM YYYY'); 
         const time = now.format('HH:mm:ss');
-        const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png';
         const totalCmds = menuData.reduce((total, cat) => total + cat.items.length, 0);
 
-        // Body message safi iliyopangwa vizuri
-        const menuText = `✨ *MICKEY GLITCH V3.0.5*
-👋 *Habari za ${greeting.text}* ${greeting.emoji}
-👤 *User:* ${userName}
-📅 *Date:* ${date} | 🕒 *Time:* ${time}
+        // Map Dynamic Categories to Menu Sections
+        const dynamicSections = menuData.map(category => ({
+            title: `${category.icon} ${category.title}`,
+            highlight_label: `MICKEY GLITCH`,
+            rows: category.items.map(item => ({
+                title: item.cmd,
+                description: item.desc || '',
+                id: item.cmd
+            }))
+        }));
 
-👇 *Bonyeza button ya list hapo chini kuona categories vyema*
-❤️ _i love mom_`;
+        const bodyText = `*-Question*\n> _Dibenci oleh parah idiot adalah harga yang harus kamu bayar karena tidak menjadi salah satu dari mereka._\n> 「 ⓘ. Mickey Glitch V3.0.5 」\n\nHõlá ${userName} habari ya ${greeting.text} ${greeting.emoji},\n📅 *Date:* ${date} | 🕒 *Time:* ${time}\n⚡ *Total Commands:* ${totalCmds}`;
 
-        // Kutengeneza Single Interactive Message (Picha Kubwa Juu + List Button Moja Chini)
-        const singleMenu = new ButtonV2(sock)
-            .setTitle('🔥 MICKEY GLITCH ')
-            .setBody(menuText)
-            .setThumbnail(imageUrl)
-            .setFooter(`⚡ Mickey | ${date}`);
+        const footerText = `\n▢ ./Informação\n└──\n ├─ ▢ *Author*: *#MickeyGlitch*\n ├─ ▢ *Prefix*: *Multi*\n ├─ ▢ *Uptime*: *${stats.uptime}*\n ├─ ▢ *RAM Used*: *${stats.memoryUsed} MB*\n └─ *MickeyGlitch 🦠*`;
 
-        buildCommandList(singleMenu, menuData);
-
-        // Tuma kama ujumbe MMOJA TU bila kupishanisha
-        await singleMenu.send(chatId, {
-            quoted: m,
-            fallbackText: menuText
-        });
+        // Using native relayMessage structure with WhatsApp Encrypted Image Media
+        await sock.relayMessage(
+            chatId,
+            {
+                interactiveMessage: {
+                    header: {
+                        imageMessage: {
+                            url: "https://mmg.whatsapp.net/o1/v/t24/f2/m238/AQPQSL2c-WwkAvc0dOlawAftDtykZMtKTBvwTeI1Fdr8Wocs_tgiAO6AsK8pujABcR5GCmOEjf3ziwFmDwNwfptr803adHl-bojx6s3z3A?ccb=9-4&oh=01_Q5Aa5gHVd95avx5626NoOSElOH79nk1qP906s41fyslDiDA9Bg&oe=6AC62D74&_nc_sid=e6ed6c&mms3=true",
+                            mimetype: "image/jpeg",
+                            fileSha256: "gdVeRzpbpu6tnVFOhsPl1MT8MIJ3c1/tzKiGmdHDdx=",
+                            fileLength: 1272476,
+                            height: 768,
+                            width: 936,
+                            mediaKey: "fg0G3iAr5lUYRIAnlf+Otib2t6F3/H+tDgES3WpLrFU=",
+                            fileEncSha256: "pf4dj4cO+IRcCkoEDJip37yMN++BeRxYFYC3Up3sWeA=",
+                            directPath: "/o1/v/t24/f2/m238/AQPQSL2c-WwkAvc0dOlawAftDtykZMtKTBvwTeI1Fdr8Wocs_tgiAO6AsK8pujABcR5GCmOEjf3ziwFmDwNwfptr803adHl-bojx6s3z3A?ccb=9-4&oh=01_Q5Aa5gHVd95avx5626NoOSElOH79nk1qP906s41fyslDiDA9Bg&oe=6AC62D74&_nc_sid=e6ed6c",
+                            mediaKeyTimestamp: 1788793282,
+                            jpegThumbnail: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2MBERISGBUYLxoaL2NCOEJjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY//AABEIABoAIAMBEQACEQEDEQH/xAGiAAABBQEBAQEBAQAAAAAAAAAAAQIDBAUGBwgJCgsQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+gEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoLEQACAQIEBAMEBwUEBAABAncAAQIDEQQFITEGEkFRB2FxEyIygQgUQpGhscEJIzNS8BVictEKFiQ04SXxFxgZGiYnKCkqNTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqCg4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2dri4+Tl5ufo6ery8/T19vf4+fr/2gA2A0AAsupplement"
+                        },
+                        hasMediaAttachment: true
+                    },
+                    body: {
+                        text: bodyText
+                    },
+                    footer: {
+                        text: footerText
+                    },
+                    nativeFlowMessage: {
+                        buttons: [
+                            {
+                                name: "single_select",
+                                buttonParamsJson: JSON.stringify({
+                                    "icon": "DOCUMENT",
+                                    "title": "🚀 SELECT COMMAND MENU",
+                                    "sections": dynamicSections,
+                                    "has_multiple_buttons": true
+                                })
+                            },
+                            {
+                                name: "cta_url",
+                                buttonParamsJson: JSON.stringify({
+                                    "display_text": "# ./MickeyGlitch Channel",
+                                    "url": "https://whatsapp.com/channel/0029VbCvKL1Id7nDv6KoDH0S",
+                                    "landing_page_url": "https://whatsapp.com/channel/0029VbCvKL1Id7nDv6KoDH0S",
+                                    "webview_interaction": true
+                                })
+                            }
+                        ],
+                        messageParamsJson: JSON.stringify({
+                            "bottom_sheet": {
+                                "in_thread_buttons_limit": 0,
+                                "list_title": "✨ MICKEY GLITCH COMMANDS LIST",
+                                "button_title": "Select"
+                            }
+                        })
+                    }
+                }
+            },
+            {
+                additionalNodes: [
+                    {
+                        tag: "biz",
+                        attrs: {},
+                        content: [
+                            {
+                                tag: "interactive",
+                                attrs: {
+                                    type: "native_flow",
+                                    v: "1"
+                                },
+                                content: [
+                                    {
+                                        tag: "native_flow",
+                                        attrs: {
+                                            v: "9",
+                                            name: "mixed"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        );
 
     } catch (e) {
         console.error('Menu Error:', e);
@@ -384,4 +419,4 @@ if (typeof global !== 'undefined') {
     }, 60000);
 }
 
-console.log(chalk.green('✓ Single Unified Menu System Loaded'));
+console.log(chalk.green('✓ Native Interactive Menu System Loaded'));
