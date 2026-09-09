@@ -1,189 +1,173 @@
-/**
- * @project: MICKEY GLITCH V3.0.5 (AIRICH A2UI DASHBOARD MENU)
- * @author: Quantum Base Developer (TZ)
- */
-
-const fs = require('fs');
-const path = require('path');
-const moment = require('moment-timezone');
-
-// Global / Local Import ya lib/a2ui (Airich Structure)
-let a2ui;
-try {
-    a2ui = require('../lib/a2ui') || require('./lib/a2ui');
-} catch (e) {
-    a2ui = null;
-}
-
-// ==============================================
-// 📊 SYSTEM STATS LOADER
-// ==============================================
-const getSystemStats = () => {
-    const uptime = process.uptime();
-    const memUsage = process.memoryUsage();
-    return {
-        uptime: `${Math.floor(uptime / 86400)}d ${Math.floor((uptime % 86400) / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
-        memoryUsed: (memUsage.heapUsed / 1024 / 1024).toFixed(2)
-    };
-};
-
-const icons = {
-    'GENERAL': '🧭', 'GROUP': '👥', 'MODERATION': '🛡️',
-    'DOWNLOAD': '📥', 'FUN': '🎮', 'AI': '🧠',
-    'OWNER': '👑', 'OTHER': '📂', 'TOOLS': '🛠️',
-    'SEARCH': '🔍', 'STICKER': '🏷️', 'RPG': '⚔️'
-};
-
-// ==============================================
-// 📂 DYNAMIC MENU LOADER (ONDOA NENO COMMAND)
-// ==============================================
-const resolveCommandsDir = () => {
-    const candidates = [
-        path.resolve(__dirname, '..', 'commands'),
-        path.join(process.cwd(), 'commands'),
-        path.join(__dirname, 'commands')
-    ];
-    for (const candidate of candidates) {
-        if (fs.existsSync(candidate)) return candidate;
-    }
-    return path.resolve(__dirname, '..', 'commands');
-};
-
-const sanitizeName = (rawName) => {
-    if (!rawName) return '';
-    // Ondoa neno 'command' au 'cmd' kabisa kwenye jina
-    let clean = String(rawName).replace(/command/gi, '').replace(/cmd/gi, '').trim();
-    return clean ? `.${clean.toLowerCase()}` : '';
-};
-
-const loadDynamicMenu = () => {
-    const commandsDir = resolveCommandsDir();
-    const dynamicMenu = {};
-
-    if (fs.existsSync(commandsDir)) {
-        const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.js'));
-        files.forEach(file => {
-            const baseName = file.replace(/\.js$/i, '');
-            if (baseName === 'menu') return;
-            try {
-                const fullPath = path.join(commandsDir, file);
-                delete require.cache[require.resolve(fullPath)];
-                const cmdModule = require(fullPath);
-                
-                // Safisha jina na ondoa neno 'command'
-                const cleanName = sanitizeName(cmdModule.name || baseName);
-                const category = (cmdModule.category || 'OTHER').toUpperCase();
-
-                if (cleanName) {
-                    if (!dynamicMenu[category]) dynamicMenu[category] = [];
-                    if (!dynamicMenu[category].includes(cleanName)) {
-                        dynamicMenu[category].push(cleanName);
-                    }
-                }
-            } catch (e) {
-                const cleanBase = sanitizeName(baseName);
-                if (cleanBase) {
-                    if (!dynamicMenu['OTHER']) dynamicMenu['OTHER'] = [];
-                    dynamicMenu['OTHER'].push(cleanBase);
-                }
-            }
-        });
-    }
-
-    return dynamicMenu;
-};
-
-// ==============================================
-// 🚀 MAIN MENU COMMAND (AIRICH A2UI UI)
-// ==============================================
-const menuCommand = async (sock, chatId, m) => {
-    try {
-        const userName = m.pushName || 'User';
-        let userJid = m.sender || m.key?.participant || chatId;
-        if (typeof userJid !== 'string') userJid = String(userJid || chatId);
-
-        const menuData = loadDynamicMenu();
-        const stats = getSystemStats();
-        const totalCmds = Object.values(menuData).flat().length;
-        const imageUrl = "https://files.catbox.moe/lnptmh.jpg";
-
-        // 1. Orodha ya Commands kwa nje (bila neno command)
-        let textMenu = `✦ *MICKEY GLITCH DASHBOARD* ✦\n\n`;
-        textMenu += `👤 *User:* @${userJid.split('@')[0]}\n`;
-        textMenu += `⚡ *Uptime:* ${stats.uptime}\n`;
-        textMenu += `💾 *RAM:* ${stats.memoryUsed} MB\n`;
-        textMenu += `📊 *Jumla:* ${totalCmds} Fitur\n`;
-        textMenu += `───────────────────\n\n`;
-
-        for (const [category, cmds] of Object.entries(menuData)) {
-            const icon = icons[category] || '📂';
-            textMenu += `*${icon} ${category}*\n`;
-            cmds.forEach(cmd => {
-                textMenu += ` › \`${cmd}\`\n`;
-            });
-            textMenu += `\n`;
-        }
-
-        textMenu += `© Mickey Glitch Technology`;
-
-        // 2. Airich A2UI Bloks Structure
-        let bloksPayload;
-        if (a2ui && typeof a2ui.createBloks === 'function') {
-            bloksPayload = a2ui.createBloks({
-                title: "✦ Mickey Glitch — Dashboard ✦",
-                image: imageUrl,
-                user: `@${userJid.split('@')[0]}`,
-                uptime: stats.uptime,
-                commands: totalCmds
-            });
-        } else {
-            // Standard Airich / A2UI JSON Template
-            bloksPayload = {
-                version: "v0.9",
-                createSurface: {
-                    surfaceId: "airich-menu-surface-01",
-                    catalogId: "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
-                    components: [
-                        { id: "root", component: "Column", children: ["header_title", "header_image", "user_card", "server_card"] },
-                        { id: "header_title", component: "Text", text: "✦ MICKEY GLITCH DASHBOARD ✦", variant: "h1" },
-                        { id: "header_image", component: "Image", url: imageUrl, variant: "header", fit: "cover" },
-                        { id: "user_card", component: "Card", child: "user_card_column" },
-                        { id: "user_card_column", component: "Column", children: ["user_card_header", "user_card_body"] },
-                        { id: "user_card_header", component: "Text", text: "👤 Taarifa za Mtumiaji", variant: "h2" },
-                        { id: "user_card_body", component: "Text", text: `• Mtumiaji: @${userJid.split('@')[0]}\n• Hali: Mwenyeji`, variant: "body" },
-                        { id: "server_card", component: "Card", child: "server_card_column" },
-                        { id: "server_card_column", component: "Column", children: ["server_card_header", "server_card_body"] },
-                        { id: "server_card_header", component: "Text", text: "⚡ Hali ya Mfumo", variant: "h2" },
-                        { id: "server_card_body", component: "Text", text: `• Muda wa Ufanyaji Kazi: ${stats.uptime}\n• RAM: ${stats.memoryUsed} MB\n• Jumla ya Fitur: ${totalCmds}`, variant: "body" }
-                    ]
-                }
-            };
-        }
-
-        // Tuma ujumbe kupitia relayMessage
-        await sock.relayMessage(
-            chatId,
-            {
-                interactiveMessage: {
-                    body: { text: textMenu },
-                    footer: { text: "© Mickey Glitch Technology" },
-                    bloksWidget: {
-                        uuid: "766dfced-36ce-4feb-b5fc-b4a6ef3c04c9",
-                        data: JSON.stringify(bloksPayload),
-                        type: "im_a2ui"
+=> conn.relayMessage(
+  m.chat,
+  {
+    interactiveMessage: {
+      footer: {
+        text: "© Shiroko Fork"
+      },
+      nativeFlowMessage: {
+        buttons: [
+          {
+            name: "single_select",
+            buttonParamsJson: JSON.stringify({
+              "title": "📂 PILIH KATEGORI",
+              "sections": [
+                {
+                  "title": "✧ Journey Commands ✧",
+                  "highlight_label": "Shiroko Fork",
+                  "rows": [
+                    {
+                      "header": "",
+                      "title": "🧭 Buka General",
+                      "description": "Terdapat 5 perintah",
+                      "id": ".menu general"
                     },
-                    contextInfo: {
-                        mentionedJid: [userJid]
+                    {
+                      "header": "",
+                      "title": "👑 Buka Owner",
+                      "description": "Terdapat 44 perintah",
+                      "id": ".menu owner"
+                    },
+                    {
+                      "header": "",
+                      "title": "🤖 Buka Ai",
+                      "description": "Terdapat 4 perintah",
+                      "id": ".menu ai"
+                    },
+                    {
+                      "header": "",
+                      "title": "🧩 Buka Bluearchive",
+                      "description": "Terdapat 2 perintah",
+                      "id": ".menu bluearchive"
+                    },
+                    {
+                      "header": "",
+                      "title": "🧩 Buka Canvas",
+                      "description": "Terdapat 4 perintah",
+                      "id": ".menu canvas"
+                    },
+                    {
+                      "header": "",
+                      "title": "📥 Buka Download",
+                      "description": "Terdapat 6 perintah",
+                      "id": ".menu download"
+                    },
+                    {
+                      "header": "",
+                      "title": "🎮 Buka Game",
+                      "description": "Terdapat 25 perintah",
+                      "id": ".menu game"
+                    },
+                    {
+                      "header": "",
+                      "title": "👥 Buka Group",
+                      "description": "Terdapat 31 perintah",
+                      "id": ".menu group"
+                    },
+                    {
+                      "header": "",
+                      "title": "🧩 Buka Handler",
+                      "description": "Terdapat 1 perintah",
+                      "id": ".menu handler"
+                    },
+                    {
+                      "header": "",
+                      "title": "🧩 Buka Menupanel",
+                      "description": "Terdapat 2 perintah",
+                      "id": ".menu menupanel"
+                    },
+                    {
+                      "header": "",
+                      "title": "🔞 Buka Nsfw",
+                      "description": "Terdapat 1 perintah",
+                      "id": ".menu nsfw"
+                    },
+                    {
+                      "header": "",
+                      "title": "⚔️ Buka Rpg",
+                      "description": "Terdapat 12 perintah",
+                      "id": ".menu rpg"
+                    },
+                    {
+                      "header": "",
+                      "title": "🔍 Buka Search",
+                      "description": "Terdapat 8 perintah",
+                      "id": ".menu search"
+                    },
+                    {
+                      "header": "",
+                      "title": "🏷️ Buka Sticker",
+                      "description": "Terdapat 6 perintah",
+                      "id": ".menu sticker"
+                    },
+                    {
+                      "header": "",
+                      "title": "🛠️ Buka Tools",
+                      "description": "Terdapat 9 perintah",
+                      "id": ".menu tools"
                     }
+                  ]
                 }
-            },
-            {}
-        );
-
-    } catch (e) {
-        console.error('Menu Error:', e);
-        await sock.sendMessage(chatId, { text: `❌ *Error:* ${e.message}` }, { quoted: m });
+              ]
+            })
+          },
+          {
+            name: "quick_reply",
+            buttonParamsJson: JSON.stringify({
+              "display_text": "👑 OWNER",
+              "id": ".owner"
+            })
+          }
+        ],
+        messageParamsJson: "{}"
+      },
+      bloksWidget: {
+        uuid: "766dfced-36ce-4feb-b5fc-b4a6ef3c04c9",
+        data: "{\"version\":\"v0.9\",\"createSurface\":{\"surfaceId\":\"menu-widget=dd55e2aa-5105-42ee-9fbd-224a9034b7c5\",\"catalogId\":\"https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json\",\"components\":[{\"id\":\"root\",\"component\":\"Column\",\"children\":[\"header_title\",\"header_image\",\"user_card\",\"server_card\",\"menu_guide_card\",\"main_footer_info\"]},{\"id\":\"header_title\",\"component\":\"Text\",\"text\":\"✦ Shiroko Fork — Dashboard ✦\",\"variant\":\"h1\"},{\"id\":\"header_image\",\"component\":\"Image\",\"url\":\"https://files.catbox.moe/lnptmh.jpg\",\"variant\":\"header\",\"fit\":\"cover\"},{\"id\":\"user_card\",\"component\":\"Card\",\"child\":\"user_card_column\"},{\"id\":\"user_card_column\",\"component\":\"Column\",\"children\":[\"user_card_header\",\"user_card_body\",\"user_card_caption\"]},{\"id\":\"user_card_header\",\"component\":\"Text\",\"text\":\"👤 Informasi Pengguna\",\"variant\":\"h2\"},{\"id\":\"user_card_body\",\"component\":\"Text\",\"text\":\"• User: @6283140783763\\n• Role: Creator\\n• Lvl: 1253 (74%)\\n• Coin: 💰 1.0009092929292828e+32M\",\"variant\":\"body\"},{\"id\":\"user_card_caption\",\"component\":\"Text\",\"text\":\"Selamat datang kembali di Shiroko Fork.\",\"variant\":\"caption\"},{\"id\":\"server_card\",\"component\":\"Card\",\"child\":\"server_card_column\"},{\"id\":\"server_card_column\",\"component\":\"Column\",\"children\":[\"server_card_header\",\"server_card_body\"]},{\"id\":\"server_card_header\",\"component\":\"Text\",\"text\":\"⚡ Statistik Bot\",\"variant\":\"h2\"},{\"id\":\"server_card_body\",\"component\":\"Text\",\"text\":\"• Uptime: 0d 7h 38m\\n• Command: 160 Fitur\\n• Status: Online\",\"variant\":\"body\"},{\"id\":\"menu_guide_card\",\"component\":\"Card\",\"child\":\"menu_guide_column\"},{\"id\":\"menu_guide_column\",\"component\":\"Column\",\"children\":[\"menu_guide_header\",\"menu_guide_body\"]},{\"id\":\"menu_guide_header\",\"component\":\"Text\",\"text\":\"📖 Panduan\",\"variant\":\"h3\"},{\"id\":\"menu_guide_body\",\"component\":\"Text\",\"text\":\"Tekan tombol '📂 PILIH KATEGORI' di bawah untuk mengeksplor fitur.\",\"variant\":\"body\"},{\"id\":\"main_footer_info\",\"component\":\"Text\",\"text\":\"Ketik .menu all untuk menampilkan semua command.\",\"variant\":\"caption\"}]}}",
+        type: "im_a2ui"
+      },
+      contextInfo: {
+        mentionedJid: [
+          "6283140783763@s.whatsapp.net"
+        ]
+      }
     }
-};
-
-module.exports = menuCommand;
+  },
+  {
+    additionalNodes: [
+      {
+        tag: "biz",
+        attrs: {
+          actual_actors: "2",
+          host_storage: "2",
+          privacy_mode_ts: "1710967811"
+        },
+        content: [
+          {
+            tag: "engagement",
+            attrs: {
+              customer_service_state: "open",
+              conversation_state: "open"
+            }
+          },
+          {
+            tag: "interactive",
+            attrs: {
+              type: "native_flow",
+              v: "1"
+            },
+            content: [
+              {
+                tag: "native_flow",
+                attrs: {
+                  v: "9",
+                  name: "mixed"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+)
