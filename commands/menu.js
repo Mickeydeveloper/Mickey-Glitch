@@ -123,7 +123,13 @@ const menuCommand = async (sock, chatId, m) => {
     try {
         const now = moment().tz('Africa/Dar_es_Salaam');
         const userName = m.pushName || 'User';
-        const userJid = m.sender || m.key.participant || chatId;
+
+        // FIX: Hakikisha sender/chatId ni string kamili kabla ya kutumia
+        let userJid = m.sender || m.key?.participant || chatId;
+        if (typeof userJid !== 'string') {
+            userJid = String(userJid || chatId);
+        }
+
         const menuData = loadDynamicMenu();
         const stats = getSystemStats();
 
@@ -165,6 +171,9 @@ const menuCommand = async (sock, chatId, m) => {
             }
         };
 
+        // FIX: Sanitize JID array ili zisiwe na invalid types
+        const validMentions = [userJid].filter(j => typeof j === 'string' && j.includes('@'));
+
         await sock.relayMessage(
             chatId,
             {
@@ -196,7 +205,7 @@ const menuCommand = async (sock, chatId, m) => {
                         type: "im_a2ui"
                     },
                     contextInfo: {
-                        mentionedJid: [userJid],
+                        mentionedJid: validMentions,
                         groupMentions: [],
                         statusAttributions: []
                     }
