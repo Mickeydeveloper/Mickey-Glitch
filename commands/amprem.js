@@ -1,4 +1,4 @@
-import axios from 'axios'
+const axios = require('axios')
 
 const BASE_URL = 'https://am.yappi.my.id'
 const COOKIE_API = `${BASE_URL}/api/cookie`
@@ -85,9 +85,12 @@ async function verifyMagicLink(email, link, cookie) {
 
 // ===== MAIN COMMAND HANDLER =====
 
-const handler = async (m, { conn, text }) => {
+const handler = async (sock, chatId, message, args) => {
+  const text = Array.isArray(args) ? args.join(' ').trim() : String(args || '').trim()
+  const reply = (content) => sock.sendMessage(chatId, { text: content }, { quoted: message })
+
   if (!text) {
-    return m.reply(
+    return reply(
 `📌 *Alight Motion Premium Activator*
 
 *1. Jinsi ya kutuma Magic Link:*
@@ -113,11 +116,11 @@ Tuma email yako kwanza, kisha fungua Email uliyopokea kutoka AM, copy hiyo Magic
 
   // Uhakiki wa Format ya Email
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return m.reply(`❌ *Format ya email siyo sahihi!*\n\nMfano: .amprem user@gmail.com`)
+    return reply(`❌ *Format ya email siyo sahihi!*\n\nMfano: .amprem user@gmail.com`)
   }
 
   // Ujumbe wa Subira
-  await conn.sendMessage(m.chat, { text: '⏳ Inachakata, tafadhali subiri...' }, { quoted: m })
+  await sock.sendMessage(chatId, { text: '⏳ Inachakata, tafadhali subiri...' }, { quoted: message })
 
   // --- HATUA YA 1: KUTUMA LINK (Kama hakuna Link iliyowekwa) ---
   if (!link) {
@@ -126,10 +129,10 @@ Tuma email yako kwanza, kisha fungua Email uliyopokea kutoka AM, copy hiyo Magic
       const result = await sendMagicLink(email, cookie)
 
       if (!result.success) {
-        return m.reply(`❌ *Imeshindikana*\n\n${result.error}`)
+        return reply(`❌ *Imeshindikana*\n\n${result.error}`)
       }
 
-      return m.reply(
+      return reply(
 `✅ *Magic Link Imeshatumwa Kwa Mafanikio!*
 
 📧 *Email:* ${email}
@@ -144,7 +147,7 @@ Tuma email yako kwanza, kisha fungua Email uliyopokea kutoka AM, copy hiyo Magic
 .amprem ${email}|LINK_ULIYO_COPY`
       )
     } catch (e) {
-      return m.reply(`❌ *Kosa:* ${e.message}`)
+      return reply(`❌ *Kosa:* ${e.message}`)
     }
   }
 
@@ -154,7 +157,7 @@ Tuma email yako kwanza, kisha fungua Email uliyopokea kutoka AM, copy hiyo Magic
     const result = await verifyMagicLink(email, link, cookie)
 
     if (!result.success) {
-      return m.reply(`❌ *Uhakiki Umeshindikana!*\n\n${result.error}`)
+      return reply(`❌ *Uhakiki Umeshindikana!*\n\n${result.error}`)
     }
 
     const response = result.data || {}
@@ -188,10 +191,10 @@ Tuma email yako kwanza, kisha fungua Email uliyopokea kutoka AM, copy hiyo Magic
     textResult += `🕐 *Login ya Mwisho:* ${lastLogin}\n\n`
     textResult += `✅ *Uhakiki umekamilika kikamilifu!*`
 
-    return m.reply(textResult)
+    return reply(textResult)
 
   } catch (e) {
-    return m.reply(`❌ *Kosa wakati wa ku-verify:* ${e.message}`)
+    return reply(`❌ *Kosa wakati wa ku-verify:* ${e.message}`)
   }
 }
 
@@ -201,4 +204,4 @@ handler.tags = ['tools']
 handler.command = ['amprem', 'amv2', 'ampremium']
 handler.premium = true // Inafanya kazi kwa watumiaji wa Premium pekee
 
-export default handler
+module.exports = handler
