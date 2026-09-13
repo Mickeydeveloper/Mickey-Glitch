@@ -1,10 +1,67 @@
 const fs = require('fs');
-const { channelInfo } = require('../lib/messageConfig');
 const isAdmin = require('../lib/isAdmin');
 const { isSudo } = require('../lib/index');
 
+function normalizeUserId(value) {
+    if (!value) return '';
+    const cleaned = String(value).trim();
+    if (!cleaned) return '';
+    return cleaned.split(':')[0].split('@')[0];
+}
+
+function loadBannedUsers() {
+    try {
+        const file = './data/banned.json';
+        if (!fs.existsSync(file)) {
+            fs.writeFileSync(file, JSON.stringify([], null, 2));
+            return [];
+        }
+        const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+        return Array.isArray(raw) ? raw : [];
+    } catch (error) {
+        console.error('[ban] failed to load banned list:', error);
+        return [];
+    }
+}
+
+function saveBannedUsers(list) {
+    try {
+        fs.writeFileSync('./data/banned.json', JSON.stringify(list, null, 2));
+        return true;
+    } catch (error) {
+        console.error('[ban] failed to save banned list:', error);
+        return false;
+    }
+}
+
+function isUserBanned(userId) {
+    const target = normalizeUserId(userId);
+    if (!target) return false;
+
+    const bannedUsers = loadBannedUsers();
+    return bannedUsers.some(entry => normalizeUserId(entry) === target);
+}
+
+async function autoDeleteBannedMessages(sock, chatId, message) {
+    if (!message || !chatId) return false;
+
+    const senderId = message.key?.participant || message.key?.remoteJid || message.participant || message.sender;
+    if (!senderId || !isUserBanned(senderId)) return false;
+
+    try {
+        const messageKey = message.key || {};
+        if (messageKey.id) {
+            await sock.sendMessage(chatId, { delete: messageKey });
+        }
+
+        return true;
+    } catch (error) {
+        console.error('[ban-auto-delete] failed:', error);
+        return false;
+    }
+}
+
 async function banCommand(sock, chatId, message) {
-    // Restrict in groups to admins; in private to owner/sudo
     const isGroup = chatId.endsWith('@g.us');
     if (isGroup) {
         const senderId = message.key.participant || message.key.remoteJid;
@@ -25,25 +82,22 @@ async function banCommand(sock, chatId, message) {
             return;
         }
     }
+
     let userToBan;
-    
-    // Check for mentioned users
+
     if (message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0) {
         userToBan = message.message.extendedTextMessage.contextInfo.mentionedJid[0];
-    }
-    // Check for replied message
-    else if (message.message?.extendedTextMessage?.contextInfo?.participant) {
+    } else if (message.message?.extendedTextMessage?.contextInfo?.participant) {
         userToBan = message.message.extendedTextMessage.contextInfo.participant;
     }
-    
+
     if (!userToBan) {
-        await sock.sendMessage(chatId, { 
-            text: 'Please mention the user or reply to their message to ban!' 
-        });
+        await sock.sendMessage(chatId, {
+            text: 'Please mention the user or reply to their message to ban!'
+        }, { quoted: message });
         return;
     }
 
-    // Prevent banning the bot itself
     try {
         const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
         if (userToBan === botId || userToBan === botId.replace('@s.whatsapp.net', '@lid')) {
@@ -53,26 +107,33 @@ async function banCommand(sock, chatId, message) {
     } catch {}
 
     try {
-        // Add user to banned list
-        const bannedUsers = JSON.parse(fs.readFileSync('./data/banned.json'));
-        if (!bannedUsers.includes(userToBan)) {
+        const bannedUsers = loadBannedUsers();
+        const normalizedTarget = normalizeUserId(userToBan);
+        const exists = bannedUsers.some(entry => normalizeUserId(entry) === normalizedTarget);
+
+        if (!exists) {
             bannedUsers.push(userToBan);
-            fs.writeFileSync('./data/banned.json', JSON.stringify(bannedUsers, null, 2));
-            
-            await sock.sendMessage(chatId, { 
-                text: `Successfully banned @${userToBan.split('@')[0]}!`,
-                mentions: [userToBan] 
+            saveBannedUsers(bannedUsers);
+
+            await sock.sendMessage(chatId, {
+                text: `Successfully banned @${userToBan.split('@')[0]}!\nAll future messages from them will be deleted immediately.`,
+                mentions: [userToBan],
+                quoted: message
             });
         } else {
-            await sock.sendMessage(chatId, { 
+            await sock.sendMessage(chatId, {
                 text: `${userToBan.split('@')[0]} is already banned!`,
-                mentions: [userToBan] 
+                mentions: [userToBan],
+                quoted: message
             });
         }
     } catch (error) {
         console.error('Error in ban command:', error);
-        await sock.sendMessage(chatId, { text: 'Failed to ban user!' });
+        await sock.sendMessage(chatId, { text: 'Failed to ban user!' }, { quoted: message });
     }
 }
 
 module.exports = banCommand;
+module.exports.banCommand = banCommand;
+module.exports.autoDeleteBannedMessages = autoDeleteBannedMessages;
+module.exports.isUserBanned = isUserBanned;
