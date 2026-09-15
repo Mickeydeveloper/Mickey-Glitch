@@ -1,8 +1,8 @@
 const settings = {
   packname: '𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™',
   author: '‎',
-  botName: "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒tch",
-  botname: "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒tch",
+  botName: "Mickey Glitch",
+  botname: "Mickey Glitch",
   botOwner: 'Mickey', // Your name
   ownerNumber: '255612130873', //Set your number here without + symbol, just add country code & number without any space
 

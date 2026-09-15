@@ -6,6 +6,8 @@
 
 require("dotenv").config();
 require("./settings");
+const { assertValidBotName } = require('./lib/botGuard');
+assertValidBotName();
 const fs = require('fs');
 const path = require('path');
 const chalk = require('chalk');
