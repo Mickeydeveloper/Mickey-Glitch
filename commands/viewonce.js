@@ -36,23 +36,21 @@ function resolveQuotedMedia(message) {
         if (candidate?.viewOnceMessageV2Extension?.message) {
             candidates.push(candidate.viewOnceMessageV2Extension.message);
         }
-
-        if (candidate?.imageMessage) {
-            return {
-                type: 'image',
-                mediaMessage: candidate,
-                caption: candidate.imageMessage.caption || '',
-                fileName: 'media.jpg'
-            };
+        if (candidate?.ephemeralMessage?.message) {
+            candidates.push(candidate.ephemeralMessage.message);
         }
 
-        if (candidate?.videoMessage) {
-            return {
-                type: 'video',
-                mediaMessage: candidate,
-                caption: candidate.videoMessage.caption || '',
-                fileName: 'media.mp4'
-            };
+        for (const type of ['image', 'video', 'audio', 'document', 'sticker']) {
+            const media = candidate?.[`${type}Message`];
+            if (media) {
+                return {
+                    type,
+                    mediaMessage: candidate,
+                    caption: media.caption || '',
+                    mimetype: media.mimetype,
+                    fileName: media.fileName || ''
+                };
+            }
         }
     }
 
@@ -63,7 +61,8 @@ async function downloadMediaBuffer(message, mediaMessage, mediaType) {
     const strategies = [];
 
     strategies.push(async () => {
-        const stream = await downloadContentFromMessage(mediaMessage, mediaType);
+        const content = mediaMessage?.[`${mediaType}Message`] || mediaMessage;
+        const stream = await downloadContentFromMessage(content, mediaType);
         const chunks = [];
         for await (const chunk of stream) chunks.push(chunk);
         return Buffer.concat(chunks);
@@ -73,11 +72,7 @@ async function downloadMediaBuffer(message, mediaMessage, mediaType) {
         strategies.push(async () => {
             const wrappedMessage = {
                 key: message?.key || mediaMessage?.key,
-                message: {
-                    viewOnceMessage: {
-                        message: mediaMessage
-                    }
-                }
+                message: mediaMessage
             };
             return await downloadMediaMessage(wrappedMessage, 'buffer', {});
         });
@@ -95,49 +90,40 @@ async function downloadMediaBuffer(message, mediaMessage, mediaType) {
     throw lastError || new Error('Unable to download media');
 }
 
-function getViewOnceMode(message) {
+function getStatusCaption(message) {
     const text = String(
         message?.message?.conversation
         || message?.message?.extendedTextMessage?.text
         || ''
-    ).trim().toLowerCase();
-    const args = text.replace(/^[.!/#]?viewonce\s*/i, '').split(/\s+/).filter(Boolean);
-    const mode = args.shift() || 'v1';
-
-    if (['v2e', 'v2extension', 'extension'].includes(mode)) {
-        return { flag: 'viewOnceV2Extension', caption: args.join(' ') };
-    }
-    if (mode === 'v2') {
-        return { flag: 'viewOnceV2', caption: args.join(' ') };
-    }
-    return { flag: 'viewOnce', caption: args.join(' ') };
+    ).trim();
+    return text.replace(/^[.!/#]?viewonce\s*/i, '').trim();
 }
 
 async function viewonceCommand(sock, chatId, message) {
     const mediaInfo = resolveQuotedMedia(message);
 
     if (!mediaInfo) {
-        await sock.sendMessage(chatId, { text: '❌ Tafadhali jibu picha au video ya view-once.' }, { quoted: message });
+        await sock.sendMessage(chatId, { text: '❌ Tafadhali reply picha, video, audio, document au sticker.' }, { quoted: message });
         return;
     }
 
     try {
         const buffer = await downloadMediaBuffer(message, mediaInfo.mediaMessage, mediaInfo.type);
-        const mode = getViewOnceMode(message);
-        const caption = mode.caption || mediaInfo.caption || '';
+        const caption = getStatusCaption(message) || mediaInfo.caption || '';
 
         await sock.sendMessage(chatId, {
             [mediaInfo.type]: buffer,
-            ...(mediaInfo.mediaMessage.mimetype
-                ? { mimetype: mediaInfo.mediaMessage.mimetype }
+            ...(mediaInfo.mimetype
+                ? { mimetype: mediaInfo.mimetype }
                 : {}),
             ...(caption ? { caption } : {}),
-            [mode.flag]: true
-        }, { quoted: message });
+            ...(mediaInfo.fileName ? { fileName: mediaInfo.fileName } : {}),
+            groupStatus: true
+        });
     } catch (err) {
-        console.error('ViewOnce download failed:', err);
+        console.error('Group status media download failed:', err);
         await sock.sendMessage(chatId, {
-            text: '❌ Media hii siwezi kupatikana kwa sasa. Jaribu tena baada ya muda mfupi.'
+            text: '❌ Media hii haikuweza kuwekwa kwenye group status. Jaribu tena baadaye.'
         }, { quoted: message });
     }
 }
