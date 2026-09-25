@@ -95,6 +95,24 @@ async function downloadMediaBuffer(message, mediaMessage, mediaType) {
     throw lastError || new Error('Unable to download media');
 }
 
+function getViewOnceMode(message) {
+    const text = String(
+        message?.message?.conversation
+        || message?.message?.extendedTextMessage?.text
+        || ''
+    ).trim().toLowerCase();
+    const args = text.replace(/^[.!/#]?viewonce\s*/i, '').split(/\s+/).filter(Boolean);
+    const mode = args.shift() || 'v1';
+
+    if (['v2e', 'v2extension', 'extension'].includes(mode)) {
+        return { flag: 'viewOnceV2Extension', caption: args.join(' ') };
+    }
+    if (mode === 'v2') {
+        return { flag: 'viewOnceV2', caption: args.join(' ') };
+    }
+    return { flag: 'viewOnce', caption: args.join(' ') };
+}
+
 async function viewonceCommand(sock, chatId, message) {
     const mediaInfo = resolveQuotedMedia(message);
 
@@ -105,11 +123,16 @@ async function viewonceCommand(sock, chatId, message) {
 
     try {
         const buffer = await downloadMediaBuffer(message, mediaInfo.mediaMessage, mediaInfo.type);
+        const mode = getViewOnceMode(message);
+        const caption = mode.caption || mediaInfo.caption || '';
 
         await sock.sendMessage(chatId, {
             [mediaInfo.type]: buffer,
-            fileName: mediaInfo.fileName,
-            caption: mediaInfo.caption || ''
+            ...(mediaInfo.mediaMessage.mimetype
+                ? { mimetype: mediaInfo.mediaMessage.mimetype }
+                : {}),
+            ...(caption ? { caption } : {}),
+            [mode.flag]: true
         }, { quoted: message });
     } catch (err) {
         console.error('ViewOnce download failed:', err);
