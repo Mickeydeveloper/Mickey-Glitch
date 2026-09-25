@@ -117,13 +117,12 @@ async function viewonceCommand(sock, chatId, message) {
                 ? { mimetype: mediaInfo.mimetype }
                 : {}),
             ...(caption ? { caption } : {}),
-            ...(mediaInfo.fileName ? { fileName: mediaInfo.fileName } : {}),
-            groupStatus: true
-        });
+            ...(mediaInfo.fileName ? { fileName: mediaInfo.fileName } : {})
+        }, { quoted: message });
     } catch (err) {
-        console.error('Group status media download failed:', err);
+        console.error('ViewOnce media download failed:', err);
         await sock.sendMessage(chatId, {
-            text: '❌ Media hii haikuweza kuwekwa kwenye group status. Jaribu tena baadaye.'
+            text: '❌ Media hii haikuweza kupakuliwa. Jaribu tena baadaye.'
         }, { quoted: message });
     }
 }
