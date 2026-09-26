@@ -1,109 +1,220 @@
-const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { createCtx } = require('../lib/messageBuilder');
+const {
+    downloadContentFromMessage,
+    downloadMediaMessage,
+    normalizeMessageContent
+} = require('@whiskeysockets/baileys');
+const isOwnerOrSudo = require('../lib/isOwner');
 
-const gpstatusCommand = async (sock, chatId, message) => {
+const COMMANDS = [
+    'gpstatus',
+    'groupstatus',
+    'gstatus',
+    'togroupstatus',
+    'statusgroup',
+    'togcstatus'
+];
+
+/**
+ * Get quoted message safely
+ */
+function getQuoted(ctx) {
+    return ctx?.quoted || ctx?.msg?.msg?.contextInfo?.quotedMessage || null;
+}
+
+/**
+ * Get text from quoted message
+ */
+function getQuotedText(quoted) {
+    if (!quoted) return '';
+    const msg = quoted?.message || quoted;
+    return String(
+        msg?.conversation ||
+        msg?.extendedTextMessage?.text ||
+        msg?.imageMessage?.caption ||
+        msg?.videoMessage?.caption ||
+        msg?.documentMessage?.caption ||
+        msg?.audioMessage?.caption ||
+        ''
+    ).trim();
+}
+
+/**
+ * Remove the command itself.
+ */
+function cleanCommandText(text) {
+    if (!text) return '';
+    let value = String(text).trim();
+    const commandRegex = new RegExp(
+        `^[.!/#]?(${COMMANDS.join('|')})(?:\\s+|$)`,
+        'i'
+    );
+    return value.replace(commandRegex, '').trim();
+}
+
+/**
+ * Detect media from current message or quoted message
+ */
+function getMediaType(ctx) {
+    const current = normalizeMessageContent(ctx?.msg?.message) || ctx?.msg?.message || {};
+    const quotedRaw = ctx?.quoted?.message || ctx?.quoted || {};
+    const quoted = normalizeMessageContent(quotedRaw) || quotedRaw;
+
+    if (current.imageMessage || quoted.imageMessage) return 'image';
+    if (current.videoMessage || quoted.videoMessage) return 'video';
+    return null;
+}
+
+/**
+ * Get the actual media message
+ */
+function getMediaMessage(ctx, type) {
+    if (!type) return null;
+    const key = `${type}Message`;
+
+    const currentContent = normalizeMessageContent(ctx?.msg?.message) || ctx?.msg?.message || {};
+    const quotedRaw = ctx?.quoted?.message || ctx?.quoted || {};
+    const quotedContent = normalizeMessageContent(quotedRaw) || quotedRaw;
+
+    if (currentContent[key]) return currentContent[key];
+    if (quotedContent[key]) return quotedContent[key];
+    if (ctx?.quoted?.[key]) return ctx.quoted[key];
+    return null;
+}
+
+/**
+ * Download media
+ */
+async function downloadMedia(ctx, type) {
+    let lastError = null;
+
+    const downloadContent = async (mediaMessage) => {
+        if (!mediaMessage) return null;
+        const stream = await downloadContentFromMessage(mediaMessage, type);
+        const chunks = [];
+        for await (const chunk of stream) chunks.push(chunk);
+        const buffer = Buffer.concat(chunks);
+        return buffer.length > 0 ? buffer : null;
+    };
+
     try {
-        // 1. Get message text
-        const messageText = message.message?.conversation?.trim() || 
-                           message.message?.extendedTextMessage?.text?.trim() || '';
-        const caption = messageText.slice(8).trim(); // Remove '.gpstatus' prefix
-        
-        // 2. Check for help or options
-        if (caption === 'help' || caption === '--help') {
-            await sock.sendMessage(chatId, {
-                text: `📢 *GROUP STATUS COMMAND*\n\n` +
-                      `*Usage:* Reply to picha/video na:\n` +
-                      `• \`.gpstatus\` - Tuma kwenye Official WA Status\n` +
-                      `• \`.gpstatus viewonce\` - Tuma kama view once Status\n` +
-                      `• \`.gpstatus <caption>\` - Tuma na caption`
-            }, { quoted: message });
-            return;
+        const mediaMessage = getMediaMessage(ctx, type);
+        const buffer = await downloadContent(mediaMessage);
+        if (buffer) return buffer;
+    } catch (error) { lastError = error; }
+
+    try {
+        if (ctx?.msg?.media && typeof ctx.msg.media.download === 'function') {
+            const buffer = await ctx.msg.media.download();
+            if (buffer && Buffer.isBuffer(buffer) && buffer.length > 0) return buffer;
         }
+    } catch (error) { lastError = error; }
 
-        // 3. Check for quoted media (image/video)
-        const quotedMsg = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-        
-        if (!quotedMsg) {
-            await sock.sendMessage(chatId, {
-                text: `📸 *Matumizi:* Reply picha/video ukizindikiza na amri \`.gpstatus\` ili kupost kwenye WhatsApp Official Status.\n\n` +
-                      `📌 *Options:*\n` +
-                      `• \`.gpstatus\` - Post status\n` +
-                      `• \`.gpstatus viewonce\` - Post kama view once\n` +
-                      `• \`.gpstatus caption text\` - Tuma na caption`
-            }, { quoted: message });
-            return;
+    try {
+        if (ctx?.quoted?.media && typeof ctx.quoted.media.download === 'function') {
+            const buffer = await ctx.quoted.media.download();
+            if (buffer && Buffer.isBuffer(buffer) && buffer.length > 0) return buffer;
         }
+    } catch (error) { lastError = error; }
 
-        const mediaMessage = quotedMsg.imageMessage || quotedMsg.videoMessage;
-        
-        if (!mediaMessage) {
-            await sock.sendMessage(chatId, {
-                text: `❌ *Error:* Tafadhali reply ujumbe wa picha au video pekee.`
-            }, { quoted: message });
-            return;
+    try {
+        if (ctx?.sock && typeof ctx.sock.downloadMediaMessage === 'function') {
+            if (ctx?.msg?.message) {
+                const buffer = await downloadMediaMessage(ctx.msg, 'buffer', {}, { logger: undefined });
+                if (buffer && Buffer.isBuffer(buffer) && buffer.length > 0) return buffer;
+            }
         }
+    } catch (error) { lastError = error; }
 
-        // 4. Determine media type
-        const mediaType = quotedMsg.imageMessage ? 'image' : 'video';
-        const isViewOnce = caption.toLowerCase().includes('viewonce');
+    return null;
+}
 
-        // 5. Show processing message
-        await sock.sendMessage(chatId, {
-            text: `⏳ *Processing...* Inadownload media na kupost kwenye Official Status.`
-        }, { quoted: message });
+const gpStatusCommand = {
+    name: 'gpstatus',
+    aliases: ['groupstatus', 'gstatus', 'togroupstatus', 'statusgroup', 'togcstatus'],
+    category: 'group',
+    permissions: { group: true },
+    description: 'Post text, image or video as WhatsApp Group Status',
 
-        // 6. Download media
-        const mediaBuffer = await downloadMediaMessage(
-            {
-                key: {
-                    remoteJid: chatId,
-                    id: message.message?.extendedTextMessage?.contextInfo?.stanzaId,
-                    participant: message.message?.extendedTextMessage?.contextInfo?.participant
-                },
-                message: quotedMsg
-            },
-            'buffer',
-            {},
-            { logger: console }
-        );
+    code: async (ctx) => {
+        try {
+            const chatId = ctx?.chatId || ctx?.msg?.key?.remoteJid || '';
+            if (!chatId || !chatId.endsWith('@g.us')) {
+                return ctx.reply('❌ Command hii inaweza kutumika ndani ya group tu.');
+            }
 
-        if (!mediaBuffer || mediaBuffer.length === 0) {
-            throw new Error('Failed to download media');
+            const senderId = ctx?.senderId || ctx?.msg?.key?.participant || '';
+            const isSuperUser = isOwnerOrSudo(senderId, ctx?.sock);
+            if (!isSuperUser) return ctx.reply('❌ Owner Only Command!');
+
+            const commandText = cleanCommandText(ctx?.text || '');
+            const quoted = getQuoted(ctx);
+            const quotedText = getQuotedText(quoted);
+            const input = commandText || quotedText || '';
+
+            let mediaType = getMediaType(ctx);
+            let buffer = null;
+
+            if (mediaType) {
+                const mediaMessage = getMediaMessage(ctx, mediaType);
+                if (mediaType === 'video' && Number(mediaMessage?.seconds || 0) > 30) {
+                    return ctx.reply('⚠️ Video must be 30 seconds or shorter.');
+                }
+                buffer = await downloadMedia(ctx, mediaType);
+                if (!buffer) return ctx.reply('❌ Imeshindikana kupakua media.');
+            }
+
+            if (!input && !buffer) {
+                return ctx.reply(
+                    '📤 *GROUP STATUS*\n\n' +
+                    'Tuma text:\n' +
+                    '.gpstatus Hello group\n\n' +
+                    'Au reply *image/video* kisha tumia:\n' +
+                    '.gpstatus'
+                );
+            }
+
+            // Tengeneza Content ya Group Status
+            let content;
+            if (buffer && mediaType) {
+                content = {
+                    [mediaType]: buffer,
+                    caption: input,
+                    // Hii inafanya iwe Group Status
+                    contextInfo: {
+                        statusAudienceMetadata: {
+                            audienceType: 1,
+                            listName: ctx?.sender?.pushName || 'Group Status',
+                            listEmoji: '🏷️'
+                        }
+                    }
+                };
+            } else {
+                content = {
+                    text: input,
+                    contextInfo: {
+                        statusAudienceMetadata: {
+                            audienceType: 1,
+                            listName: ctx?.sender?.pushName || 'Group Status',
+                            listEmoji: '🏷️'
+                        }
+                    }
+                };
+            }
+
+            // Tuma Group Status
+            await ctx.sock.sendMessage(chatId, content);
+
+            return ctx.reply('✅ Group status sent successfully!');
+
+        } catch (error) {
+            console.error('[GPSTATUS ERROR]', error);
+            if (ctx?.helper && typeof ctx.helper.handleError === 'function') {
+                return ctx.helper.handleError(ctx, error, false);
+            }
+            return ctx.reply('❌ Imeshindikana kuweka Group Status.');
         }
-
-        // 7. Extract caption from quoted media
-        const statusCaption = caption.replace(/viewonce/gi, '').trim() || 
-                             mediaMessage.caption || 
-                             (mediaType === 'image' ? '📸 Status' : '🎥 Status');
-
-        // 8. Send to Official WhatsApp Status
-        const statusPayload = mediaType === 'image'
-            ? { 
-                image: mediaBuffer, 
-                caption: statusCaption, 
-                viewOnce: isViewOnce
-              }
-            : { 
-                video: mediaBuffer, 
-                caption: statusCaption, 
-                gifPlayback: false,
-                viewOnce: isViewOnce
-              };
-
-        await sock.sendMessage('status@broadcast', statusPayload);
-
-        // 9. Success response
-        await sock.sendMessage(chatId, {
-            text: `✅ *Success!* Status imetumwa kwenye Official WhatsApp Status.\n\n` +
-                  `📊 *Type:* ${mediaType === 'image' ? '🖼️ Image' : '🎥 Video'}\n` +
-                  `📝 *Caption:* ${statusCaption}`
-        }, { quoted: message });
-
-    } catch (error) {
-        console.error('gpstatus command error:', error);
-        await sock.sendMessage(chatId, {
-            text: `❌ *Error:* ${error.message || 'Failed to send status. Try again later.'}`
-        }, { quoted: message });
     }
 };
 
-module.exports = gpstatusCommand;
+module.exports = gpStatusCommand;
