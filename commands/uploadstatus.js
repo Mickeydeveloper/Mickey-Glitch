@@ -1,206 +1,171 @@
-const { createCtx } = require('../lib/messageBuilder');
-const {
-    downloadContentFromMessage,
-    downloadMediaMessage,
-    normalizeMessageContent
-} = require('@whiskeysockets/baileys');
-const isOwnerOrSudo = require('../lib/isOwner');
+/**
+ * @project: MICKEY GLITCH V3.0.5
+ * @command: uploadstatus / upsw
+ * @description: Uploads text or media directly to Bot's WhatsApp Story / Status
+ */
 
-const COMMANDS = [
-    'uploadstatus',
-    'upload-status',
-    'status',
-    'sw',
-    'story',
-    'upswgc'
-];
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 
-function getQuoted(ctx) {
-    return ctx?.quoted || ctx?.msg?.msg?.contextInfo?.quotedMessage || null;
-}
-
-function getQuotedText(quoted) {
-    if (!quoted) return '';
-    const msg = quoted?.message || quoted;
-    return String(
-        msg?.conversation ||
-        msg?.extendedTextMessage?.text ||
-        msg?.imageMessage?.caption ||
-        msg?.videoMessage?.caption ||
-        msg?.documentMessage?.caption ||
-        msg?.audioMessage?.caption ||
-        ''
-    ).trim();
-}
-
-function cleanCommandText(text) {
-    if (!text) return '';
-    let value = String(text).trim();
-    const commandRegex = new RegExp(
-        `^[.!/#]?(${COMMANDS.join('|')})(?:\\s+|$)`,
-        'i'
-    );
-    return value.replace(commandRegex, '').trim();
-}
-
-function getMediaType(ctx) {
-    const current = normalizeMessageContent(ctx?.msg?.message) || ctx?.msg?.message || {};
-    const quotedRaw = ctx?.quoted?.message || ctx?.quoted || {};
-    const quoted = normalizeMessageContent(quotedRaw) || quotedRaw;
-
-    if (current.imageMessage || quoted.imageMessage) return 'image';
-    if (current.videoMessage || quoted.videoMessage) return 'video';
-    return null;
-}
-
-function getMediaMessage(ctx, type) {
-    if (!type) return null;
-    const key = `${type}Message`;
-
-    const currentContent = normalizeMessageContent(ctx?.msg?.message) || ctx?.msg?.message || {};
-    const quotedRaw = ctx?.quoted?.message || ctx?.quoted || {};
-    const quotedContent = normalizeMessageContent(quotedRaw) || quotedRaw;
-
-    if (currentContent[key]) return currentContent[key];
-    if (quotedContent[key]) return quotedContent[key];
-    if (ctx?.quoted?.[key]) return ctx.quoted[key];
-    return null;
-}
-
-async function downloadMedia(ctx, type) {
-    let lastError = null;
-
-    const downloadContent = async (mediaMessage) => {
-        if (!mediaMessage) return null;
-        const stream = await downloadContentFromMessage(mediaMessage, type);
-        const chunks = [];
-        for await (const chunk of stream) chunks.push(chunk);
-        const buffer = Buffer.concat(chunks);
-        return buffer.length > 0 ? buffer : null;
-    };
-
+const uploadstatusCommand = async (ctx, chatId, m, args) => {
     try {
-        const mediaMessage = getMediaMessage(ctx, type);
-        const buffer = await downloadContent(mediaMessage);
-        if (buffer) return buffer;
-    } catch (error) { lastError = error; }
+        const sock = ctx.sock || ctx.client || ctx;
+        const msg = ctx.m || ctx.msg || m || ctx;
+        const targetChat = chatId || ctx.from || ctx.chatId || msg.key?.remoteJid;
 
-    try {
-        if (ctx?.msg?.media && typeof ctx.msg.media.download === 'function') {
-            const buffer = await ctx.msg.media.download();
-            if (buffer && Buffer.isBuffer(buffer) && buffer.length > 0) return buffer;
-        }
-    } catch (error) { lastError = error; }
+        const prefix = ctx.used?.prefix || ctx.prefix || ".";
+        const command = ctx.used?.command || ctx.command || "upsw";
 
-    try {
-        if (ctx?.quoted?.media && typeof ctx.quoted.media.download === 'function') {
-            const buffer = await ctx.quoted.media.download();
-            if (buffer && Buffer.isBuffer(buffer) && buffer.length > 0) return buffer;
-        }
-    } catch (error) { lastError = error; }
+        // Maandishi kutoka kwa user
+        const input = ctx.text || (args ? args.join(' ') : '') || '';
 
-    try {
-        if (ctx?.sock && typeof ctx.sock.downloadMediaMessage === 'function') {
-            if (ctx?.msg?.message) {
-                const buffer = await downloadMediaMessage(ctx.msg, 'buffer', {}, { logger: undefined });
-                if (buffer && Buffer.isBuffer(buffer) && buffer.length > 0) return buffer;
+        // Angalia kama kuna quoted message au current message
+        const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+        const currentMsg = msg.message;
+
+        // Tambua ujumbe wenye media
+        const mediaMsg = currentMsg?.imageMessage || currentMsg?.videoMessage || currentMsg?.audioMessage || currentMsg?.stickerMessage || currentMsg?.documentMessage 
+            ? currentMsg 
+            : (quotedMsg ? quotedMsg : null);
+
+        // Tambua aina ya media
+        let mediaType = null;
+        if (mediaMsg?.imageMessage) mediaType = 'image';
+        else if (mediaMsg?.videoMessage) mediaType = 'video';
+        else if (mediaMsg?.audioMessage) mediaType = 'audio';
+        else if (mediaMsg?.stickerMessage) mediaType = 'sticker';
+        else if (mediaMsg?.documentMessage) mediaType = 'document';
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // IKIWA HAKUNA TEXT WALA MEDIA
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        if (!input && !mediaType) {
+            const usageText = 
+                `📢 *Upload Bot Status*\n\n` +
+                `📌 *Matumizi:*\n` +
+                `• ${prefix}${command} <maandishi>\n` +
+                `• Reply picha/video/audio ukiandika ${prefix}${command} <caption (sio lazima)>\n` +
+                `• Au reply tu ${prefix}${command} kupost media uliyotag\n\n` +
+                `📝 *Mifano:*\n` +
+                `${prefix}${command} Habari za leo!\n` +
+                `${prefix}${command} Angalia hii (reply kwenye picha)\n\n` +
+                `⚠️ *Zingatia:* Video isiwe ndefu kuliko sekunde 30.`;
+
+            if (typeof ctx.reply === 'function') {
+                return await ctx.reply(usageText);
             }
+            return await sock.sendMessage(targetChat, { text: usageText }, { quoted: msg });
         }
-    } catch (error) { lastError = error; }
 
-    return null;
-}
+        let content = {};
 
-async function getStatusJidList(ctx) {
-    try {
-        const contacts = ctx?.sock?.store?.contacts || {};
-        const list = Object.keys(contacts).filter(jid => jid.endsWith('@s.whatsapp.net'));
-        if (list.length === 0 && ctx?.sock?.user?.id) {
-            return [ctx.sock.user.id];
-        }
-        return list;
-    } catch (e) {
-        console.log('Could not fetch contacts for status list');
-        return ctx?.sock?.user?.id ? [ctx.sock.user.id] : [];
-    }
-}
-
-const uploadStatusCommand = {
-    name: 'uploadstatus',
-    aliases: ['upload-status', 'status', 'sw', 'story', 'upswgc'],
-    category: 'owner',
-    permissions: { owner: true },
-    description: 'Post text, image or video as Bot WhatsApp Status Story',
-
-    code: async (ctx) => {
-        try {
-            const senderId = ctx?.senderId || ctx?.msg?.key?.participant || '';
-            const isSuperUser = isOwnerOrSudo(senderId, ctx?.sock);
-            if (!isSuperUser) return ctx.reply('❌ Owner Only Command!');
-
-            const commandText = cleanCommandText(ctx?.text || '');
-            const quoted = getQuoted(ctx);
-            const quotedText = getQuotedText(quoted);
-            const input = commandText || quotedText || '';
-
-            let mediaType = getMediaType(ctx);
-            let buffer = null;
-
-            if (mediaType) {
-                const mediaMessage = getMediaMessage(ctx, mediaType);
-                if (mediaType === 'video' && Number(mediaMessage?.seconds || 0) > 30) {
-                    return ctx.reply('⚠️ Video must be 30 seconds or shorter.');
-                }
-                buffer = await downloadMedia(ctx, mediaType);
-                if (!buffer) {
-                    console.log('[UPLOADSTATUS] Media download failed');
-                    return ctx.reply('❌ Failed to download media.');
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // SHUGHULIKIA MEDIA
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        if (mediaType) {
+            if (mediaType === 'video') {
+                const seconds = mediaMsg.videoMessage?.seconds || 0;
+                if (seconds > 30) {
+                    const warnText = "⚠️ Video inatakiwa iwe ya sekunde 30 au chini yake.";
+                    if (typeof ctx.reply === 'function') return await ctx.reply(warnText);
+                    return await sock.sendMessage(targetChat, { text: warnText }, { quoted: msg });
                 }
             }
 
-            if (!input && !buffer) {
-                return ctx.reply(
-                    '📤 *BOT STATUS STORY*\n\n' +
-                    'Send text:\n' +
-                    '.uploadstatus Hello world\n\n' +
-                    'Or reply to an *image/video* then use:\n' +
-                    '.uploadstatus'
-                );
+            // Download media buffer
+            let buffer;
+            try {
+                if (typeof ctx.downloadMediaBuffer === 'function') {
+                    buffer = await ctx.downloadMediaBuffer();
+                } else if (msg.media?.download) {
+                    buffer = await msg.media.download();
+                } else if (ctx.quoted?.media?.download) {
+                    buffer = await ctx.quoted.media.download();
+                } else {
+                    const messageToDownload = quotedMsg 
+                        ? { message: quotedMsg, key: { remoteJid: targetChat } } 
+                        : msg;
+                    buffer = await downloadMediaMessage(messageToDownload, 'buffer', {});
+                }
+            } catch (err) {
+                console.error("Media Download Error:", err);
             }
 
-            const statusJidList = await getStatusJidList(ctx);
+            if (!buffer) {
+                throw new Error("Imeshindikana kupakua media uliyochagua!");
+            }
 
-            let content;
-            if (buffer && mediaType) {
-                content = {
-                    [mediaType]: buffer,
-                    caption: input,
-                    statusJidList: statusJidList,
-                    backgroundColor: '#000000',
-                    font: 3
+            if (mediaType === 'image') {
+                content = { image: buffer, caption: input };
+            } else if (mediaType === 'video') {
+                content = { 
+                    video: buffer, 
+                    caption: input, 
+                    seconds: mediaMsg.videoMessage?.seconds 
                 };
-            } else {
-                content = {
-                    text: input,
-                    backgroundColor: '#000000',
-                    font: 3,
-                    statusJidList: statusJidList
+            } else if (mediaType === 'audio') {
+                content = { 
+                    audio: buffer, 
+                    mimetype: mediaMsg.audioMessage?.mimetype || 'audio/mpeg',
+                    ptt: mediaMsg.audioMessage?.ptt || false
+                };
+            } else if (mediaType === 'sticker') {
+                content = { sticker: buffer };
+            } else if (mediaType === 'document') {
+                content = { 
+                    document: buffer, 
+                    mimetype: mediaMsg.documentMessage?.mimetype,
+                    fileName: mediaMsg.documentMessage?.fileName || 'file'
                 };
             }
+        } else {
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // MAANDISHI PEKEE (TEXT STATUS)
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            content = { text: input };
+        }
 
-            // ✅ FIX: Send to 'status@broadcast'
-            await ctx.sock.sendMessage('status@broadcast', content);
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // TUMA KWENYE BOT STATUS (status@broadcast)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        const statusJid = 'status@broadcast';
 
-            return ctx.reply('✅ Bot status story sent successfully!');
+        await sock.sendMessage(statusJid, content);
 
-        } catch (error) {
-            console.error('[UPLOADSTATUS ERROR]', error);
-            if (ctx?.helper && typeof ctx.helper.handleError === 'function') {
-                return ctx.helper.handleError(ctx, error, false);
-            }
-            return ctx.reply('❌ Failed to set Bot Status Story.');
+        if (typeof ctx.replyReact === 'function') {
+            await ctx.replyReact("✅");
+        }
+
+        const successText = "✅ *Status imewekwa kikamilifu kwenye WhatsApp Story ya Bot!*";
+
+        if (typeof ctx.reply === 'function') {
+            await ctx.reply(successText);
+        } else {
+            await sock.sendMessage(targetChat, { text: successText }, { quoted: msg });
+        }
+
+    } catch (error) {
+        console.error('[UPLOADSTATUS] Error:', error);
+
+        if (typeof ctx.replyReact === 'function') {
+            await ctx.replyReact("❌");
+        }
+
+        const errorText = `❌ *Glitched Error:* ${error.message}`;
+        if (typeof ctx.reply === 'function') {
+            await ctx.reply(errorText);
+        } else {
+            const sock = ctx.sock || ctx.client || ctx;
+            const targetChat = chatId || ctx.from || ctx.chatId;
+            if (sock) await sock.sendMessage(targetChat, { text: errorText }, { quoted: m });
         }
     }
 };
 
-module.exports = uploadStatusCommand;
+// ==============================================
+// 📤 EXPORTS
+// ==============================================
+module.exports = uploadstatusCommand;
+module.exports.name = "uploadstatus";
+module.exports.aliases = ["upsw", "swup", "botstatus", "tobotstatus", "swbot"];
+module.exports.category = "OWNER";
+module.exports.description = "Uploads text or media to Bot's WhatsApp Story.";
