@@ -15,16 +15,10 @@ const COMMANDS = [
     'togcstatus'
 ];
 
-/**
- * Get quoted message safely
- */
 function getQuoted(ctx) {
     return ctx?.quoted || ctx?.msg?.msg?.contextInfo?.quotedMessage || null;
 }
 
-/**
- * Get text from quoted message
- */
 function getQuotedText(quoted) {
     if (!quoted) return '';
     const msg = quoted?.message || quoted;
@@ -39,9 +33,6 @@ function getQuotedText(quoted) {
     ).trim();
 }
 
-/**
- * Remove the command itself.
- */
 function cleanCommandText(text) {
     if (!text) return '';
     let value = String(text).trim();
@@ -52,9 +43,6 @@ function cleanCommandText(text) {
     return value.replace(commandRegex, '').trim();
 }
 
-/**
- * Detect media from current message or quoted message
- */
 function getMediaType(ctx) {
     const current = normalizeMessageContent(ctx?.msg?.message) || ctx?.msg?.message || {};
     const quotedRaw = ctx?.quoted?.message || ctx?.quoted || {};
@@ -65,9 +53,6 @@ function getMediaType(ctx) {
     return null;
 }
 
-/**
- * Get the actual media message
- */
 function getMediaMessage(ctx, type) {
     if (!type) return null;
     const key = `${type}Message`;
@@ -82,9 +67,6 @@ function getMediaMessage(ctx, type) {
     return null;
 }
 
-/**
- * Download media
- */
 async function downloadMedia(ctx, type) {
     let lastError = null;
 
@@ -140,7 +122,7 @@ const gpStatusCommand = {
         try {
             const chatId = ctx?.chatId || ctx?.msg?.key?.remoteJid || '';
             if (!chatId || !chatId.endsWith('@g.us')) {
-                return ctx.reply('❌ Command hii inaweza kutumika ndani ya group tu.');
+                return ctx.reply('❌ This command can only be used inside a group.');
             }
 
             const senderId = ctx?.senderId || ctx?.msg?.key?.participant || '';
@@ -161,26 +143,26 @@ const gpStatusCommand = {
                     return ctx.reply('⚠️ Video must be 30 seconds or shorter.');
                 }
                 buffer = await downloadMedia(ctx, mediaType);
-                if (!buffer) return ctx.reply('❌ Imeshindikana kupakua media.');
+                if (!buffer) return ctx.reply('❌ Failed to download media.');
             }
 
             if (!input && !buffer) {
                 return ctx.reply(
                     '📤 *GROUP STATUS*\n\n' +
-                    'Tuma text:\n' +
+                    'Send text:\n' +
                     '.gpstatus Hello group\n\n' +
-                    'Au reply *image/video* kisha tumia:\n' +
+                    'Or reply to an *image/video* then use:\n' +
                     '.gpstatus'
                 );
             }
 
-            // Tengeneza Content ya Group Status
+            // Build Group Status Content
             let content;
             if (buffer && mediaType) {
                 content = {
                     [mediaType]: buffer,
                     caption: input,
-                    // Hii inafanya iwe Group Status
+                    // This makes it a Group Status
                     contextInfo: {
                         statusAudienceMetadata: {
                             audienceType: 1,
@@ -202,7 +184,7 @@ const gpStatusCommand = {
                 };
             }
 
-            // Tuma Group Status
+            // Send Group Status (FIXED: Using ctx.sock.sendMessage instead of ctx.reply)
             await ctx.sock.sendMessage(chatId, content);
 
             return ctx.reply('✅ Group status sent successfully!');
@@ -212,7 +194,7 @@ const gpStatusCommand = {
             if (ctx?.helper && typeof ctx.helper.handleError === 'function') {
                 return ctx.helper.handleError(ctx, error, false);
             }
-            return ctx.reply('❌ Imeshindikana kuweka Group Status.');
+            return ctx.reply('❌ Failed to set Group Status.');
         }
     }
 };
