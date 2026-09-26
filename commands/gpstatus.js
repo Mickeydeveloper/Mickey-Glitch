@@ -143,7 +143,10 @@ const gpStatusCommand = {
                     return ctx.reply('⚠️ Video must be 30 seconds or shorter.');
                 }
                 buffer = await downloadMedia(ctx, mediaType);
-                if (!buffer) return ctx.reply('❌ Failed to download media.');
+                if (!buffer) {
+                    console.log('[GPSTATUS] Media download failed');
+                    return ctx.reply('❌ Failed to download media.');
+                }
             }
 
             if (!input && !buffer) {
@@ -162,7 +165,7 @@ const gpStatusCommand = {
                 content = {
                     [mediaType]: buffer,
                     caption: input,
-                    // This makes it a Group Status
+                    groupStatus: true, // This makes it a Group Status
                     contextInfo: {
                         statusAudienceMetadata: {
                             audienceType: 1,
@@ -174,6 +177,7 @@ const gpStatusCommand = {
             } else {
                 content = {
                     text: input,
+                    groupStatus: true, // This makes it a Group Status
                     contextInfo: {
                         statusAudienceMetadata: {
                             audienceType: 1,
@@ -184,7 +188,7 @@ const gpStatusCommand = {
                 };
             }
 
-            // Send Group Status (FIXED: Using ctx.sock.sendMessage instead of ctx.reply)
+            // ✅ FIX: Use ctx.sock.sendMessage to send Group Status
             await ctx.sock.sendMessage(chatId, content);
 
             return ctx.reply('✅ Group status sent successfully!');
