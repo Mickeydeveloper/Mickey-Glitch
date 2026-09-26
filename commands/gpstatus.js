@@ -1,19 +1,16 @@
-const { createCtx } = require('../lib/messageBuilder');
-const {
-    downloadContentFromMessage,
-    downloadMediaMessage,
-    normalizeMessageContent
-} = require('@whiskeysockets/baileys');
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const fs = require('fs');
+const path = require('path');
 const isOwnerOrSudo = require('../lib/isOwner');
 
-const COMMANDS = [
-    'gpstatus',
-    'groupstatus',
-    'gstatus',
-    'togroupstatus',
-    'statusgroup',
-    'togcstatus'
-];
+const COMMANDS = ['gpstatus', 'groupstatus', 'gstatus', 'togroupstatus', 'statusgroup', 'togcstatus'];
+
+function cleanCommandText(text) {
+    if (!text) return '';
+    let value = String(text).trim();
+    const commandRegex = new RegExp(`^[.!/#]?(${COMMANDS.join('|')})(?:\\s+|$)`, 'i');
+    return value.replace(commandRegex, '').trim();
+}
 
 function getQuoted(ctx) {
     return ctx?.quoted || ctx?.msg?.msg?.contextInfo?.quotedMessage || null;
@@ -28,90 +25,48 @@ function getQuotedText(quoted) {
         msg?.imageMessage?.caption ||
         msg?.videoMessage?.caption ||
         msg?.documentMessage?.caption ||
-        msg?.audioMessage?.caption ||
         ''
     ).trim();
 }
 
-function cleanCommandText(text) {
-    if (!text) return '';
-    let value = String(text).trim();
-    const commandRegex = new RegExp(
-        `^[.!/#]?(${COMMANDS.join('|')})(?:\\s+|$)`,
-        'i'
-    );
-    return value.replace(commandRegex, '').trim();
-}
-
 function getMediaType(ctx) {
-    const current = normalizeMessageContent(ctx?.msg?.message) || ctx?.msg?.message || {};
-    const quotedRaw = ctx?.quoted?.message || ctx?.quoted || {};
-    const quoted = normalizeMessageContent(quotedRaw) || quotedRaw;
-
+    const current = ctx?.msg?.message || {};
+    const quoted = ctx?.quoted?.message || ctx?.quoted || {};
     if (current.imageMessage || quoted.imageMessage) return 'image';
     if (current.videoMessage || quoted.videoMessage) return 'video';
+    if (current.audioMessage || quoted.audioMessage) return 'audio';
+    if (current.documentMessage || quoted.documentMessage) return 'document';
+    if (current.stickerMessage || quoted.stickerMessage) return 'sticker';
     return null;
 }
 
 function getMediaMessage(ctx, type) {
     if (!type) return null;
     const key = `${type}Message`;
-
-    const currentContent = normalizeMessageContent(ctx?.msg?.message) || ctx?.msg?.message || {};
-    const quotedRaw = ctx?.quoted?.message || ctx?.quoted || {};
-    const quotedContent = normalizeMessageContent(quotedRaw) || quotedRaw;
-
-    if (currentContent[key]) return currentContent[key];
-    if (quotedContent[key]) return quotedContent[key];
+    if (ctx?.msg?.message?.[key]) return ctx.msg.message[key];
+    if (ctx?.quoted?.message?.[key]) return ctx.quoted.message[key];
     if (ctx?.quoted?.[key]) return ctx.quoted[key];
     return null;
 }
 
-async function downloadMedia(ctx, type) {
-    let lastError = null;
+async function downloadMediaToFile(ctx, type, tmpDir) {
+    const mediaMessage = getMediaMessage(ctx, type);
+    if (!mediaMessage) return null;
 
-    const downloadContent = async (mediaMessage) => {
-        if (!mediaMessage) return null;
-        const stream = await downloadContentFromMessage(mediaMessage, type);
-        const chunks = [];
-        for await (const chunk of stream) chunks.push(chunk);
-        const buffer = Buffer.concat(chunks);
-        return buffer.length > 0 ? buffer : null;
-    };
+    const stream = await downloadContentFromMessage(mediaMessage, type);
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    const buffer = Buffer.concat(chunks);
 
-    try {
-        const mediaMessage = getMediaMessage(ctx, type);
-        const buffer = await downloadContent(mediaMessage);
-        if (buffer) return buffer;
-    } catch (error) { lastError = error; }
+    if (!buffer || buffer.length === 0) return null;
 
-    try {
-        if (ctx?.msg?.media && typeof ctx.msg.media.download === 'function') {
-            const buffer = await ctx.msg.media.download();
-            if (buffer && Buffer.isBuffer(buffer) && buffer.length > 0) return buffer;
-        }
-    } catch (error) { lastError = error; }
-
-    try {
-        if (ctx?.quoted?.media && typeof ctx.quoted.media.download === 'function') {
-            const buffer = await ctx.quoted.media.download();
-            if (buffer && Buffer.isBuffer(buffer) && buffer.length > 0) return buffer;
-        }
-    } catch (error) { lastError = error; }
-
-    try {
-        if (ctx?.sock && typeof ctx.sock.downloadMediaMessage === 'function') {
-            if (ctx?.msg?.message) {
-                const buffer = await downloadMediaMessage(ctx.msg, 'buffer', {}, { logger: undefined });
-                if (buffer && Buffer.isBuffer(buffer) && buffer.length > 0) return buffer;
-            }
-        }
-    } catch (error) { lastError = error; }
-
-    return null;
+    const ext = type === 'image' ? 'jpg' : type === 'video' ? 'mp4' : type === 'audio' ? 'mp3' : type === 'sticker' ? 'webp' : 'bin';
+    const filePath = path.join(tmpDir, `gcstatus-${Date.now()}.${ext}`);
+    fs.writeFileSync(filePath, buffer);
+    return filePath;
 }
 
-const gpStatusCommand = {
+module.exports = {
     name: 'gpstatus',
     aliases: ['groupstatus', 'gstatus', 'togroupstatus', 'statusgroup', 'togcstatus'],
     category: 'group',
@@ -119,6 +74,11 @@ const gpStatusCommand = {
     description: 'Post text, image or video as WhatsApp Group Status',
 
     code: async (ctx) => {
+        const tmpDir = path.join(__dirname, '..', 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+        let filePath = null;
+
         try {
             const chatId = ctx?.chatId || ctx?.msg?.key?.remoteJid || '';
             if (!chatId || !chatId.endsWith('@g.us')) {
@@ -138,18 +98,19 @@ const gpStatusCommand = {
             let buffer = null;
 
             if (mediaType) {
-                const mediaMessage = getMediaMessage(ctx, mediaType);
-                if (mediaType === 'video' && Number(mediaMessage?.seconds || 0) > 30) {
-                    return ctx.reply('⚠️ Video must be 30 seconds or shorter.');
+                if (mediaType === 'video') {
+                    const mediaMsg = getMediaMessage(ctx, 'video');
+                    if (Number(mediaMsg?.seconds || 0) > 30) {
+                        return ctx.reply('⚠️ Video must be 30 seconds or shorter.');
+                    }
                 }
-                buffer = await downloadMedia(ctx, mediaType);
-                if (!buffer) {
-                    console.log('[GPSTATUS] Media download failed');
-                    return ctx.reply('❌ Failed to download media.');
+                filePath = await downloadMediaToFile(ctx, mediaType, tmpDir);
+                if (!filePath) {
+                    return ctx.reply('❌ Failed to download media. Try replying again.');
                 }
             }
 
-            if (!input && !buffer) {
+            if (!input && !filePath) {
                 return ctx.reply(
                     '📤 *GROUP STATUS*\n\n' +
                     'Send text:\n' +
@@ -159,48 +120,45 @@ const gpStatusCommand = {
                 );
             }
 
-            // Build Group Status Content
+            // Build content using the exact Baileys format
             let content;
-            if (buffer && mediaType) {
+
+            if (filePath && mediaType) {
                 content = {
-                    [mediaType]: buffer,
-                    caption: input,
-                    groupStatus: true, // This makes it a Group Status
-                    contextInfo: {
-                        statusAudienceMetadata: {
-                            audienceType: 1,
-                            listName: ctx?.sender?.pushName || 'Group Status',
-                            listEmoji: '🏷️'
-                        }
-                    }
+                    [mediaType]: { url: filePath },
+                    caption: input || '',
+                    groupStatus: true
                 };
+                // Add mimetype for video/audio/document
+                const mediaMsg = getMediaMessage(ctx, mediaType);
+                if (mediaMsg?.mimetype) {
+                    content.mimetype = mediaMsg.mimetype;
+                }
+                if (mediaType === 'video' && mediaMsg?.seconds) {
+                    content.seconds = mediaMsg.seconds;
+                }
             } else {
                 content = {
                     text: input,
-                    groupStatus: true, // This makes it a Group Status
-                    contextInfo: {
-                        statusAudienceMetadata: {
-                            audienceType: 1,
-                            listName: ctx?.sender?.pushName || 'Group Status',
-                            listEmoji: '🏷️'
-                        }
-                    }
+                    groupStatus: true
                 };
             }
 
-            // ✅ FIX: Use ctx.sock.sendMessage to send Group Status
+            // ✅ This is the correct Baileys way to send Group Status
             await ctx.sock.sendMessage(chatId, content);
 
-            return ctx.reply('✅ Group status sent successfully!');
+            return ctx.reply('✅ Posted to group status!');
 
         } catch (error) {
             console.error('[GPSTATUS ERROR]', error);
             if (ctx?.helper && typeof ctx.helper.handleError === 'function') {
                 return ctx.helper.handleError(ctx, error, false);
             }
-            return ctx.reply('❌ Failed to set Group Status.');
+            return ctx.reply('❌ Failed to set Group Status: ' + error.message);
+        } finally {
+            if (filePath && fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch (e) {}
+            }
         }
     }
 };
-
-module.exports = gpStatusCommand;
