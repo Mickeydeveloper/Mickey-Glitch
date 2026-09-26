@@ -12,7 +12,6 @@ const COMMANDS = [
     'status',
     'sw',
     'story',
-    'upswgc',
     'upswgc'
 ];
 
@@ -113,14 +112,14 @@ async function downloadMedia(ctx, type) {
 }
 
 /**
- * Pata Orodha ya Watu (Status JID List)
- * Hii inachukua contacts zote za bot ili status ionekane
+ * Get Status JID List
+ * This fetches all bot contacts so the status is visible to them
  */
 async function getStatusJidList(ctx) {
     try {
         const contacts = ctx?.sock?.store?.contacts || {};
         const list = Object.keys(contacts).filter(jid => jid.endsWith('@s.whatsapp.net'));
-        // Kama hakuna contacts, tumia namba ya bot yenyewe
+        // If no contacts found, use bot's own number
         if (list.length === 0 && ctx?.sock?.user?.id) {
             return [ctx.sock.user.id];
         }
@@ -133,7 +132,7 @@ async function getStatusJidList(ctx) {
 
 const uploadStatusCommand = {
     name: 'uploadstatus',
-    aliases: ['upload-status', 'status', 'sw', 'story', 'upswgc', 'upswgc'],
+    aliases: ['upload-status', 'status', 'sw', 'story', 'upswgc'],
     category: 'owner',
     permissions: { owner: true },
     description: 'Post text, image or video as Bot WhatsApp Status Story',
@@ -158,23 +157,23 @@ const uploadStatusCommand = {
                     return ctx.reply('⚠️ Video must be 30 seconds or shorter.');
                 }
                 buffer = await downloadMedia(ctx, mediaType);
-                if (!buffer) return ctx.reply('❌ Imeshindikana kupakua media.');
+                if (!buffer) return ctx.reply('❌ Failed to download media.');
             }
 
             if (!input && !buffer) {
                 return ctx.reply(
                     '📤 *BOT STATUS STORY*\n\n' +
-                    'Tuma text:\n' +
+                    'Send text:\n' +
                     '.uploadstatus Hello world\n\n' +
-                    'Au reply *image/video* kisha tumia:\n' +
+                    'Or reply to an *image/video* then use:\n' +
                     '.uploadstatus'
                 );
             }
 
-            // Pata Status JID List
+            // Get Status JID List
             const statusJidList = await getStatusJidList(ctx);
 
-            // Tengeneza Content ya Status Story
+            // Build Status Story Content
             let content;
             if (buffer && mediaType) {
                 content = {
@@ -193,7 +192,7 @@ const uploadStatusCommand = {
                 };
             }
 
-            // Tuma Status kwa kutumia 'status@broadcast'
+            // Send Status to 'status@broadcast' (FIXED: Using ctx.sock.sendMessage)
             await ctx.sock.sendMessage('status@broadcast', content);
 
             return ctx.reply('✅ Bot status story sent successfully!');
@@ -203,7 +202,7 @@ const uploadStatusCommand = {
             if (ctx?.helper && typeof ctx.helper.handleError === 'function') {
                 return ctx.helper.handleError(ctx, error, false);
             }
-            return ctx.reply('❌ Imeshindikana kuweka Bot Status Story.');
+            return ctx.reply('❌ Failed to set Bot Status Story.');
         }
     }
 };
