@@ -1,3 +1,9 @@
+/**
+ * @project: MICKEY GLITCH V3.0.5
+ * @command: groupstatus
+ * @description: Posts text or media to WhatsApp Group Status
+ */
+
 module.exports = {
     name: "groupstatus",
     aliases: ["gcsw", "swgc", "upgcsw", "upswgc", "togroupstatus", "statusgroup", "togcstatus"],
@@ -7,28 +13,41 @@ module.exports = {
         group: true
     },
     code: async (ctx) => {
-        const input = ctx.text || ctx.quoted?.body;
-        const quoted = ctx.quoted;
-        
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // NO INPUT - Show Usage
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        if (!input && !quoted)
-            return await ctx.reply(
-                `📢 *Group Status*\n\n` +
-                `📌 *Usage:*\n` +
-                `• ${ctx.used.prefix}${ctx.used.command} <text>\n` +
-                `• Reply to image/video/audio/document/sticker with ${ctx.used.prefix}${ctx.used.command} <caption>\n` +
-                `• Or just ${ctx.used.prefix}${ctx.used.command} to forward quoted media\n\n` +
-                `📝 *Examples:*\n` +
-                `${ctx.used.prefix}${ctx.used.command} hello, world!\n` +
-                `${ctx.used.prefix}${ctx.used.command} Check this out! (reply to image)\n\n` +
-                `⚠️ *Note:* Video must be 30 seconds or shorter`
-            );
-
         try {
+            // Safe handling ya prefix na command name kuzuia error ya undefined
+            const prefix = ctx.used?.prefix || ctx.prefix || ".";
+            const command = ctx.used?.command || ctx.command || "groupstatus";
+
+            const input = ctx.text || ctx.quoted?.body || "";
+            const quoted = ctx.quoted;
+            
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // NO INPUT - Show Usage
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            if (!input && !quoted) {
+                const usageText = 
+                    `📢 *Group Status*\n\n` +
+                    `📌 *Usage:*\n` +
+                    `• ${prefix}${command} <text>\n` +
+                    `• Reply to image/video/audio/document/sticker with ${prefix}${command} <caption>\n` +
+                    `• Or just ${prefix}${command} to forward quoted media\n\n` +
+                    `📝 *Examples:*\n` +
+                    `${prefix}${command} hello, world!\n` +
+                    `${prefix}${command} Check this out! (reply to image)\n\n` +
+                    `⚠️ *Note:* Video must be 30 seconds or shorter`;
+
+                if (typeof ctx.reply === 'function') {
+                    return await ctx.reply(usageText);
+                }
+                const sock = ctx.sock || ctx.client || ctx;
+                const msg = ctx.m || ctx.msg || ctx;
+                const targetChat = ctx.from || ctx.chatId || msg.key?.remoteJid;
+                return await sock.sendMessage(targetChat, { text: usageText }, { quoted: msg });
+            }
+
             let content;
-            const type = ctx.isMedia(["image", "video"]);
+            const isMedia = typeof ctx.isMedia === 'function' ? ctx.isMedia.bind(ctx) : () => false;
+            const type = isMedia(["image", "video"]);
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // IMAGE OR VIDEO
@@ -36,13 +55,13 @@ module.exports = {
             if (["image", "video"].includes(type)) {
                 // Check video duration
                 if (type === "video") {
-                    const videoMsg = ctx.msg.message?.videoMessage || quoted?.message?.videoMessage;
+                    const videoMsg = ctx.msg?.message?.videoMessage || quoted?.message?.videoMessage;
                     if (videoMsg?.seconds > 30) {
                         return await ctx.reply("⚠️ Video must be 30 seconds or shorter.");
                     }
                 }
                 
-                const buffer = await ctx.msg.media.download() || await quoted.media.download();
+                const buffer = await ctx.msg?.media?.download() || await quoted?.media?.download();
                 content = {
                     [type]: buffer,
                     caption: input
@@ -50,7 +69,7 @@ module.exports = {
                 
                 // Add video seconds if available
                 if (type === "video") {
-                    const videoMsg = ctx.msg.message?.videoMessage || quoted?.message?.videoMessage;
+                    const videoMsg = ctx.msg?.message?.videoMessage || quoted?.message?.videoMessage;
                     if (videoMsg?.seconds) {
                         content.seconds = videoMsg.seconds;
                     }
@@ -60,31 +79,31 @@ module.exports = {
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // AUDIO
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            else if (ctx.isMedia(["audio"])) {
-                const buffer = await ctx.msg.media.download() || await quoted.media.download();
+            else if (isMedia(["audio"])) {
+                const buffer = await ctx.msg?.media?.download() || await quoted?.media?.download();
                 content = {
                     audio: buffer,
-                    mimetype: ctx.msg.message?.audioMessage?.mimetype || quoted?.message?.audioMessage?.mimetype || "audio/mpeg"
+                    mimetype: ctx.msg?.message?.audioMessage?.mimetype || quoted?.message?.audioMessage?.mimetype || "audio/mpeg"
                 };
             }
             
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // DOCUMENT
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            else if (ctx.isMedia(["document"])) {
-                const buffer = await ctx.msg.media.download() || await quoted.media.download();
+            else if (isMedia(["document"])) {
+                const buffer = await ctx.msg?.media?.download() || await quoted?.media?.download();
                 content = {
                     document: buffer,
-                    mimetype: ctx.msg.message?.documentMessage?.mimetype || quoted?.message?.documentMessage?.mimetype,
-                    fileName: ctx.msg.message?.documentMessage?.fileName || quoted?.message?.documentMessage?.fileName || "file"
+                    mimetype: ctx.msg?.message?.documentMessage?.mimetype || quoted?.message?.documentMessage?.mimetype,
+                    fileName: ctx.msg?.message?.documentMessage?.fileName || quoted?.message?.documentMessage?.fileName || "file"
                 };
             }
             
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // STICKER
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            else if (ctx.isMedia(["sticker"])) {
-                const buffer = await ctx.msg.media.download() || await quoted.media.download();
+            else if (isMedia(["sticker"])) {
+                const buffer = await ctx.msg?.media?.download() || await quoted?.media?.download();
                 content = {
                     sticker: buffer
                 };
@@ -102,12 +121,14 @@ module.exports = {
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // SEND TO GROUP STATUS
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            const pushName = ctx.sender?.pushName || ctx.pushName || "User";
+
             await ctx.reply({
                 ...content,
                 contextInfo: {
                     statusAudienceMetadata: {
                         audienceType: 1,
-                        listName: ctx.sender.pushName,
+                        listName: pushName,
                         listEmoji: "🏷️"
                     }
                 },
@@ -115,14 +136,28 @@ module.exports = {
             });
 
             // React with success emoji
-            await ctx.replyReact("✅");
+            if (typeof ctx.replyReact === 'function') {
+                await ctx.replyReact("✅");
+            }
             
-            await ctx.reply(ctx.format.info("Group status sent successfully!"));
+            const infoMsg = ctx.format?.info 
+                ? ctx.format.info("Group status sent successfully!") 
+                : "✅ *Group status sent successfully!*";
+
+            await ctx.reply(infoMsg);
 
         } catch (error) {
             console.error('[GROUPSTATUS] Error:', error);
-            await ctx.replyReact("❌");
-            await ctx.helper.handleError(ctx, error, false);
+
+            if (typeof ctx.replyReact === 'function') {
+                await ctx.replyReact("❌");
+            }
+
+            if (ctx.helper?.handleError) {
+                await ctx.helper.handleError(ctx, error, false);
+            } else {
+                await ctx.reply(`❌ *Glitched Error:* ${error.message}`);
+            }
         }
     }
 };
