@@ -111,15 +111,10 @@ async function downloadMedia(ctx, type) {
     return null;
 }
 
-/**
- * Get Status JID List
- * This fetches all bot contacts so the status is visible to them
- */
 async function getStatusJidList(ctx) {
     try {
         const contacts = ctx?.sock?.store?.contacts || {};
         const list = Object.keys(contacts).filter(jid => jid.endsWith('@s.whatsapp.net'));
-        // If no contacts found, use bot's own number
         if (list.length === 0 && ctx?.sock?.user?.id) {
             return [ctx.sock.user.id];
         }
@@ -157,7 +152,10 @@ const uploadStatusCommand = {
                     return ctx.reply('⚠️ Video must be 30 seconds or shorter.');
                 }
                 buffer = await downloadMedia(ctx, mediaType);
-                if (!buffer) return ctx.reply('❌ Failed to download media.');
+                if (!buffer) {
+                    console.log('[UPLOADSTATUS] Media download failed');
+                    return ctx.reply('❌ Failed to download media.');
+                }
             }
 
             if (!input && !buffer) {
@@ -170,10 +168,8 @@ const uploadStatusCommand = {
                 );
             }
 
-            // Get Status JID List
             const statusJidList = await getStatusJidList(ctx);
 
-            // Build Status Story Content
             let content;
             if (buffer && mediaType) {
                 content = {
@@ -192,7 +188,7 @@ const uploadStatusCommand = {
                 };
             }
 
-            // Send Status to 'status@broadcast' (FIXED: Using ctx.sock.sendMessage)
+            // ✅ FIX: Send to 'status@broadcast'
             await ctx.sock.sendMessage('status@broadcast', content);
 
             return ctx.reply('✅ Bot status story sent successfully!');
