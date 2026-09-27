@@ -1,5 +1,6 @@
 const axios = require('axios');
-const { ButtonV2, createCtx } = require('../lib/messageBuilder');
+const { createCtx } = require('../lib/messageBuilder');
+const { A2UI, sendA2UIWidget } = require('../lib/a2ui');
 const paymentStore = require('../lib/paymentStore');
 const settings = require('../settings');
 
@@ -13,8 +14,37 @@ const WEBHOOK_URL = process.env.PAYMENT_WEBHOOK_URL || 'https://mickey-pterodact
 const userSessions = new Map();
 
 function normalizeAmount(value) {
-  const parsed = Number(String(value || '').replace(/[^0-9]/g, ''));
-  return Number.isNaN(parsed) ? 0 : parsed;
+  const normalized = String(value ?? '').replace(/[\s,]/g, '');
+  if (!/^\d+$/.test(normalized)) return 0;
+  const parsed = Number(normalized);
+  return Number.isSafeInteger(parsed) ? parsed : 0;
+}
+
+async function sendDonationWidget(ctx, { title, body, footer, buttons = [], fallbackText }) {
+  const a2ui = new A2UI();
+  const titleId = a2ui.text(title, { variant: 'h2' });
+  const bodyId = a2ui.text(body, { variant: 'body' });
+  const contentId = a2ui.column([titleId, bodyId]);
+  a2ui.root([contentId]);
+
+  const nativeButtons = buttons.map(({ label, id, url }) => ({
+    name: url ? 'cta_url' : 'quick_reply',
+    params: url
+      ? { display_text: label, url, merchant_url: url }
+      : { display_text: label, id },
+  }));
+
+  try {
+    return await sendA2UIWidget(ctx.sock, ctx.chatId, {
+      a2ui,
+      footer,
+      buttons: nativeButtons,
+      quoted: ctx.msg,
+    });
+  } catch (error) {
+    console.error('[donate] A2UI send failed:', error?.message || error);
+    return ctx.sock.sendMessage(ctx.chatId, { text: fallbackText || `${title}\n\n${body}` }, { quoted: ctx.msg });
+  }
 }
 
 function isValidPhone(phone) {
@@ -29,9 +59,6 @@ function isValidPhone(phone) {
   }
   if (clean.length === 12 && clean.startsWith('255')) {
     return clean; // Tayari ni sahihi
-  }
-  if (clean.length === 13 && clean.startsWith('255')) {
-    return clean; // Sahihi
   }
   return null;
 }
@@ -118,11 +145,9 @@ async function requestPhoneNumber(ctx, amount) {
     }
   }, 300000); // 5 minutes
 
-  const text = `💰 *Mchakato wa Malipo*
+    const text = `Umechagua kutoa: TSh ${amount.toLocaleString()}
 
-Umechagua kutoa: *TSh ${amount.toLocaleString()}*
-
-Tafadhali *tuma namba yako ya simu* katika muundo huu:
+  Tafadhali tuma namba yako ya simu katika muundo huu:
 • 0712345678
 • 255712345678
 • 0621234567
@@ -131,14 +156,12 @@ Au tumia: .donate ${amount} 255712345678
 
 Namba itatumika kukutumia mwongozo wa malipo.`;
 
-  const button = new ButtonV2(ctx.sock)
-    .text(text)
-    .footer('Tuma namba yako ya simu sasa')
-    .addButton('Ghairi', '.donate cancel');
-
-  await button.send(ctx.chatId, {
-    quoted: ctx.msg,
-    fallbackText: `Tuma namba yako ya simu kama: 0712345678`
+  await sendDonationWidget(ctx, {
+    title: 'Mchakato wa Malipo',
+    body: text,
+    footer: 'Tuma namba yako ya simu sasa',
+    buttons: [{ label: 'Ghairi', id: '.donate cancel' }],
+    fallbackText: `Tuma namba yako ya simu kama: 0712345678`,
   });
 }
 
@@ -170,6 +193,14 @@ Au tuma .donate cancel kughairi.`);
 }
 
 async function createPaymentCheckout(ctx, amount, phone) {
+  if (!Number.isInteger(amount) || amount < MIN_AMOUNT || amount > MAX_AMOUNT) {
+    return ctx.reply(`⚠️ Kiasi lazima kiwe kati ya TSh ${MIN_AMOUNT.toLocaleString()} na TSh ${MAX_AMOUNT.toLocaleString()}.`);
+  }
+
+  if (!isValidPhone(phone)) {
+    return ctx.reply('❌ Namba ya simu si sahihi. Tumia mfano 0712345678 au 255712345678.');
+  }
+
   const orderId = `DON-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   
   const payload = {
@@ -223,27 +254,28 @@ async function createPaymentCheckout(ctx, amount, phone) {
       metadata: payload.metadata,
     });
 
-    const button = new ButtonV2(ctx.sock)
-      .text(`✅ *Malipo Yameanzishwa*
+    const paymentText = `Malipo yameanzishwa.
 
-💰 Kiasi: TSh ${amount.toLocaleString()}
-📱 Namba: ${phone}
-🆔 Order ID: ${orderId}
+Kiasi: TSh ${amount.toLocaleString()}
+Namba: ${phone}
+Order ID: ${orderId}
 
-🔗 Endelea kwa malipo kupitia link ifuatayo:
-${data.data.paymentUrl}
+Endelea kwa malipo kupitia kitufe cha Lipa Sasa.
 
-⏰ *Muhimu:* Hakikisha unakamilisha malipo ndani ya dakika 15.
+Muhimu: Hakikisha unakamilisha malipo ndani ya dakika 15.
 
-📌 Unaweza kuangalia historia yako kwa .donate history`)
-      .footer('Donate kupitia API ya malipo ya nje')
-      .addButton('Historia', '.donate history')
-      .addButton('Takwimu', '.donate stats')
-      .addButton('Msaada', '.donate help');
+Unaweza kuangalia historia yako kwa .donate history`;
 
-    await button.send(ctx.chatId, {
-      quoted: ctx.msg,
-      fallbackText: `Link ya malipo: ${data.data.paymentUrl}`
+    await sendDonationWidget(ctx, {
+      title: 'Malipo Yameanzishwa',
+      body: paymentText,
+      footer: 'Donate kupitia API ya malipo ya nje',
+      buttons: [
+        { label: 'Lipa Sasa', url: data.data.paymentUrl },
+        { label: 'Historia', id: '.donate history' },
+        { label: 'Takwimu', id: '.donate stats' },
+      ],
+      fallbackText: `Link ya malipo: ${data.data.paymentUrl}`,
     });
   } catch (error) {
     console.error('[donate] createPaymentCheckout failed:', error?.message || error);
@@ -269,15 +301,15 @@ async function showDonationMenu(ctx) {
 
 📌 *Njia za Matumizi:*
 
-1️⃣ *Malipo ya Moja kwa Moja:*
+  1. Malipo ya Moja kwa Moja:
 .donate <kiasi> <namba>
 Mfano: .donate 1000 255615944741
 
-2️⃣ *Malipo kwa Hatua:*
+  2. Malipo kwa Hatua:
 .donate <kiasi>
 Kisha tuma namba yako
 
-3️⃣ *Commands:*
+  3. Commands:
 • .donate menu - Menyu hii
 • .donate history - Historia yako
 • .donate stats - Takwimu
@@ -286,26 +318,25 @@ Kisha tuma namba yako
 💰 Kiasi cha chini: TSh ${MIN_AMOUNT.toLocaleString()}
 💰 Kiasi cha juu: TSh ${MAX_AMOUNT.toLocaleString()}
 
-*Mchakato:* Tuma namba → Thibitisha → Malipo`;
+  Mchakato: Tuma namba, kisha kamilisha malipo.`;
 
-  const button = new ButtonV2(ctx.sock)
-    .text(text)
-    .footer('Tumia .donate <kiasi> <namba> kuendelea')
-    .addButton('Historia', '.donate history')
-    .addButton('Takwimu', '.donate stats')
-    .addButton('Ghairi', '.donate cancel');
-
-  await button.send(ctx.chatId, {
-    quoted: ctx.msg,
-    fallbackText: 'Tuma .donate <kiasi> <namba> kuanzisha malipo.'
+  await sendDonationWidget(ctx, {
+    title: 'Msaada kwa Mickey Glitch',
+    body: text,
+    footer: 'Tumia .donate <kiasi> <namba> kuendelea',
+    buttons: [
+      { label: 'Historia', id: '.donate history' },
+      { label: 'Takwimu', id: '.donate stats' },
+      { label: 'Ghairi', id: '.donate cancel' },
+    ],
+    fallbackText: 'Tuma .donate <kiasi> <namba> kuanzisha malipo.',
   });
 }
 
 async function showDonationHistory(ctx) {
   const history = paymentStore.getTransactionHistory(ctx.chatId);
   if (!history.length) {
-    return ctx.reply('📭 Hakuna historia ya malipo. 
-Tumia .donate <kiasi> <namba> kuanza.');
+    return ctx.reply('📭 Hakuna historia ya malipo.\nTumia .donate <kiasi> <namba> kuanza.');
   }
 
   const lines = history.slice(0, 8).map((item, index) => {
