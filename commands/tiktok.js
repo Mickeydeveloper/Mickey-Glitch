@@ -62,23 +62,35 @@ async function extractAudioFromVideo(videoUrl, audioPath) {
 }
 
 async function getTiktokDownload(url) {
-    const apiUrl = `https://api-aswin-sparky.koyeb.app/api/downloader/tiktok?url=${encodeURIComponent(url)}`;
-    const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
+    const apiUrls = [
+        `https://api.nexray.eu.cc/downloader/tiktok?url=${encodeURIComponent(url)}`,
+        `https://api-aswin-sparky.koyeb.app/api/downloader/tiktok?url=${encodeURIComponent(url)}`
+    ];
+    let lastError;
 
-    if (!res || !res.data || !res.data.status || !res.data.data) {
-        throw new Error('No response from TikTok API');
+    for (const apiUrl of apiUrls) {
+        try {
+            const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
+            const responseData = res?.data;
+            const d = responseData?.result || responseData?.data;
+            const videoUrl = d?.size_nowm_hd || d?.size_nowm || d?.data || d?.video;
+
+            if (!responseData?.status || !videoUrl) {
+                throw new Error('Could not find video URL in API response');
+            }
+
+            return {
+                url: videoUrl,
+                title: d.title,
+                nickname: d.author?.nickname,
+                thumbnail: d.cover || d.thumbnail
+            };
+        } catch (err) {
+            lastError = err;
+        }
     }
 
-    const d = res.data.data;
-    const videoUrl = d.video;
-    if (!videoUrl) throw new Error('Could not find video URL in API response');
-
-    return { 
-        url: videoUrl, 
-        title: d.title, 
-        nickname: d.author?.nickname,
-        thumbnail: d.thumbnail 
-    };
+    throw lastError || new Error('No response from TikTok API');
 }
 
 async function tiktokAudioCommand(sock, chatId, message, url) {
