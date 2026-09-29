@@ -6,9 +6,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const moment = require('moment-timezone');
+const { Toolkit } = require('../lib/messageBuilder');
 const settings = require('../settings');
-const os = require('os');
 const chalk = require('chalk');
 
 // ==============================================
@@ -258,74 +257,48 @@ const loadDynamicMenu = (showAll = true) => {
         }));
 };
 
-const getGreeting = (hour) => {
-    if (hour >= 0 && hour <= 4) return { text: 'Usiku sana', emoji: '🌙' };
-    if (hour >= 5 && hour <= 11) return { text: 'Asubuhi', emoji: '☀️' };
-    if (hour >= 12 && hour <= 16) return { text: 'Mchana', emoji: '🎉' };
-    if (hour >= 17 && hour <= 18) return { text: 'Jioni', emoji: '🌤️' };
-    return { text: 'Usiku', emoji: '🌙' };
-};
-
 // ==============================================
 // 🚀 MAIN MENU COMMAND
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
         const identity = typeof settings.getBotIdentity === 'function' ? settings.getBotIdentity() : settings;
-        const now = moment().tz(identity.timezone || 'Africa/Dar_es_Salaam');
-        const hour = now.hour();
-        const userName = m.pushName || 'User';
-        const greeting = getGreeting(hour);
         const botName = identity.name || 'MICKEY GLITCH';
+        const connectedJid = sock.user?.id || '';
+        const businessNumber = connectedJid.split('@')[0].split(':')[0];
+
+        if (!/^\d+$/.test(businessNumber)) {
+            throw new Error('Cannot determine the connected WhatsApp business JID.');
+        }
+
+        const jpegThumbnail = await Toolkit.resize(
+            await Toolkit.fetchBuffer('https://cdn.ornzora.eu.cc/e5596d94-d434-4265-b0ec-eee03e8a1487-FIORA.jpg', {}, { silent: false }),
+            300,
+            300
+        );
 
         await sock.relayMessage(chatId, {
             listMessage: {
                 title: botName,
-                description: `Habari za ${greeting.text}, ${userName}. Chagua menu hapa chini.`,
-                buttonText: 'Pilih Menu',
-                listType: 1,
-                sections: [
-                    {
-                        title: 'Menu Utama',
-                        rows: [
-                            {
-                                title: 'Profile',
-                                description: 'Lihat profile pengguna',
-                                rowId: '.profile'
-                            },
-                            {
-                                title: 'Settings',
-                                description: 'Pengaturan bot',
-                                rowId: '.settings'
-                            },
-                            {
-                                title: 'Help',
-                                description: 'Lihat bantuan dan command',
-                                rowId: '.menu'
-                            },
-                            {
-                                title: 'About',
-                                description: 'Informasi tentang bot dan repository',
-                                rowId: '.repo'
-                            }
-                        ]
+                description: 'Pilih salah satu produk di bawah.',
+                buttonText: 'Lihat Produk',
+                listType: 2,
+                productListInfo: {
+                    headerImage: {
+                        jpegThumbnail,
+                        productId: '1'
                     },
-                    {
-                        title: 'Tools',
-                        rows: [
-                            {
-                                title: 'Downloader',
-                                description: 'Download media dari TikTok',
-                                rowId: '.tiktok'
-                            },
-                            {
-                                title: 'AI',
-                                description: 'Gunakan fitur AI',
-                                rowId: '.ai'
-                            }
-                        ]
-                    }
-                ],
+                    productSections: [
+                        {
+                            title: 'Menu Utama',
+                            products: [
+                                { productId: '1' },
+                                { productId: '1' }
+                            ]
+                        }
+                    ],
+                    businessOwnerJid: `${businessNumber}@s.whatsapp.net`
+                },
                 footerText: `© ${botName}`
             }
         }, {
