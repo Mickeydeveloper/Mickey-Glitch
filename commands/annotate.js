@@ -1,7 +1,5 @@
 const {
     downloadContentFromMessage,
-    generateWAMessageFromContent,
-    prepareWAMessageMedia
 } = require('@whiskeysockets/baileys');
 
 async function annotateCommand(sock, chatId, message) {
@@ -36,36 +34,16 @@ async function annotateCommand(sock, chatId, message) {
             throw new Error('Sticker haikupakuliwa.');
         }
 
-        const media = await prepareWAMessageMedia(
-            { sticker: stickerBuffer },
-            { upload: sock.waUploadToServer }
-        );
-
-        const parentMessageKey = {
+        const quotedSticker = {
+            key: {
             remoteJid: chatId,
             id: contextInfo.stanzaId
-        };
-        if (contextInfo.participant) parentMessageKey.participant = contextInfo.participant;
-
-        const outgoing = await generateWAMessageFromContent(chatId, {
-            messageContextInfo: {
-                messageAssociation: {
-                    associationType: 11,
-                    parentMessageKey
-                }
-            },
-            stickerMessage: {
-                ...media.stickerMessage,
-                isAnimated: Boolean(sticker.isAnimated || sticker.isLottie),
-                isLottie: Boolean(sticker.isLottie)
             }
-        }, {
-            userJid: sock.user?.id
-        });
+        };
+        if (contextInfo.participant) quotedSticker.key.participant = contextInfo.participant;
+        quotedSticker.message = quotedMessage;
 
-        await sock.relayMessage(chatId, outgoing.message, {
-            messageId: outgoing.key.id
-        });
+        await sock.sendMessage(chatId, { sticker: stickerBuffer }, { quoted: quotedSticker });
     } catch (error) {
         console.error('[annotate]', error?.message || error);
         await sock.sendMessage(chatId, {
@@ -75,7 +53,7 @@ async function annotateCommand(sock, chatId, message) {
 }
 
 annotateCommand.commandName = 'annotate';
-annotateCommand.description = 'Tuma sticker kama annotation kwenye ujumbe ulioujibu.';
+annotateCommand.description = 'Jibu sticker kwa sticker inayooana na matoleo mengi ya WhatsApp.';
 annotateCommand.category = 'MEDIA';
 
 module.exports = annotateCommand;
