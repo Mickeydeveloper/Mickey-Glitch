@@ -6,8 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { Toolkit } = require('../lib/messageBuilder');
-const settings = require('../settings');
+const { ButtonV2 } = require('../lib/messageBuilder');
 const chalk = require('chalk');
 
 // ==============================================
@@ -262,62 +261,32 @@ const loadDynamicMenu = (showAll = true) => {
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
-        const identity = typeof settings.getBotIdentity === 'function' ? settings.getBotIdentity() : settings;
-        const botName = identity.name || 'MICKEY GLITCH';
-        const connectedJid = sock.user?.id || '';
-        const businessNumber = connectedJid.split('@')[0].split(':')[0];
-
-        if (!/^\d+$/.test(businessNumber)) {
-            throw new Error('Cannot determine the connected WhatsApp business JID.');
-        }
-
-        const jpegThumbnail = await Toolkit.resize(
-            await Toolkit.fetchBuffer('https://cdn.ornzora.eu.cc/e5596d94-d434-4265-b0ec-eee03e8a1487-FIORA.jpg', {}, { silent: false }),
-            300,
-            300
-        );
-
-        await sock.relayMessage(chatId, {
-            listMessage: {
-                title: botName,
-                description: 'Pilih salah satu produk di bawah.',
-                buttonText: 'Lihat Produk',
-                listType: 2,
-                productListInfo: {
-                    headerImage: {
-                        jpegThumbnail,
-                        productId: '1'
-                    },
-                    productSections: [
-                        {
-                            title: 'Menu Utama',
-                            products: [
-                                { productId: '1' },
-                                { productId: '1' }
-                            ]
-                        }
-                    ],
-                    businessOwnerJid: `${businessNumber}@s.whatsapp.net`
-                },
-                footerText: `© ${botName}`
-            }
-        }, {
-            additionalNodes: [
-                {
-                    tag: 'biz',
-                    attrs: {},
-                    content: [
-                        {
-                            tag: 'list',
-                            attrs: {
-                                v: '2',
-                                type: 'product_list'
-                            }
-                        }
-                    ]
+        await new ButtonV2(sock)
+            .setBody('Halo dunia')
+            .setFooter('Footer Message')
+            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png')
+            .addRawButton({
+                buttonText: { displayText: '📡 Menu' },
+                buttonId: 'Nixel',
+                type: 1,
+                nativeFlowInfo: {
+                    name: 'single_select',
+                    paramsJson: JSON.stringify({
+                        title: 'Click Here!',
+                        sections: [{
+                            title: 'Fiora Sylvie',
+                            highlight_label: '',
+                            rows: [{
+                                header: '',
+                                title: 'Nixel',
+                                description: '',
+                                id: ''
+                            }]
+                        }]
+                    })
                 }
-            ]
-        });
+            })
+            .send(chatId);
 
     } catch (e) {
         console.error('Menu Error:', e);
