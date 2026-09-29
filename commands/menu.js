@@ -6,7 +6,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const moment = require('moment-timezone');
 const { ButtonV2 } = require('../lib/messageBuilder');
+const settings = require('../settings');
+const os = require('os');
 const chalk = require('chalk');
 
 // ==============================================
@@ -256,15 +259,58 @@ const loadDynamicMenu = (showAll = true) => {
         }));
 };
 
+const getGreeting = (hour) => {
+    if (hour >= 0 && hour <= 4) return { text: 'Usiku sana', emoji: '🌙' };
+    if (hour >= 5 && hour <= 11) return { text: 'Asubuhi', emoji: '☀️' };
+    if (hour >= 12 && hour <= 16) return { text: 'Mchana', emoji: '🎉' };
+    if (hour >= 17 && hour <= 18) return { text: 'Jioni', emoji: '🌤️' };
+    return { text: 'Usiku', emoji: '🌙' };
+};
+
 // ==============================================
 // 🚀 MAIN MENU COMMAND
 // ==============================================
 const menuCommand = async (sock, chatId, m, userDb = null) => {
     try {
-        await new ButtonV2(sock)
-            .setBody('Halo dunia')
-            .setFooter('Footer Message')
-            .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png')
+        const identity = typeof settings.getBotIdentity === 'function' ? settings.getBotIdentity() : settings;
+        const now = moment().tz(identity.timezone || 'Africa/Dar_es_Salaam');
+        const hour = now.hour();
+        const userName = m.pushName || 'User';
+        const greeting = getGreeting(hour);
+        const menuData = loadDynamicMenu();
+        const stats = getSystemStats();
+
+        const date = now.format('DD MMMM YYYY'); 
+        const time = now.format('HH:mm:ss');
+        const totalCmds = menuData.reduce((total, cat) => total + cat.items.length, 0);
+        const commandSections = menuData.map((category) => ({
+            title: `${category.icon} ${category.title}`,
+            highlight_label: `${category.items.length} commands`,
+            rows: category.items.map((item) => ({
+                header: '',
+                title: item.cmd,
+                description: item.desc || 'Mickey Glitch command',
+                id: item.cmd
+            }))
+        }));
+
+        // Body message safi iliyopangwa vizuri
+        const menuText = `✨ *${identity.name || 'MICKEY GLITCH'}*
+👋 *Habari za ${greeting.text}* ${greeting.emoji}
+👤 *User:* ${userName}
+📅 *Date:* ${date} | 🕒 *Time:* ${time}
+⚡ *Commands:* ${totalCmds} | 💾 *RAM:* ${stats.memoryUsed} MB
+
+👇 *Bonyeza button ya list hapo chini kuona categories vyema*
+❤️ _i love mom_`;
+
+        // Kutengeneza Single Interactive Message (Picha Kubwa Juu + List Button Moja Chini)
+        const singleMenu = new ButtonV2(sock)
+            .setTitle(`🔥 ${identity.name || 'MICKEY GLITCH'} MENU`)
+            .setSubtitle('WhatsApp automation control center')
+            .setBody(menuText)
+            .setFooter(`⚡ ${identity.name || 'MICKEY BOT'} | ${date}`)
+               .setThumbnail('https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png')
             .addRawButton({
                 buttonText: { displayText: '📡 Menu' },
                 buttonId: 'Nixel',
@@ -274,19 +320,16 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
                     paramsJson: JSON.stringify({
                         title: 'Click Here!',
                         sections: [{
-                            title: 'Fiora Sylvie',
+                            title: `${identity.name || 'MICKEY GLITCH'} Commands`,
                             highlight_label: '',
-                            rows: [{
-                                header: '',
-                                title: 'Nixel',
-                                description: '',
-                                id: ''
-                            }]
-                        }]
+                            rows: []
+                        }, ...commandSections]
                     })
                 }
-            })
-            .send(chatId);
+            });
+
+        // Tuma kama ujumbe MMOJA TU bila kupishanisha
+        await singleMenu.send(chatId, { quoted: m });
 
     } catch (e) {
         console.error('Menu Error:', e);
