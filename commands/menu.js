@@ -7,7 +7,6 @@
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment-timezone');
-const { ButtonV2 } = require('../lib/messageBuilder');
 const settings = require('../settings');
 const os = require('os');
 const chalk = require('chalk');
@@ -277,59 +276,75 @@ const menuCommand = async (sock, chatId, m, userDb = null) => {
         const hour = now.hour();
         const userName = m.pushName || 'User';
         const greeting = getGreeting(hour);
-        const menuData = loadDynamicMenu();
-        const stats = getSystemStats();
+        const botName = identity.name || 'MICKEY GLITCH';
 
-        const date = now.format('DD MMMM YYYY'); 
-        const time = now.format('HH:mm:ss');
-        const totalCmds = menuData.reduce((total, cat) => total + cat.items.length, 0);
-        const commandSections = menuData.map((category) => ({
-            title: `${category.icon} ${category.title}`,
-            highlight_label: `${category.items.length} commands`,
-            rows: category.items.map((item) => ({
-                header: '',
-                title: item.cmd,
-                description: item.desc || 'Mickey Glitch command',
-                id: item.cmd
-            }))
-        }));
-
-        // Body message safi iliyopangwa vizuri
-        const menuText = `✨ *${identity.name || 'MICKEY GLITCH'}*
-👋 *Habari za ${greeting.text}* ${greeting.emoji}
-👤 *User:* ${userName}
-📅 *Date:* ${date} | 🕒 *Time:* ${time}
-⚡ *Commands:* ${totalCmds} | 💾 *RAM:* ${stats.memoryUsed} MB
-
-👇 *Bonyeza button ya list hapo chini kuona categories vyema*
-❤️ _i love mom_`;
-
-        // Kutengeneza Single Interactive Message (Picha Kubwa Juu + List Button Moja Chini)
-        const singleMenu = new ButtonV2(sock)
-            .setTitle(`🔥 ${identity.name || 'MICKEY GLITCH'} MENU`)
-            .setSubtitle('WhatsApp automation control center')
-            .setBody(menuText)
-            .setFooter(`⚡ ${identity.name || 'MICKEY BOT'} | ${date}`)
-            .setThumbnail('https://cdn.ornzora.eu.cc/4d2905ce-3707-4ec0-998a-68a3d851629f-FIORA.jpg')
-            .addRawButton({
-                buttonText: { displayText: '📡 Menu' },
-                buttonId: 'Nixel',
-                type: 1,
-                nativeFlowInfo: {
-                    name: 'single_select',
-                    paramsJson: JSON.stringify({
-                        title: 'Click Here!',
-                        sections: [{
-                            title: `${identity.name || 'MICKEY GLITCH'} Commands`,
-                            highlight_label: '',
-                            rows: []
-                        }, ...commandSections]
-                    })
+        await sock.relayMessage(chatId, {
+            listMessage: {
+                title: botName,
+                description: `Habari za ${greeting.text}, ${userName}. Chagua menu hapa chini.`,
+                buttonText: 'Pilih Menu',
+                listType: 1,
+                sections: [
+                    {
+                        title: 'Menu Utama',
+                        rows: [
+                            {
+                                title: 'Profile',
+                                description: 'Lihat profile pengguna',
+                                rowId: '.profile'
+                            },
+                            {
+                                title: 'Settings',
+                                description: 'Pengaturan bot',
+                                rowId: '.settings'
+                            },
+                            {
+                                title: 'Help',
+                                description: 'Lihat bantuan dan command',
+                                rowId: '.menu'
+                            },
+                            {
+                                title: 'About',
+                                description: 'Informasi tentang bot dan repository',
+                                rowId: '.repo'
+                            }
+                        ]
+                    },
+                    {
+                        title: 'Tools',
+                        rows: [
+                            {
+                                title: 'Downloader',
+                                description: 'Download media dari TikTok',
+                                rowId: '.tiktok'
+                            },
+                            {
+                                title: 'AI',
+                                description: 'Gunakan fitur AI',
+                                rowId: '.ai'
+                            }
+                        ]
+                    }
+                ],
+                footerText: `© ${botName}`
+            }
+        }, {
+            additionalNodes: [
+                {
+                    tag: 'biz',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: 'list',
+                            attrs: {
+                                v: '2',
+                                type: 'product_list'
+                            }
+                        }
+                    ]
                 }
-            });
-
-        // Tuma kama ujumbe MMOJA TU bila kupishanisha
-        await singleMenu.send(chatId, { quoted: m });
+            ]
+        });
 
     } catch (e) {
         console.error('Menu Error:', e);
