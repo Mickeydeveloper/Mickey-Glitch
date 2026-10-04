@@ -4,7 +4,7 @@ const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
 const { pipeline } = require('stream');
 const { promisify } = require('util');
-const { generateWAMessageFromContent } = require('@whiskeysockets/baileys'); // Hakikisha ume-import hii kabla ya kuanza
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 const { AIRich, Button } = require('../lib/messageBuilder');
 
 const streamPipeline = promisify(pipeline);
@@ -63,7 +63,7 @@ async function extractAudioFromVideo(videoUrl, audioPath) {
 
 async function getTiktokDownload(url) {
     const apiUrls = [
-        `https://api.nexray.eu.cc/downloader/tiktok?url=${encodeURIComponent(url)}`,
+        `https://prexzyapis.com/download/tiktok?url=${encodeURIComponent(url)}`,
         `https://api-aswin-sparky.koyeb.app/api/downloader/tiktok?url=${encodeURIComponent(url)}`
     ];
     let lastError;
@@ -72,25 +72,34 @@ async function getTiktokDownload(url) {
         try {
             const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
             const responseData = res?.data;
-            const d = responseData?.result || responseData?.data;
-            const videoUrl = d?.size_nowm_hd || d?.size_nowm || d?.data || d?.video;
 
-            if (!responseData?.status || !videoUrl) {
+            // Kagua iwapo status ni ya mafanikio (API zote mbili hutumia status: true / status: 200 au data)
+            if (!responseData || (responseData.status !== true && responseData.status !== 200 && !responseData.data)) {
+                throw new Error('API request failed or invalid response status');
+            }
+
+            // Kuweka support ya structure za Prexzy na Aswin
+            const d = responseData?.data || responseData?.result;
+            
+            // Kutafuta link ya video (hdplay, play, size_nowm_hd, size_nowm, etc.)
+            const videoUrl = d?.hdplay || d?.play || d?.size_nowm_hd || d?.size_nowm || d?.video;
+
+            if (!videoUrl) {
                 throw new Error('Could not find video URL in API response');
             }
 
             return {
                 url: videoUrl,
-                title: d.title,
-                nickname: d.author?.nickname,
-                thumbnail: d.cover || d.thumbnail
+                title: d?.title || d?.content_desc?.[0] || 'TikTok Video',
+                nickname: d?.author?.nickname || d?.author?.unique_id || 'N/A',
+                thumbnail: d?.cover || d?.origin_cover || d?.thumbnail
             };
         } catch (err) {
             lastError = err;
         }
     }
 
-    throw lastError || new Error('No response from TikTok API');
+    throw lastError || new Error('No response from TikTok APIs');
 }
 
 async function tiktokAudioCommand(sock, chatId, message, url) {
