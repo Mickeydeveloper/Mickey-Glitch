@@ -43,6 +43,15 @@ try {
 // LOGGER - SILENT FOR CLEAN CONSOLE
 // ────────────────────────────────────────────────
 const pinoLogger = pino({ level: 'silent' });
+const originalConsoleLog = console.log.bind(console);
+console.log = (...args) => {
+    const message = args[0];
+    if (typeof message === 'string' && (
+        message.startsWith('Closing open session in favor of incoming prekey bundle') ||
+        message.startsWith('Closing session: SessionEntry')
+    )) return;
+    originalConsoleLog(...args);
+};
 
 // --- Global Settings ---
 const _botName = settings.botName || settings.botname || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
