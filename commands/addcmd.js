@@ -518,6 +518,56 @@ function extractFunctionName(source) {
     return matches.find(Boolean)?.[1] || '';
 }
 
+function isRunnableCodeSnippet(source) {
+    return /\b(?:async\s+)?function\s+[\w$]+\s*\(|=>|\bmodule\.exports\b|\b(?:sock|conn|RyuuBotz)\.(?:sendMessage|relayMessage)\s*\(|\breturn\s+await\s+[\w$]+\s*\(/m.test(source);
+}
+
+async function previewSourceSnippet(sock, chatId, senderId, message, source) {
+    const code = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
+    const sandbox = createSandbox(sock, chatId, message, [], senderId, 'snippet');
+    const trackedSocket = createTrackedSocket(sock, sandbox);
+    const settings = require('../settings');
+
+    sandbox.previewMode = true;
+    sandbox.sock = trackedSocket;
+    sandbox.conn = trackedSocket;
+    sandbox.core = trackedSocket;
+    sandbox.RyuuBotz = trackedSocket;
+    sandbox.jid = chatId;
+    sandbox.m = {
+        ...message,
+        chat: chatId,
+        reply: async (text, options = {}) => trackedSocket.sendMessage(chatId, { text: String(text) }, { quoted: message, ...options }),
+    };
+    sandbox.namabot = global.namabot || settings.botName || settings.botname || 'Bot';
+    sandbox.ownername = global.ownername || settings.botOwner || 'Owner';
+
+    const result = await executeInSandbox(`(async () => {\n${code}\n})()`, sandbox);
+    if (!result.success) {
+        await sock.sendMessage(chatId, {
+            text: `❌ Snippet preview imeshindwa:\n${result.error?.stack || result.error?.message || result.error}`,
+        }, { quoted: message });
+        return;
+    }
+
+    if (sandbox.__sentMessages.length) {
+        const previews = sandbox.__sentMessages
+            .map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false }))
+            .join('\n\n---\n\n');
+        await sock.sendMessage(chatId, {
+            text: `🔎 Preview ya function snippet\n\n${previews}`,
+        }, { quoted: message });
+        return;
+    }
+
+    const detail = result.result !== undefined
+        ? util.inspect(result.result, { depth: 4, colors: false })
+        : result.logs.join('\n') || 'Function ime-run lakini haijaita sendMessage/relayMessage kutoa payload ya preview.';
+    await sock.sendMessage(chatId, {
+        text: `🔎 Preview ya function snippet\n\n${detail}`,
+    }, { quoted: message });
+}
+
 async function previewCommand(sock, chatId, senderId, message, targetInput) {
     const functionName = extractFunctionName(targetInput);
     const parts = targetInput.trim().split(/\s+/);
@@ -654,10 +704,15 @@ Examples:
 
         // ─── Preview the matching bot function from quoted source ───────
         if (quotedCode) {
-            const functionName = extractFunctionName(quotedCode.toString());
+            const source = quotedCode.toString();
+            const functionName = extractFunctionName(source);
+            if (isRunnableCodeSnippet(source) && (!functionName || !resolveCommandPath(functionName))) {
+                await previewSourceSnippet(sock, chatId, senderId, message, source);
+                return;
+            }
             if (!functionName) {
                 await sock.sendMessage(chatId, {
-                    text: '❌ Code uliyo-reply nayo haina jina la function linaloweza kutafutwa. Tuma .run <command/function> kwa jina lake.',
+                    text: '❌ Code uliyo-reply nayo haina function inayoweza ku-preview. Hakikisha snippet ina function pamoja na call yake.',
                 }, { quoted: message });
                 return;
             }
@@ -669,6 +724,15 @@ Examples:
         const explicitExecute = body.match(/^execute\s+(.+)$/i);
         const sourceFunction = extractFunctionName(rawBody);
         const target = explicitPreview?.[1] || explicitExecute?.[1] || sourceFunction || body;
+
+        if (!explicitPreview && !explicitExecute && isRunnableCodeSnippet(rawBody)) {
+            if (sourceFunction && resolveCommandPath(sourceFunction)) {
+                await previewCommand(sock, chatId, senderId, message, sourceFunction);
+            } else {
+                await previewSourceSnippet(sock, chatId, senderId, message, rawBody);
+            }
+            return;
+        }
 
         if (!explicitExecute) {
             await previewCommand(sock, chatId, senderId, message, target);
