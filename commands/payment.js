@@ -1,46 +1,7 @@
-const { generateMessageIDV2, proto } = require('@whiskeysockets/baileys');
+const crypto = require('crypto');
+const { generateMessageIDV2 } = require('@whiskeysockets/baileys');
 
-const WALLETS = ['DANA', 'OVO', 'GoPay', 'ShopeePay', 'LinkAja'];
-const DEFAULT_BANKS = ['SeaBank', 'Bank Jago', 'Bank Central Asia', 'Bank Mandiri', 'DANA', 'GoPay', 'OVO'];
-
-const amountParts = amount => ({ value: Math.round(amount * 100), offset: 100 });
-
-const account = (institution, beneficiary, type, identifier) => ({
-    type: 'payment_account',
-    payment_account: {
-        account_type: type,
-        identifier_type: identifier,
-        identifier_value: '08888',
-        institution_name: institution,
-        beneficiary_name: beneficiary,
-    },
-});
-
-const buildPaymentConfig = (amount, description, beneficiary, institutions) => ({
-    currency: 'IDR',
-    payment_configuration: '',
-    payment_type: 'upr',
-    total_amount: amountParts(amount),
-    reference_id: `PAY-${Date.now()}`,
-    type: 'physical-goods',
-    order: {
-        status: 'pending',
-        description,
-        subtotal: amountParts(amount),
-        tax: { value: 0, offset: 100 },
-        discount: { value: 0, offset: 100 },
-        shipping: { value: 0, offset: 100 },
-        order_type: 'PAYMENT_REQUEST',
-        items: [{ name: description, amount: amountParts(amount), quantity: 1 }],
-    },
-    payment_settings: institutions.map(institution => WALLETS.includes(institution)
-        ? account(institution, beneficiary, 'digital_wallet', 'phone_number')
-        : account(institution, beneficiary, 'bank_account', 'id_account_number')),
-    additional_note: description,
-    native_payment_methods: [],
-    share_payment_status: false,
-    is_soft_deleted: false,
-});
+const KEY_TYPES = ['PHONE', 'EVP', 'CPF', 'CNPJ', 'EMAIL'];
 
 function getInput(message, args) {
     const text = message?.message?.conversation ||
@@ -54,66 +15,79 @@ function getInput(message, args) {
     return Array.isArray(args) ? args.join(' ').trim() : String(args || '').trim();
 }
 
-async function paymentCommand(conn, chatId, message, args = []) {
+async function paymentinfo(conn, chatId, message, args = []) {
     const input = getInput(message, args);
-    const [amountRaw, description, beneficiary, banksRaw] = input.split('|').map(part => part.trim());
-    const amount = Number.parseFloat((amountRaw || '').replace(/[^\d.]/g, ''));
+    const [merchant, key, keyTypeRaw, currencyRaw, amountRaw] = input.split('|').map(part => part.trim());
+    const amount = Number.parseFloat(amountRaw || '0');
 
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!merchant || !key || !Number.isFinite(amount) || amount < 0) {
         await conn.sendMessage(chatId, {
-            text: `Matumizi: .payment <amount> | <description> | <beneficiary> | [banks;separated]\nBenki za kawaida: ${DEFAULT_BANKS.join(', ')}`,
+            text: `Matumizi: .paymentinfo <merchant> | <key> | [${KEY_TYPES.join('|')}] | [currency] | [amount]`,
         }, { quoted: message });
         return;
     }
 
-    const desc = description || 'Payment';
-    const who = beneficiary || 'Merchant';
-    const institutions = banksRaw
-        ? banksRaw.split(/[;,]/).map(bank => bank.trim()).filter(Boolean)
-        : DEFAULT_BANKS;
-
-    const interactiveMessage = proto.Message.InteractiveMessage.create({
-        header: proto.Message.InteractiveMessage.Header.create({ title: desc, subtitle: who }),
-        body: proto.Message.InteractiveMessage.Body.create({
-            text: `Payment request for ${who}\nAmount: IDR ${amount.toLocaleString('id-ID')}`,
-        }),
-        footer: proto.Message.InteractiveMessage.Footer.create({ text: 'whatsapp-bot' }),
-        nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
-            buttons: [{
-                name: 'review_and_pay',
-                buttonParamsJson: JSON.stringify(buildPaymentConfig(amount, desc, who, institutions)),
+    const keyType = KEY_TYPES.includes(keyTypeRaw?.toUpperCase()) ? keyTypeRaw.toUpperCase() : 'PHONE';
+    const currency = (currencyRaw || 'BRL').toUpperCase();
+    const cents = Math.round(amount * 100);
+    const config = {
+        currency,
+        total_amount: { value: cents, offset: 100 },
+        reference_id: crypto.randomBytes(6).toString('hex').toUpperCase().slice(0, 11),
+        type: 'physical-goods',
+        order: {
+            status: 'pending',
+            subtotal: { value: cents, offset: 100 },
+            order_type: 'ORDER',
+            items: [{
+                name: merchant,
+                amount: { value: cents, offset: 100 },
+                quantity: 1,
+                sale_amount: { value: cents, offset: 100 },
             }],
-            messageParamsJson: '{}',
-            messageVersion: 1,
-        }),
-    });
+        },
+        payment_settings: [{
+            type: 'pix_static_code',
+            pix_static_code: { merchant_name: merchant, key, key_type: keyType },
+        }],
+        share_payment_status: false,
+        is_soft_deleted: false,
+        referral: 'chat_attachment',
+    };
 
     try {
-        await conn.relayMessage(chatId, { interactiveMessage }, {
+        await conn.relayMessage(chatId, {
+            messageContextInfo: { messageSecret: crypto.randomBytes(32) },
+            interactiveMessage: {
+                nativeFlowMessage: {
+                    buttons: [{ name: 'payment_info', buttonParamsJson: JSON.stringify(config) }],
+                },
+                contextInfo: {
+                    expiration: 7776000,
+                    disappearingMode: { initiator: 0, trigger: 0 },
+                },
+            },
+        }, {
             messageId: generateMessageIDV2(conn.user?.id),
             additionalNodes: [{
                 tag: 'biz',
-                attrs: {
-                    actual_actors: '2',
-                    host_storage: '2',
-                    native_flow_name: 'order_details',
-                },
+                attrs: {},
                 content: [{
-                    tag: 'quality_control',
-                    attrs: { source_type: 'third_party' },
-                    content: [{ tag: 'decision_source', attrs: { value: 'df' } }],
+                    tag: 'interactive',
+                    attrs: { type: 'native_flow', v: '1' },
+                    content: [{ tag: 'native_flow', attrs: { name: 'payment_info' } }],
                 }],
             }],
         });
     } catch (error) {
-        console.error('[PAYMENT] Failed to send payment request:', error?.message || error);
+        console.error('[PAYMENTINFO] Failed to send payment info:', error?.message || error);
         await conn.sendMessage(chatId, {
-            text: 'Imeshindikana kutuma ombi la malipo. Hakikisha toleo la Baileys linaunga mkono review_and_pay kisha ujaribu tena.',
+            text: 'Imeshindikana kutuma taarifa za malipo. Hakikisha toleo la Baileys linaunga mkono payment_info kisha ujaribu tena.',
         }, { quoted: message });
     }
 }
 
-paymentCommand.description = 'Tuma ombi la malipo la WhatsApp kupitia benki au e-wallet.';
-paymentCommand.category = 'EXPERIMENTAL';
+paymentinfo.description = 'Tuma kadi ya payment_info yenye merchant na payment key.';
+paymentinfo.category = 'EXPERIMENTAL';
 
-module.exports = paymentCommand;
+module.exports = paymentinfo;
