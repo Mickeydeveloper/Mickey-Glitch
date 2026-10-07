@@ -8,7 +8,7 @@ async function fiveSecondCommand(sock, chatId, message, args = []) {
 
     if (action !== 'on' && action !== 'off') {
         await sock.sendMessage(chatId, {
-            text: 'Matumizi: .5second on/off\nGroup: WhatsApp huanza disappearing messages kwenye sekunde 60. Private chat: sekunde 5 baada ya kusomwa.',
+            text: 'Matumizi: .5second on/off\nWasha au zima disappearing messages za chat; timer hii inahusu ujumbe mpya unaotumwa na pande zote.',
         }, { quoted: message });
         return;
     }
@@ -26,30 +26,16 @@ async function fiveSecondCommand(sock, chatId, message, args = []) {
                 }, { quoted: message });
                 return;
             }
-
-            await sock.sendMessage(chatId, {
-                disappearingMessagesInChat: enabled ? 60 : 0,
-            });
-
-            await sock.sendMessage(chatId, {
-                text: enabled
-                    ? 'Disappearing messages zimewashwa kwa group hii (sekunde 60; WhatsApp hairuhusu sekunde 5 kwa chat nzima).'
-                    : 'Disappearing messages zimezimwa kwa group hii.',
-            }, { quoted: message });
-            return;
         }
 
-        await sock.relayMessage(chatId, {
-            protocolMessage: {
-                type: 3,
-                afterReadDuration: enabled ? 5 : 0,
-            },
-        }, {});
+        await sock.sendMessage(chatId, {
+            disappearingMessagesInChat: enabled ? 5 : 0,
+        });
 
         await sock.sendMessage(chatId, {
             text: enabled
-                ? 'Setting ya disappearing message baada ya kusomwa imewashwa kwa sekunde 5 kwenye chat hii.'
-                : 'Setting ya disappearing message baada ya kusomwa imezimwa kwenye chat hii.',
+                ? 'Disappearing messages zimewashwa kwa sekunde 5 kwenye chat hii. Ujumbe mpya wa pande zote mbili utatoweka baada ya muda huo.'
+                : 'Disappearing messages zimezimwa kwenye chat hii.',
         }, { quoted: message });
     } catch (error) {
         console.error('[5SECOND] Failed to update disappearing messages:', error?.message || error);

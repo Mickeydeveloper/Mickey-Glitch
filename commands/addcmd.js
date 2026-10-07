@@ -522,9 +522,69 @@ function isRunnableCodeSnippet(source) {
     return /\b(?:async\s+)?function\s+[\w$]+\s*\(|=>|\bmodule\.exports\b|\b(?:sock|conn|RyuuBotz)\.(?:sendMessage|relayMessage)\s*\(|\breturn\s+await\s+[\w$]+\s*\(/m.test(source);
 }
 
+function createSnippetSandbox(sock, chatId, message, senderId) {
+    const baseRequire = Module.createRequire(path.join(process.cwd(), '__run_preview__.js'));
+    const sandbox = {
+        sock,
+        conn: sock,
+        core: sock,
+        chatId,
+        jid: chatId,
+        message,
+        senderId,
+        commandName: 'snippet',
+        args: [],
+        prefix: '.',
+        util,
+        process,
+        Buffer,
+        __dirname: process.cwd(),
+        __filename: path.join(process.cwd(), '__run_preview__.js'),
+        module: { exports: {} },
+        exports: {},
+        setTimeout,
+        setInterval,
+        clearTimeout,
+        clearInterval,
+        Promise,
+        Date,
+        Math,
+        String,
+        Number,
+        Boolean,
+        Array,
+        Object,
+        JSON,
+        Error,
+        RegExp,
+        Map,
+        Set,
+        require: specifier => {
+            if (typeof specifier !== 'string') throw new TypeError('Module specifier must be a string');
+            const rootedSpecifier = specifier.startsWith('../') ? `./${specifier.slice(3)}` : specifier;
+            try {
+                return baseRequire(rootedSpecifier);
+            } catch (error) {
+                if (rootedSpecifier === specifier) throw error;
+                return baseRequire(specifier);
+            }
+        },
+        console: {
+            log: (...values) => sandbox.__logs.push(values.map(value => util.format(value)).join(' ')),
+            error: (...values) => sandbox.__logs.push(values.map(value => util.format(value)).join(' ')),
+            warn: (...values) => sandbox.__logs.push(values.map(value => util.format(value)).join(' ')),
+            info: (...values) => sandbox.__logs.push(values.map(value => util.format(value)).join(' ')),
+        },
+    };
+    sandbox.__logs = [];
+    sandbox.__sent = false;
+    sandbox.__sentMessages = [];
+    return sandbox;
+}
+
 async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     const code = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
-    const sandbox = createSandbox(sock, chatId, message, [], senderId, 'snippet');
+    const sandbox = createSnippetSandbox(sock, chatId, message, senderId);
     const trackedSocket = createTrackedSocket(sock, sandbox);
     const settings = require('../settings');
 
@@ -706,7 +766,7 @@ Examples:
         if (quotedCode) {
             const source = quotedCode.toString();
             const functionName = extractFunctionName(source);
-            if (isRunnableCodeSnippet(source) && (!functionName || !resolveCommandPath(functionName))) {
+            if (isRunnableCodeSnippet(source)) {
                 await previewSourceSnippet(sock, chatId, senderId, message, source);
                 return;
             }
@@ -726,11 +786,7 @@ Examples:
         const target = explicitPreview?.[1] || explicitExecute?.[1] || sourceFunction || body;
 
         if (!explicitPreview && !explicitExecute && isRunnableCodeSnippet(rawBody)) {
-            if (sourceFunction && resolveCommandPath(sourceFunction)) {
-                await previewCommand(sock, chatId, senderId, message, sourceFunction);
-            } else {
-                await previewSourceSnippet(sock, chatId, senderId, message, rawBody);
-            }
+            await previewSourceSnippet(sock, chatId, senderId, message, rawBody);
             return;
         }
 
