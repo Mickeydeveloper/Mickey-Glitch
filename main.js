@@ -88,7 +88,7 @@ const { autoBioCommand } = require('./commands/autobio');
 // Command imports
 const tagAllCommand = require('./commands/tagall');
 const helpCommand = require('./commands/menu');
-const getppCommand = require('./commands/getpp-direct'); 
+const getppCommand = require('./commands/getpp');
 const banCommand = require('./commands/ban');
 const addCommand = require('./commands/add');
 const { promoteCommand } = require('./commands/promote');
@@ -1619,10 +1619,9 @@ We will process it and send you an update shortly.`
                 await clearTmpCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
-            case userMessage === '.getpp':
-            case userMessage === '.ppic':
-            case userMessage === '.profile':
-                await getppCommand(sock, chatId, senderId, message, userMessage.split(' ').slice(1));
+            case userMessage === '.getpp' || userMessage.startsWith('.getpp '):
+            case userMessage === '.ppic' || userMessage.startsWith('.ppic '):
+                await getppCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
             case userMessage === '.setpp':
