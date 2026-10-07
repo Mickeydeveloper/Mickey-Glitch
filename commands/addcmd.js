@@ -471,6 +471,21 @@ function createTrackedSocket(sock, sandbox) {
     });
 }
 
+function isCodeSnippet(source) {
+    return /^\s*```/.test(source) || /\bmodule\.exports\b|\bexports\.[\w$]+\s*=|\brequire\s*\(|\b(?:async\s+)?function\b|=>|\b(?:const|let|var)\s+[$\w]+\s*=|\b(?:await|return)\b|\b(?:sock|conn)\.(?:sendMessage|relayMessage)\s*\(/m.test(source);
+}
+
+function formatRunPreview(source) {
+    const content = String(source || '');
+    const trimmed = content.trim();
+    const alreadyFenced = /^```[\w-]*\s*[\s\S]*\s*```$/.test(trimmed);
+
+    if (isCodeSnippet(content) && !alreadyFenced) {
+        return `🔎 Code preview:\n\`\`\`javascript\n${content}\n\`\`\``;
+    }
+    return `${isCodeSnippet(content) ? '🔎 Code preview:' : '🔎 Text preview:'}\n${content}`;
+}
+
 async function runCommand(sock, chatId, senderId, rawText, message, fullText = '') {
     try {
         const isOwner = message?.key?.fromMe || await isOwnerOrSudo(senderId, sock, chatId);
@@ -479,8 +494,9 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
-        const input = (rawText || fullText || '').toString();
-        const body = input.replace(/^\.run\b/i, '').trim();
+        const input = (fullText || rawText || '').toString();
+        const rawBody = input.replace(/^\.run\b/i, '').replace(/^\s/, '');
+        const body = rawBody.trim();
         const previewRequested = /^preview\b/i.test(body) || global.RUN_PREVIEW_MODE === true || process.env.BOT_PREVIEW_MODE === '1' || process.env.BOT_PREVIEW_MODE === 'true';
         const quotedMessage = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
         const quotedCode = quotedMessage?.conversation || 
@@ -525,12 +541,12 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
                 text: `🛠️ Run Command Help:
                 
 Usage:
-• .run <javascript code> - Execute inline JavaScript
+• .run <javascript code or text> - Preview code or text without executing it
 • .run <command_name> [args] - Run a custom command
 • .run preview <command_name> [args] - Preview what the command would send without posting it
 • .run list - List all custom commands
 • .run delete <command_name> - Delete a custom command
-• Reply to code with .run - Execute quoted code
+• Reply to code or text with .run - Preview it without executing
 
 Examples:
 .run console.log('Hello World')
@@ -553,25 +569,11 @@ Examples:
             return;
         }
 
-        // ─── Execute quoted code ────────────────────────────────────────
+        // ─── Preview quoted code or text ────────────────────────────────
         if (quotedCode) {
-            const codeText = quotedCode.toString().trim();
-            const args = body ? body.split(/\s+/) : [];
-            const sandbox = createSandbox(sock, chatId, message, args, senderId);
-            sandbox.sock = createTrackedSocket(sock, sandbox);
-            sandbox.core = sandbox.sock;
-
-            const result = await executeInSandbox(codeText, sandbox);
-
-            let response = result.success 
-                ? `✅ Code executed successfully.\nResult:\n${util.inspect(result.result, { depth: 2, colors: false })}`
-                : `❌ Code execution error:\n${result.error?.stack || result.error?.message || result.error}`;
-
-            if (result.logs.length) {
-                response += `\n\n📋 Logs:\n${result.logs.join('\n')}`;
-            }
-
-            await sock.sendMessage(chatId, { text: response }, { quoted: message });
+            await sock.sendMessage(chatId, {
+                text: formatRunPreview(quotedCode.toString()),
+            }, { quoted: message });
             return;
         }
 
@@ -689,24 +691,10 @@ Examples:
             return;
         }
 
-        // ─── Execute inline code ────────────────────────────────────────
-        const codeText = body;
-        const args = [];
-        const sandbox = createSandbox(sock, chatId, message, args, senderId);
-        sandbox.sock = createTrackedSocket(sock, sandbox);
-        sandbox.core = sandbox.sock;
-
-        const result = await executeInSandbox(codeText, sandbox);
-
-        let response = result.success 
-            ? `✅ Code executed successfully.\nResult:\n${util.inspect(result.result, { depth: 2, colors: false })}`
-            : `❌ Code execution error:\n${result.error?.stack || result.error?.message || result.error}`;
-
-        if (result.logs.length) {
-            response += `\n\n📋 Logs:\n${result.logs.join('\n')}`;
-        }
-
-        await sock.sendMessage(chatId, { text: response }, { quoted: message });
+        // ─── Preview inline code or bot text without executing it ───────
+        await sock.sendMessage(chatId, {
+            text: formatRunPreview(rawBody),
+        }, { quoted: message });
 
     } catch (error) {
         console.error('runCommand error:', error);
