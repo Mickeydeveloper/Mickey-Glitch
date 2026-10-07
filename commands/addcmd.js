@@ -56,6 +56,18 @@ function resolveCommandPath(commandName) {
         .filter((file) => file.endsWith('.js'))
         .find((file) => path.basename(file, '.js').toLowerCase() === normalizedName);
     if (aliasPath) return path.join(COMMANDS_DIR, aliasPath);
+
+    const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const functionDeclaration = new RegExp(`\\b(?:async\\s+)?function\\s+${escapedName}\\b|\\b(?:const|let|var)\\s+${escapedName}\\s*=`, 'm');
+    const files = fs.readdirSync(COMMANDS_DIR).filter((file) => file.endsWith('.js'));
+    for (const file of files) {
+        const fullPath = path.join(COMMANDS_DIR, file);
+        const source = fs.readFileSync(fullPath, 'utf8');
+        const isExported = new RegExp(`module\\.exports[\\s\\S]*\\b${escapedName}\\b|exports\\.${escapedName}\\s*=|module\\.exports\\.name\\s*=\\s*['"]${escapedName}['"]`, 'm');
+        const hasCommandName = new RegExp(`\\bcommands\\s*:\\s*\\[[^\\]]*['"]${escapedName}['"]`, 'i').test(source);
+        const exportsRunHandler = hasCommandName && /\b(?:async\s+)?run\s*\(/.test(source);
+        if ((functionDeclaration.test(source) && isExported.test(source)) || exportsRunHandler) return fullPath;
+    }
     return null;
 }
 
@@ -446,6 +458,24 @@ function summarizePreviewPayload(payload) {
 function createTrackedSocket(sock, sandbox) {
     return new Proxy(sock, {
         get(target, property, receiver) {
+            if (property === 'relayMessage') {
+                return async (...args) => {
+                    if (sandbox.previewMode) {
+                        sandbox.__sent = true;
+                        const preview = {
+                            preview: true,
+                            payload: args[1],
+                            options: args[2] || {},
+                            summary: `Native relay payload:\n${util.inspect(args[1], { depth: 5, colors: false, maxArrayLength: 20 })}`,
+                        };
+                        sandbox.__sentMessages.push(preview);
+                        return preview;
+                    }
+                    const result = await target.relayMessage.apply(target, args);
+                    sandbox.__sentMessages.push(result);
+                    return result;
+                };
+            }
             if (property === 'sendMessage') {
                 return async (...args) => {
                     sandbox.__sent = true;
@@ -471,19 +501,74 @@ function createTrackedSocket(sock, sandbox) {
     });
 }
 
-function isCodeSnippet(source) {
-    return /^\s*```/.test(source) || /\bmodule\.exports\b|\bexports\.[\w$]+\s*=|\brequire\s*\(|\b(?:async\s+)?function\b|=>|\b(?:const|let|var)\s+[$\w]+\s*=|\b(?:await|return)\b|\b(?:sock|conn)\.(?:sendMessage|relayMessage)\s*\(/m.test(source);
+function extractFunctionName(source) {
+    const content = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
+    const commandMetadata = content.match(/\bcommands\s*:\s*\[\s*['"`]([\w-]+)/i) ||
+        content.match(/\bcommandName\s*[:=]\s*['"`]([\w-]+)/i) ||
+        content.match(/\bmodule\.exports\.name\s*=\s*['"`]([\w-]+)/i);
+    if (commandMetadata) return commandMetadata[1];
+
+    const matches = [
+        content.match(/\b(?:async\s+)?function\s+([\w$]+)\s*\(/),
+        content.match(/\b(?:const|let|var)\s+([\w$]+)\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>|[\w$]+\s*=>)/),
+        content.match(/\bmodule\.exports\s*=\s*([\w$]+)\s*;?/),
+        content.match(/\bmodule\.exports\.([\w$]+)\s*=/),
+        content.match(/\bmodule\.exports\s*=\s*\{[\s\S]*?\b(?:async\s+)?([\w$]+)\s*\([^)]*\)\s*\{/),
+    ];
+    return matches.find(Boolean)?.[1] || '';
 }
 
-function formatRunPreview(source) {
-    const content = String(source || '');
-    const trimmed = content.trim();
-    const alreadyFenced = /^```[\w-]*\s*[\s\S]*\s*```$/.test(trimmed);
+async function previewCommand(sock, chatId, senderId, message, targetInput) {
+    const functionName = extractFunctionName(targetInput);
+    const parts = targetInput.trim().split(/\s+/);
+    const commandName = (functionName || parts[0]).replace(/^\./, '').toLowerCase();
+    const commandPath = resolveCommandPath(commandName);
 
-    if (isCodeSnippet(content) && !alreadyFenced) {
-        return `🔎 Code preview:\n\`\`\`javascript\n${content}\n\`\`\``;
+    if (!commandPath) {
+        await sock.sendMessage(chatId, {
+            text: `❌ Function/command "${commandName}" haikupatikana kwenye commands/. Tumia jina la command au function iliyotangazwa na ku-export.`,
+        }, { quoted: message });
+        return;
     }
-    return `${isCodeSnippet(content) ? '🔎 Code preview:' : '🔎 Text preview:'}\n${content}`;
+
+    try {
+        const commandModule = loadCommandModule(commandPath);
+        const handler = findHandler(commandModule);
+        if (!handler) throw new Error('Hakuna runnable handler kwenye faili hilo.');
+
+        const args = functionName ? [] : parts.slice(1);
+        const invocationText = `.${commandName}${args.length ? ` ${args.join(' ')}` : ''}`;
+        const previewMessage = {
+            ...message,
+            message: { conversation: invocationText },
+        };
+        const sandbox = createSandbox(sock, chatId, previewMessage, args, senderId, commandName);
+        sandbox.previewMode = true;
+        sandbox.sock = createTrackedSocket(sock, sandbox);
+        sandbox.core = sandbox.sock;
+        const result = await safeInvokeHandler(handler, sandbox, sandbox.args);
+
+        if (sandbox.__sentMessages.length) {
+            const previews = sandbox.__sentMessages
+                .map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false }))
+                .join('\n\n---\n\n');
+            await sock.sendMessage(chatId, {
+                text: `🔎 Preview ya function .${commandName}\n\n${previews}`,
+            }, { quoted: message });
+            return;
+        }
+
+        const detail = result !== undefined
+            ? util.inspect(result, { depth: 4, colors: false })
+            : sandbox.__logs.join('\n') || 'Function haikuunda ujumbe wa preview.';
+        await sock.sendMessage(chatId, {
+            text: `🔎 Preview ya function .${commandName}\n\n${detail}`,
+        }, { quoted: message });
+    } catch (error) {
+        await sock.sendMessage(chatId, {
+            text: `❌ Preview ya function .${commandName} imeshindwa:\n${error?.stack || error?.message || error}`,
+        }, { quoted: message });
+    }
 }
 
 async function runCommand(sock, chatId, senderId, rawText, message, fullText = '') {
@@ -497,7 +582,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         const input = (fullText || rawText || '').toString();
         const rawBody = input.replace(/^\.run\b/i, '').replace(/^\s/, '');
         const body = rawBody.trim();
-        const previewRequested = /^preview\b/i.test(body) || global.RUN_PREVIEW_MODE === true || process.env.BOT_PREVIEW_MODE === '1' || process.env.BOT_PREVIEW_MODE === 'true';
         const quotedMessage = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
         const quotedCode = quotedMessage?.conversation || 
                           quotedMessage?.extendedTextMessage?.text || 
@@ -541,17 +625,16 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
                 text: `🛠️ Run Command Help:
                 
 Usage:
-• .run <javascript code or text> - Preview code or text without executing it
-• .run <command_name> [args] - Run a custom command
-• .run preview <command_name> [args] - Preview what the command would send without posting it
+• .run <command_or_function> [args] - Preview the matching command function
+• Reply to a named function with .run - Preview its matching command function
+• .run execute <command_name> [args] - Execute a custom command
 • .run list - List all custom commands
 • .run delete <command_name> - Delete a custom command
-• Reply to code or text with .run - Preview it without executing
 
 Examples:
-.run console.log('Hello World')
 .run button8
 .run preview button8
+.run execute button8
 .run list
 .run delete button8`
             }, { quoted: message });
@@ -561,87 +644,39 @@ Examples:
         if (!body && !quotedCode) {
             await sock.sendMessage(chatId, {
                 text: `🛠️ Usage:
-• Reply to a code message and send .run
-• Or send .run <javascript code>
-• Or send .run <command_name> [args] to run a command file.
+• Reply to a named function and send .run
+• Or send .run <command_or_function> [args] to preview its handler.
+• Use .run execute <command_name> only when you intend to run it.
 • Send .run help for more info.`
             }, { quoted: message });
             return;
         }
 
-        // ─── Preview quoted code or text ────────────────────────────────
+        // ─── Preview the matching bot function from quoted source ───────
         if (quotedCode) {
-            await sock.sendMessage(chatId, {
-                text: formatRunPreview(quotedCode.toString()),
-            }, { quoted: message });
+            const functionName = extractFunctionName(quotedCode.toString());
+            if (!functionName) {
+                await sock.sendMessage(chatId, {
+                    text: '❌ Code uliyo-reply nayo haina jina la function linaloweza kutafutwa. Tuma .run <command/function> kwa jina lake.',
+                }, { quoted: message });
+                return;
+            }
+            await previewCommand(sock, chatId, senderId, message, functionName);
             return;
         }
 
-        // ─── Preview command file ──────────────────────────────────────
-        const previewMatch = body.match(/^preview\s+(.+)$/i);
-        const previewTarget = previewMatch ? previewMatch[1].trim() : (previewRequested && body ? body : '');
-        if (previewTarget) {
-            const previewInput = previewTarget.trim();
-            const previewParts = previewInput.split(/\s+/);
-            const previewCommandName = previewParts[0].replace(/^\./, '').toLowerCase();
-            const previewPath = resolveCommandPath(previewCommandName);
+        const explicitPreview = body.match(/^preview\s+(.+)$/i);
+        const explicitExecute = body.match(/^execute\s+(.+)$/i);
+        const sourceFunction = extractFunctionName(rawBody);
+        const target = explicitPreview?.[1] || explicitExecute?.[1] || sourceFunction || body;
 
-            if (!previewPath) {
-                await sock.sendMessage(chatId, { text: `❌ No command named .${previewCommandName} was found for preview.` }, { quoted: message });
-                return;
-            }
-
-            let previewModule;
-            try {
-                previewModule = loadCommandModule(previewPath);
-            } catch (loadError) {
-                await sock.sendMessage(chatId, { text: `❌ Failed to load command preview:\n${loadError?.message || loadError}` }, { quoted: message });
-                return;
-            }
-
-            const previewHandler = findHandler(previewModule);
-            if (!previewHandler) {
-                await sock.sendMessage(chatId, { text: `❌ No runnable handler found in ${previewCommandName}.js` }, { quoted: message });
-                return;
-            }
-
-            try {
-                const previewArgs = previewParts.slice(1);
-                const sandbox = createSandbox(sock, chatId, message, previewArgs, senderId, previewCommandName);
-                sandbox.previewMode = true;
-                sandbox.sock = createTrackedSocket(sock, sandbox);
-                sandbox.core = sandbox.sock;
-                const previewResult = await safeInvokeHandler(previewHandler, sandbox, sandbox.args);
-
-                if (sandbox.__sentMessages.length > 0) {
-                    const previewText = sandbox.__sentMessages
-                        .map((entry) => (entry && entry.summary) ? entry.summary : util.inspect(entry, { depth: 3, colors: false }))
-                        .join('\n\n---\n\n');
-
-                    await sock.sendMessage(chatId, { 
-                        text: `🔎 Preview for .${previewCommandName}\n\n${previewText}`
-                    }, { quoted: message });
-                    return;
-                }
-
-                let response;
-                if (previewResult !== undefined) {
-                    response = `🔎 Preview for .${previewCommandName}\nResult:\n${util.inspect(previewResult, { depth: 2, colors: false })}`;
-                } else if (sandbox.__logs.length) {
-                    response = `🔎 Preview for .${previewCommandName}\n\n📋 Logs:\n${sandbox.__logs.join('\n')}`;
-                } else {
-                    response = `🔎 Preview for .${previewCommandName}\nNo message payload was produced.`;
-                }
-
-                await sock.sendMessage(chatId, { text: response }, { quoted: message });
-            } catch (execError) {
-                await sock.sendMessage(chatId, { text: `❌ Preview failed for .${previewCommandName}:\n${execError?.stack || execError?.message || execError}` }, { quoted: message });
-            }
+        if (!explicitExecute) {
+            await previewCommand(sock, chatId, senderId, message, target);
             return;
         }
 
-        // ─── Execute command file ──────────────────────────────────────
-        const parts = body.split(/\s+/);
+        // ─── Execute command only when explicitly requested ────────────
+        const parts = target.split(/\s+/);
         const commandName = parts[0].replace(/^\./, '').toLowerCase();
         const commandPath = resolveCommandPath(commandName);
 
@@ -691,9 +726,9 @@ Examples:
             return;
         }
 
-        // ─── Preview inline code or bot text without executing it ───────
+        // ─── Reject unknown commands instead of evaluating inline code ─
         await sock.sendMessage(chatId, {
-            text: formatRunPreview(rawBody),
+            text: `❌ Command/function "${commandName}" haikupatikana kwenye commands/.`,
         }, { quoted: message });
 
     } catch (error) {
