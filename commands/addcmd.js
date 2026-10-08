@@ -1,8 +1,9 @@
 /**
- * addcmd.js - Powerful Command Manager (Full Enhanced Version)
+ * addcmd.js - Powerful Command Manager (Full Enhanced Version with Smart Completion)
  * Features:
  *   - Add, Run, List, Delete custom commands
  *   - Live Preview as Bot Message (buttons, image, interactive, n.k.)
+ *   - Smart Code Completion — inaongeza `)`, `}` zinazokosekana
  *   - Sandbox execution for snippets and commands
  *   - Handles relayMessage, sendMessage, requestPaymentMessage, interactiveMessage, etc.
  * Usage: .cmdadd <name> <code> | .run <name> | .run preview <name> | .run execute <name>
@@ -73,7 +74,7 @@ function resolveCommandPath(commandName) {
         const hasCommandName = new RegExp(
             `\\bcommands\\s*:\\s*\\[[^\\]]*['"]${escapedName}['"]`, 'i'
         ).test(source);
-        const exportsRunHandler = hasCommandName && /\b(?:async\s+)?run\s*\(/.test(source);
+        const exportsRunHandler = hasCommandName && /\b(?:async\\s+)?run\\s*\\(/.test(source);
         if ((functionDeclaration.test(source) && isExported.test(source)) || exportsRunHandler) return fullPath;
     }
     return null;
@@ -179,6 +180,9 @@ function saveCustomCommand(commandName, sourceCode) {
 
     if (!cleaned) throw new Error('Command source is empty');
 
+    // Smart completion
+    cleaned = completeCodeIfTruncated(cleaned);
+
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
@@ -220,13 +224,170 @@ function saveCustomCommand(commandName, sourceCode) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. PREVIEW AS BOT MESSAGE — LIVE PREVIEW
+// 4. SMART CODE COMPLETION — HUONGEZA `)`, `}` ZINAZOKOSEKANA
 // ─── ──────────────────────────────────────────────────────────────────────
 
 /**
- * Tuma preview KAMA ujumbe halisi wa bot.
- * Inajaribu sendMessage kwanza, kisha relayMessage.
+ * Hii function inajaribu kukamilisha code iliyokatwa.
+ * Inahesabu `(`, `{`, `[` zilizo wazi na kuongeza zile zinazokosekana.
+ * Pia inaondoa `...` na `Read more` ikiwa zipo.
  */
+function completeCodeIfTruncated(code) {
+    if (!code) return code;
+    let cleaned = String(code).trim();
+
+    // Ondoa alama za WhatsApp truncation
+    cleaned = cleaned.replace(/\.\.\.\s*Read\s*more\s*$/i, '');
+    cleaned = cleaned.replace(/…\s*Read\s*more\s*$/i, '');
+    cleaned = cleaned.replace(/\.\.\.\s*$/g, '');
+
+    // Hesabu brackets
+    const counters = {
+        '(': 0, ')': 0,
+        '{': 0, '}': 0,
+        '[': 0, ']': 0,
+        '`': 0,
+        "'": 0,
+        '"': 0,
+    };
+
+    let inString = null;
+    let inComment = false;
+    let inBlockComment = false;
+    let escape = false;
+
+    for (let i = 0; i < cleaned.length; i++) {
+        const char = cleaned[i];
+        const prev = cleaned[i - 1] || '';
+        const next = cleaned[i + 1] || '';
+
+        if (escape) { escape = false; continue; }
+        if (char === '\\') { escape = true; continue; }
+
+        // Comments
+        if (!inString && !inBlockComment && char === '/' && next === '/') {
+            inComment = true;
+            continue;
+        }
+        if (inComment && char === '\n') { inComment = false; continue; }
+        if (!inString && !inComment && char === '/' && next === '*') {
+            inBlockComment = true;
+            i++;
+            continue;
+        }
+        if (inBlockComment && char === '*' && next === '/') {
+            inBlockComment = false;
+            i++;
+            continue;
+        }
+        if (inComment || inBlockComment) continue;
+
+        // Strings
+        if (!inString && (char === '"' || char === "'" || char === '`')) {
+            inString = char;
+            counters[char]++;
+            continue;
+        }
+        if (inString && char === inString) {
+            inString = null;
+            counters[char]++;
+            continue;
+        }
+        if (inString) continue;
+
+        // Count brackets
+        if (counters[char] !== undefined) counters[char]++;
+    }
+
+    // Kamilisha
+    const needs = {
+        ')': Math.max(0, counters['('] - counters[')']),
+        '}': Math.max(0, counters['{'] - counters['}']),
+        ']': Math.max(0, counters['['] - counters[']']),
+    };
+
+    // Funga strings kwanza
+    if (inString) {
+        cleaned += inString;
+    }
+
+    // Funga brackets kwa mpangilio sahihi
+    // Kwanza tunahitaji kujua mpangilio wa kufunga
+    const stack = [];
+    inString = null;
+    escape = false;
+    inComment = false;
+    inBlockComment = false;
+
+    for (let i = 0; i < cleaned.length; i++) {
+        const char = cleaned[i];
+        const next = cleaned[i + 1] || '';
+
+        if (escape) { escape = false; continue; }
+        if (char === '\\') { escape = true; continue; }
+
+        if (!inString && !inBlockComment && char === '/' && next === '/') {
+            inComment = true; continue;
+        }
+        if (inComment && char === '\n') { inComment = false; continue; }
+        if (!inString && !inComment && char === '/' && next === '*') {
+            inBlockComment = true; i++; continue;
+        }
+        if (inBlockComment && char === '*' && next === '/') {
+            inBlockComment = false; i++; continue;
+        }
+        if (inComment || inBlockComment) continue;
+
+        if (!inString && (char === '"' || char === "'" || char === '`')) {
+            inString = char; continue;
+        }
+        if (inString && char === inString) { inString = null; continue; }
+        if (inString) continue;
+
+        if (char === '(' || char === '{' || char === '[') {
+            stack.push(char);
+        } else if (char === ')' || char === '}' || char === ']') {
+            const open = char === ')' ? '(' : char === '}' ? '{' : '[';
+            if (stack[stack.length - 1] === open) stack.pop();
+        }
+    }
+
+    // Funga kwa mpangilio wa nyuma
+    while (stack.length > 0) {
+        const open = stack.pop();
+        if (open === '(') cleaned += ')';
+        else if (open === '{') cleaned += '}';
+        else if (open === '[') cleaned += ']';
+    }
+
+    return cleaned.trim();
+}
+
+/**
+ * Angalia kama code inaonekana haijakamilika.
+ */
+function isCodeLikelyTruncated(code) {
+    if (!code) return false;
+    const s = String(code).trim();
+
+    // Alama za truncation
+    if (/\.\.\.\s*$/.test(s) || /…\s*$/.test(s) || /Read\s*more\s*$/i.test(s)) return true;
+
+    // Hesabu brackets
+    const open = (s.match(/[\(\{\[]/g) || []).length;
+    const close = (s.match(/[\)\}\]]/g) || []).length;
+    if (open !== close) return true;
+
+    // Kama inaishia na operator au comma
+    if (/[,\+\-\*\/\=\&\|\?]\s*$/.test(s)) return true;
+
+    return false;
+}
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 5. PREVIEW AS BOT MESSAGE
+// ─── ──────────────────────────────────────────────────────────────────────
+
 async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMessage = null) {
     try {
         if (!payload) {
@@ -236,7 +397,6 @@ async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMes
             return { success: false };
         }
 
-        // Kama payload ni string tu
         if (typeof payload === 'string') {
             await sock.sendMessage(chatId, {
                 text: `${PREVIEW_TAG}📝 *Text Message:*\n\n${payload}`,
@@ -244,7 +404,6 @@ async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMes
             return { success: true, method: 'text' };
         }
 
-        // Detect kama ni relay-style au sendMessage-style
         const relayKeys = [
             'buttonsMessage', 'viewOnceMessage', 'viewOnceMessageV2',
             'interactiveMessage', 'documentWithCaptionMessage', 'ephemeralMessage',
@@ -252,22 +411,17 @@ async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMes
             'productMessage', 'orderMessage', 'invoiceMessage',
         ];
         const isRelay = relayKeys.some((k) => payload[k]);
-        const isSendMessage = payload.message || payload.text || payload.caption ||
-            payload.image || payload.video || payload.document || payload.audio;
 
-        // Ongeza tag kwenye text/caption kama inawezekana
         if (payload.text && typeof payload.text === 'string' && !payload.text.includes('PREVIEW MODE')) {
             payload.text = `${PREVIEW_TAG}${payload.text}`;
         } else if (payload.caption && typeof payload.caption === 'string' && !payload.caption.includes('PREVIEW MODE')) {
             payload.caption = `${PREVIEW_TAG}${payload.caption}`;
         }
 
-        // Jaribu sendMessage kwanza
         try {
             await sock.sendMessage(chatId, payload, { quoted: originalMessage, ...options });
             return { success: true, method: 'sendMessage' };
         } catch (sendError) {
-            // Kama ni relay-style, jaribu relayMessage
             if (isRelay && typeof sock.relayMessage === 'function') {
                 try {
                     await sock.relayMessage(chatId, payload, { quoted: originalMessage, ...options });
@@ -279,7 +433,6 @@ async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMes
             throw sendError;
         }
     } catch (error) {
-        // Fallback: text
         try {
             const formatted = formatPreviewPayload(payload);
             await sock.sendMessage(chatId, {
@@ -293,15 +446,11 @@ async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMes
     }
 }
 
-/**
- * Format payload kama text — inashughulikia aina nyingi za ujumbe.
- */
 function formatPreviewPayload(payload) {
     if (!payload) return '_(hakuna payload)_';
     if (typeof payload === 'string') return payload;
 
     try {
-        // Extract inner message
         let msg = payload;
         if (msg.message) msg = msg.message;
         if (msg.buttonsMessage) msg = msg.buttonsMessage;
@@ -315,7 +464,6 @@ function formatPreviewPayload(payload) {
         lines.push('╭━━━〔 *PREVIEW* 〕━━━⬣');
         lines.push('┃');
 
-        // ─── Payment Request ─────────────────────────────────────
         if (msg.requestPaymentMessage) {
             const rpm = msg.requestPaymentMessage;
             const amount = rpm.amount1000 ? (Number(rpm.amount1000) / 1000).toFixed(2) : 'N/A';
@@ -329,7 +477,6 @@ function formatPreviewPayload(payload) {
             lines.push('┃');
         }
 
-        // ─── Interactive Message ─────────────────────────────────
         if (msg.interactiveMessage) {
             const im = msg.interactiveMessage;
             if (im.header) {
@@ -356,7 +503,6 @@ function formatPreviewPayload(payload) {
             lines.push('┃');
         }
 
-        // ─── Buttons Message ─────────────────────────────────────
         if (msg.buttonsMessage) {
             const bm = msg.buttonsMessage;
             if (bm.contentText) {
@@ -375,7 +521,6 @@ function formatPreviewPayload(payload) {
             lines.push('┃');
         }
 
-        // ─── Media ────────────────────────────────────────────────
         if (msg.imageMessage) {
             lines.push('┃ 🖼️ *[IMAGE]*');
             if (msg.imageMessage.caption) lines.push(`┃ 📝 _${msg.imageMessage.caption}_`);
@@ -391,12 +536,7 @@ function formatPreviewPayload(payload) {
             lines.push(`┃ 📎 ${msg.documentMessage.fileName || 'file'}`);
             lines.push('┃');
         }
-        if (msg.audioMessage) {
-            lines.push('┃ 🎵 *[AUDIO]*');
-            lines.push('┃');
-        }
 
-        // ─── Text / Conversation ──────────────────────────────────
         const text = msg.conversation || msg.extendedTextMessage?.text || msg.contentText;
         if (text) {
             lines.push('┃ 📌 *Text:*');
@@ -404,7 +544,6 @@ function formatPreviewPayload(payload) {
             lines.push('┃');
         }
 
-        // Kama hakuna kitu kilichoonekana, tumia util.inspect
         if (lines.length <= 2) {
             return util.inspect(payload, { depth: 4, colors: false, maxArrayLength: 20 });
         }
@@ -417,7 +556,7 @@ function formatPreviewPayload(payload) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 5. SANDBOX EXECUTION (Preview Mode)
+// 6. SANDBOX EXECUTION
 // ─── ──────────────────────────────────────────────────────────────────────
 
 function createSandbox(sock, chatId, message, args, senderId, commandName = '', options = {}) {
@@ -519,7 +658,7 @@ async function executeInSandbox(codeText, sandbox, timeout = 15000) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 6. RUN COMMAND
+// 7. RUN COMMAND
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function safeInvokeHandler(handler, sandbox, args = []) {
@@ -581,32 +720,26 @@ function extractFunctionName(source) {
     const content = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
     if (!content) return '';
 
-    // 1. Metadata ya wazi
     const commandMetadata =
         content.match(/\bcommands\s*:\s*\[\s*['"`]([\w-]+)/i) ||
         content.match(/\bcommandName\s*[:=]\s*['"`]([\w-]+)/i) ||
         content.match(/\bmodule\.exports\.name\s*=\s*['"`]([\w-]+)/i);
     if (commandMetadata && /^[a-zA-Z_$][\w$]*$/.test(commandMetadata[1])) return commandMetadata[1];
 
-    // 2. Function yenye jina
     const namedFunction = content.match(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(/);
     if (namedFunction) return namedFunction[1];
 
-    // 3. Variable yenye function
     const varFunction = content.match(
         /\b(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>|[a-zA-Z_$][\w$]*\s*=>)/
     );
     if (varFunction && varFunction[1] !== '>' && varFunction[1] !== '=>') return varFunction[1];
 
-    // 4. module.exports = jina
     const exportedRef = content.match(/\bmodule\.exports\s*=\s*([a-zA-Z_$][\w$]*)\s*;?\s*$/m);
     if (exportedRef && exportedRef[1] !== '>' && exportedRef[1] !== '=>') return exportedRef[1];
 
-    // 5. module.exports.jina
     const exportedProp = content.match(/\bmodule\.exports\.([a-zA-Z_$][\w$]*)\s*=/);
     if (exportedProp) return exportedProp[1];
 
-    // 6. Inline function yenye jina
     const inlineNamed = content.match(/\b(?:async\s+)?([a-zA-Z_$][\w$]*)\s*\([^)]*\)\s*\{/);
     if (inlineNamed && !['if', 'for', 'while', 'switch', 'catch', 'return', 'function'].includes(inlineNamed[1])) {
         return inlineNamed[1];
@@ -619,11 +752,8 @@ function isRunnableCodeSnippet(source) {
     if (!source) return false;
     const s = String(source).trim();
     if (!s) return false;
-
-    // Kama ni `>` pekee au `=>` pekee — sio code
     if (s === '>' || s === '=>') return false;
 
-    // Dalili za code halisi
     return (
         /=>/.test(s) ||
         /\b(?:async\s+)?function\s+[\w$]+\s*\(/.test(s) ||
@@ -668,7 +798,7 @@ function createSnippetSandbox(sock, chatId, message, senderId) {
 }
 
 /**
- * Preview snippet → Tuma preview KAMA ujumbe halisi wa bot.
+ * Preview snippet — inashughulikia code iliyokatwa kwa smart completion.
  */
 async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     let code = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
@@ -678,6 +808,22 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
 
     if (!code) {
         await sock.sendMessage(chatId, { text: '❌ Snippet ni tupu.' }, { quoted: message });
+        return;
+    }
+
+    // ─── Smart Code Completion ─────────────────────────────────────
+    const wasTruncated = isCodeLikelyTruncated(code);
+    const completedCode = completeCodeIfTruncated(code);
+    const isStillTruncated = isCodeLikelyTruncated(completedCode);
+
+    // Kama ilikuwa truncated na bado haijakamilika, onyesha taarifa
+    if (wasTruncated && isStillTruncated) {
+        await sock.sendMessage(chatId, {
+            text: `⚠️ *Code inaonekana haijakamilika*\n\n` +
+                  `📊 Code uliyotuma haiwezi ku-run moja kwa moja kwa sababu imekatwa.\n` +
+                  `💡 *Kidokezo:* Tuma code kamili, au tumia \`.cmdadd\` kuhifadhi code ndefu.\n\n` +
+                  `📄 *Code uliyotuma:*\n\`\`\`\n${code.slice(0, 500)}${code.length > 500 ? '\n...' : ''}\n\`\`\``,
+        }, { quoted: message });
         return;
     }
 
@@ -699,32 +845,57 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     sandbox.namabot = global.namabot || settings.botName || settings.botname || 'Bot';
     sandbox.ownername = global.ownername || settings.botOwner || 'Owner';
 
-    // Kama code haina `await` au `return`, iitishe kama function body
+    // ─── Amua jinsi ya ku-run ──────────────────────────────────────
     let wrappedCode;
-    if (/^\s*(module\.exports|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=|function\s)/.test(code) ||
-        code.includes('module.exports')) {
-        // Code kamili — i-run moja kwa moja
-        wrappedCode = `(async () => {\n${code}\n})()`;
+    const isBlockCode =
+        completedCode.includes('module.exports') ||
+        /^\s*(const|let|var|function|class|import|export)\s/m.test(completedCode) ||
+        (completedCode.split('\n').filter(l => l.trim()).length > 1 && /[;{}]/.test(completedCode));
+
+    if (isBlockCode) {
+        wrappedCode = `(async () => {\n${completedCode}\n})()`;
     } else {
-        // Expression — iitishe moja kwa moja
-        wrappedCode = `(async () => {\n${code}\n})()`;
+        wrappedCode = `(async () => {\n    return await (${completedCode});\n})()`;
     }
 
-    const result = await executeInSandbox(wrappedCode, sandbox);
+    let result = await executeInSandbox(wrappedCode, sandbox);
+
+    // Kama ilishindwa, jaribu fallback (block mode)
+    if (!result.success && !isBlockCode) {
+        const fallbackWrapped = `(async () => {\n${completedCode}\n})()`;
+        result = await executeInSandbox(fallbackWrapped, sandbox);
+    }
+
+    // Kama bado imeshindwa, jaribu tena na code ya awali (bila completion)
+    if (!result.success && wasTruncated) {
+        const originalWrapped = `(async () => {\n${code}\n})()`;
+        result = await executeInSandbox(originalWrapped, sandbox);
+    }
+
     if (!result.success) {
         await sock.sendMessage(chatId, {
-            text: `❌ Snippet preview imeshindwa:\n${result.error?.stack || result.error?.message || result.error}`,
+            text: `❌ *Snippet preview imeshindwa*\n\n` +
+                  `🔧 *Kosa:* ${result.error?.name || 'Error'}\n` +
+                  `📝 *Maelezo:* ${result.error?.message || result.error}\n\n` +
+                  `💡 *Kidokezo:* Hakikisha code yako imekamilika (imefungwa vizuri) na haina makosa ya syntax.\n\n` +
+                  `📄 *Code uliyotuma (kwa ufupi):*\n\`\`\`\n${code.slice(0, 500)}${code.length > 500 ? '\n...' : ''}\n\`\`\``,
         }, { quoted: message });
         return;
     }
 
+    // Tuma taarifa ya completion ikiwa ilikamilishwa
+    if (wasTruncated && !isStillTruncated) {
+        await sock.sendMessage(chatId, {
+            text: `🔧 *Code ilikamilishwa kiotomatiki* (ilikuwa imekatwa).`,
+        }, { quoted: message });
+    }
+
+    // ─── Tuma previews ─────────────────────────────────────────────
     if (sandbox.__sentMessages.length) {
-        // Tuma taarifa ya kwanza
         await sock.sendMessage(chatId, {
             text: `🔎 *PREVIEW YA SNIPPET* — inafuata 👇`,
         }, { quoted: message });
 
-        // Tuma kila preview kama ujumbe halisi
         for (const entry of sandbox.__sentMessages) {
             try {
                 await sendPreviewAsBot(sock, chatId, entry.payload, entry.options, message);
@@ -744,9 +915,6 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     }, { quoted: message });
 }
 
-/**
- * Preview command → Tuma preview KAMA ujumbe halisi wa bot.
- */
 async function previewCommand(sock, chatId, senderId, message, targetInput) {
     const functionName = extractFunctionName(targetInput);
     const parts = targetInput.trim().split(/\s+/);
@@ -874,18 +1042,15 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         // ─── Quoted code → preview snippet MOJA KWA MOJA ─────────
         if (quotedCode) {
             const source = quotedCode.toString().trim();
-            // Kama ni code inayoweza ku-run → preview snippet
             if (isRunnableCodeSnippet(source)) {
                 await previewSourceSnippet(sock, chatId, senderId, message, source);
                 return;
             }
-            // Kama ni function yenye jina → tafuta command
             const functionName = extractFunctionName(source);
             if (functionName && functionName !== '>' && functionName !== '=>') {
                 await previewCommand(sock, chatId, senderId, message, functionName);
                 return;
             }
-            // Fallback: preview snippet
             await previewSourceSnippet(sock, chatId, senderId, message, source);
             return;
         }
@@ -907,18 +1072,15 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             cleanBody.includes('socket.');
 
         if (looksLikeCode && !explicitPreview && !explicitExecute) {
-            // Angalia kama jina la command lipo kwenye commands/ kwanza
             const firstWord = cleanBody.split(/\s+/)[0].replace(/^\./, '').toLowerCase();
             const cmdPath = resolveCommandPath(firstWord);
 
-            // Kama ni jina la command halisi (kama `.ping`) → previewCommand
             if (cmdPath && !cleanBody.includes('.') && !cleanBody.includes('(') &&
                 !cleanBody.includes('=') && cleanBody.split(/\s+/).length <= 2) {
                 await previewCommand(sock, chatId, senderId, message, cleanBody);
                 return;
             }
 
-            // Vinginevyo → snippet
             await previewSourceSnippet(sock, chatId, senderId, message, cleanBody);
             return;
         }
@@ -1016,7 +1178,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 7. ADD COMMAND (CMDADD)
+// 8. ADD COMMAND (CMDADD)
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText = '') {
@@ -1102,7 +1264,7 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 8. EXPORTS
+// 9. EXPORTS
 // ─── ──────────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -1126,4 +1288,6 @@ module.exports = {
     extractFunctionName,
     isRunnableCodeSnippet,
     createSnippetSandbox,
+    completeCodeIfTruncated,
+    isCodeLikelyTruncated,
 };
