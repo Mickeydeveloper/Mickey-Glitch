@@ -1,5 +1,5 @@
 /**
- * addcmd.js - Powerful Command Manager (Full Enhanced Version with Smart Completion)
+ * addcmd.js - Powerful Command Manager (Full Fixed Version with Smart Completion)
  * Features:
  *   - Add, Run, List, Delete custom commands
  *   - Live Preview as Bot Message (buttons, image, interactive, n.k.)
@@ -61,21 +61,27 @@ function resolveCommandPath(commandName) {
 
     const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const functionDeclaration = new RegExp(
-        `\\b(?:async\\s+)?function\\s+${escapedName}\\b|\\b(?:const|let|var)\\s+${escapedName}\\s*=`, 'm'
+        '\\b(?:async\\s+)?function\\s+' + escapedName + '\\b|\\b(?:const|let|var)\\s+' + escapedName + '\\s*=',
+        'm'
     );
     const files = fs.readdirSync(COMMANDS_DIR).filter((file) => file.endsWith('.js'));
     for (const file of files) {
         const fullPath = path.join(COMMANDS_DIR, file);
         const source = fs.readFileSync(fullPath, 'utf8');
+
         const isExported = new RegExp(
-            `module\\.exports[\\s\\S]*\\b${escapedName}\\b|exports\\.${escapedName}\\s*=|module\\.exports\\.name\\s*=\\s*['"]${escapedName}['"]`,
+            'module\\.exports[\\s\\S]*\\b' + escapedName + '\\b|exports\\.' + escapedName + '\\s*=|module\\.exports\\.name\\s*=\\s*[\'"]' + escapedName + '[\'"]',
             'm'
         );
         const hasCommandName = new RegExp(
-            `\\bcommands\\s*:\\s*\\[[^\\]]*['"]${escapedName}['"]`, 'i'
+            '\\bcommands\\s*:\\s*\\[[^\\]]*[\'"]' + escapedName + '[\'"]',
+            'i'
         ).test(source);
-        const exportsRunHandler = hasCommandName && /\b(?:async\\s+)?run\\s*\\(/.test(source);
-        if ((functionDeclaration.test(source) && isExported.test(source)) || exportsRunHandler) return fullPath;
+        const exportsRunHandler = hasCommandName && /run\s*\(/.test(source);
+
+        if ((functionDeclaration.test(source) && isExported.test(source)) || exportsRunHandler) {
+            return fullPath;
+        }
     }
     return null;
 }
@@ -180,7 +186,7 @@ function saveCustomCommand(commandName, sourceCode) {
 
     if (!cleaned) throw new Error('Command source is empty');
 
-    // Smart completion
+    // Smart completion ya code iliyokatwa
     cleaned = completeCodeIfTruncated(cleaned);
 
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
@@ -224,13 +230,11 @@ function saveCustomCommand(commandName, sourceCode) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. SMART CODE COMPLETION — HUONGEZA `)`, `}` ZINAZOKOSEKANA
+// 4. SMART CODE COMPLETION
 // ─── ──────────────────────────────────────────────────────────────────────
 
 /**
- * Hii function inajaribu kukamilisha code iliyokatwa.
- * Inahesabu `(`, `{`, `[` zilizo wazi na kuongeza zile zinazokosekana.
- * Pia inaondoa `...` na `Read more` ikiwa zipo.
+ * Kamilisha code iliyokatwa — inaongeza `)`, `}`, `]` zinazokosekana.
  */
 function completeCodeIfTruncated(code) {
     if (!code) return code;
@@ -241,83 +245,12 @@ function completeCodeIfTruncated(code) {
     cleaned = cleaned.replace(/…\s*Read\s*more\s*$/i, '');
     cleaned = cleaned.replace(/\.\.\.\s*$/g, '');
 
-    // Hesabu brackets
-    const counters = {
-        '(': 0, ')': 0,
-        '{': 0, '}': 0,
-        '[': 0, ']': 0,
-        '`': 0,
-        "'": 0,
-        '"': 0,
-    };
-
+    // Hesabu brackets kwa kuzingatia strings na comments
+    const stack = [];
     let inString = null;
     let inComment = false;
     let inBlockComment = false;
     let escape = false;
-
-    for (let i = 0; i < cleaned.length; i++) {
-        const char = cleaned[i];
-        const prev = cleaned[i - 1] || '';
-        const next = cleaned[i + 1] || '';
-
-        if (escape) { escape = false; continue; }
-        if (char === '\\') { escape = true; continue; }
-
-        // Comments
-        if (!inString && !inBlockComment && char === '/' && next === '/') {
-            inComment = true;
-            continue;
-        }
-        if (inComment && char === '\n') { inComment = false; continue; }
-        if (!inString && !inComment && char === '/' && next === '*') {
-            inBlockComment = true;
-            i++;
-            continue;
-        }
-        if (inBlockComment && char === '*' && next === '/') {
-            inBlockComment = false;
-            i++;
-            continue;
-        }
-        if (inComment || inBlockComment) continue;
-
-        // Strings
-        if (!inString && (char === '"' || char === "'" || char === '`')) {
-            inString = char;
-            counters[char]++;
-            continue;
-        }
-        if (inString && char === inString) {
-            inString = null;
-            counters[char]++;
-            continue;
-        }
-        if (inString) continue;
-
-        // Count brackets
-        if (counters[char] !== undefined) counters[char]++;
-    }
-
-    // Kamilisha
-    const needs = {
-        ')': Math.max(0, counters['('] - counters[')']),
-        '}': Math.max(0, counters['{'] - counters['}']),
-        ']': Math.max(0, counters['['] - counters[']']),
-    };
-
-    // Funga strings kwanza
-    if (inString) {
-        cleaned += inString;
-    }
-
-    // Funga brackets kwa mpangilio sahihi
-    // Kwanza tunahitaji kujua mpangilio wa kufunga
-    const stack = [];
-    inString = null;
-    escape = false;
-    inComment = false;
-    inBlockComment = false;
 
     for (let i = 0; i < cleaned.length; i++) {
         const char = cleaned[i];
@@ -352,7 +285,10 @@ function completeCodeIfTruncated(code) {
         }
     }
 
-    // Funga kwa mpangilio wa nyuma
+    // Funga strings ikiwa hazijafungwa
+    if (inString) cleaned += inString;
+
+    // Funga brackets kwa mpangilio wa nyuma
     while (stack.length > 0) {
         const open = stack.pop();
         if (open === '(') cleaned += ')';
@@ -374,9 +310,14 @@ function isCodeLikelyTruncated(code) {
     if (/\.\.\.\s*$/.test(s) || /…\s*$/.test(s) || /Read\s*more\s*$/i.test(s)) return true;
 
     // Hesabu brackets
-    const open = (s.match(/[\(\{\[]/g) || []).length;
-    const close = (s.match(/[\)\}\]]/g) || []).length;
-    if (open !== close) return true;
+    const openParen = (s.match(/\(/g) || []).length;
+    const closeParen = (s.match(/\)/g) || []).length;
+    const openBrace = (s.match(/\{/g) || []).length;
+    const closeBrace = (s.match(/\}/g) || []).length;
+    const openBracket = (s.match(/\[/g) || []).length;
+    const closeBracket = (s.match(/\]/g) || []).length;
+
+    if (openParen !== closeParen || openBrace !== closeBrace || openBracket !== closeBracket) return true;
 
     // Kama inaishia na operator au comma
     if (/[,\+\-\*\/\=\&\|\?]\s*$/.test(s)) return true;
@@ -816,7 +757,6 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     const completedCode = completeCodeIfTruncated(code);
     const isStillTruncated = isCodeLikelyTruncated(completedCode);
 
-    // Kama ilikuwa truncated na bado haijakamilika, onyesha taarifa
     if (wasTruncated && isStillTruncated) {
         await sock.sendMessage(chatId, {
             text: `⚠️ *Code inaonekana haijakamilika*\n\n` +
@@ -860,13 +800,11 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
 
     let result = await executeInSandbox(wrappedCode, sandbox);
 
-    // Kama ilishindwa, jaribu fallback (block mode)
     if (!result.success && !isBlockCode) {
         const fallbackWrapped = `(async () => {\n${completedCode}\n})()`;
         result = await executeInSandbox(fallbackWrapped, sandbox);
     }
 
-    // Kama bado imeshindwa, jaribu tena na code ya awali (bila completion)
     if (!result.success && wasTruncated) {
         const originalWrapped = `(async () => {\n${code}\n})()`;
         result = await executeInSandbox(originalWrapped, sandbox);
@@ -883,7 +821,6 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
         return;
     }
 
-    // Tuma taarifa ya completion ikiwa ilikamilishwa
     if (wasTruncated && !isStillTruncated) {
         await sock.sendMessage(chatId, {
             text: `🔧 *Code ilikamilishwa kiotomatiki* (ilikuwa imekatwa).`,
@@ -1059,7 +996,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         const explicitPreview = body.match(/^preview\s+(.+)$/i);
         const explicitExecute = body.match(/^execute\s+(.+)$/i);
 
-        // Safisha body — ondoa `>` au `=>` mwanzoni
         let cleanBody = body.replace(/^[>\s]+/, '').trim();
 
         // ─── Detect kama body ni code ─────────────────────────────
