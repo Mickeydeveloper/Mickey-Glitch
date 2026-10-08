@@ -1,6 +1,6 @@
 /**
- * addcmd.js - Powerful Command Manager (Enhanced Preview Renderer)
- * Features: Add, Run, List, Delete custom commands, Beautiful Preview, Sandbox execution
+ * addcmd.js - Powerful Command Manager (Preview as Bot Message)
+ * Features: Add, Run, List, Delete custom commands, Live Preview, Sandbox execution
  * Usage: .cmdadd <name> <code> | .run <name> | .run preview <name> | .run execute <name>
  */
 
@@ -17,6 +17,7 @@ const isOwnerOrSudo = require('../lib/isOwner');
 
 const COMMANDS_DIR = path.join(process.cwd(), 'commands');
 const GENERATED_MARKER = '// @generated-by:addcmd';
+const PREVIEW_TAG = '🔎 *PREVIEW MODE* — Ujumbe huu hautumwa kwa wateja.\n\n';
 
 if (!fs.existsSync(COMMANDS_DIR)) fs.mkdirSync(COMMANDS_DIR, { recursive: true });
 
@@ -92,9 +93,8 @@ function findHandler(commandModule) {
 }
 
 function isGeneratedCommandFile(filePath) {
-    try {
-        return fs.readFileSync(filePath, 'utf8').includes(GENERATED_MARKER);
-    } catch { return false; }
+    try { return fs.readFileSync(filePath, 'utf8').includes(GENERATED_MARKER); }
+    catch { return false; }
 }
 
 function registerGeneratedCommand(commandName, filePath) {
@@ -181,157 +181,98 @@ function saveCustomCommand(commandName, sourceCode) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. PREVIEW RENDERER — MUONEKANO WA UJUMBE (KAMA KWENYE PICHA)
+// 4. PREVIEW AS BOT MESSAGE — LIVE PREVIEW (KAMA KWENYE PICHA)
 // ─── ──────────────────────────────────────────────────────────────────────
 
 /**
- * Huu ndio mfumo mpya wa kuonyesha muonekano wa ujumbe
- * Unachukua payload na kui-format kama ujumbe wa WhatsApp unaonekana.
+ * Hii ndio function kuu ya kutuma preview KAMA ujumbe halisi wa bot.
+ * Inachukua payload na kui-tuma kwa mtumiaji kama ujumbe wa kawaida,
+ * ikionyesha muonekano kamili (picha, buttons, n.k.)
  */
-function formatPreviewPayload(payload, options = {}) {
-    if (!payload) return '_(hakuna payload)_';
-
-    // Handle relayMessage-style payload { buttonsMessage: {...} } or { viewOnceMessage: {...} }
-    let msg = payload;
-    if (msg.buttonsMessage) msg = msg.buttonsMessage;
-    if (msg.viewOnceMessage) msg = msg.viewOnceMessage;
-    if (msg.viewOnceMessageV2) msg = msg.viewOnceMessageV2;
-    if (msg.documentWithCaptionMessage) msg = msg.documentWithCaptionMessage;
-    if (msg.ephemeralMessage) msg = msg.ephemeralMessage;
-    if (msg.interactiveMessage) msg = msg.interactiveMessage;
-
-    // Handle sendMessage-style payload { text, image, buttons, ... }
-    if (msg.message) {
-        // Native WhatsApp message object
-        const inner = msg.message;
-        if (inner.buttonsMessage) msg = inner.buttonsMessage;
-        else if (inner.interactiveMessage) msg = inner.interactiveMessage;
-        else if (inner.imageMessage) msg = { imageMessage: inner.imageMessage };
-        else if (inner.videoMessage) msg = { videoMessage: inner.videoMessage };
-        else if (inner.documentMessage) msg = { documentMessage: inner.documentMessage };
-        else if (inner.conversation) msg = { conversation: inner.conversation };
-        else if (inner.extendedTextMessage) msg = { extendedTextMessage: inner.extendedTextMessage };
-    }
-
-    const lines = [];
-    lines.push('╭━━━〔 *PREVIEW* 〕━━━⬣');
-    lines.push('┃');
-
-    // ─── HEADER (image/video/document) ───────────────────────────────
-    if (msg.imageMessage || msg.image) {
-        lines.push('┃ 🖼️  *[IMAGE HEADER]*');
-        const cap = msg.imageMessage?.caption || msg.caption;
-        if (cap) lines.push(`┃ 📝 _${cap}_`);
-        lines.push('┃');
-    } else if (msg.videoMessage || msg.video) {
-        lines.push('┃ 🎥  *[VIDEO HEADER]*');
-        const cap = msg.videoMessage?.caption || msg.caption;
-        if (cap) lines.push(`┃ 📝 _${cap}_`);
-        lines.push('┃');
-    } else if (msg.documentMessage || msg.document) {
-        lines.push('┃ 📄  *[DOCUMENT HEADER]*');
-        const name = msg.documentMessage?.fileName || msg.fileName || 'file';
-        lines.push(`┃ 📎 ${name}`);
-        lines.push('┃');
-    } else if (msg.locationMessage) {
-        lines.push('┃ 📍  *[LOCATION HEADER]*');
-        lines.push('┃');
-    } else if (msg.headerType === 1 && msg.imageMessage) {
-        lines.push('┃ 🖼️  *[IMAGE HEADER]*');
-        lines.push('┃');
-    }
-
-    // ─── BODY / TEXT ──────────────────────────────────────────────────
-    const bodyText = 
-        msg.contentText || 
-        msg.text || 
-        msg.caption || 
-        (msg.conversation) || 
-        (msg.extendedTextMessage?.text) || 
-        null;
-
-    if (bodyText) {
-        lines.push('┃ 📌 *Content:*');
-        String(bodyText).split('\n').forEach((l) => {
-            lines.push(`┃   ${l}`);
-        });
-        lines.push('┃');
-    }
-
-    // ─── BUTTONS ──────────────────────────────────────────────────────
-    const buttons = msg.buttons || msg.templateButtons || msg.interactiveButtons || [];
-    if (Array.isArray(buttons) && buttons.length > 0) {
-        lines.push('┃ 🔘 *Buttons:*');
-        buttons.forEach((btn, i) => {
-            const label = 
-                btn.buttonText?.displayText || 
-                btn.text || 
-                btn.name || 
-                btn.buttonId || 
-                `Button ${i + 1}`;
-            const id = btn.buttonId || btn.id || '';
-            lines.push(`┃   ${i + 1}. [ ${label} ]`);
-            if (id) lines.push(`┃      ↳ id: ${id}`);
-        });
-        lines.push('┃');
-    }
-
-    // ─── SECTIONS (List Message) ──────────────────────────────────────
-    const sections = msg.sections || [];
-    if (Array.isArray(sections) && sections.length > 0) {
-        lines.push('┃ 📋 *Sections:*');
-        sections.forEach((sec, si) => {
-            lines.push(`┃   ▸ ${sec.title || `Section ${si + 1}`}`);
-            (sec.rows || []).forEach((row) => {
-                lines.push(`┃     • ${row.title || ''} — _${row.description || ''}_`);
-            });
-        });
-        lines.push('┃');
-    }
-
-    // ─── FOOTER ───────────────────────────────────────────────────────
-    const footer = msg.footerText || msg.footer;
-    if (footer) {
-        lines.push('┃');
-        lines.push(`┃ 🦶 _${footer}_`);
-    }
-
-    // ─── QUOTED ───────────────────────────────────────────────────────
-    if (options.quoted) {
-        lines.push('┃');
-        lines.push('┃ ↩️ _Quoted: ' + (options.quoted?.text || options.quoted?.conversation || 'message') + '_');
-    }
-
-    lines.push('┃');
-    lines.push('╰━━━━━━━━━━━━━━━━━━⬣');
-
-    return lines.join('\n');
-}
-
-/**
- * Huu ni mfumo wa ziada — unachukua payload na kui-render kwa njia
- * inayofanana na MessageBuilder ya bot (kama ipo), au inarudi kwenye
- * formatter yetu.
- */
-function renderAsBotMessage(payload, options = {}) {
+async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMessage = null) {
     try {
-        const mbPath = resolveMessageBuilderPath();
-        if (mbPath) {
-            const mb = require(mbPath);
-            // Try using MessageBuilder if it has a preview method
-            if (mb && typeof mb.renderPreview === 'function') {
-                return mb.renderPreview(payload);
-            }
+        if (!payload || typeof payload !== 'object') {
+            // Simple text payload
+            await sock.sendMessage(chatId, {
+                text: `${PREVIEW_TAG}📝 *Text Message:*\n\n${payload || '(empty)'}`,
+            }, { quoted: originalMessage });
+            return;
         }
-    } catch (_) {}
-    return formatPreviewPayload(payload, options);
+
+        // Handle relayMessage-style payload: { buttonsMessage: {...} }
+        let innerPayload = payload;
+        let isRelay = false;
+
+        if (payload.buttonsMessage || payload.viewOnceMessage || payload.viewOnceMessageV2 ||
+            payload.interactiveMessage || payload.documentWithCaptionMessage || payload.ephemeralMessage) {
+            isRelay = true;
+            innerPayload = payload;
+        } else if (payload.message) {
+            // Already in sendMessage format
+            innerPayload = payload;
+        }
+
+        // Try to send using sendMessage (which handles both native and MessageBuilder)
+        try {
+            const messageOptions = {
+                ...options,
+                quoted: originalMessage,
+            };
+
+            // Add preview prefix as caption if possible
+            if (innerPayload.text) {
+                innerPayload.text = `${PREVIEW_TAG}${innerPayload.text}`;
+            } else if (innerPayload.caption) {
+                innerPayload.caption = `${PREVIEW_TAG}${innerPayload.caption}`;
+            }
+
+            await sock.sendMessage(chatId, innerPayload, messageOptions);
+            return { success: true, method: 'sendMessage' };
+        } catch (sendError) {
+            // Fallback: try relayMessage
+            if (isRelay && sock.relayMessage) {
+                try {
+                    await sock.relayMessage(chatId, innerPayload, { quoted: originalMessage });
+                    return { success: true, method: 'relayMessage' };
+                } catch (relayError) {
+                    throw new Error(`Both sendMessage and relayMessage failed: ${relayError.message}`);
+                }
+            }
+            throw sendError;
+        }
+    } catch (error) {
+        // Final fallback: send as formatted text
+        try {
+            const formatted = formatPreviewPayload(payload);
+            await sock.sendMessage(chatId, {
+                text: `${PREVIEW_TAG}⚠️ _Imeshindwa kutuma preview halisi. Hii ni muonekano wake:_\n\n${formatted}`,
+            }, { quoted: originalMessage });
+            return { success: false, method: 'text-fallback', error };
+        } catch (finalError) {
+            throw new Error(`Preview failed completely: ${finalError.message}`);
+        }
+    }
+}
+
+/**
+ * Format payload kama text (fallback)
+ */
+function formatPreviewPayload(payload) {
+    if (!payload) return '_(hakuna payload)_';
+    try {
+        return util.inspect(payload, { depth: 4, colors: false, maxArrayLength: 20 });
+    } catch {
+        return String(payload);
+    }
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 5. SANDBOX EXECUTION
+// 5. SANDBOX EXECUTION (Preview Mode)
 // ─── ──────────────────────────────────────────────────────────────────────
 
-function createSandbox(sock, chatId, message, args, senderId, commandName = '') {
+function createSandbox(sock, chatId, message, args, senderId, commandName = '', options = {}) {
+    const previewMode = options.previewMode === true;
+
     const sandbox = {
         sock, chatId, message, args: args || [], senderId, commandName, prefix: '.', ctx: null,
         console: {
@@ -355,36 +296,32 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
         module: { exports: {} }, exports: {},
         setTimeout, setInterval, clearTimeout, clearInterval,
         Promise, Date, Math, String, Number, Boolean, Array, Object, JSON, Error, RegExp, Map, Set,
-        sendMessage: async (content, options = {}) => {
-            const msgContent = typeof content === 'string' ? { text: content } : content;
-            if (sandbox.previewMode) {
+        sendMessage: async (content, opts = {}) => {
+            if (previewMode) {
                 sandbox.__sent = true;
                 const preview = {
-                    preview: true, payload: msgContent,
-                    options: { quoted: message, ...options },
-                    summary: formatPreviewPayload(msgContent, { quoted: message }),
+                    preview: true, payload: content,
+                    options: { quoted: message, ...opts },
                 };
                 sandbox.__sentMessages.push(preview);
                 return preview;
             }
-            const result = await sock.sendMessage(chatId, msgContent, { quoted: message, ...options });
+            const result = await sock.sendMessage(chatId, content, { quoted: message, ...opts });
             sandbox.__sent = true;
             sandbox.__sentMessages.push(result);
             return result;
         },
-        reply: async (content, options = {}) => {
-            const msgContent = typeof content === 'string' ? { text: content } : content;
-            if (sandbox.previewMode) {
+        reply: async (content, opts = {}) => {
+            if (previewMode) {
                 sandbox.__sent = true;
                 const preview = {
-                    preview: true, payload: msgContent,
-                    options: { quoted: message, ...options },
-                    summary: formatPreviewPayload(msgContent, { quoted: message }),
+                    preview: true, payload: content,
+                    options: { quoted: message, ...opts },
                 };
                 sandbox.__sentMessages.push(preview);
                 return preview;
             }
-            const result = await sock.sendMessage(chatId, msgContent, { quoted: message, ...options });
+            const result = await sock.sendMessage(chatId, content, { quoted: message, ...opts });
             sandbox.__sent = true;
             sandbox.__sentMessages.push(result);
             return result;
@@ -416,7 +353,7 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
     return sandbox;
 }
 
-async function executeInSandbox(codeText, sandbox, timeout = 10000) {
+async function executeInSandbox(codeText, sandbox, timeout = 15000) {
     try {
         const script = new vm.Script(codeText, { filename: 'runCommand.js', displayErrors: true });
         const context = vm.createContext(sandbox);
@@ -446,6 +383,10 @@ async function safeInvokeHandler(handler, sandbox, args = []) {
     return await handler();
 }
 
+/**
+ * Tracked socket — inarekodi sendMessage/relayMessage BILA kutuma.
+ * Inatumika kwa previewMode.
+ */
 function createTrackedSocket(sock, sandbox) {
     return new Proxy(sock, {
         get(target, property, receiver) {
@@ -453,10 +394,10 @@ function createTrackedSocket(sock, sandbox) {
                 return async (...args) => {
                     if (sandbox.previewMode) {
                         sandbox.__sent = true;
-                        // args[1] = message payload, args[2] = options
                         const preview = {
-                            preview: true, payload: args[1], options: args[2] || {},
-                            summary: formatPreviewPayload(args[1], { quoted: sandbox.message }),
+                            preview: true, payload: args[1],
+                            options: args[2] || {},
+                            isRelay: true,
                         };
                         sandbox.__sentMessages.push(preview);
                         return preview;
@@ -468,13 +409,12 @@ function createTrackedSocket(sock, sandbox) {
             }
             if (property === 'sendMessage') {
                 return async (...args) => {
-                    sandbox.__sent = true;
                     if (sandbox.previewMode) {
-                        const payload = args[0];
-                        const options = args[1] || {};
+                        sandbox.__sent = true;
                         const preview = {
-                            preview: true, payload, options,
-                            summary: formatPreviewPayload(payload, { quoted: sandbox.message }),
+                            preview: true, payload: args[0],
+                            options: args[1] || {},
+                            isRelay: false,
                         };
                         sandbox.__sentMessages.push(preview);
                         return preview;
@@ -493,7 +433,7 @@ function extractFunctionName(source) {
     const content = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
     if (!content) return '';
 
-    const commandMetadata = 
+    const commandMetadata =
         content.match(/\bcommands\s*:\s*\[\s*['"`]([\w-]+)/i) ||
         content.match(/\bcommandName\s*[:=]\s*['"`]([\w-]+)/i) ||
         content.match(/\bmodule\.exports\.name\s*=\s*['"`]([\w-]+)/i) ||
@@ -552,6 +492,9 @@ function createSnippetSandbox(sock, chatId, message, senderId) {
     return sandbox;
 }
 
+/**
+ * Preview snippet → Tuma preview KAMA ujumbe halisi wa bot
+ */
 async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     const code = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
     const sandbox = createSnippetSandbox(sock, chatId, message, senderId);
@@ -577,12 +520,20 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     }
 
     if (sandbox.__sentMessages.length) {
-        const previews = sandbox.__sentMessages
-            .map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false }))
-            .join('\n\n---\n\n');
-        await sock.sendMessage(chatId, {
-            text: `🔎 *PREVIEW YA FUNCTION SNIPPET*\n\n${previews}`,
-        }, { quoted: message });
+        // Tuma kila preview kama ujumbe halisi
+        await sock.sendMessage(chatId, { text: `🔎 *PREVIEW YA SNIPPET — inafuata*` }, { quoted: message });
+        for (const entry of sandbox.__sentMessages) {
+            try {
+                if (entry.isRelay) {
+                    await sendPreviewAsBot(sock, chatId, entry.payload, entry.options, message);
+                } else {
+                    await sendPreviewAsBot(sock, chatId, entry.payload, entry.options, message);
+                }
+                await new Promise(r => setTimeout(r, 800)); // slight delay between messages
+            } catch (err) {
+                console.error('Preview send error:', err);
+            }
+        }
         return;
     }
 
@@ -594,6 +545,9 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     }, { quoted: message });
 }
 
+/**
+ * Preview command → Tuma preview KAMA ujumbe halisi wa bot
+ */
 async function previewCommand(sock, chatId, senderId, message, targetInput) {
     const functionName = extractFunctionName(targetInput);
     const parts = targetInput.trim().split(/\s+/);
@@ -615,19 +569,26 @@ async function previewCommand(sock, chatId, senderId, message, targetInput) {
         const args = functionName ? [] : parts.slice(1);
         const invocationText = `.${commandName}${args.length ? ` ${args.join(' ')}` : ''}`;
         const previewMessage = { ...message, message: { conversation: invocationText } };
-        const sandbox = createSandbox(sock, chatId, previewMessage, args, senderId, commandName);
+        const sandbox = createSandbox(sock, chatId, previewMessage, args, senderId, commandName, { previewMode: true });
         sandbox.previewMode = true;
         sandbox.sock = createTrackedSocket(sock, sandbox);
         sandbox.core = sandbox.sock;
         const result = await safeInvokeHandler(handler, sandbox, sandbox.args);
 
         if (sandbox.__sentMessages.length) {
-            const previews = sandbox.__sentMessages
-                .map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false }))
-                .join('\n\n━━━━━━━━━━━━━━━━━━\n\n');
+            // Tuma taarifa ya kwanza
             await sock.sendMessage(chatId, {
-                text: `🔎 *PREVIEW YA FUNCTION .${commandName}*\n\n${previews}`,
+                text: `🔎 *PREVIEW YA FUNCTION .${commandName}* — inafuata 👇`,
             }, { quoted: message });
+            // Tuma kila preview kama ujumbe halisi
+            for (const entry of sandbox.__sentMessages) {
+                try {
+                    await sendPreviewAsBot(sock, chatId, entry.payload, entry.options, message);
+                    await new Promise(r => setTimeout(r, 800));
+                } catch (err) {
+                    console.error('Preview send error:', err);
+                }
+            }
             return;
         }
 
@@ -751,7 +712,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             }
 
             try {
-                const sandbox = createSandbox(sock, chatId, message, args, senderId, commandName);
+                const sandbox = createSandbox(sock, chatId, message, args, senderId, commandName, { previewMode: false });
                 sandbox.sock = createTrackedSocket(sock, sandbox);
                 sandbox.core = sandbox.sock;
                 const handlerResult = await safeInvokeHandler(handler, sandbox, sandbox.args);
@@ -867,9 +828,8 @@ module.exports = {
     listCustomCommands,
     resolveMessageBuilderPath,
     COMMANDS_DIR,
-    // Preview renderer exports
+    sendPreviewAsBot,
     formatPreviewPayload,
-    renderAsBotMessage,
     previewCommand,
     previewSourceSnippet,
     extractFunctionName,
