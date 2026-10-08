@@ -1,6 +1,6 @@
 /**
- * addcmd.js - Powerful Command Manager (Enhanced Preview & Execution)
- * Features: Add, Run, List, Delete custom commands, Preview Mode, Sandbox execution
+ * addcmd.js - Powerful Command Manager (Enhanced Preview Renderer)
+ * Features: Add, Run, List, Delete custom commands, Beautiful Preview, Sandbox execution
  * Usage: .cmdadd <name> <code> | .run <name> | .run preview <name> | .run execute <name>
  */
 
@@ -18,7 +18,6 @@ const isOwnerOrSudo = require('../lib/isOwner');
 const COMMANDS_DIR = path.join(process.cwd(), 'commands');
 const GENERATED_MARKER = '// @generated-by:addcmd';
 
-// Ensure directory exists
 if (!fs.existsSync(COMMANDS_DIR)) fs.mkdirSync(COMMANDS_DIR, { recursive: true });
 
 // ─── ──────────────────────────────────────────────────────────────────────
@@ -52,7 +51,6 @@ function resolveCommandPath(commandName) {
         .find((file) => path.basename(file, '.js').toLowerCase() === normalizedName);
     if (aliasPath) return path.join(COMMANDS_DIR, aliasPath);
 
-    // Search inside files for exported function names
     const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const functionDeclaration = new RegExp(`\\b(?:async\\s+)?function\\s+${escapedName}\\b|\\b(?:const|let|var)\\s+${escapedName}\\s*=`, 'm');
     const files = fs.readdirSync(COMMANDS_DIR).filter((file) => file.endsWith('.js'));
@@ -81,43 +79,29 @@ function findHandler(commandModule) {
     if (!commandModule || typeof commandModule !== 'object') return null;
 
     const candidates = [
-        commandModule.code,
-        commandModule.handler,
-        commandModule.run,
-        commandModule.execute,
-        commandModule.default,
-        commandModule.main,
-        commandModule.logic,
+        commandModule.code, commandModule.handler, commandModule.run,
+        commandModule.execute, commandModule.default, commandModule.main, commandModule.logic,
     ];
-
     for (const candidate of candidates) {
         if (typeof candidate === 'function') return candidate;
     }
-
     for (const value of Object.values(commandModule)) {
         if (typeof value === 'function') return value;
     }
-
     return null;
 }
 
 function isGeneratedCommandFile(filePath) {
     try {
-        const content = fs.readFileSync(filePath, 'utf8');
-        return content.includes(GENERATED_MARKER);
-    } catch {
-        return false;
-    }
+        return fs.readFileSync(filePath, 'utf8').includes(GENERATED_MARKER);
+    } catch { return false; }
 }
 
 function registerGeneratedCommand(commandName, filePath) {
     if (!global.commands || typeof global.commands !== 'object') global.commands = {};
     global.commands[commandName] = {
-        name: commandName,
-        description: 'Generated command',
-        category: 'UTILITY',
-        file: path.basename(filePath),
-        generated: true,
+        name: commandName, description: 'Generated command',
+        category: 'UTILITY', file: path.basename(filePath), generated: true,
     };
     if (!global.autoRegisteredCommands || typeof global.autoRegisteredCommands !== 'object') global.autoRegisteredCommands = {};
     try {
@@ -134,15 +118,12 @@ function registerGeneratedCommand(commandName, filePath) {
 
 function listCustomCommands() {
     try {
-        const files = fs.readdirSync(COMMANDS_DIR);
-        return files
+        return fs.readdirSync(COMMANDS_DIR)
             .filter((f) => f.endsWith('.js'))
             .filter((f) => f !== 'addcmd.js' && f !== 'menu.js')
             .map((f) => f.replace(/\.js$/, ''))
             .filter((name) => isGeneratedCommandFile(path.join(COMMANDS_DIR, `${name}.js`)));
-    } catch {
-        return [];
-    }
+    } catch { return []; }
 }
 
 function deleteCustomCommand(commandName) {
@@ -167,7 +148,6 @@ function saveCustomCommand(commandName, sourceCode) {
 
     if (!cleaned) throw new Error('Command source is empty');
 
-    // Normalize require paths
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
@@ -177,7 +157,6 @@ function saveCustomCommand(commandName, sourceCode) {
     const hasSymbol = symbolNames.some((s) => new RegExp('\\b' + s + '\\b').test(cleaned));
     const header = `${GENERATED_MARKER}\nconst { Button, ButtonV2, Carousel, AIRich, Toolkit, createCtx } = require('../lib/messageBuilder');\n\n`;
 
-    // Check if it's a direct function, arrow function, or object export
     const isDirectFunction = /^async\s*\(/.test(cleaned) || /^async\s+[A-Za-z0-9_$]+\s*\(/.test(cleaned) || /^function\s*/.test(cleaned) || /^\(.*\)\s*=>/.test(cleaned) || /^async\s*\(.*\)\s*=>/.test(cleaned);
     const isObjectExport = /module\.exports\s*=\s*\{/.test(cleaned) || /exports\.[A-Za-z0-9_$]+\s*=/.test(cleaned);
     const hasModuleExports = cleaned.includes('module.exports');
@@ -186,14 +165,11 @@ function saveCustomCommand(commandName, sourceCode) {
         if (isDirectFunction) {
             cleaned = `module.exports = ${cleaned};`;
         } else {
-            // Assume it's inline code to be wrapped
             cleaned = `module.exports = {\n    code: async (sock, chatId, message, args = [], options = {}) => {\n        ${cleaned}\n    },\n    name: '${commandName}',\n    description: 'Generated command',\n    category: 'UTILITY'\n};`;
         }
     }
 
-    // Special handling for direct exported functions
     if (/module\.exports\s*=\s*async\s+function/.test(cleaned) || /module\.exports\s*=\s*\(?\s*\(?[^)]*\)\s*=>/.test(cleaned)) {
-        // Wrap to ensure it has a name and proper args
         cleaned = cleaned.replace(/module\.exports\s*=\s*/, "module.exports = async function generatedCommand(sock, chatId, message, args = [], options = {}) {\n    return (async () => {\n    ");
         cleaned += '\n    })();\n};\n';
     }
@@ -205,7 +181,154 @@ function saveCustomCommand(commandName, sourceCode) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. SANDBOX EXECUTION (ENHANCED)
+// 4. PREVIEW RENDERER — MUONEKANO WA UJUMBE (KAMA KWENYE PICHA)
+// ─── ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Huu ndio mfumo mpya wa kuonyesha muonekano wa ujumbe
+ * Unachukua payload na kui-format kama ujumbe wa WhatsApp unaonekana.
+ */
+function formatPreviewPayload(payload, options = {}) {
+    if (!payload) return '_(hakuna payload)_';
+
+    // Handle relayMessage-style payload { buttonsMessage: {...} } or { viewOnceMessage: {...} }
+    let msg = payload;
+    if (msg.buttonsMessage) msg = msg.buttonsMessage;
+    if (msg.viewOnceMessage) msg = msg.viewOnceMessage;
+    if (msg.viewOnceMessageV2) msg = msg.viewOnceMessageV2;
+    if (msg.documentWithCaptionMessage) msg = msg.documentWithCaptionMessage;
+    if (msg.ephemeralMessage) msg = msg.ephemeralMessage;
+    if (msg.interactiveMessage) msg = msg.interactiveMessage;
+
+    // Handle sendMessage-style payload { text, image, buttons, ... }
+    if (msg.message) {
+        // Native WhatsApp message object
+        const inner = msg.message;
+        if (inner.buttonsMessage) msg = inner.buttonsMessage;
+        else if (inner.interactiveMessage) msg = inner.interactiveMessage;
+        else if (inner.imageMessage) msg = { imageMessage: inner.imageMessage };
+        else if (inner.videoMessage) msg = { videoMessage: inner.videoMessage };
+        else if (inner.documentMessage) msg = { documentMessage: inner.documentMessage };
+        else if (inner.conversation) msg = { conversation: inner.conversation };
+        else if (inner.extendedTextMessage) msg = { extendedTextMessage: inner.extendedTextMessage };
+    }
+
+    const lines = [];
+    lines.push('╭━━━〔 *PREVIEW* 〕━━━⬣');
+    lines.push('┃');
+
+    // ─── HEADER (image/video/document) ───────────────────────────────
+    if (msg.imageMessage || msg.image) {
+        lines.push('┃ 🖼️  *[IMAGE HEADER]*');
+        const cap = msg.imageMessage?.caption || msg.caption;
+        if (cap) lines.push(`┃ 📝 _${cap}_`);
+        lines.push('┃');
+    } else if (msg.videoMessage || msg.video) {
+        lines.push('┃ 🎥  *[VIDEO HEADER]*');
+        const cap = msg.videoMessage?.caption || msg.caption;
+        if (cap) lines.push(`┃ 📝 _${cap}_`);
+        lines.push('┃');
+    } else if (msg.documentMessage || msg.document) {
+        lines.push('┃ 📄  *[DOCUMENT HEADER]*');
+        const name = msg.documentMessage?.fileName || msg.fileName || 'file';
+        lines.push(`┃ 📎 ${name}`);
+        lines.push('┃');
+    } else if (msg.locationMessage) {
+        lines.push('┃ 📍  *[LOCATION HEADER]*');
+        lines.push('┃');
+    } else if (msg.headerType === 1 && msg.imageMessage) {
+        lines.push('┃ 🖼️  *[IMAGE HEADER]*');
+        lines.push('┃');
+    }
+
+    // ─── BODY / TEXT ──────────────────────────────────────────────────
+    const bodyText = 
+        msg.contentText || 
+        msg.text || 
+        msg.caption || 
+        (msg.conversation) || 
+        (msg.extendedTextMessage?.text) || 
+        null;
+
+    if (bodyText) {
+        lines.push('┃ 📌 *Content:*');
+        String(bodyText).split('\n').forEach((l) => {
+            lines.push(`┃   ${l}`);
+        });
+        lines.push('┃');
+    }
+
+    // ─── BUTTONS ──────────────────────────────────────────────────────
+    const buttons = msg.buttons || msg.templateButtons || msg.interactiveButtons || [];
+    if (Array.isArray(buttons) && buttons.length > 0) {
+        lines.push('┃ 🔘 *Buttons:*');
+        buttons.forEach((btn, i) => {
+            const label = 
+                btn.buttonText?.displayText || 
+                btn.text || 
+                btn.name || 
+                btn.buttonId || 
+                `Button ${i + 1}`;
+            const id = btn.buttonId || btn.id || '';
+            lines.push(`┃   ${i + 1}. [ ${label} ]`);
+            if (id) lines.push(`┃      ↳ id: ${id}`);
+        });
+        lines.push('┃');
+    }
+
+    // ─── SECTIONS (List Message) ──────────────────────────────────────
+    const sections = msg.sections || [];
+    if (Array.isArray(sections) && sections.length > 0) {
+        lines.push('┃ 📋 *Sections:*');
+        sections.forEach((sec, si) => {
+            lines.push(`┃   ▸ ${sec.title || `Section ${si + 1}`}`);
+            (sec.rows || []).forEach((row) => {
+                lines.push(`┃     • ${row.title || ''} — _${row.description || ''}_`);
+            });
+        });
+        lines.push('┃');
+    }
+
+    // ─── FOOTER ───────────────────────────────────────────────────────
+    const footer = msg.footerText || msg.footer;
+    if (footer) {
+        lines.push('┃');
+        lines.push(`┃ 🦶 _${footer}_`);
+    }
+
+    // ─── QUOTED ───────────────────────────────────────────────────────
+    if (options.quoted) {
+        lines.push('┃');
+        lines.push('┃ ↩️ _Quoted: ' + (options.quoted?.text || options.quoted?.conversation || 'message') + '_');
+    }
+
+    lines.push('┃');
+    lines.push('╰━━━━━━━━━━━━━━━━━━⬣');
+
+    return lines.join('\n');
+}
+
+/**
+ * Huu ni mfumo wa ziada — unachukua payload na kui-render kwa njia
+ * inayofanana na MessageBuilder ya bot (kama ipo), au inarudi kwenye
+ * formatter yetu.
+ */
+function renderAsBotMessage(payload, options = {}) {
+    try {
+        const mbPath = resolveMessageBuilderPath();
+        if (mbPath) {
+            const mb = require(mbPath);
+            // Try using MessageBuilder if it has a preview method
+            if (mb && typeof mb.renderPreview === 'function') {
+                return mb.renderPreview(payload);
+            }
+        }
+    } catch (_) {}
+    return formatPreviewPayload(payload, options);
+}
+
+// ─── ──────────────────────────────────────────────────────────────────────
+// 5. SANDBOX EXECUTION
 // ─── ──────────────────────────────────────────────────────────────────────
 
 function createSandbox(sock, chatId, message, args, senderId, commandName = '') {
@@ -222,7 +345,7 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
             if (typeof specifier !== 'string') throw new TypeError('Module specifier must be a string');
             const baseRequire = Module.createRequire(path.join(COMMANDS_DIR, 'addcmd.js'));
             if (specifier.startsWith('.')) {
-                try { return require(path.resolve(COMMANDS_DIR, specifier)); } catch (error) { return baseRequire(specifier); }
+                try { return require(path.resolve(COMMANDS_DIR, specifier)); } catch { return baseRequire(specifier); }
             }
             return baseRequire(specifier);
         },
@@ -239,7 +362,7 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
                 const preview = {
                     preview: true, payload: msgContent,
                     options: { quoted: message, ...options },
-                    summary: summarizePreviewPayload(msgContent),
+                    summary: formatPreviewPayload(msgContent, { quoted: message }),
                 };
                 sandbox.__sentMessages.push(preview);
                 return preview;
@@ -256,7 +379,7 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
                 const preview = {
                     preview: true, payload: msgContent,
                     options: { quoted: message, ...options },
-                    summary: summarizePreviewPayload(msgContent),
+                    summary: formatPreviewPayload(msgContent, { quoted: message }),
                 };
                 sandbox.__sentMessages.push(preview);
                 return preview;
@@ -275,7 +398,6 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
     sandbox.__sentMessages = [];
     sandbox.ctx = sandbox;
 
-    // Load MessageBuilder
     try {
         const mbPath = resolveMessageBuilderPath();
         if (mbPath) {
@@ -310,7 +432,7 @@ async function executeInSandbox(codeText, sandbox, timeout = 10000) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 5. RUN COMMAND
+// 6. RUN COMMAND
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function safeInvokeHandler(handler, sandbox, args = []) {
@@ -324,21 +446,6 @@ async function safeInvokeHandler(handler, sandbox, args = []) {
     return await handler();
 }
 
-function summarizePreviewPayload(payload) {
-    if (typeof payload === 'string') return payload;
-    if (Buffer.isBuffer(payload)) return `<Buffer ${payload.length} bytes>`;
-    if (Array.isArray(payload)) return payload.map((item) => summarizePreviewPayload(item)).join('\n');
-    if (!payload || typeof payload !== 'object') return util.inspect(payload, { depth: 3, colors: false, maxArrayLength: 10 });
-
-    if (typeof payload.text === 'string' || typeof payload.caption === 'string') {
-        const text = payload.text || payload.caption || '';
-        const meta = Object.keys(payload).filter((key) => !['text', 'caption'].includes(key)).slice(0, 6);
-        if (meta.length === 0) return text || util.inspect(payload, { depth: 3, colors: false, maxArrayLength: 10 });
-        return `${text || 'Message object'}\n\nMeta: ${meta.map((key) => `${key}: ${util.inspect(payload[key], { depth: 2, colors: false, maxArrayLength: 8 })}`).join(', ')}`;
-    }
-    return util.inspect(payload, { depth: 3, colors: false, maxArrayLength: 10 });
-}
-
 function createTrackedSocket(sock, sandbox) {
     return new Proxy(sock, {
         get(target, property, receiver) {
@@ -346,9 +453,10 @@ function createTrackedSocket(sock, sandbox) {
                 return async (...args) => {
                     if (sandbox.previewMode) {
                         sandbox.__sent = true;
+                        // args[1] = message payload, args[2] = options
                         const preview = {
                             preview: true, payload: args[1], options: args[2] || {},
-                            summary: `Native relay payload:\n${util.inspect(args[1], { depth: 5, colors: false, maxArrayLength: 20 })}`,
+                            summary: formatPreviewPayload(args[1], { quoted: sandbox.message }),
                         };
                         sandbox.__sentMessages.push(preview);
                         return preview;
@@ -364,7 +472,10 @@ function createTrackedSocket(sock, sandbox) {
                     if (sandbox.previewMode) {
                         const payload = args[0];
                         const options = args[1] || {};
-                        const preview = { preview: true, payload, options, summary: summarizePreviewPayload(payload) };
+                        const preview = {
+                            preview: true, payload, options,
+                            summary: formatPreviewPayload(payload, { quoted: sandbox.message }),
+                        };
                         sandbox.__sentMessages.push(preview);
                         return preview;
                     }
@@ -380,20 +491,34 @@ function createTrackedSocket(sock, sandbox) {
 
 function extractFunctionName(source) {
     const content = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
-    const commandMetadata = content.match(/\bcommands\s*:\s*\[\s*['"`]([\w-]+)/i) ||
-        content.match(/\bcommandName\s*[:=]\s*['"`]([\w-]+)/i) ||
-        content.match(/\bmodule\.exports\.name\s*=\s*['"`]([\w-]+)/i);
-    if (commandMetadata) return commandMetadata[1];
+    if (!content) return '';
 
-    const matches = [
-        content.match(/\b(?:async\s+)?function\s+([\w$]+)\s*\(/),
-        content.match(/\b(?:const|let|var)\s+([\w$]+)\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>|[\w$]+\s*=>)/),
-        content.match(/\bmodule\.exports\s*=\s*([\w$]+)\s*;?/),
-        content.match(/\bmodule\.exports\.([\w$]+)\s*=/),
-        content.match(/\bmodule\.exports\s*=\s*\{[\s\S]*?\b(?:async\s+)?([\w$]+)\s*\([^)]*\)\s*\{/),
-        content.match(/\b(?:async\s+)?([\w$]+)\s*\([^)]*\)\s*\{/), // fallback for unnamed functions
-    ];
-    return matches.find(Boolean)?.[1] || '';
+    const commandMetadata = 
+        content.match(/\bcommands\s*:\s*\[\s*['"`]([\w-]+)/i) ||
+        content.match(/\bcommandName\s*[:=]\s*['"`]([\w-]+)/i) ||
+        content.match(/\bmodule\.exports\.name\s*=\s*['"`]([\w-]+)/i) ||
+        content.match(/\bname\s*[:=]\s*['"`]([\w-]+)['"`]/i);
+    if (commandMetadata && /^[a-zA-Z_$][\w$]*$/.test(commandMetadata[1])) return commandMetadata[1];
+
+    const namedFunction = content.match(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(/);
+    if (namedFunction) return namedFunction[1];
+
+    const varFunction = content.match(/\b(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>|[a-zA-Z_$][\w$]*\s*=>)/);
+    if (varFunction && varFunction[1] !== '>' && varFunction[1] !== '=>') return varFunction[1];
+
+    const exportedRef = content.match(/\bmodule\.exports\s*=\s*([a-zA-Z_$][\w$]*)\s*;?\s*$/m);
+    if (exportedRef && exportedRef[1] !== '>' && exportedRef[1] !== '=>') return exportedRef[1];
+
+    const exportedProp = content.match(/\bmodule\.exports\.([a-zA-Z_$][\w$]*)\s*=/);
+    if (exportedProp) return exportedProp[1];
+
+    const objExport = content.match(/\bmodule\.exports\s*=\s*\{[\s\S]*?\b(?:async\s+)?([a-zA-Z_$][\w$]*)\s*\([^)]*\)\s*\{/);
+    if (objExport) return objExport[1];
+
+    const inlineNamed = content.match(/\b(?:async\s+)?([a-zA-Z_$][\w$]*)\s*\([^)]*\)\s*\{/);
+    if (inlineNamed && !['if', 'for', 'while', 'switch', 'catch', 'return', 'function'].includes(inlineNamed[1])) return inlineNamed[1];
+
+    return '';
 }
 
 function isRunnableCodeSnippet(source) {
@@ -443,7 +568,6 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     sandbox.namabot = global.namabot || settings.botName || settings.botname || 'Bot';
     sandbox.ownername = global.ownername || settings.botOwner || 'Owner';
 
-    // Try to execute the code
     const result = await executeInSandbox(`(async () => {\n${code}\n})()`, sandbox);
     if (!result.success) {
         await sock.sendMessage(chatId, {
@@ -453,15 +577,21 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     }
 
     if (sandbox.__sentMessages.length) {
-        const previews = sandbox.__sentMessages.map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false })).join('\n\n---\n\n');
-        await sock.sendMessage(chatId, { text: `🔎 Preview ya function snippet\n\n${previews}` }, { quoted: message });
+        const previews = sandbox.__sentMessages
+            .map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false }))
+            .join('\n\n---\n\n');
+        await sock.sendMessage(chatId, {
+            text: `🔎 *PREVIEW YA FUNCTION SNIPPET*\n\n${previews}`,
+        }, { quoted: message });
         return;
     }
 
     const detail = result.result !== undefined
         ? util.inspect(result.result, { depth: 4, colors: false })
         : result.logs.join('\n') || 'Function ime-run lakini haijaita sendMessage/relayMessage kutoa payload ya preview.';
-    await sock.sendMessage(chatId, { text: `🔎 Preview ya function snippet\n\n${detail}` }, { quoted: message });
+    await sock.sendMessage(chatId, {
+        text: `🔎 *PREVIEW YA FUNCTION SNIPPET*\n\n${detail}`,
+    }, { quoted: message });
 }
 
 async function previewCommand(sock, chatId, senderId, message, targetInput) {
@@ -492,15 +622,21 @@ async function previewCommand(sock, chatId, senderId, message, targetInput) {
         const result = await safeInvokeHandler(handler, sandbox, sandbox.args);
 
         if (sandbox.__sentMessages.length) {
-            const previews = sandbox.__sentMessages.map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false })).join('\n\n---\n\n');
-            await sock.sendMessage(chatId, { text: `🔎 Preview ya function .${commandName}\n\n${previews}` }, { quoted: message });
+            const previews = sandbox.__sentMessages
+                .map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false }))
+                .join('\n\n━━━━━━━━━━━━━━━━━━\n\n');
+            await sock.sendMessage(chatId, {
+                text: `🔎 *PREVIEW YA FUNCTION .${commandName}*\n\n${previews}`,
+            }, { quoted: message });
             return;
         }
 
         const detail = result !== undefined
             ? util.inspect(result, { depth: 4, colors: false })
             : sandbox.__logs.join('\n') || 'Function haikuunda ujumbe wa preview.';
-        await sock.sendMessage(chatId, { text: `🔎 Preview ya function .${commandName}\n\n${detail}` }, { quoted: message });
+        await sock.sendMessage(chatId, {
+            text: `🔎 *PREVIEW YA FUNCTION .${commandName}*\n\n${detail}`,
+        }, { quoted: message });
     } catch (error) {
         await sock.sendMessage(chatId, {
             text: `❌ Preview ya function .${commandName} imeshindwa:\n${error?.stack || error?.message || error}`,
@@ -522,7 +658,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         const quotedMessage = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
         const quotedCode = quotedMessage?.conversation || quotedMessage?.extendedTextMessage?.text || quotedMessage?.imageMessage?.caption || quotedMessage?.videoMessage?.caption || '';
 
-        // List commands
         if (body.match(/^list$/i)) {
             const commands = listCustomCommands();
             if (commands.length === 0) {
@@ -534,7 +669,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
-        // Delete command
         if (body.match(/^delete\s+(\S+)/i)) {
             const match = body.match(/^delete\s+(\S+)/i);
             const cmdName = match[1];
@@ -547,7 +681,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
-        // Help
         if (body.match(/^help$/i)) {
             await sock.sendMessage(chatId, {
                 text: `🛠️ Run Command Help:\n\nUsage:\n• .run <command_or_function> [args] - Preview the matching command function\n• Reply to a named function with .run - Preview its matching command function\n• .run execute <command_name> [args] - Execute a custom command\n• .run list - List all custom commands\n• .run delete <command_name> - Delete a custom command\n\nExamples:\n.run button8\n.run preview button8\n.run execute button8\n.run list\n.run delete button8`
@@ -562,7 +695,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
-        // Preview the matching bot function from quoted source
         if (quotedCode) {
             const source = quotedCode.toString();
             const functionName = extractFunctionName(source);
@@ -583,7 +715,10 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         const explicitPreview = body.match(/^preview\s+(.+)$/i);
         const explicitExecute = body.match(/^execute\s+(.+)$/i);
         const sourceFunction = extractFunctionName(rawBody);
-        const target = explicitPreview?.[1] || explicitExecute?.[1] || sourceFunction || body;
+
+        let target = explicitPreview?.[1] || explicitExecute?.[1] || sourceFunction || body;
+        target = String(target || '').trim();
+        if (!target || target === '>' || target === '=>' || target.startsWith('=>')) target = body;
 
         if (!explicitPreview && !explicitExecute && isRunnableCodeSnippet(rawBody)) {
             await previewSourceSnippet(sock, chatId, senderId, message, rawBody);
@@ -595,7 +730,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
-        // Execute command only when explicitly requested
         const parts = target.split(/\s+/);
         const commandName = parts[0].replace(/^\./, '').toLowerCase();
         const commandPath = resolveCommandPath(commandName);
@@ -648,7 +782,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 6. ADD COMMAND (CMDADD)
+// 7. ADD COMMAND (CMDADD)
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText = '') {
@@ -716,7 +850,7 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 7. EXPORTS
+// 8. EXPORTS
 // ─── ──────────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -733,7 +867,9 @@ module.exports = {
     listCustomCommands,
     resolveMessageBuilderPath,
     COMMANDS_DIR,
-    // Additional exports for advanced usage
+    // Preview renderer exports
+    formatPreviewPayload,
+    renderAsBotMessage,
     previewCommand,
     previewSourceSnippet,
     extractFunctionName,
