@@ -1,7 +1,7 @@
 /**
- * addcmd.js - Powerful Command Manager (Fixed)
- * Features: Add, Run, List, Delete custom commands
- * Usage: .cmdadd <name> <code> | .run <name>
+ * addcmd.js - Powerful Command Manager (Enhanced Preview & Execution)
+ * Features: Add, Run, List, Delete custom commands, Preview Mode, Sandbox execution
+ * Usage: .cmdadd <name> <code> | .run <name> | .run preview <name> | .run execute <name>
  */
 
 const fs = require('fs');
@@ -28,17 +28,12 @@ if (!fs.existsSync(COMMANDS_DIR)) fs.mkdirSync(COMMANDS_DIR, { recursive: true }
 function resolveMessageBuilderPath() {
     const possiblePaths = [
         path.join(process.cwd(), 'lib', 'messageBuilder.js'),
-        path.join(process.cwd(), 'lib', 'messageBuilder.js'),
-        path.join(process.cwd(), 'lib', 'messageBuilder'),
         path.join(process.cwd(), 'lib', 'messageBuilder'),
         path.join(process.cwd(), 'src', 'lib', 'messageBuilder.js'),
-        path.join(process.cwd(), 'src', 'lib', 'messageBuilder.js'),
+        path.join(process.cwd(), 'src', 'lib', 'messageBuilder'),
     ];
-    
     for (const p of possiblePaths) {
-        if (fs.existsSync(p)) {
-            return p;
-        }
+        if (fs.existsSync(p)) return p;
     }
     return null;
 }
@@ -57,6 +52,7 @@ function resolveCommandPath(commandName) {
         .find((file) => path.basename(file, '.js').toLowerCase() === normalizedName);
     if (aliasPath) return path.join(COMMANDS_DIR, aliasPath);
 
+    // Search inside files for exported function names
     const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const functionDeclaration = new RegExp(`\\b(?:async\\s+)?function\\s+${escapedName}\\b|\\b(?:const|let|var)\\s+${escapedName}\\s*=`, 'm');
     const files = fs.readdirSync(COMMANDS_DIR).filter((file) => file.endsWith('.js'));
@@ -73,10 +69,8 @@ function resolveCommandPath(commandName) {
 
 function loadCommandModule(commandPath) {
     try {
-        // Clear cache to reload fresh
         delete require.cache[require.resolve(commandPath)];
-        const module = require(commandPath);
-        return module;
+        return require(commandPath);
     } catch (error) {
         throw new Error(`Failed to load module: ${error.message}`);
     }
@@ -100,12 +94,8 @@ function findHandler(commandModule) {
         if (typeof candidate === 'function') return candidate;
     }
 
-    if (commandModule && typeof commandModule === 'object') {
-        for (const value of Object.values(commandModule)) {
-            if (typeof value === 'function') {
-                return value;
-            }
-        }
+    for (const value of Object.values(commandModule)) {
+        if (typeof value === 'function') return value;
     }
 
     return null;
@@ -121,10 +111,7 @@ function isGeneratedCommandFile(filePath) {
 }
 
 function registerGeneratedCommand(commandName, filePath) {
-    if (!global.commands || typeof global.commands !== 'object') {
-        global.commands = {};
-    }
-
+    if (!global.commands || typeof global.commands !== 'object') global.commands = {};
     global.commands[commandName] = {
         name: commandName,
         description: 'Generated command',
@@ -132,25 +119,16 @@ function registerGeneratedCommand(commandName, filePath) {
         file: path.basename(filePath),
         generated: true,
     };
-
-    if (!global.autoRegisteredCommands || typeof global.autoRegisteredCommands !== 'object') {
-        global.autoRegisteredCommands = {};
-    }
-    // prefer Map-based registry if available (main.js exposes it)
+    if (!global.autoRegisteredCommands || typeof global.autoRegisteredCommands !== 'object') global.autoRegisteredCommands = {};
     try {
         if (global.autoRegisteredCommands instanceof Map) {
-            // force a reload so main.js picks up the new file
-            if (typeof global.reloadAutoRegisteredCommands === 'function') {
-                global.reloadAutoRegisteredCommands();
-            }
-            // also set basic meta in global.commands
+            if (typeof global.reloadAutoRegisteredCommands === 'function') global.reloadAutoRegisteredCommands();
             global.commands[commandName] = global.commands[commandName] || {};
             global.commands[commandName].file = path.basename(filePath);
             global.commands[commandName].generated = true;
             return;
         }
     } catch (e) {}
-
     global.autoRegisteredCommands[commandName] = global.commands[commandName];
 }
 
@@ -169,12 +147,8 @@ function listCustomCommands() {
 
 function deleteCustomCommand(commandName) {
     const filePath = path.join(COMMANDS_DIR, `${commandName}.js`);
-    if (!fs.existsSync(filePath)) {
-        throw new Error(`Command "${commandName}" not found`);
-    }
-    if (!isGeneratedCommandFile(filePath)) {
-        throw new Error(`Command "${commandName}" is not a generated command and cannot be deleted here.`);
-    }
+    if (!fs.existsSync(filePath)) throw new Error(`Command "${commandName}" not found`);
+    if (!isGeneratedCommandFile(filePath)) throw new Error(`Command "${commandName}" is not a generated command and cannot be deleted here.`);
     fs.unlinkSync(filePath);
     if (global.commands && global.commands[commandName]) delete global.commands[commandName];
     return true;
@@ -183,23 +157,17 @@ function deleteCustomCommand(commandName) {
 function saveCustomCommand(commandName, sourceCode) {
     const filePath = path.join(COMMANDS_DIR, `${commandName}.js`);
 
-    if (!/^[a-z0-9_\-]+$/i.test(commandName)) {
-        throw new Error('Invalid command name. Use only letters, numbers, underscore, and hyphen.');
-    }
-
-    if (fs.existsSync(filePath) && !isGeneratedCommandFile(filePath)) {
-        throw new Error(`Command "${commandName}" already exists as a built-in command and cannot be overwritten.`);
-    }
+    if (!/^[a-z0-9_\-]+$/i.test(commandName)) throw new Error('Invalid command name. Use only letters, numbers, underscore, and hyphen.');
+    if (fs.existsSync(filePath) && !isGeneratedCommandFile(filePath)) throw new Error(`Command "${commandName}" already exists as a built-in command and cannot be overwritten.`);
 
     let cleaned = String(sourceCode || '')
         .replace(/^```(?:js|javascript)?\s*/i, '')
         .replace(/```\s*$/i, '')
         .trim();
 
-    if (!cleaned) {
-        throw new Error('Command source is empty');
-    }
+    if (!cleaned) throw new Error('Command source is empty');
 
+    // Normalize require paths
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi, "require('../lib/messageBuilder')");
     cleaned = cleaned.replace(/require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
@@ -209,43 +177,40 @@ function saveCustomCommand(commandName, sourceCode) {
     const hasSymbol = symbolNames.some((s) => new RegExp('\\b' + s + '\\b').test(cleaned));
     const header = `${GENERATED_MARKER}\nconst { Button, ButtonV2, Carousel, AIRich, Toolkit, createCtx } = require('../lib/messageBuilder');\n\n`;
 
-    const isDirectFunction = /^async\s*\(/.test(cleaned) || /^async\s+[A-Za-z0-9_$]+\s*\(/.test(cleaned) || /^function\s*/.test(cleaned) || /^\(.*\)\s*=>/.test(cleaned);
+    // Check if it's a direct function, arrow function, or object export
+    const isDirectFunction = /^async\s*\(/.test(cleaned) || /^async\s+[A-Za-z0-9_$]+\s*\(/.test(cleaned) || /^function\s*/.test(cleaned) || /^\(.*\)\s*=>/.test(cleaned) || /^async\s*\(.*\)\s*=>/.test(cleaned);
     const isObjectExport = /module\.exports\s*=\s*\{/.test(cleaned) || /exports\.[A-Za-z0-9_$]+\s*=/.test(cleaned);
+    const hasModuleExports = cleaned.includes('module.exports');
 
-    if (!cleaned.includes('module.exports') && !isObjectExport) {
+    if (!hasModuleExports && !isObjectExport) {
         if (isDirectFunction) {
             cleaned = `module.exports = ${cleaned};`;
         } else {
+            // Assume it's inline code to be wrapped
             cleaned = `module.exports = {\n    code: async (sock, chatId, message, args = [], options = {}) => {\n        ${cleaned}\n    },\n    name: '${commandName}',\n    description: 'Generated command',\n    category: 'UTILITY'\n};`;
         }
     }
 
-    // If source is a single exported function object with no explicit name metadata, auto-add metadata.
+    // Special handling for direct exported functions
     if (/module\.exports\s*=\s*async\s+function/.test(cleaned) || /module\.exports\s*=\s*\(?\s*\(?[^)]*\)\s*=>/.test(cleaned)) {
+        // Wrap to ensure it has a name and proper args
         cleaned = cleaned.replace(/module\.exports\s*=\s*/, "module.exports = async function generatedCommand(sock, chatId, message, args = [], options = {}) {\n    return (async () => {\n    ");
         cleaned += '\n    })();\n};\n';
     }
 
-    const finalSource = `${hasMessageBuilderRequire || hasSymbol ? '' : header}${cleaned}\n`;
+    const finalSource = `${(!hasMessageBuilderRequire && hasSymbol) || !hasMessageBuilderRequire ? header : ''}${cleaned}\n`;
     fs.writeFileSync(filePath, finalSource, 'utf8');
     registerGeneratedCommand(commandName, filePath);
     return filePath;
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. SANDBOX EXECUTION
+// 4. SANDBOX EXECUTION (ENHANCED)
 // ─── ──────────────────────────────────────────────────────────────────────
 
 function createSandbox(sock, chatId, message, args, senderId, commandName = '') {
     const sandbox = {
-        sock,
-        chatId,
-        message,
-        args: args || [],
-        senderId,
-        commandName,
-        prefix: '.',
-        ctx: null,
+        sock, chatId, message, args: args || [], senderId, commandName, prefix: '.', ctx: null,
         console: {
             log: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
             error: (...values) => sandbox.__logs.push(values.map((v) => util.format(v)).join(' ')),
@@ -254,49 +219,25 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
         },
         util,
         require: (specifier) => {
-            if (typeof specifier !== 'string') {
-                throw new TypeError('Module specifier must be a string');
-            }
+            if (typeof specifier !== 'string') throw new TypeError('Module specifier must be a string');
             const baseRequire = Module.createRequire(path.join(COMMANDS_DIR, 'addcmd.js'));
             if (specifier.startsWith('.')) {
-                try {
-                    return require(path.resolve(COMMANDS_DIR, specifier));
-                } catch (error) {
-                    return baseRequire(specifier);
-                }
+                try { return require(path.resolve(COMMANDS_DIR, specifier)); } catch (error) { return baseRequire(specifier); }
             }
             return baseRequire(specifier);
         },
-        process,
-        Buffer,
+        process, Buffer,
         __dirname: process.cwd(),
         __filename: path.join(process.cwd(), 'runCommand.js'),
-        module: { exports: {} },
-        exports: {},
-        setTimeout,
-        setInterval,
-        clearTimeout,
-        clearInterval,
-        Promise,
-        Date,
-        Math,
-        String,
-        Number,
-        Boolean,
-        Array,
-        Object,
-        JSON,
-        Error,
-        RegExp,
-        Map,
-        Set,
+        module: { exports: {} }, exports: {},
+        setTimeout, setInterval, clearTimeout, clearInterval,
+        Promise, Date, Math, String, Number, Boolean, Array, Object, JSON, Error, RegExp, Map, Set,
         sendMessage: async (content, options = {}) => {
             const msgContent = typeof content === 'string' ? { text: content } : content;
             if (sandbox.previewMode) {
                 sandbox.__sent = true;
                 const preview = {
-                    preview: true,
-                    payload: msgContent,
+                    preview: true, payload: msgContent,
                     options: { quoted: message, ...options },
                     summary: summarizePreviewPayload(msgContent),
                 };
@@ -313,8 +254,7 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
             if (sandbox.previewMode) {
                 sandbox.__sent = true;
                 const preview = {
-                    preview: true,
-                    payload: msgContent,
+                    preview: true, payload: msgContent,
                     options: { quoted: message, ...options },
                     summary: summarizePreviewPayload(msgContent),
                 };
@@ -334,64 +274,38 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '') 
     sandbox.__sent = false;
     sandbox.__sentMessages = [];
     sandbox.ctx = sandbox;
-    
-    // ─── Load MessageBuilder modules with path detection ────────────────
+
+    // Load MessageBuilder
     try {
         const mbPath = resolveMessageBuilderPath();
         if (mbPath) {
             const mb = require(mbPath);
-            sandbox.Button = mb.Button;
-            sandbox.ButtonV2 = mb.ButtonV2;
-            sandbox.Carousel = mb.Carousel;
-            sandbox.AIRich = mb.AIRich;
-            sandbox.Toolkit = mb.Toolkit;
-            sandbox.createCtx = mb.createCtx;
+            sandbox.Button = mb.Button; sandbox.ButtonV2 = mb.ButtonV2;
+            sandbox.Carousel = mb.Carousel; sandbox.AIRich = mb.AIRich;
+            sandbox.Toolkit = mb.Toolkit; sandbox.createCtx = mb.createCtx;
         } else {
-            // Try relative path as fallback
             const mb = require('../lib/messageBuilder');
-            sandbox.Button = mb.Button;
-            sandbox.ButtonV2 = mb.ButtonV2;
-            sandbox.Carousel = mb.Carousel;
-            sandbox.AIRich = mb.AIRich;
-            sandbox.Toolkit = mb.Toolkit;
-            sandbox.createCtx = mb.createCtx;
+            sandbox.Button = mb.Button; sandbox.ButtonV2 = mb.ButtonV2;
+            sandbox.Carousel = mb.Carousel; sandbox.AIRich = mb.AIRich;
+            sandbox.Toolkit = mb.Toolkit; sandbox.createCtx = mb.createCtx;
         }
-    } catch (_) {
-        // MessageBuilder not available
-        console.log('[SANDBOX] MessageBuilder not loaded');
-    }
-    
+    } catch (_) { console.log('[SANDBOX] MessageBuilder not loaded'); }
+
     return sandbox;
 }
 
 async function executeInSandbox(codeText, sandbox, timeout = 10000) {
     try {
-        const script = new vm.Script(codeText, { 
-            filename: 'runCommand.js',
-            displayErrors: true 
-        });
+        const script = new vm.Script(codeText, { filename: 'runCommand.js', displayErrors: true });
         const context = vm.createContext(sandbox);
         let result = script.runInContext(context, { timeout });
-
-        if (result && typeof result.then === 'function') {
-            result = await result;
-        }
-
+        if (result && typeof result.then === 'function') result = await result;
         if (result === undefined && typeof sandbox.module?.exports === 'function') {
             result = await sandbox.module.exports(sandbox.sock, sandbox.chatId, sandbox.message, sandbox.args, { senderId: sandbox.senderId });
         }
-
-        return {
-            success: true,
-            result,
-            logs: sandbox.__logs || []
-        };
+        return { success: true, result, logs: sandbox.__logs || [] };
     } catch (error) {
-        return {
-            success: false,
-            error,
-            logs: sandbox.__logs || []
-        };
+        return { success: false, error, logs: sandbox.__logs || [] };
     }
 }
 
@@ -400,36 +314,13 @@ async function executeInSandbox(codeText, sandbox, timeout = 10000) {
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function safeInvokeHandler(handler, sandbox, args = []) {
-    if (typeof handler !== 'function') {
-        throw new Error('No valid handler found');
-    }
-
+    if (typeof handler !== 'function') throw new Error('No valid handler found');
     const arity = handler.length;
-
     if (arity <= 1) {
-        return await handler({
-            ...sandbox,
-            args,
-            conn: sandbox.sock,
-            command: sandbox.commandName,
-            message: sandbox.message,
-            msg: sandbox.message,
-            chat: sandbox.chatId,
-            reply: sandbox.reply,
-        });
+        return await handler({ ...sandbox, args, conn: sandbox.sock, command: sandbox.commandName, message: sandbox.message, msg: sandbox.message, chat: sandbox.chatId, reply: sandbox.reply });
     }
-
-    if (arity === 2) {
-        return await handler(sandbox.sock, sandbox.chatId);
-    }
-
-    if (arity >= 3) {
-        return await handler(sandbox.sock, sandbox.chatId, sandbox.message, args, {
-            senderId: sandbox.senderId,
-            commandName: sandbox.commandName,
-        });
-    }
-
+    if (arity === 2) return await handler(sandbox.sock, sandbox.chatId);
+    if (arity >= 3) return await handler(sandbox.sock, sandbox.chatId, sandbox.message, args, { senderId: sandbox.senderId, commandName: sandbox.commandName });
     return await handler();
 }
 
@@ -441,17 +332,10 @@ function summarizePreviewPayload(payload) {
 
     if (typeof payload.text === 'string' || typeof payload.caption === 'string') {
         const text = payload.text || payload.caption || '';
-        const meta = Object.keys(payload)
-            .filter((key) => !['text', 'caption'].includes(key))
-            .slice(0, 6);
-
-        if (meta.length === 0) {
-            return text || util.inspect(payload, { depth: 3, colors: false, maxArrayLength: 10 });
-        }
-
+        const meta = Object.keys(payload).filter((key) => !['text', 'caption'].includes(key)).slice(0, 6);
+        if (meta.length === 0) return text || util.inspect(payload, { depth: 3, colors: false, maxArrayLength: 10 });
         return `${text || 'Message object'}\n\nMeta: ${meta.map((key) => `${key}: ${util.inspect(payload[key], { depth: 2, colors: false, maxArrayLength: 8 })}`).join(', ')}`;
     }
-
     return util.inspect(payload, { depth: 3, colors: false, maxArrayLength: 10 });
 }
 
@@ -463,9 +347,7 @@ function createTrackedSocket(sock, sandbox) {
                     if (sandbox.previewMode) {
                         sandbox.__sent = true;
                         const preview = {
-                            preview: true,
-                            payload: args[1],
-                            options: args[2] || {},
+                            preview: true, payload: args[1], options: args[2] || {},
                             summary: `Native relay payload:\n${util.inspect(args[1], { depth: 5, colors: false, maxArrayLength: 20 })}`,
                         };
                         sandbox.__sentMessages.push(preview);
@@ -482,12 +364,7 @@ function createTrackedSocket(sock, sandbox) {
                     if (sandbox.previewMode) {
                         const payload = args[0];
                         const options = args[1] || {};
-                        const preview = {
-                            preview: true,
-                            payload,
-                            options,
-                            summary: summarizePreviewPayload(payload),
-                        };
+                        const preview = { preview: true, payload, options, summary: summarizePreviewPayload(payload) };
                         sandbox.__sentMessages.push(preview);
                         return preview;
                     }
@@ -514,6 +391,7 @@ function extractFunctionName(source) {
         content.match(/\bmodule\.exports\s*=\s*([\w$]+)\s*;?/),
         content.match(/\bmodule\.exports\.([\w$]+)\s*=/),
         content.match(/\bmodule\.exports\s*=\s*\{[\s\S]*?\b(?:async\s+)?([\w$]+)\s*\([^)]*\)\s*\{/),
+        content.match(/\b(?:async\s+)?([\w$]+)\s*\([^)]*\)\s*\{/), // fallback for unnamed functions
     ];
     return matches.find(Boolean)?.[1] || '';
 }
@@ -525,46 +403,15 @@ function isRunnableCodeSnippet(source) {
 function createSnippetSandbox(sock, chatId, message, senderId) {
     const baseRequire = Module.createRequire(path.join(process.cwd(), '__run_preview__.js'));
     const sandbox = {
-        sock,
-        conn: sock,
-        core: sock,
-        chatId,
-        jid: chatId,
-        message,
-        senderId,
-        commandName: 'snippet',
-        args: [],
-        prefix: '.',
-        util,
-        process,
-        Buffer,
-        __dirname: process.cwd(),
-        __filename: path.join(process.cwd(), '__run_preview__.js'),
-        module: { exports: {} },
-        exports: {},
-        setTimeout,
-        setInterval,
-        clearTimeout,
-        clearInterval,
-        Promise,
-        Date,
-        Math,
-        String,
-        Number,
-        Boolean,
-        Array,
-        Object,
-        JSON,
-        Error,
-        RegExp,
-        Map,
-        Set,
+        sock, conn: sock, core: sock, chatId, jid: chatId, message, senderId, commandName: 'snippet', args: [], prefix: '.',
+        util, process, Buffer, __dirname: process.cwd(), __filename: path.join(process.cwd(), '__run_preview__.js'),
+        module: { exports: {} }, exports: {},
+        setTimeout, setInterval, clearTimeout, clearInterval,
+        Promise, Date, Math, String, Number, Boolean, Array, Object, JSON, Error, RegExp, Map, Set,
         require: specifier => {
             if (typeof specifier !== 'string') throw new TypeError('Module specifier must be a string');
             const rootedSpecifier = specifier.startsWith('../') ? `./${specifier.slice(3)}` : specifier;
-            try {
-                return baseRequire(rootedSpecifier);
-            } catch (error) {
+            try { return baseRequire(rootedSpecifier); } catch (error) {
                 if (rootedSpecifier === specifier) throw error;
                 return baseRequire(specifier);
             }
@@ -576,9 +423,7 @@ function createSnippetSandbox(sock, chatId, message, senderId) {
             info: (...values) => sandbox.__logs.push(values.map(value => util.format(value)).join(' ')),
         },
     };
-    sandbox.__logs = [];
-    sandbox.__sent = false;
-    sandbox.__sentMessages = [];
+    sandbox.__logs = []; sandbox.__sent = false; sandbox.__sentMessages = [];
     return sandbox;
 }
 
@@ -589,19 +434,16 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     const settings = require('../settings');
 
     sandbox.previewMode = true;
-    sandbox.sock = trackedSocket;
-    sandbox.conn = trackedSocket;
-    sandbox.core = trackedSocket;
-    sandbox.RyuuBotz = trackedSocket;
+    sandbox.sock = trackedSocket; sandbox.conn = trackedSocket; sandbox.core = trackedSocket; sandbox.RyuuBotz = trackedSocket;
     sandbox.jid = chatId;
     sandbox.m = {
-        ...message,
-        chat: chatId,
+        ...message, chat: chatId,
         reply: async (text, options = {}) => trackedSocket.sendMessage(chatId, { text: String(text) }, { quoted: message, ...options }),
     };
     sandbox.namabot = global.namabot || settings.botName || settings.botname || 'Bot';
     sandbox.ownername = global.ownername || settings.botOwner || 'Owner';
 
+    // Try to execute the code
     const result = await executeInSandbox(`(async () => {\n${code}\n})()`, sandbox);
     if (!result.success) {
         await sock.sendMessage(chatId, {
@@ -611,21 +453,15 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     }
 
     if (sandbox.__sentMessages.length) {
-        const previews = sandbox.__sentMessages
-            .map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false }))
-            .join('\n\n---\n\n');
-        await sock.sendMessage(chatId, {
-            text: `🔎 Preview ya function snippet\n\n${previews}`,
-        }, { quoted: message });
+        const previews = sandbox.__sentMessages.map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false })).join('\n\n---\n\n');
+        await sock.sendMessage(chatId, { text: `🔎 Preview ya function snippet\n\n${previews}` }, { quoted: message });
         return;
     }
 
     const detail = result.result !== undefined
         ? util.inspect(result.result, { depth: 4, colors: false })
         : result.logs.join('\n') || 'Function ime-run lakini haijaita sendMessage/relayMessage kutoa payload ya preview.';
-    await sock.sendMessage(chatId, {
-        text: `🔎 Preview ya function snippet\n\n${detail}`,
-    }, { quoted: message });
+    await sock.sendMessage(chatId, { text: `🔎 Preview ya function snippet\n\n${detail}` }, { quoted: message });
 }
 
 async function previewCommand(sock, chatId, senderId, message, targetInput) {
@@ -648,10 +484,7 @@ async function previewCommand(sock, chatId, senderId, message, targetInput) {
 
         const args = functionName ? [] : parts.slice(1);
         const invocationText = `.${commandName}${args.length ? ` ${args.join(' ')}` : ''}`;
-        const previewMessage = {
-            ...message,
-            message: { conversation: invocationText },
-        };
+        const previewMessage = { ...message, message: { conversation: invocationText } };
         const sandbox = createSandbox(sock, chatId, previewMessage, args, senderId, commandName);
         sandbox.previewMode = true;
         sandbox.sock = createTrackedSocket(sock, sandbox);
@@ -659,21 +492,15 @@ async function previewCommand(sock, chatId, senderId, message, targetInput) {
         const result = await safeInvokeHandler(handler, sandbox, sandbox.args);
 
         if (sandbox.__sentMessages.length) {
-            const previews = sandbox.__sentMessages
-                .map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false }))
-                .join('\n\n---\n\n');
-            await sock.sendMessage(chatId, {
-                text: `🔎 Preview ya function .${commandName}\n\n${previews}`,
-            }, { quoted: message });
+            const previews = sandbox.__sentMessages.map((entry) => entry?.summary || util.inspect(entry, { depth: 5, colors: false })).join('\n\n---\n\n');
+            await sock.sendMessage(chatId, { text: `🔎 Preview ya function .${commandName}\n\n${previews}` }, { quoted: message });
             return;
         }
 
         const detail = result !== undefined
             ? util.inspect(result, { depth: 4, colors: false })
             : sandbox.__logs.join('\n') || 'Function haikuunda ujumbe wa preview.';
-        await sock.sendMessage(chatId, {
-            text: `🔎 Preview ya function .${commandName}\n\n${detail}`,
-        }, { quoted: message });
+        await sock.sendMessage(chatId, { text: `🔎 Preview ya function .${commandName}\n\n${detail}` }, { quoted: message });
     } catch (error) {
         await sock.sendMessage(chatId, {
             text: `❌ Preview ya function .${commandName} imeshindwa:\n${error?.stack || error?.message || error}`,
@@ -693,12 +520,9 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         const rawBody = input.replace(/^\.run\b/i, '').replace(/^\s/, '');
         const body = rawBody.trim();
         const quotedMessage = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-        const quotedCode = quotedMessage?.conversation || 
-                          quotedMessage?.extendedTextMessage?.text || 
-                          quotedMessage?.imageMessage?.caption || 
-                          quotedMessage?.videoMessage?.caption || '';
+        const quotedCode = quotedMessage?.conversation || quotedMessage?.extendedTextMessage?.text || quotedMessage?.imageMessage?.caption || quotedMessage?.videoMessage?.caption || '';
 
-        // ─── List commands ──────────────────────────────────────────────
+        // List commands
         if (body.match(/^list$/i)) {
             const commands = listCustomCommands();
             if (commands.length === 0) {
@@ -706,63 +530,39 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
                 return;
             }
             const commandList = commands.map((cmd) => `• .${cmd}`).join('\n');
-            await sock.sendMessage(chatId, { 
-                text: `📋 Available custom commands:\n\n${commandList}\n\nTotal: ${commands.length} commands` 
-            }, { quoted: message });
+            await sock.sendMessage(chatId, { text: `📋 Available custom commands:\n\n${commandList}\n\nTotal: ${commands.length} commands` }, { quoted: message });
             return;
         }
 
-        // ─── Delete command ─────────────────────────────────────────────
+        // Delete command
         if (body.match(/^delete\s+(\S+)/i)) {
             const match = body.match(/^delete\s+(\S+)/i);
             const cmdName = match[1];
             try {
                 deleteCustomCommand(cmdName);
-                await sock.sendMessage(chatId, { 
-                    text: `✅ Command .${cmdName} deleted successfully.` 
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: `✅ Command .${cmdName} deleted successfully.` }, { quoted: message });
             } catch (error) {
-                await sock.sendMessage(chatId, { 
-                    text: `❌ Failed to delete command: ${error.message}` 
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: `❌ Failed to delete command: ${error.message}` }, { quoted: message });
             }
             return;
         }
 
-        // ─── Help ────────────────────────────────────────────────────────
+        // Help
         if (body.match(/^help$/i)) {
             await sock.sendMessage(chatId, {
-                text: `🛠️ Run Command Help:
-                
-Usage:
-• .run <command_or_function> [args] - Preview the matching command function
-• Reply to a named function with .run - Preview its matching command function
-• .run execute <command_name> [args] - Execute a custom command
-• .run list - List all custom commands
-• .run delete <command_name> - Delete a custom command
-
-Examples:
-.run button8
-.run preview button8
-.run execute button8
-.run list
-.run delete button8`
+                text: `🛠️ Run Command Help:\n\nUsage:\n• .run <command_or_function> [args] - Preview the matching command function\n• Reply to a named function with .run - Preview its matching command function\n• .run execute <command_name> [args] - Execute a custom command\n• .run list - List all custom commands\n• .run delete <command_name> - Delete a custom command\n\nExamples:\n.run button8\n.run preview button8\n.run execute button8\n.run list\n.run delete button8`
             }, { quoted: message });
             return;
         }
 
         if (!body && !quotedCode) {
             await sock.sendMessage(chatId, {
-                text: `🛠️ Usage:
-• Reply to a named function and send .run
-• Or send .run <command_or_function> [args] to preview its handler.
-• Use .run execute <command_name> only when you intend to run it.
-• Send .run help for more info.`
+                text: `🛠️ Usage:\n• Reply to a named function and send .run\n• Or send .run <command_or_function> [args] to preview its handler.\n• Use .run execute <command_name> only when you intend to run it.\n• Send .run help for more info.`
             }, { quoted: message });
             return;
         }
 
-        // ─── Preview the matching bot function from quoted source ───────
+        // Preview the matching bot function from quoted source
         if (quotedCode) {
             const source = quotedCode.toString();
             const functionName = extractFunctionName(source);
@@ -795,7 +595,7 @@ Examples:
             return;
         }
 
-        // ─── Execute command only when explicitly requested ────────────
+        // Execute command only when explicitly requested
         const parts = target.split(/\s+/);
         const commandName = parts[0].replace(/^\./, '').toLowerCase();
         const commandPath = resolveCommandPath(commandName);
@@ -806,17 +606,13 @@ Examples:
             try {
                 commandModule = loadCommandModule(commandPath);
             } catch (loadError) {
-                await sock.sendMessage(chatId, { 
-                    text: `❌ Failed to load command file:\n${loadError?.message || loadError}` 
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: `❌ Failed to load command file:\n${loadError?.message || loadError}` }, { quoted: message });
                 return;
             }
 
             const handler = findHandler(commandModule);
             if (!handler) {
-                await sock.sendMessage(chatId, { 
-                    text: `❌ No runnable handler found in ${commandName}.js` 
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: `❌ No runnable handler found in ${commandName}.js` }, { quoted: message });
                 return;
             }
 
@@ -835,27 +631,19 @@ Examples:
                     } else {
                         response = `✅ Command .${commandName} executed successfully.`;
                     }
-
                     await sock.sendMessage(chatId, { text: response }, { quoted: message });
                 }
             } catch (execError) {
-                await sock.sendMessage(chatId, { 
-                    text: `❌ Command .${commandName} failed:\n${execError?.stack || execError?.message || execError}` 
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: `❌ Command .${commandName} failed:\n${execError?.stack || execError?.message || execError}` }, { quoted: message });
             }
             return;
         }
 
-        // ─── Reject unknown commands instead of evaluating inline code ─
-        await sock.sendMessage(chatId, {
-            text: `❌ Command/function "${commandName}" haikupatikana kwenye commands/.`,
-        }, { quoted: message });
+        await sock.sendMessage(chatId, { text: `❌ Command/function "${commandName}" haikupatikana kwenye commands/.` }, { quoted: message });
 
     } catch (error) {
         console.error('runCommand error:', error);
-        await sock.sendMessage(chatId, { 
-            text: `❌ Run command failed: ${error?.message || error}` 
-        }, { quoted: message });
+        await sock.sendMessage(chatId, { text: `❌ Run command failed: ${error?.message || error}` }, { quoted: message });
     }
 }
 
@@ -872,34 +660,23 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
         }
 
         const input = (rawText || fullText || '').toString();
-
-        // Check for quoted message with code
         const quotedMessage = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-        const quotedCode = quotedMessage?.conversation || 
-                          quotedMessage?.extendedTextMessage?.text || 
-                          quotedMessage?.imageMessage?.caption || 
-                          quotedMessage?.videoMessage?.caption || '';
+        const quotedCode = quotedMessage?.conversation || quotedMessage?.extendedTextMessage?.text || quotedMessage?.imageMessage?.caption || quotedMessage?.videoMessage?.caption || '';
 
         let commandName, sourceCode;
 
-        // If there's a quoted message with code
         if (quotedCode && !input.includes('module.exports')) {
             const nameMatch = input.match(/^\.cmdadd\s+([a-z0-9_\-]+)/i);
             if (!nameMatch) {
-                await sock.sendMessage(chatId, {
-                    text: '🛠️ Usage:\n.cmdadd <command_name> (with quoted code)\nOr\n.cmdadd <command_name> <module_code>'
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: '🛠️ Usage:\n.cmdadd <command_name> (with quoted code)\nOr\n.cmdadd <command_name> <module_code>' }, { quoted: message });
                 return;
             }
             commandName = nameMatch[1];
             sourceCode = quotedCode;
         } else {
-            // Regular mode: parse from text
             const match = input.match(/^\.cmdadd\s+([a-z0-9_\-]+)\s*(.*)$/is);
             if (!match) {
-                await sock.sendMessage(chatId, {
-                    text: '🛠️ Usage:\n.cmdadd <command_name> <module_code>\n\nExample:\n.cmdadd button8 module.exports = { ... }'
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: '🛠️ Usage:\n.cmdadd <command_name> <module_code>\n\nExample:\n.cmdadd button8 module.exports = { ... }' }, { quoted: message });
                 return;
             }
             commandName = match[1].trim();
@@ -907,51 +684,34 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
         }
 
         if (!sourceCode) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ Please provide command source code. You can either type it or reply to a code message.' 
-            }, { quoted: message });
+            await sock.sendMessage(chatId, { text: '❌ Please provide command source code. You can either type it or reply to a code message.' }, { quoted: message });
             return;
         }
 
-        // ─── Save command ──────────────────────────────────────────────
         try {
             const filePath = saveCustomCommand(commandName, sourceCode);
-            
-            // Try to load the command to verify it works
             try {
                 const module = loadCommandModule(filePath);
                 const handler = findHandler(module);
                 if (!handler) {
                     fs.unlinkSync(filePath);
-                    await sock.sendMessage(chatId, { 
-                        text: `❌ Command saved but no valid handler found. File deleted.` 
-                    }, { quoted: message });
+                    await sock.sendMessage(chatId, { text: `❌ Command saved but no valid handler found. File deleted.` }, { quoted: message });
                     return;
                 }
             } catch (loadError) {
                 fs.unlinkSync(filePath);
-                await sock.sendMessage(chatId, { 
-                    text: `❌ Command saved but failed to load:\n${loadError.message}\n\nFile deleted.` 
-                }, { quoted: message });
+                await sock.sendMessage(chatId, { text: `❌ Command saved but failed to load:\n${loadError.message}\n\nFile deleted.` }, { quoted: message });
                 return;
             }
 
-            await sock.sendMessage(chatId, {
-                text: `✅ Custom command saved as .${commandName}\n\nFile: commands/${commandName}.js`
-            }, { quoted: message });
-
-
+            await sock.sendMessage(chatId, { text: `✅ Custom command saved as .${commandName}\n\nFile: commands/${commandName}.js` }, { quoted: message });
         } catch (saveError) {
-            await sock.sendMessage(chatId, { 
-                text: `❌ Failed to save command: ${saveError?.message || saveError}` 
-            }, { quoted: message });
+            await sock.sendMessage(chatId, { text: `❌ Failed to save command: ${saveError?.message || saveError}` }, { quoted: message });
         }
 
     } catch (error) {
         console.error('cmdadd error:', error);
-        await sock.sendMessage(chatId, { 
-            text: `❌ Failed to add custom command: ${error?.message || error}` 
-        }, { quoted: message });
+        await sock.sendMessage(chatId, { text: `❌ Failed to add custom command: ${error?.message || error}` }, { quoted: message });
     }
 }
 
@@ -972,5 +732,11 @@ module.exports = {
     deleteCustomCommand,
     listCustomCommands,
     resolveMessageBuilderPath,
-    COMMANDS_DIR
+    COMMANDS_DIR,
+    // Additional exports for advanced usage
+    previewCommand,
+    previewSourceSnippet,
+    extractFunctionName,
+    isRunnableCodeSnippet,
+    createSnippetSandbox,
 };
