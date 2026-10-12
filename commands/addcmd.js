@@ -285,8 +285,12 @@ function completeCodeIfTruncated(code) {
         }
     }
 
-    // Funga strings ikiwa hazijafungwa
-    if (inString) cleaned += inString;
+    if (inComment) cleaned += '\n';
+    if (inBlockComment) cleaned += '*/';
+    if (inString) {
+        if (escape) cleaned += '\\';
+        cleaned += inString;
+    }
 
     // Funga brackets kwa mpangilio wa nyuma
     while (stack.length > 0) {
@@ -781,17 +785,7 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
     // ─── Smart Code Completion ─────────────────────────────────────
     const wasTruncated = isCodeLikelyTruncated(code);
     const completedCode = completeCodeIfTruncated(code);
-    const isStillTruncated = isCodeLikelyTruncated(completedCode);
-
-    if (wasTruncated && isStillTruncated) {
-        await sock.sendMessage(chatId, {
-            text: `⚠️ *Code inaonekana haijakamilika*\n\n` +
-                  `📊 Code uliyotuma haiwezi ku-run moja kwa moja kwa sababu imekatwa.\n` +
-                  `💡 *Kidokezo:* Tuma code kamili, au tumia \`.cmdadd\` kuhifadhi code ndefu.\n\n` +
-                  `📄 *Code uliyotuma:*\n\`\`\`\n${code.slice(0, 500)}${code.length > 500 ? '\n...' : ''}\n\`\`\``,
-        }, { quoted: message });
-        return;
-    }
+    const completionApplied = completedCode !== code;
 
     const sandbox = createSnippetSandbox(sock, chatId, message, senderId);
     const trackedSocket = createTrackedSocket(sock, sandbox);
@@ -854,9 +848,9 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
         return;
     }
 
-    if (wasTruncated && !isStillTruncated) {
+    if (wasTruncated && completionApplied) {
         await sock.sendMessage(chatId, {
-            text: `🔧 *Code ilikamilishwa kiotomatiki* (ilikuwa imekatwa).`,
+            text: `🔧 *Code imefungwa na kusahihishwa kiotomatiki.*`,
         }, { quoted: message });
     }
 
