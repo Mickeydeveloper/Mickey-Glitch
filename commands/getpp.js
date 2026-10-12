@@ -1,8 +1,15 @@
 async function getppCommand(sock, chatId, message) {
     try {
         const contextInfo = message.message?.extendedTextMessage?.contextInfo;
+        const messageText = message.message?.conversation
+            || message.message?.extendedTextMessage?.text
+            || message.message?.imageMessage?.caption
+            || '';
+        const phoneNumber = messageText.trim().split(/\s+/).slice(1).join('').replace(/\D/g, '');
+        const explicitTarget = phoneNumber ? `${phoneNumber}@s.whatsapp.net` : null;
         const targetJid = contextInfo?.mentionedJid?.[0]
             || contextInfo?.participant
+            || explicitTarget
             || message.key?.participant
             || message.key?.remoteJid
             || chatId;
