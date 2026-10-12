@@ -119,6 +119,23 @@ async function requestChatbotReply(prompt, conversationId) {
     return response.data;
 }
 
+async function repairCodeSnippet(source, errorMessage = '') {
+    const code = String(source || '').slice(0, 12000);
+    if (!code.trim()) return null;
+
+    const prompt = `Repair this JavaScript snippet so it runs in a WhatsApp Baileys bot sandbox. Keep the intended behavior and existing APIs. The available variables may include sock, conn, core, chatId, jid, message, m, senderId, reply, Button, ButtonV2, Carousel, AIRich, Toolkit, and createCtx. Fix syntax errors and obvious TypeErrors only. Return ONLY the corrected JavaScript code, without Markdown fences or explanations.\n\nRuntime error:\n${String(errorMessage).slice(0, 2000)}\n\nSnippet:\n${code}`;
+
+    const response = parseChatbotResponse(await requestChatbotReply(prompt, ''));
+    if (!response) return null;
+
+    const cleaned = response
+        .replace(/^```(?:javascript|js)?\s*/i, '')
+        .replace(/\s*```$/, '')
+        .trim();
+    if (!cleaned || cleaned.length > 16000 || cleaned === code.trim()) return null;
+    return cleaned;
+}
+
 // --- Generate AI Message Structure ---
 function generateAIMessageStructure(text) {
     const msg = {
@@ -359,6 +376,7 @@ module.exports = {
     desc: 'Mickeydady Chatbot - Inajibu kama binadamu!',
     handleChatbotMessage,
     groupChatbotToggleCommand,
+    repairCodeSnippet,
     getHelp,
     relayAIMessage,
     generateAIMessageStructure

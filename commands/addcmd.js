@@ -744,7 +744,14 @@ function createSnippetSandbox(sock, chatId, message, senderId) {
         typeof content === 'string' ? { text: content } : content,
         { quoted: message, ...options }
     );
-    sandbox.__invokeSnippetFunction = (handler) => safeInvokeHandler(handler, sandbox, sandbox.args);
+    sandbox.__invokeSnippetFunction = async (handler) => {
+        if (typeof handler !== 'function') throw new TypeError('Snippet function is not callable');
+        if (handler.length <= 1) {
+            return handler({ ...sandbox, conn: sandbox.conn, chat: chatId, msg: message });
+        }
+        if (handler.length === 2) return handler(sandbox.conn, sandbox.m);
+        return handler(sandbox.conn, chatId, message, sandbox.args, { senderId });
+    };
     sandbox.m = {
         ...message,
         chat: chatId,
@@ -769,8 +776,36 @@ function createSnippetSandbox(sock, chatId, message, senderId) {
     return sandbox;
 }
 
+function prepareSnippetExecution(code) {
+    const snippetFunctionName = extractFunctionName(code);
+    const isFunctionDefinition = snippetFunctionName && (
+        new RegExp(`^\\s*(?:async\\s+)?function\\s+${snippetFunctionName}\\s*\\(`).test(code) ||
+        new RegExp(`^\\s*(?:const|let|var)\\s+${snippetFunctionName}\\s*=\\s*(?:async\\s*)?(?:function\\b|\\([^)]*\\)\\s*=>|[a-zA-Z_$][\\w$]*\\s*=>)`).test(code)
+    );
+    const directMessageCall = /^(?:await\s+)?(?:conn|sock|socket|client|RyuuBotz|core)\.(?:sendMessage|relayMessage)\s*\(/.test(code);
+    const isBlockCode = !directMessageCall && (
+        code.includes('module.exports') ||
+        /^\s*(const|let|var|function|class|import|export)\s/m.test(code) ||
+        (code.split('\n').filter((line) => line.trim()).length > 1 && /[;{}]/.test(code))
+    );
+
+    let wrappedCode;
+    if (isFunctionDefinition) {
+        wrappedCode = `(async () => {\n${code}\nreturn await __invokeSnippetFunction(${snippetFunctionName});\n})()`;
+    } else if (directMessageCall) {
+        const expression = code.replace(/^await\s+/, '').replace(/;\s*$/, '');
+        wrappedCode = `(async () => await (${expression}))()`;
+    } else if (isBlockCode) {
+        wrappedCode = `(async () => {\n${code}\n})()`;
+    } else {
+        wrappedCode = `(async () => {\n    return await (${code});\n})()`;
+    }
+
+    return { wrappedCode, isBlockCode };
+}
+
 /**
- * Preview snippet — inashughulikia code iliyokatwa kwa smart completion.
+ * Run or preview snippets after repairing incomplete delimiters.
  */
 async function runSourceSnippet(sock, chatId, senderId, message, source, previewMode) {
     let code = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
@@ -784,8 +819,8 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
 
     // ─── Smart Code Completion ─────────────────────────────────────
     const wasTruncated = isCodeLikelyTruncated(code);
-    const completedCode = completeCodeIfTruncated(code);
-    const completionApplied = completedCode !== code;
+    let completedCode = completeCodeIfTruncated(code);
+    let completionApplied = completedCode !== code;
 
     const sandbox = createSnippetSandbox(sock, chatId, message, senderId);
     const trackedSocket = createTrackedSocket(sock, sandbox);
@@ -800,31 +835,7 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
     sandbox.namabot = global.namabot || settings.botName || settings.botname || 'Bot';
     sandbox.ownername = global.ownername || settings.botOwner || 'Owner';
 
-    // ─── Amua jinsi ya ku-run ──────────────────────────────────────
-    let wrappedCode;
-    const snippetFunctionName = extractFunctionName(completedCode);
-    const isFunctionDefinition = snippetFunctionName && (
-        new RegExp(`^\\s*(?:async\\s+)?function\\s+${snippetFunctionName}\\s*\\(`).test(completedCode) ||
-        new RegExp(`^\\s*(?:const|let|var)\\s+${snippetFunctionName}\\s*=\\s*(?:async\\s*)?(?:function\\b|\\([^)]*\\)\\s*=>|[a-zA-Z_$][\\w$]*\\s*=>)`).test(completedCode)
-    );
-    const directMessageCall = /^(?:await\s+)?(?:conn|sock|socket|client|RyuuBotz|core)\.(?:sendMessage|relayMessage)\s*\(/.test(completedCode);
-    const isBlockCode = !directMessageCall && (
-        completedCode.includes('module.exports') ||
-        /^\s*(const|let|var|function|class|import|export)\s/m.test(completedCode) ||
-        (completedCode.split('\n').filter(l => l.trim()).length > 1 && /[;{}]/.test(completedCode))
-    );
-
-    if (isFunctionDefinition) {
-        wrappedCode = `(async () => {\n${completedCode}\nreturn await __invokeSnippetFunction(${snippetFunctionName});\n})()`;
-    } else if (directMessageCall) {
-        const expression = completedCode.replace(/^await\s+/, '').replace(/;\s*$/, '');
-        wrappedCode = `(async () => await (${expression}))()`;
-    } else if (isBlockCode) {
-        wrappedCode = `(async () => {\n${completedCode}\n})()`;
-    } else {
-        wrappedCode = `(async () => {\n    return await (${completedCode});\n})()`;
-    }
-
+    const { wrappedCode, isBlockCode } = prepareSnippetExecution(completedCode);
     let result = await executeInSandbox(wrappedCode, sandbox);
 
     if (!result.success && !isBlockCode) {
@@ -835,6 +846,33 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
     if (!result.success && wasTruncated) {
         const originalWrapped = `(async () => {\n${code}\n})()`;
         result = await executeInSandbox(originalWrapped, sandbox);
+    }
+
+    let aiRepaired = false;
+    if (!result.success && !previewMode && !sandbox.__sentMessages.length &&
+        ['SyntaxError', 'TypeError'].includes(result.error?.name)) {
+        try {
+            const { repairCodeSnippet } = require('./chatbot');
+            const repairedSource = await repairCodeSnippet(
+                completedCode,
+                `${result.error?.name}: ${result.error?.message}`
+            );
+            if (repairedSource) {
+                completedCode = completeCodeIfTruncated(repairedSource);
+                completionApplied = completedCode !== code;
+                const repairedExecution = prepareSnippetExecution(completedCode);
+                result = await executeInSandbox(repairedExecution.wrappedCode, sandbox);
+                if (!result.success && !repairedExecution.isBlockCode) {
+                    result = await executeInSandbox(
+                        `(async () => {\n${completedCode}\n})()`,
+                        sandbox
+                    );
+                }
+                aiRepaired = result.success;
+            }
+        } catch (repairError) {
+            console.error('AI snippet repair failed:', repairError?.message || repairError);
+        }
     }
 
     if (!result.success) {
@@ -848,9 +886,11 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
         return;
     }
 
-    if (wasTruncated && completionApplied) {
+    if ((wasTruncated && completionApplied) || aiRepaired) {
         await sock.sendMessage(chatId, {
-            text: `🔧 *Code imefungwa na kusahihishwa kiotomatiki.*`,
+            text: aiRepaired
+                ? `🤖 *AI imerekebisha code na ime-run kikamilifu.*`
+                : `🔧 *Code imefungwa na kusahihishwa kiotomatiki.*`,
         }, { quoted: message });
     }
 
