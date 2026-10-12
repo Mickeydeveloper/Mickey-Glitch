@@ -735,17 +735,43 @@ function createSnippetSandbox(sock, chatId, message, senderId) {
     sandbox.__logs = [];
     sandbox.__sent = false;
     sandbox.__sentMessages = [];
+    sandbox.reply = async (content, options = {}) => sandbox.conn.sendMessage(
+        chatId,
+        typeof content === 'string' ? { text: content } : content,
+        { quoted: message, ...options }
+    );
+    sandbox.__invokeSnippetFunction = (handler) => safeInvokeHandler(handler, sandbox, sandbox.args);
+    sandbox.m = {
+        ...message,
+        chat: chatId,
+        reply: sandbox.reply,
+    };
+
+    try {
+        const mbPath = resolveMessageBuilderPath();
+        const messageBuilder = require(mbPath || '../lib/messageBuilder');
+        Object.assign(sandbox, {
+            Button: messageBuilder.Button,
+            ButtonV2: messageBuilder.ButtonV2,
+            Carousel: messageBuilder.Carousel,
+            AIRich: messageBuilder.AIRich,
+            Toolkit: messageBuilder.Toolkit,
+            createCtx: messageBuilder.createCtx,
+        });
+    } catch (error) {
+        sandbox.__logs.push(`MessageBuilder load failed: ${error.message}`);
+    }
+
     return sandbox;
 }
 
 /**
  * Preview snippet — inashughulikia code iliyokatwa kwa smart completion.
  */
-async function previewSourceSnippet(sock, chatId, senderId, message, source) {
+async function runSourceSnippet(sock, chatId, senderId, message, source, previewMode) {
     let code = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
 
-    // Ondoa `>` au `=>` iliyobaki mwanzoni
-    code = code.replace(/^[>\s]+/, '').trim();
+    code = code.replace(/^\s*(?:=>|>)\s*/, '').trim();
 
     if (!code) {
         await sock.sendMessage(chatId, { text: '❌ Snippet ni tupu.' }, { quoted: message });
@@ -771,28 +797,35 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
     const trackedSocket = createTrackedSocket(sock, sandbox);
     const settings = require('../settings');
 
-    sandbox.previewMode = true;
+    sandbox.previewMode = previewMode;
     sandbox.sock = trackedSocket;
     sandbox.conn = trackedSocket;
     sandbox.core = trackedSocket;
     sandbox.RyuuBotz = trackedSocket;
     sandbox.jid = chatId;
-    sandbox.m = {
-        ...message, chat: chatId,
-        reply: async (text, options = {}) =>
-            trackedSocket.sendMessage(chatId, { text: String(text) }, { quoted: message, ...options }),
-    };
     sandbox.namabot = global.namabot || settings.botName || settings.botname || 'Bot';
     sandbox.ownername = global.ownername || settings.botOwner || 'Owner';
 
     // ─── Amua jinsi ya ku-run ──────────────────────────────────────
     let wrappedCode;
-    const isBlockCode =
+    const snippetFunctionName = extractFunctionName(completedCode);
+    const isFunctionDefinition = snippetFunctionName && (
+        new RegExp(`^\\s*(?:async\\s+)?function\\s+${snippetFunctionName}\\s*\\(`).test(completedCode) ||
+        new RegExp(`^\\s*(?:const|let|var)\\s+${snippetFunctionName}\\s*=\\s*(?:async\\s*)?(?:function\\b|\\([^)]*\\)\\s*=>|[a-zA-Z_$][\\w$]*\\s*=>)`).test(completedCode)
+    );
+    const directMessageCall = /^(?:await\s+)?(?:conn|sock|socket|client|RyuuBotz|core)\.(?:sendMessage|relayMessage)\s*\(/.test(completedCode);
+    const isBlockCode = !directMessageCall && (
         completedCode.includes('module.exports') ||
         /^\s*(const|let|var|function|class|import|export)\s/m.test(completedCode) ||
-        (completedCode.split('\n').filter(l => l.trim()).length > 1 && /[;{}]/.test(completedCode));
+        (completedCode.split('\n').filter(l => l.trim()).length > 1 && /[;{}]/.test(completedCode))
+    );
 
-    if (isBlockCode) {
+    if (isFunctionDefinition) {
+        wrappedCode = `(async () => {\n${completedCode}\nreturn await __invokeSnippetFunction(${snippetFunctionName});\n})()`;
+    } else if (directMessageCall) {
+        const expression = completedCode.replace(/^await\s+/, '').replace(/;\s*$/, '');
+        wrappedCode = `(async () => await (${expression}))()`;
+    } else if (isBlockCode) {
         wrappedCode = `(async () => {\n${completedCode}\n})()`;
     } else {
         wrappedCode = `(async () => {\n    return await (${completedCode});\n})()`;
@@ -812,7 +845,7 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
 
     if (!result.success) {
         await sock.sendMessage(chatId, {
-            text: `❌ *Snippet preview imeshindwa*\n\n` +
+            text: `❌ *Snippet ${previewMode ? 'preview' : 'run'} imeshindwa*\n\n` +
                   `🔧 *Kosa:* ${result.error?.name || 'Error'}\n` +
                   `📝 *Maelezo:* ${result.error?.message || result.error}\n\n` +
                   `💡 *Kidokezo:* Hakikisha code yako imekamilika (imefungwa vizuri) na haina makosa ya syntax.\n\n` +
@@ -827,18 +860,19 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
         }, { quoted: message });
     }
 
-    // ─── Tuma previews ─────────────────────────────────────────────
     if (sandbox.__sentMessages.length) {
-        await sock.sendMessage(chatId, {
-            text: `🔎 *PREVIEW YA SNIPPET* — inafuata 👇`,
-        }, { quoted: message });
+        if (previewMode) {
+            await sock.sendMessage(chatId, {
+                text: `🔎 *PREVIEW YA SNIPPET* — inafuata 👇`,
+            }, { quoted: message });
 
-        for (const entry of sandbox.__sentMessages) {
-            try {
-                await sendPreviewAsBot(sock, chatId, entry.payload, entry.options, message);
-                await new Promise((r) => setTimeout(r, 900));
-            } catch (err) {
-                console.error('Preview send error:', err);
+            for (const entry of sandbox.__sentMessages) {
+                try {
+                    await sendPreviewAsBot(sock, chatId, entry.payload, entry.options, message);
+                    await new Promise((r) => setTimeout(r, 900));
+                } catch (err) {
+                    console.error('Preview send error:', err);
+                }
             }
         }
         return;
@@ -846,10 +880,20 @@ async function previewSourceSnippet(sock, chatId, senderId, message, source) {
 
     const detail = result.result !== undefined
         ? util.inspect(result.result, { depth: 4, colors: false })
-        : result.logs.join('\n') || 'Function ime-run lakini haijaita sendMessage/relayMessage kutoa payload ya preview.';
+        : result.logs.join('\n') || (previewMode
+            ? 'Function ime-run lakini haijaita sendMessage/relayMessage kutoa payload ya preview.'
+            : 'Code ime-run bila kutuma ujumbe.');
     await sock.sendMessage(chatId, {
-        text: `🔎 *PREVIEW YA FUNCTION SNIPPET*\n\n${detail}`,
+        text: `${previewMode ? '🔎 *PREVIEW YA FUNCTION SNIPPET*' : '✅ *SNIPPET IME-RUN*'}\n\n${detail}`,
     }, { quoted: message });
+}
+
+async function previewSourceSnippet(sock, chatId, senderId, message, source) {
+    return runSourceSnippet(sock, chatId, senderId, message, source, true);
+}
+
+async function executeSourceSnippet(sock, chatId, senderId, message, source) {
+    return runSourceSnippet(sock, chatId, senderId, message, source, false);
 }
 
 async function previewCommand(sock, chatId, senderId, message, targetInput) {
@@ -964,23 +1008,30 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         // ─── Help ─────────────────────────────────────────────────
         if (body.match(/^help$/i)) {
             await sock.sendMessage(chatId, {
-                text: `🛠️ Run Command Help:\n\nUsage:\n• .run <command_or_function> [args] - Preview the matching command function\n• Reply to a named function with .run - Preview its matching command function\n• .run execute <command_name> [args] - Execute a custom command\n• .run list - List all custom commands\n• .run delete <command_name> - Delete a custom command\n\nExamples:\n.run button8\n.run preview button8\n.run execute button8\n.run list\n.run delete button8`,
+                text: `🛠️ Run Command Help:\n\nUsage:\n• .run <code> - Run a code snippet now\n• Reply to code with .run - Run the quoted snippet now\n• .run preview <code> - Preview without running the message action\n• .run <command_name> - Preview a custom command\n• .run execute <command_name> - Execute a custom command\n• .run list - List custom commands\n• .run delete <command_name> - Delete a custom command\n\nExamples:\n.run conn.relayMessage(m.chat, payload, {})\n.run preview conn.sendMessage(m.chat, { text: 'Hello' })\n.run execute button8\n.run list\n.run delete button8`,
             }, { quoted: message });
             return;
         }
 
         if (!body && !quotedCode) {
             await sock.sendMessage(chatId, {
-                text: `🛠️ Usage:\n• Reply to a named function and send .run\n• Or send .run <command_or_function> [args] to preview its handler.\n• Use .run execute <command_name> only when you intend to run it.\n• Send .run help for more info.`,
+                text: `🛠️ Usage:\n• Reply to code and send .run to execute it.\n• Or send .run <code> to execute a snippet immediately.\n• Use .run preview <code> to preview without executing it.\n• Use .run execute <command_name> to execute a saved command.\n• Send .run help for more info.`,
             }, { quoted: message });
             return;
         }
 
-        // ─── Quoted code → preview snippet MOJA KWA MOJA ─────────
+        const explicitPreview = body.match(/^preview(?:\s+([\s\S]+))?$/i);
+        const explicitExecute = body.match(/^execute(?:\s+([\s\S]+))?$/i);
+
+        // ─── Quoted code → run snippet moja kwa moja ──────────────
         if (quotedCode) {
             const source = quotedCode.toString().trim();
             if (isRunnableCodeSnippet(source)) {
-                await previewSourceSnippet(sock, chatId, senderId, message, source);
+                if (explicitPreview) {
+                    await previewSourceSnippet(sock, chatId, senderId, message, source);
+                } else {
+                    await executeSourceSnippet(sock, chatId, senderId, message, source);
+                }
                 return;
             }
             const functionName = extractFunctionName(source);
@@ -988,15 +1039,12 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
                 await previewCommand(sock, chatId, senderId, message, functionName);
                 return;
             }
-            await previewSourceSnippet(sock, chatId, senderId, message, source);
+            await executeSourceSnippet(sock, chatId, senderId, message, source);
             return;
         }
 
-        // ─── Parse explicit commands ──────────────────────────────
-        const explicitPreview = body.match(/^preview\s+(.+)$/i);
-        const explicitExecute = body.match(/^execute\s+(.+)$/i);
-
-        let cleanBody = body.replace(/^[>\s]+/, '').trim();
+        const snippetInput = explicitPreview?.[1] || explicitExecute?.[1] || body;
+        let cleanBody = snippetInput.replace(/^\s*(?:=>|>)\s*/, '').trim();
 
         // ─── Detect kama body ni code ─────────────────────────────
         const looksLikeCode = isRunnableCodeSnippet(cleanBody) ||
@@ -1007,7 +1055,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             cleanBody.includes('sock.') ||
             cleanBody.includes('socket.');
 
-        if (looksLikeCode && !explicitPreview && !explicitExecute) {
+        if (looksLikeCode) {
             const firstWord = cleanBody.split(/\s+/)[0].replace(/^\./, '').toLowerCase();
             const cmdPath = resolveCommandPath(firstWord);
 
@@ -1017,7 +1065,11 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
                 return;
             }
 
-            await previewSourceSnippet(sock, chatId, senderId, message, cleanBody);
+            if (explicitPreview) {
+                await previewSourceSnippet(sock, chatId, senderId, message, cleanBody);
+            } else {
+                await executeSourceSnippet(sock, chatId, senderId, message, cleanBody);
+            }
             return;
         }
 
