@@ -13,21 +13,21 @@ module.exports = {
         try {
             const rich = new AIRich(conn);
 
-            rich.addText('test product:');
+            rich.addText(' _My product_');
             rich.addProduct([
                 {
-                    title: 'Txra-md',
+                    title: 'Mickey G;itch',
                     brand: 'Srcrpt',
-                    price: 'USD 1.500.000',
-                    sale_price: 'USD 1.200.000',
-                    product_url: 'https://shop.example.com/nike',
-                    image_url: 'https://picsum.photos/id/10/300/300'
+                    price: 'TZ 45,000',
+                    sale_price: 'TZ 50,000',
+                    product_url: 'https://mickey-pterodacty.vercel.app/',
+                    image_url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/menu.png'
                 },
                 {
-                    title: 'CEO OF TXRA-MD',
-                    brand: 'Ghost King™',
-                    price: 'USD 1.800.000',
-                    image_url: 'https://picsum.photos/id/11/300/300'
+                    title: 'PREMIUM G;ITCH',
+                    brand: 'Premium',
+                    price: '10,000',
+                    image_url: 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy4.jpg'
                 }
             ]);
 

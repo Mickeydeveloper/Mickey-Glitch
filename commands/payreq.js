@@ -1,25 +1,37 @@
-const isAdmin = require('../lib/isAdmin');
-
 /**
  * Payment Request command: Send interactive payment request
  * Usage: .payreq [amount]
  * Example: .payreq 50000
  */
 async function payReqCommand(sock, chatId, senderId, text, message) {
+    let amountValue = 50000;
     try {
-        // Extract amount from text or default to 0
-        const cleanText = (text || '').trim();
-        const amountValue = cleanText && !isNaN(cleanText) ? parseInt(cleanText) : 0;
+        const cleanText = (text || '').trim().replace(/^\.payreq\b/i, '').trim();
+        amountValue = cleanText ? Number(cleanText) : 50000;
+
+        if (!Number.isSafeInteger(amountValue) || amountValue <= 0) {
+            await sock.sendMessage(chatId, {
+                text: 'Tumia: .payreq [kiasi]\nMfano: .payreq 50000'
+            }, { quoted: message });
+            return;
+        }
 
         const params = {
             currency: 'IDR',
             payment_type: 'upr',
             total_amount: { value: amountValue, offset: 100 },
-            reference_id: '4WE1QWVYL6Z',
+            reference_id: `PAYREQ-${Date.now()}`,
             type: 'physical-goods',
-            order: { 
-                status: 'pending', 
-                order_type: 'PAYMENT_REQUEST' 
+            order: {
+                status: 'pending',
+                subtotal: { value: amountValue, offset: 100 },
+                order_type: 'physical-goods',
+                items: [{
+                    retailer_id: 'payment-request',
+                    name: 'Payment request',
+                    amount: { value: amountValue, offset: 100 },
+                    quantity: 1
+                }]
             },
             payment_settings: [
                 {
@@ -51,8 +63,8 @@ async function payReqCommand(sock, chatId, senderId, text, message) {
         // Send payment request interactive message
         await sock.sendMessage(chatId, {
             interactiveMessage: {
-                body: { text: '💰 *Payment Request*' },
-                footer: { text: 'Review detail di bawah' },
+                body: { text: `💰 *Payment Request*\nAmount: IDR ${amountValue.toLocaleString('id-ID')}` },
+                footer: { text: 'Pilih tombol Review and Pay untuk melanjutkan.' },
                 nativeFlowMessage: {
                     messageVersion: 1,
                     buttons: [
@@ -69,7 +81,7 @@ async function payReqCommand(sock, chatId, senderId, text, message) {
         console.error('payReqCommand error:', e && e.message ? e.message : e);
         try {
             await sock.sendMessage(chatId, { 
-                text: '❌ An error occurred while sending payment request.' 
+                text: `❌ Button ya malipo imeshindwa kutumwa.\nKiasi: IDR ${Number.isSafeInteger(amountValue) ? amountValue.toLocaleString('id-ID') : '50.000'}\nDANA / GoPay: +62 8587107433`
             }, { quoted: message });
         } catch (err) {}
     }
