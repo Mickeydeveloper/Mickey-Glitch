@@ -3,10 +3,10 @@
  * Usage: .payreq [amount]
  * Example: .payreq 50000
  */
-async function payReqCommand(sock, chatId, senderId, text, message) {
+async function payReqCommand(sock, chatId, message, args = []) {
     let amountValue = 50000;
     try {
-        const cleanText = (text || '').trim().replace(/^\.payreq\b/i, '').trim();
+        const cleanText = (Array.isArray(args) ? args.join(' ') : String(args || '')).trim();
         amountValue = cleanText ? Number(cleanText) : 50000;
 
         if (!Number.isSafeInteger(amountValue) || amountValue <= 0) {
