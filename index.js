@@ -43,15 +43,47 @@ try {
 // LOGGER - SILENT FOR CLEAN CONSOLE
 // ────────────────────────────────────────────────
 const pinoLogger = pino({ level: 'silent' });
-const originalConsoleLog = console.log.bind(console);
-console.log = (...args) => {
-    const message = args[0];
-    if (typeof message === 'string' && (
-        message.startsWith('Closing open session in favor of incoming prekey bundle') ||
-        message.startsWith('Closing session: SessionEntry')
-    )) return;
-    originalConsoleLog(...args);
-};
+const sensitiveSignalFields = new Set([
+    'currentRatchet',
+    'ephemeralKeyPair',
+    'privKey',
+    'rootKey',
+    'lastRemoteEphemeralKey',
+    'remoteIdentityKey',
+    'pendingPreKey',
+    'baseKey',
+]);
+
+function containsSensitiveSignalData(value, seen = new WeakSet(), depth = 0) {
+    if (typeof value === 'string') {
+        return /currentRatchet|ephemeralKeyPair|privKey|rootKey|lastRemoteEphemeralKey|remoteIdentityKey|pendingPreKey/i.test(value);
+    }
+    if (!value || typeof value !== 'object' || Buffer.isBuffer(value) || depth > 6 || seen.has(value)) return false;
+
+    seen.add(value);
+    const keys = Object.keys(value);
+    if (keys.some((key) => sensitiveSignalFields.has(key))) return true;
+    return keys.some((key) => containsSensitiveSignalData(value[key], seen, depth + 1));
+}
+
+for (const method of ['log', 'info', 'warn', 'error', 'debug', 'dir', 'trace']) {
+    if (typeof console[method] !== 'function') continue;
+
+    const original = console[method].bind(console);
+    console[method] = (...args) => {
+        if (args.some((arg) => containsSensitiveSignalData(arg))) {
+            return original('[SECURITY] Suppressed Signal session-key debug output.');
+        }
+
+        const message = args[0];
+        if (method === 'log' && typeof message === 'string' && (
+            message.startsWith('Closing open session in favor of incoming prekey bundle') ||
+            message.startsWith('Closing session: SessionEntry')
+        )) return;
+
+        return original(...args);
+    };
+}
 
 // --- Global Settings ---
 const _botName = settings.botName || settings.botname || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
@@ -66,11 +98,54 @@ const SESSION_DIR = path.resolve(process.cwd(), 'session');
 const TEMP_DIR = path.resolve(process.cwd(), 'tmp');
 const CACHE_DIR = path.resolve(process.cwd(), 'cache');
 const MEDIA_DIR = path.resolve(process.cwd(), 'media');
+const SESSION_KEY_FILE_PATTERN = /^(?:pre-key|session|sender-key|app-state-sync-key|app-state-sync-version|lid-mapping|device-list|tctoken)-.+\.json$/;
+const SESSION_TEMP_FILE_PATTERN = /\.(?:tmp|temp|bak|old|lock)$/i;
+const SESSION_STALE_ARTIFACT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_CORRUPT_FILE_MIN_AGE_MS = 60 * 60 * 1000;
 
 function ensureDirectories() {
     [SESSION_DIR, TEMP_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     });
+}
+
+function cleanSessionFiles() {
+    try {
+        if (!fs.existsSync(SESSION_DIR)) return;
+
+        const now = Date.now();
+        let cleaned = 0;
+
+        for (const entry of fs.readdirSync(SESSION_DIR, { withFileTypes: true })) {
+            if (!entry.isFile() || entry.name === 'creds.json' || entry.name.startsWith('creds.json.')) continue;
+
+            const filePath = path.join(SESSION_DIR, entry.name);
+
+            try {
+                const age = now - fs.statSync(filePath).mtimeMs;
+                let shouldDelete = SESSION_TEMP_FILE_PATTERN.test(entry.name) && age > SESSION_STALE_ARTIFACT_AGE_MS;
+
+                if (!shouldDelete && SESSION_KEY_FILE_PATTERN.test(entry.name) && age > SESSION_CORRUPT_FILE_MIN_AGE_MS) {
+                    try {
+                        JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                    } catch {
+                        shouldDelete = true;
+                    }
+                }
+
+                if (shouldDelete) {
+                    fs.unlinkSync(filePath);
+                    cleaned++;
+                }
+            } catch (error) {
+                UI.warning(`Could not inspect session file ${entry.name}: ${error.message}`);
+            }
+        }
+
+        if (cleaned > 0) UI.info(`Removed ${cleaned} stale or corrupted session artifact(s); credentials and valid keys were preserved.`);
+    } catch (error) {
+        UI.warning(`Session cleanup skipped: ${error.message}`);
+    }
 }
 
 function autoClean() {
@@ -199,6 +274,7 @@ async function startMickeyBot() {
 
     try {
         ensureDirectories();
+        cleanSessionFiles();
         autoClean();
         
         UI.banner();
@@ -368,14 +444,7 @@ async function startMickeyBot() {
                 
                 if (isDecryptError) {
                     UI.info(`Session error (recoverable): ${errorMessage.substring(0, 40)}...`);
-                    try {
-                        if (fs.existsSync(SESSION_DIR)) {
-                            fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-                            UI.warning('Corrupted WhatsApp session removed. Re-pairing will start fresh.');
-                        }
-                    } catch (cleanupErr) {
-                        UI.warning(`Could not clear broken session: ${cleanupErr.message}`);
-                    }
+                    UI.warning('Session credentials and valid key files were preserved for reconnect.');
                 } else {
                     UI.warning(`Link disrupted: ${errorMessage.substring(0, 50)}`);
                 }
