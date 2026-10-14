@@ -1,26 +1,113 @@
-module.exports = async function button1Command(sock, chatId, msg) {
-    const stickerMessage = {
-        messageContextInfo: {
-            messageAssociation: {
-                associationType: 11,
-                parentMessageKey: msg.key
+const { Buffer } = require('buffer');
+const settings = require('../settings');
+
+async function sendInstagramProfile(sock, chatId, username) {
+    const profilePictureUrl = 'https://cdn.zass.in/ozfiUL0rM9.jpg';
+    const responseData = {
+        sections: [
+            {
+                view_model: {
+                    primitives: [
+                        {
+                            title: settings.botName,
+                            subtitle: settings.botOwner,
+                            secondary_subtitle: '',
+                            image: {
+                                url: profilePictureUrl,
+                                mime_type: 'image/jpeg'
+                            },
+                            entity_id: '123456',
+                            entity_url: 'wa.me/6288246552068',
+                            entity_type: 'WEBSITE',
+                            action_type: 'OPEN_URL',
+                            is_verified: true,
+                            __typename: 'GenAICompactEntityPrimitive'
+                        }
+                    ],
+                    __typename: 'GenAIActionRowLayoutViewModel'
+                }
+            },
+            {
+                view_model: {
+                    primitives: [
+                        {
+                            type: 'HORIZONTAL_LINE',
+                            __typename: 'GenAIDividerPrimitive'
+                        }
+                    ],
+                    __typename: 'GenAIVStackLayoutViewModel'
+                }
+            },
+            {
+                view_model: {
+                    primitives: [
+                        { __typename: 'GenAISpacerPrimitive' },
+                        {
+                            text: '# {{social_entity_1}}See results\0{{/social_entity_1}}    ',
+                            inline_entities: [
+                                {
+                                    key: 'social_entity_1',
+                                    metadata: {
+                                        __typename: 'GenAISocialEntityItem',
+                                        entity_id: username,
+                                        entity_name: username,
+                                        entity_full_name: 'NOT found',
+                                        entity_picture_url: profilePictureUrl,
+                                        entity_url: `https://www.instagram.com/${username}`,
+                                        entity_type: 'IG_PROFILE',
+                                        is_verified: true
+                                    }
+                                }
+                            ],
+                            __typename: 'GenAIMarkdownTextUXPrimitive'
+                        },
+                        { __typename: 'GenAISpacerPrimitive' }
+                    ],
+                    __typename: 'GenAIActionRowLayoutViewModel'
+                }
             }
-        },
-        stickerMessage: {
-            url: 'https://mmg.whatsapp.net/v/t62.15575-24/818766779_1129097639778153_6590267083545743956_n.enc?ccb=11-4&oh=01_Q5Aa5gHNe2HdbLE-cWkJXND2kbQ-dPCK_OUE8yMZftwYLe7BsQ&oe=6ADAC196&_nc_sid=5e03e0&mms3=true',
-            fileSha256: 'Uoa2mnXeustnlPHuKU4SBDRzKn/Tfi7Yn8zDAbYCnos=',
-            fileEncSha256: 'L2lSGKLAk7SXkVhBHuNwy2gyET1OhAcR8O7hTmFx0Ss=',
-            mediaKey: 'rsI+FYArjYdzSdlGH4R6G5OUviYNZmBrFvoAitAlI7U=',
-            mimetype: 'application/was',
-            directPath: '/v/t62.15575-24/818766779_1129097639778153_6590267083545743956_n.enc?ccb=11-4&oh=01_Q5Aa5gHNe2HdbLE-cWkJXND2kbQ-dPCK_OUE8yMZftwYLe7BsQ&oe=6ADAC196&_nc_sid=5e03e0',
-            isLottie: true
-        }
+        ]
     };
 
-    await sock.relayMessage(chatId, stickerMessage, {});
+    return sock.relayMessage(chatId, {
+        botForwardedMessage: {
+            message: {
+                richResponseMessage: {
+                    messageType: 1,
+                    submessages: [],
+                    unifiedResponse: {
+                        data: Buffer.from(JSON.stringify(responseData)).toString('base64')
+                    },
+                    contextInfo: {
+                        isForwarded: true,
+                        forwardOrigin: 4
+                    }
+                }
+            }
+        }
+    }, {});
+}
+
+module.exports = async function button1Command(sock, chatId, msg, args = []) {
+    const username = args[0] || 'ryuu_reinzz';
+    if (!/^[a-zA-Z0-9._]{1,30}$/.test(username)) {
+        await sock.sendMessage(chatId, {
+            text: 'Tumia username halali ya Instagram, mfano: .button1 ryuu_reinzz'
+        }, { quoted: msg });
+        return;
+    }
+
+    try {
+        await sendInstagramProfile(sock, chatId, username);
+    } catch (error) {
+        console.error('[button1] relay failed:', error?.message || error);
+        await sock.sendMessage(chatId, {
+            text: 'Imeshindikana kutuma Instagram profile response.'
+        }, { quoted: msg });
+    }
 };
 
 module.exports.name = 'button1';
-module.exports.description = 'Send the button1 sticker';
+module.exports.description = 'Show an Instagram profile rich response';
 module.exports.category = 'TOOLS';
 module.exports.aliases = [];
