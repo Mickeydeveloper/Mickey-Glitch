@@ -11,7 +11,7 @@ const DEFAULT_CONFIG = Object.freeze({
     forwardNumber: ''
 });
 
-const EMOJI_REACTIONS = ['❤️', '🔥', '😂', '😱', '👍', '🎉', '😍', '💯', '🙏', '😢', '🤔', '😁'];
+const EMOJI_REACTIONS = ['❤️', '❤️‍🔥', '💚'];
 
 let configCache = null;
 const processedStatusIds = new Set();
