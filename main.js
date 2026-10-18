@@ -1620,6 +1620,7 @@ We will process it and send you an update shortly.`
                 commandExecuted = true;
                 break;
             case userMessage === '.getpp' || userMessage.startsWith('.getpp '):
+            case userMessage === '.getpp' || userMessage.startsWith('.getpp '):
             case userMessage === '.ppic' || userMessage.startsWith('.ppic '):
                 await getppCommand(sock, chatId, message);
                 commandExecuted = true;
