@@ -43,47 +43,15 @@ try {
 // LOGGER - SILENT FOR CLEAN CONSOLE
 // ────────────────────────────────────────────────
 const pinoLogger = pino({ level: 'silent' });
-const sensitiveSignalFields = new Set([
-    'currentRatchet',
-    'ephemeralKeyPair',
-    'privKey',
-    'rootKey',
-    'lastRemoteEphemeralKey',
-    'remoteIdentityKey',
-    'pendingPreKey',
-    'baseKey',
-]);
-
-function containsSensitiveSignalData(value, seen = new WeakSet(), depth = 0) {
-    if (typeof value === 'string') {
-        return /currentRatchet|ephemeralKeyPair|privKey|rootKey|lastRemoteEphemeralKey|remoteIdentityKey|pendingPreKey/i.test(value);
-    }
-    if (!value || typeof value !== 'object' || Buffer.isBuffer(value) || depth > 6 || seen.has(value)) return false;
-
-    seen.add(value);
-    const keys = Object.keys(value);
-    if (keys.some((key) => sensitiveSignalFields.has(key))) return true;
-    return keys.some((key) => containsSensitiveSignalData(value[key], seen, depth + 1));
-}
-
-for (const method of ['log', 'info', 'warn', 'error', 'debug', 'dir', 'trace']) {
-    if (typeof console[method] !== 'function') continue;
-
-    const original = console[method].bind(console);
-    console[method] = (...args) => {
-        if (args.some((arg) => containsSensitiveSignalData(arg))) {
-            return original('[SECURITY] Suppressed Signal session-key debug output.');
-        }
-
-        const message = args[0];
-        if (method === 'log' && typeof message === 'string' && (
-            message.startsWith('Closing open session in favor of incoming prekey bundle') ||
-            message.startsWith('Closing session: SessionEntry')
-        )) return;
-
-        return original(...args);
-    };
-}
+const originalConsoleLog = console.log.bind(console);
+console.log = (...args) => {
+    const message = args[0];
+    if (typeof message === 'string' && (
+        message.startsWith('Closing open session in favor of incoming prekey bundle') ||
+        message.startsWith('Closing session: SessionEntry')
+    )) return;
+    originalConsoleLog(...args);
+};
 
 // --- Global Settings ---
 const _botName = settings.botName || settings.botname || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";

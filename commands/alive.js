@@ -1,7 +1,5 @@
 const os = require('os');
-const { performance } = require('perf_hooks');
-const fs = require('fs');
-const path = require('path');
+const settings = require('../settings');
 const { A2UI, sendA2UIWidget } = require('../lib/a2ui');
 
 /**
@@ -22,18 +20,8 @@ const formatUptime = (seconds) => {
     return parts.join(' ');
 };
 
-/**
- * Get bot name from config
- */
 const getBotName = () => {
-    try {
-        const configPath = path.join(__dirname, '..', 'config', 'config.json');
-        if (fs.existsSync(configPath)) {
-            const config = JSON.parse(fs.readFileSync(configPath));
-            return config.botName || '𝐌𝐈𝐂𝐊𝐄𝐘-𝐕𝟑';
-        }
-    } catch (e) {}
-    return '𝐌𝐈𝐂𝐊𝐄𝐘-𝐕𝟑';
+    return settings.botName || settings.botname || global.botName || 'Mickey Glitch';
 };
 
 /**
@@ -43,42 +31,6 @@ const progressBar = (percentage, length = 10) => {
     const filled = Math.round((percentage / 100) * length);
     const empty = length - filled;
     return '█'.repeat(filled) + '░'.repeat(empty);
-};
-
-/**
- * Get system load average
- */
-const getSystemLoad = () => {
-    const loadAvg = os.loadavg();
-    const cpuCount = os.cpus().length;
-    return {
-        '1m': (loadAvg[0] / cpuCount * 100).toFixed(1),
-        '5m': (loadAvg[1] / cpuCount * 100).toFixed(1),
-        '15m': (loadAvg[2] / cpuCount * 100).toFixed(1)
-    };
-};
-
-/**
- * Get network stats
- */
-const getNetworkStats = () => {
-    const networkInterfaces = os.networkInterfaces();
-    let ipAddress = 'N/A';
-    let macAddress = 'N/A';
-
-    for (const interfaceName in networkInterfaces) {
-        const interfaces = networkInterfaces[interfaceName];
-        for (const iface of interfaces) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                ipAddress = iface.address;
-                macAddress = iface.mac;
-                break;
-            }
-        }
-        if (ipAddress !== 'N/A') break;
-    }
-
-    return { ipAddress, macAddress };
 };
 
 /**
@@ -96,11 +48,7 @@ const getFormattedDate = () => {
  * Main command handler
  */
 const aliveCommand = async (sock, chatId, message) => {
-    const startTime = performance.now();
-    console.log('[alive] invoked for', chatId, 'from', message.key?.participant || message.key?.remoteJid);
-
     try {
-        // System Calculations
         const botName = getBotName();
         const formattedDate = getFormattedDate();
 
@@ -112,25 +60,28 @@ const aliveCommand = async (sock, chatId, message) => {
             hour12: true
         });
 
-        const latency = (performance.now() - startTime).toFixed(0);
-        const pingEmoji = latency < 100 ? '🟢' : latency < 200 ? '🟡' : '🔴';
-
-        const totalRam = os.totalmem() / Math.pow(1024, 3);
-        const usedRam = process.memoryUsage().heapUsed / Math.pow(1024, 3);
-        const freeRam = totalRam - usedRam;
+        const totalRam = os.totalmem();
+        const freeRam = os.freemem();
+        const usedRam = totalRam - freeRam;
+        const processRam = process.memoryUsage().rss / Math.pow(1024, 3);
+        const totalRamGb = totalRam / Math.pow(1024, 3);
+        const usedRamGb = usedRam / Math.pow(1024, 3);
+        const freeRamGb = freeRam / Math.pow(1024, 3);
         const ramPercent = ((usedRam / totalRam) * 100).toFixed(1);
         const ramBar = progressBar(parseFloat(ramPercent), 12);
 
-        const cpuModel = os.cpus()[0]?.model.split('@')[0].trim() || 'Generic CPU';
-        const cpuCores = os.cpus().length;
+        const cpus = os.cpus();
+        const cpuModel = cpus[0]?.model?.split('@')[0].trim() || 'Generic CPU';
+        const cpuCores = cpus.length || 1;
 
-        const network = getNetworkStats();
         const uptime = formatUptime(process.uptime());
-        const platform = os.platform() === 'linux' ? '🐧 𝐋𝐢𝐧𝐮𝐱' : os.platform() === 'win32' ? '🪟 𝐖𝐢𝐧𝐝𝐨𝐰𝐬' : '📱 𝐀𝐧𝐝𝐫𝐨𝐢ډ';
-        const arch = os.arch() === 'x64' ? '64-ʙɪᴛ' : os.arch();
-
-        const botStartTime = global.botStartTime || Date.now();
-        const botUptime = formatUptime(Math.floor((Date.now() - botStartTime) / 1000));
+        const platformNames = { linux: 'Linux', win32: 'Windows', darwin: 'macOS' };
+        const platform = platformNames[os.platform()] || os.platform();
+        const arch = os.arch();
+        const botUptime = global.botStartTime
+            ? formatUptime(Math.max(0, Math.floor((Date.now() - global.botStartTime) / 1000)))
+            : uptime;
+        const health = ramPercent < 70 ? '🟢 Status: Healthy' : ramPercent < 85 ? '🟡 Status: Memory use is elevated' : '🔴 Status: High memory use';
 
         const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
 
@@ -140,22 +91,22 @@ const aliveCommand = async (sock, chatId, message) => {
 👤 *Name:* ${message.pushName || 'Guest'}
 📅 *Date:* ${formattedDate}
 🕐 *Time:* ${time} EAT
-⚡ *Ping:* ${latency}ms ${pingEmoji}
+✅ *Status:* Online
 
 *— BOT RUNTIME —*
 🤖 *Bot Uptime:* ${botUptime}
 🖥️ *Server Uptime:* ${uptime}
 
 *— SYSTEM —*
-💾 *RAM:* ${ramPercent}% (${usedRam.toFixed(1)}GB)
+💾 *System RAM:* ${ramPercent}% (${usedRamGb.toFixed(1)} / ${totalRamGb.toFixed(1)}GB)
 📊 ${ramBar}
+🧠 *Bot RAM:* ${processRam.toFixed(2)}GB
 🖥️ *CPU:* ${cpuModel.split(' ').slice(0, 2).join(' ')} (${cpuCores} cores)
-🐧 *OS:* ${platform} (${arch})
-📍 *IP:* \`${network.ipAddress}\`
+💿 *OS:* ${platform} (${arch})
 
 *— HEALTH —*
-${ramPercent < 70 ? '🟢 Status: Perfect' : ramPercent < 85 ? '🟡 Status: Stable' : '🔴 Status: Heavy'}
-💡 *Free:* ${freeRam.toFixed(2)}GB
+${health}
+💡 *Free RAM:* ${freeRamGb.toFixed(2)}GB
 
 _Mickey Glitch Technology™_`;
 
@@ -166,7 +117,7 @@ _Mickey Glitch Technology™_`;
         const statusImage = a2ui.image(imageUrl, { variant: 'header', fit: 'cover' });
         const userSection = a2ui.column([
             a2ui.text('User info', { variant: 'h2' }),
-            a2ui.text(`Name: ${message.pushName || 'Guest'}\nDate: ${formattedDate}\nTime: ${time} EAT\nPing: ${latency}ms ${pingEmoji}`)
+            a2ui.text(`Name: ${message.pushName || 'Guest'}\nDate: ${formattedDate}\nTime: ${time} EAT\nStatus: Online`)
         ]);
         const runtimeSection = a2ui.column([
             a2ui.text('Bot runtime', { variant: 'h2' }),
@@ -174,11 +125,11 @@ _Mickey Glitch Technology™_`;
         ]);
         const systemSection = a2ui.column([
             a2ui.text('System', { variant: 'h2' }),
-            a2ui.text(`RAM: ${ramPercent}% (${usedRam.toFixed(1)}GB)\n${ramBar}\nCPU: ${cpuModel.split(' ').slice(0, 2).join(' ')} (${cpuCores} cores)\nOS: ${platform} (${arch})\nIP: ${network.ipAddress}`)
+            a2ui.text(`System RAM: ${ramPercent}% (${usedRamGb.toFixed(1)} / ${totalRamGb.toFixed(1)}GB)\n${ramBar}\nBot RAM: ${processRam.toFixed(2)}GB\nCPU: ${cpuModel.split(' ').slice(0, 2).join(' ')} (${cpuCores} cores)\nOS: ${platform} (${arch})`)
         ]);
         const healthSection = a2ui.column([
             a2ui.text('Health', { variant: 'h2' }),
-            a2ui.text(`${ramPercent < 70 ? 'Status: Perfect' : ramPercent < 85 ? 'Status: Stable' : 'Status: Heavy'}\nFree RAM: ${freeRam.toFixed(2)}GB`, { variant: 'caption' })
+            a2ui.text(`${health.replace(/[🟢🟡🔴] /u, '')}\nFree RAM: ${freeRamGb.toFixed(2)}GB`, { variant: 'caption' })
         ]);
         a2ui.root([title, statusImage, userSection, runtimeSection, systemSection, healthSection]);
 
@@ -210,7 +161,7 @@ _Mickey Glitch Technology™_`;
         console.error('Critical Error in Alive Command:', error);
         try {
             await sock.sendMessage(chatId, { 
-                text: '❌ *System Error:* Unable to fetch status.\n```' + error.message + '```' 
+                text: '❌ Imeshindikana kupata hali ya mfumo kwa sasa. Tafadhali jaribu tena.'
             }, { quoted: message });
         } catch (e) { }
     }
