@@ -2,8 +2,7 @@ const os = require('os');
 const { performance } = require('perf_hooks');
 const fs = require('fs');
 const path = require('path');
-const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
-const axios = require('axios');
+const { A2UI, sendA2UIWidget } = require('../lib/a2ui');
 
 /**
  * Formats seconds into a human-readable string (d h m s)
@@ -162,89 +161,44 @@ _Mickey Glitch Technology™_`;
 
         const footer = '𝐌𝐢𝐜𝐤𝐞𝐲 𝐆𝐥𝐢𝐭𝐜𝐡 𝐓𝐞𝐜𝐡𝐧𝐨𝐥𝐨𝐠𝐲';
 
-        const fetchBuffer = async (url) => {
-            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
-            return Buffer.from(res.data);
-        };
-
-        async function resizeImg(buffer, width = 300, height = 300) {
-            try {
-                const sharp = require('sharp');
-                return await sharp(buffer).resize(width, height, { fit: 'cover' }).toBuffer();
-            } catch {
-                return buffer;
-            }
-        }
+        const a2ui = new A2UI();
+        const title = a2ui.text(`${botName} Status`, { variant: 'h1' });
+        const statusImage = a2ui.image(imageUrl, { variant: 'header', fit: 'cover' });
+        const userSection = a2ui.column([
+            a2ui.text('User info', { variant: 'h2' }),
+            a2ui.text(`Name: ${message.pushName || 'Guest'}\nDate: ${formattedDate}\nTime: ${time} EAT\nPing: ${latency}ms ${pingEmoji}`)
+        ]);
+        const runtimeSection = a2ui.column([
+            a2ui.text('Bot runtime', { variant: 'h2' }),
+            a2ui.text(`Bot uptime: ${botUptime}\nServer uptime: ${uptime}`)
+        ]);
+        const systemSection = a2ui.column([
+            a2ui.text('System', { variant: 'h2' }),
+            a2ui.text(`RAM: ${ramPercent}% (${usedRam.toFixed(1)}GB)\n${ramBar}\nCPU: ${cpuModel.split(' ').slice(0, 2).join(' ')} (${cpuCores} cores)\nOS: ${platform} (${arch})\nIP: ${network.ipAddress}`)
+        ]);
+        const healthSection = a2ui.column([
+            a2ui.text('Health', { variant: 'h2' }),
+            a2ui.text(`${ramPercent < 70 ? 'Status: Perfect' : ramPercent < 85 ? 'Status: Stable' : 'Status: Heavy'}\nFree RAM: ${freeRam.toFixed(2)}GB`, { variant: 'caption' })
+        ]);
+        a2ui.root([title, statusImage, userSection, runtimeSection, systemSection, healthSection]);
 
         const nativeButtons = [
-            { buttonId: '.menu', buttonText: { displayText: '⦂ Menu' }, type: 1 },
-            { buttonId: '.ping', buttonText: { displayText: '📡 Ping' }, type: 1 },
-            { buttonId: '.owner', buttonText: { displayText: '👑 Owner' }, type: 1 }
+            { name: 'quick_reply', params: { display_text: '⦂ Menu', id: '.menu' } },
+            { name: 'quick_reply', params: { display_text: '📡 Ping', id: '.ping' } },
+            { name: 'quick_reply', params: { display_text: '👑 Owner', id: '.owner' } }
         ];
 
-        const sendNativeButtonV2 = async () => {
-            let thumbnailBuffer = null;
-            if (imageUrl) {
-                try {
-                    const buf = await fetchBuffer(imageUrl);
-                    thumbnailBuffer = await resizeImg(buf, 300, 300);
-                } catch (e) {
-                    console.error('[alive] thumbnail fetch failed', e && e.message ? e.message : e);
-                }
-            }
-
-            const contextInfo = {
-                forwardingScore: 999,
-                isForwarded: true,
-            };
-            const mentionJid = message.key?.participant || message.key?.remoteJid;
-            if (mentionJid) contextInfo.mentionedJid = [mentionJid];
-
-            const msg = generateWAMessageFromContent(chatId, {
-                buttonsMessage: {
-                    contentText: statusMessage,
-                    footerText: footer,
-                    headerType: 6,
-                    locationMessage: {
-                        degreesLatitude: 0,
-                        degreesLongitude: 0,
-                        name: botName,
-                        address: 'Status',
-                        jpegThumbnail: thumbnailBuffer
-                    },
-                    viewOnce: true,
-                    contextInfo,
-                    buttons: nativeButtons
-                }
-            }, { userJid: (sock && sock.user && sock.user.id) || '' });
-
-            await sock.relayMessage(chatId, msg.message, {
-                messageId: msg.key.id,
-                additionalNodes: [
-                    {
-                        tag: 'biz',
-                        attrs: {},
-                        content: [
-                            {
-                                tag: 'interactive',
-                                attrs: { type: 'native_flow', v: '1' },
-                                content: [
-                                    {
-                                        tag: 'native_flow',
-                                        attrs: { v: '9', name: 'mixed' }
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            });
-        };
-
         try {
-            await sendNativeButtonV2();
+            await sendA2UIWidget(sock, chatId, {
+                a2ui,
+                bodyText: '',
+                footer,
+                buttons: nativeButtons,
+                contextInfo: { expiration: 7776000 },
+                quoted: message
+            });
         } catch (e) {
-            console.error('[alive] sendNativeButtonV2 failed:', e && e.message ? e.message : e);
+            console.error('[alive] A2UI send failed:', e && e.message ? e.message : e);
             try {
                 await sock.sendMessage(chatId, { text: statusMessage }, { quoted: message });
             } catch (ee) {
