@@ -1684,8 +1684,8 @@ We will process it and send you an update shortly.`
                 await tiktokCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
-            case userMessage.startsWith('.gpt') || userMessage.startsWith('.gemini'):
-                await aiCommand(sock, chatId, message);
+            case /^\.(ai|gpt|gemini|chatgpt|bot|mickey|boresha)(?:\s|$)/.test(userMessage):
+                await aiCommand.execute(sock, chatId, message, rawText.trim().split(/\s+/).slice(1));
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.aivoice') || userMessage.startsWith('.vai') || userMessage.startsWith('.voicex') || userMessage.startsWith('.voiceai'):
@@ -1898,6 +1898,33 @@ async function handleStatus(sock, messageUpdate) {
         }
     } catch (e) {}
 }
+
+global.executeBotCommandFromAI = async ({ sock, chatId, message, commandText } = {}) => {
+    const commandName = String(commandText || '').trim().split(/\s+/)[0].replace(/^\./, '').toLowerCase();
+    const registeredCommands = global.autoRegisteredCommands;
+
+    if (!sock || !chatId || !message?.key || !/^\.[a-z0-9_-]+(?:\s|$)/i.test(String(commandText || ''))) {
+        throw new TypeError('Invalid AI command execution request');
+    }
+    if (!registeredCommands?.has?.(commandName)) {
+        throw new Error(`Command .${commandName} is not registered`);
+    }
+    if (['ai', 'gpt', 'gemini', 'chatgpt', 'bot', 'mickey', 'boresha'].includes(commandName)) {
+        throw new Error('AI cannot recursively execute itself');
+    }
+
+    const syntheticMessage = {
+        ...message,
+        key: {
+            ...message.key,
+            remoteJid: chatId,
+            id: `AI-${require('crypto').randomUUID()}`,
+        },
+        message: { conversation: String(commandText).trim() },
+    };
+
+    return handleMessages(sock, { messages: [syntheticMessage], type: 'notify' }, false);
+};
 
 module.exports = {
     handleMessages,

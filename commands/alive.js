@@ -142,7 +142,7 @@ _Mickey Glitch Technology™_`;
         try {
             await sendA2UIWidget(sock, chatId, {
                 a2ui,
-                bodyText: '',
+                bodyText: statusMessage,
                 footer,
                 buttons: nativeButtons,
                 contextInfo: { expiration: 7776000 },
