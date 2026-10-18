@@ -3,7 +3,7 @@ const { randomUUID } = require('crypto');
 module.exports = async function button5Command(sock, chatId, msg) {
     try {
         const uuid = randomUUID();
-        const imageUrl = 'https://litter.catbox.moe/cenuvu.jpg';
+        const imageUrl = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
         const widgetData = {
             version: 'v0.9',
             createSurface: {
