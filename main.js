@@ -171,6 +171,7 @@ const updateCommand = require('./commands/update');
 const checkUpdatesCommand = require('./commands/checkupdates');
 const { igsCommand } = require('./commands/igs');
 const { anticallCommand, readState: readAnticallState } = require('./commands/anticall');
+const callCommand = require('./commands/call');
 const { pinCommand, verifyPinCommand, checkPinVerification } = require('./commands/pin');
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
@@ -1083,6 +1084,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ping2':
                 await ping2Command(sock, chatId, message, userMessage.split(/\s+/).slice(1));
+                commandExecuted = true;
+                break;
+            case /^\.call(?:\s|$)/i.test(userMessage):
+                await callCommand(sock, chatId, message, userMessage.trim().split(/\s+/).slice(1));
                 commandExecuted = true;
                 break;
             case userMessage === '.ipleak' || userMessage.startsWith('.ipleak '):
