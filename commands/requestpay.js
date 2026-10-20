@@ -51,7 +51,9 @@ module.exports = {
         }
 
         const maxAmount = Number(process.env.EXTERNAL_PAYMENT_MAX_TZS) || DEFAULT_MAX_AMOUNT;
-        if (/^\d+$/.test(firstArg)) {
+        const normalizedPhone = firstArg.replace(/^\+/, '').replace(/[\s()-]/g, '');
+        const isTanzaniaPhone = /^255\d{9}$/.test(normalizedPhone);
+        if (!isTanzaniaPhone && /^\d+$/.test(firstArg)) {
             const newAmount = Number(firstArg);
             if (!Number.isSafeInteger(newAmount) || newAmount < 1 || newAmount > maxAmount) {
                 return reply(`❌ Kiasi lazima kiwe namba kamili kati ya 1 na ${maxAmount.toLocaleString('en-US')} TZS.`);
@@ -75,7 +77,7 @@ module.exports = {
             return reply(`✅ Kiasi cha malipo kimehifadhiwa: *${newAmount.toLocaleString('en-US')} TZS*.`);
         }
 
-        const customerPhone = firstArg.replace(/^\+/, '').replace(/[\s()-]/g, '');
+        const customerPhone = normalizedPhone;
         if (!/^255\d{9}$/.test(customerPhone)) {
             return reply('❌ Namba si sahihi. Tumia mfumo wa Tanzania, mfano: .requestpay 255612130873');
         }
