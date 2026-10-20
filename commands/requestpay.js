@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const isOwnerOrSudo = require('../lib/isOwner');
+const config = require('../config');
 
 const PAYMENT_API_URL = 'https://mickey-pterodacty.vercel.app/api/integration/payments/checkout';
 const SETTINGS_PATH = path.join(__dirname, '..', 'data', 'requestpay.json');
@@ -50,7 +51,7 @@ module.exports = {
             return reply(`💳 Kiasi cha sasa: *${amount.toLocaleString('en-US')} TZS*\nTuma malipo: .requestpay 255712345678\nBadili kiasi (owner/sudo): .requestpay 1000`);
         }
 
-        const maxAmount = Number(process.env.EXTERNAL_PAYMENT_MAX_TZS) || DEFAULT_MAX_AMOUNT;
+        const maxAmount = config.PAYMENT_CONFIG?.maxTzs || DEFAULT_MAX_AMOUNT;
         const normalizedPhone = firstArg.replace(/^\+/, '').replace(/[\s()-]/g, '');
         const isTanzaniaPhone = /^255\d{9}$/.test(normalizedPhone);
         if (!isTanzaniaPhone && /^\d+$/.test(firstArg)) {
@@ -82,7 +83,7 @@ module.exports = {
             return reply('❌ Namba si sahihi. Tumia mfumo wa Tanzania, mfano: .requestpay 255612130873');
         }
 
-        const apiKey = process.env.EXTERNAL_PAYMENT_API_KEY;
+        const apiKey = config.PAYMENT_CONFIG?.externalApiKey;
         if (!apiKey) {
             return reply('❌ Malipo hayajasanidiwa: EXTERNAL_PAYMENT_API_KEY haipo kwenye server.');
         }

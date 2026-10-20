@@ -42,6 +42,10 @@ global.OPENAI_CONFIG = {
 
 module.exports = {
     WARN_COUNT: 3,
+    PAYMENT_CONFIG: {
+        externalApiKey: process.env.EXTERNAL_PAYMENT_API_KEY || 'mp_live_2889760a1567aa0d8d04028bc5b7339d30f009a43d90612dfeb73cfab4b83f91',
+        maxTzs: Number(process.env.EXTERNAL_PAYMENT_MAX_TZS) || 50000000
+    },
     domain: global.domain,
     plta: global.plta,
     eggs: global.eggs,
