@@ -1,0 +1,21 @@
+diff --git a/node_modules/baileys-caller/src/wasm-engine.js b/node_modules/baileys-caller/src/wasm-engine.js
+--- a/node_modules/baileys-caller/src/wasm-engine.js
++++ b/node_modules/baileys-caller/src/wasm-engine.js
+@@ -44,8 +44,14 @@
+ };
+ const resolveWorkerScriptPath = () => {
+   const compiled = path.join(__dirname, "worker-bootstrap.mjs");
+-  return fs.existsSync(compiled)
+-    ? compiled
+-    : path.join(__dirname, "worker-bootstrap.mts");
++  if (fs.existsSync(compiled)) return compiled;
++
++  const javascript = path.join(__dirname, "worker-bootstrap.js");
++  if (fs.existsSync(javascript)) return javascript;
++
++  const typescript = path.join(__dirname, "worker-bootstrap.mts");
++  if (fs.existsSync(typescript)) return typescript;
++
++  return compiled;
+ };
+ class NodeWorkerMessagePort {
