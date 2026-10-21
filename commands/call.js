@@ -3,7 +3,7 @@ const path = require('path');
 const isOwnerOrSudo = require('../lib/isOwner');
 
 const activeSockets = new WeakSet();
-const CALL_EVENTS = ['CB:call', 'CB:receipt'];
+const voipClients = new WeakMap();
 const DEFAULT_AUDIO_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3';
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024;
 
@@ -75,31 +75,27 @@ async function callCommand(sock, chatId, message, args = []) {
     }
 
     activeSockets.add(sock);
-    let client;
-    const previousListeners = new Map();
 
     try {
         await sock.sendMessage(chatId, {
             text: `Inaanzisha voice call kwenda +${phoneNumber}...`,
         }, { quoted: message });
 
-        const [callerModule, baileys] = await Promise.all([
-            import('baileys-caller'),
-            import('@whiskeysockets/baileys'),
-        ]);
-        const VoipClient = callerModule.VoipClient || callerModule.default?.VoipClient;
-        if (typeof VoipClient !== 'function') {
-            throw new Error('VoipClient haikupatikana kwenye baileys-caller.');
+        if (!sock.user || !sock.ws || sock.ws.readyState !== 1) {
+            throw new Error('Socket ya Baileys haijaunganishwa bado.');
         }
 
-        for (const eventName of CALL_EVENTS) {
-            previousListeners.set(eventName, new Set(sock.ws.listeners(eventName)));
+        let voip = voipClients.get(sock);
+        if (!voip) {
+            const { makeVoipClient } = await import('@whiskeysockets/baileys');
+            if (typeof makeVoipClient !== 'function') {
+                throw new Error('makeVoipClient haipatikani kwenye Baileys hii.');
+            }
+            voip = await makeVoipClient(sock, { debug: false });
+            voipClients.set(sock, voip);
         }
 
-        client = new VoipClient({ sock, baileys });
-        await client.connect();
-
-        const call = await client.call(phoneNumber, {
+        const call = await voip.call(phoneNumber, {
             audioSource,
             durationMs: durationSeconds * 1000,
         });
@@ -126,34 +122,9 @@ async function callCommand(sock, chatId, message, args = []) {
     } catch (error) {
         console.error('[CALL] Voice call failed:', error?.message || error);
         await sock.sendMessage(chatId, {
-            text: `Imeshindikana kupiga voice call: ${error?.message || 'hitilafu isiyojulikana'}. Hakikisha ffmpeg ipo kwenye PATH.`,
+            text: `Imeshindikana kupiga voice call: ${error?.message || 'hitilafu isiyojulikana'}. Hakikisha ffmpeg ipo kwenye PATH na Baileys ina VoIP enabled.`,
         }, { quoted: message });
     } finally {
-        if (client) {
-            for (const eventName of CALL_EVENTS) {
-                const existingListeners = previousListeners.get(eventName) || new Set();
-                for (const listener of sock.ws.listeners(eventName)) {
-                    if (!existingListeners.has(listener)) {
-                        sock.ws.removeListener(eventName, listener);
-                    }
-                }
-            }
-
-            const originalEnd = sock.end;
-            let suppressSocketEnd = true;
-            try {
-                sock.end = function (...endArgs) {
-                    if (suppressSocketEnd) return;
-                    return originalEnd.apply(this, endArgs);
-                };
-                client.disconnect();
-            } catch (error) {
-                console.error('[CALL] Caller cleanup failed:', error?.message || error);
-            } finally {
-                suppressSocketEnd = false;
-                sock.end = originalEnd;
-            }
-        }
         activeSockets.delete(sock);
     }
 }

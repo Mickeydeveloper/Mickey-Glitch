@@ -4,7 +4,6 @@
   "description": "WhatsApp Bot",
   "main": "index.js",
   "scripts": {
-    "postinstall": "patch-package",
     "start": "npm install --legacy-peer-deps && node ./glitch/server.js",
     "start:optimized": "npm install --legacy-peer-deps && node --max-old-space-size=512 --optimize-for-size --gc-interval=100 --max-semi-space-size=128 --expose-gc ./index.js",
     "cleanup": "node cleanup.js",
@@ -27,7 +26,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "baileys-caller": "git+https://github.com/FgsiDev/baileys-caller.git#master",
     "@adiwajshing/keyed-db": "^0.2.4",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@hapi/boom": "^10.0.1",
@@ -60,7 +58,6 @@
     "node-fetch": "^2.7.0",
     "node-id3": "^0.2.3",
     "node-webpmux": "^3.1.0",
-    "patch-package": "^8.0.0",
     "@google/generative-ai": "^0.24.1",
     "adm-zip": "^0.5.11",
     "pdf-parse": "^1.1.1",
