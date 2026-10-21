@@ -111,9 +111,9 @@ async function callCommand(sock, chatId, message, args = []) {
             }
             voip = new VoipManager(sock, {
                 maxConcurrentCalls: 1,
-                maxCallsPerHour: 3,
-                maxCallsPerDay: 8,
-                minIntervalMs: 300000,
+                maxCallsPerHour: 6,
+                maxCallsPerDay: 12,
+                minIntervalMs: 10000,
                 voipLogLevel: 'debug',
             });
             voipManagers.set(sock, voip);
