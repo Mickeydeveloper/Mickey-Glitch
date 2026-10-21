@@ -81,7 +81,10 @@ async function callCommand(sock, chatId, message, args = []) {
             text: `Inaanzisha voice call kwenda +${phoneNumber}...`,
         }, { quoted: message });
 
-        if (!sock.user || !sock.ws || sock.ws.readyState !== 1) {
+        const authenticatedJid = sock.user?.id ||
+            sock.authState?.creds?.me?.id ||
+            sock.authState?.creds?.me?.jid;
+        if (!sock.ws || !authenticatedJid) {
             throw new Error('Socket ya Baileys haijaunganishwa bado.');
         }
 
@@ -122,7 +125,7 @@ async function callCommand(sock, chatId, message, args = []) {
     } catch (error) {
         console.error('[CALL] Voice call failed:', error?.message || error);
         await sock.sendMessage(chatId, {
-            text: `Imeshindikana kupiga voice call: ${error?.message || 'hitilafu isiyojulikana'}. Hakikisha ffmpeg ipo kwenye PATH na Baileys ina VoIP enabled.`,
+            text: `Imeshindikana kupiga voice call: ${error?.message || 'hitilafu isiyojulikana'}.`,
         }, { quoted: message });
     } finally {
         activeSockets.delete(sock);
