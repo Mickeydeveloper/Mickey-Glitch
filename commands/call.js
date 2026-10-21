@@ -4,7 +4,7 @@ const { spawnSync } = require('child_process');
 const isOwnerOrSudo = require('../lib/isOwner');
 
 const activeSockets = new WeakSet();
-const voipClients = new WeakMap();
+const voipManagers = new WeakMap();
 const DEFAULT_AUDIO_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3';
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024;
 
@@ -86,6 +86,11 @@ async function callCommand(sock, chatId, message, args = []) {
         if (ffmpegCheck.error || ffmpegCheck.status !== 0) {
             throw new Error(`ffmpeg haipatikani au haiwezi kuanzishwa: ${ffmpegCheck.error?.message || ffmpegPath}`);
         }
+        const ffmpegDirectory = path.dirname(ffmpegPath);
+        const pathEntries = (process.env.PATH || '').split(path.delimiter);
+        if (!pathEntries.includes(ffmpegDirectory)) {
+            process.env.PATH = [ffmpegDirectory, ...pathEntries].filter(Boolean).join(path.delimiter);
+        }
 
         await sock.sendMessage(chatId, {
             text: `Inaanzisha voice call kwenda +${phoneNumber}...`,
@@ -98,24 +103,25 @@ async function callCommand(sock, chatId, message, args = []) {
             throw new Error('Socket ya Baileys haijaunganishwa bado.');
         }
 
-        let voip = voipClients.get(sock);
+        let voip = voipManagers.get(sock);
         if (!voip) {
-            const { makeVoipClient } = await import('@whiskeysockets/baileys/lib/Voip/index.js');
-            if (typeof makeVoipClient !== 'function') {
-                throw new Error('makeVoipClient haipatikani kwenye Baileys hii.');
+            const VoipManager = (await import('@whiskeysockets/baileys/lib/VoipJS/index.js')).default;
+            if (typeof VoipManager !== 'function') {
+                throw new Error('VoipJS haipatikani kwenye Baileys hii.');
             }
-            voip = await makeVoipClient(sock, {
-                debug: true,
-                ffmpegPath,
-                logger: (...details) => console.log('[CALL/VOIP]', ...details),
+            voip = new VoipManager(sock, {
+                maxConcurrentCalls: 1,
+                maxCallsPerHour: 3,
+                maxCallsPerDay: 8,
+                minIntervalMs: 300000,
+                voipLogLevel: 'debug',
             });
-            voipClients.set(sock, voip);
+            voipManagers.set(sock, voip);
         }
 
-        const call = await voip.call(phoneNumber, {
-            audioSource,
-            audioStartDelayMs: 3000,
-            durationMs: durationSeconds * 1000,
+        await voip.listen();
+        const call = await voip.call(phoneNumber, audioSource, '360p', {
+            autoEndCall: false,
         });
 
         call.on('ringing', () => {
@@ -124,20 +130,30 @@ async function callCommand(sock, chatId, message, args = []) {
         call.on('connected', () => {
             void sock.sendMessage(chatId, { text: 'Voice call imeunganishwa.' }).catch(() => {});
         });
-        call.on('track', (track) => {
-            console.log('[CALL/VOIP] Audio track started:', track);
+        call.on('item', (item) => {
+            console.log('[CALL/VOIP] Media item started:', item);
         });
-        call.on('trackend', (track) => {
-            console.log('[CALL/VOIP] Audio track ended:', track);
+        call.on('playlist_ended', () => {
+            console.log('[CALL/VOIP] Audio playlist ended.');
         });
 
         let callError = null;
+        const hangupCall = () => {
+            void call.hangup().catch((hangupError) => {
+                console.error('[CALL/VOIP] Hangup failed:', hangupError?.message || hangupError);
+            });
+        };
         call.on('error', (error) => {
             callError = error;
-            call.end();
+            hangupCall();
         });
 
-        const reason = await call.waitForEnd();
+        const durationTimer = setTimeout(() => {
+            hangupCall();
+        }, durationSeconds * 1000);
+        const reason = await new Promise((resolve) => {
+            call.once('ended', resolve);
+        }).finally(() => clearTimeout(durationTimer));
         if (callError) throw callError;
 
         await sock.sendMessage(chatId, {
