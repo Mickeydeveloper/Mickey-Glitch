@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const isOwnerOrSudo = require('../lib/isOwner');
 
 const activeSockets = new WeakSet();
@@ -77,6 +78,15 @@ async function callCommand(sock, chatId, message, args = []) {
     activeSockets.add(sock);
 
     try {
+        const ffmpegPath = process.env.FFMPEG_PATH || require('ffmpeg-static') || 'ffmpeg';
+        const ffmpegCheck = spawnSync(ffmpegPath, ['-version'], {
+            stdio: 'ignore',
+            timeout: 5000,
+        });
+        if (ffmpegCheck.error || ffmpegCheck.status !== 0) {
+            throw new Error(`ffmpeg haipatikani au haiwezi kuanzishwa: ${ffmpegCheck.error?.message || ffmpegPath}`);
+        }
+
         await sock.sendMessage(chatId, {
             text: `Inaanzisha voice call kwenda +${phoneNumber}...`,
         }, { quoted: message });
@@ -94,7 +104,7 @@ async function callCommand(sock, chatId, message, args = []) {
             if (typeof makeVoipClient !== 'function') {
                 throw new Error('makeVoipClient haipatikani kwenye Baileys hii.');
             }
-            voip = await makeVoipClient(sock, { debug: false });
+            voip = await makeVoipClient(sock, { debug: false, ffmpegPath });
             voipClients.set(sock, voip);
         }
 
