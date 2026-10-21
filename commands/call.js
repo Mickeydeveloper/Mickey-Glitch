@@ -100,16 +100,21 @@ async function callCommand(sock, chatId, message, args = []) {
 
         let voip = voipClients.get(sock);
         if (!voip) {
-            const { makeVoipClient } = await import('@whiskeysockets/baileys');
+            const { makeVoipClient } = await import('@whiskeysockets/baileys/lib/Voip/index.js');
             if (typeof makeVoipClient !== 'function') {
                 throw new Error('makeVoipClient haipatikani kwenye Baileys hii.');
             }
-            voip = await makeVoipClient(sock, { debug: false, ffmpegPath });
+            voip = await makeVoipClient(sock, {
+                debug: true,
+                ffmpegPath,
+                logger: (...details) => console.log('[CALL/VOIP]', ...details),
+            });
             voipClients.set(sock, voip);
         }
 
         const call = await voip.call(phoneNumber, {
             audioSource,
+            audioStartDelayMs: 3000,
             durationMs: durationSeconds * 1000,
         });
 
@@ -118,6 +123,12 @@ async function callCommand(sock, chatId, message, args = []) {
         });
         call.on('connected', () => {
             void sock.sendMessage(chatId, { text: 'Voice call imeunganishwa.' }).catch(() => {});
+        });
+        call.on('track', (track) => {
+            console.log('[CALL/VOIP] Audio track started:', track);
+        });
+        call.on('trackend', (track) => {
+            console.log('[CALL/VOIP] Audio track ended:', track);
         });
 
         let callError = null;
