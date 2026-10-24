@@ -109,7 +109,12 @@ function mediaKind(url) {
 async function albumCommand(sock, chatId, message, args = []) {
     const senderId = message?.key?.participant || message?.key?.remoteJid;
     const allowed = message?.key?.fromMe || await isOwnerOrSudo(senderId, sock, chatId);
-    if (!allowed) return;
+    if (!allowed) {
+        await sock.sendMessage(chatId, {
+            text: '❌ Album command inapatikana kwa owner/sudo pekee.'
+        }, { quoted: message });
+        return;
+    }
 
     const parts = getArgs(args);
     if (parts.length < 2) {
