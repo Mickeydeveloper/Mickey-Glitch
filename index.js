@@ -44,13 +44,19 @@ try {
 // ────────────────────────────────────────────────
 const pinoLogger = pino({ level: 'silent' });
 const originalConsoleLog = console.log.bind(console);
+const consoleTimestamp = () => chalk.hex('#6E7681')(
+    new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    }).format(new Date())
+);
 console.log = (...args) => {
     const message = args[0];
     if (typeof message === 'string' && (
         message.startsWith('Closing open session in favor of incoming prekey bundle') ||
         message.startsWith('Closing session: SessionEntry')
     )) return;
-    originalConsoleLog(...args);
+
+    originalConsoleLog(chalk.hex('#00D4FF')('  ●'), consoleTimestamp(), ...args);
 };
 
 // --- Global Settings ---
@@ -212,21 +218,21 @@ setInterval(() => {
 // ULTRA-MODERN UI COMPONENTS
 // ────────────────────────────────────────────────
 const UI = {
-    success: (text) => console.log(chalk.greenBright.bold('  ✔ [SUCCESS] ') + chalk.white(text)),
-    error: (text) => console.log(chalk.redBright.bold('  ✖ [ERROR]   ') + chalk.red(text)),
-    warning: (text) => console.log(chalk.yellowBright.bold('  ⚠ [WARNING] ') + chalk.yellow(text)),
-    info: (text) => console.log(chalk.blueBright.bold('  ℹ [INFO]    ') + chalk.dim(text)),
-    divider: () => console.log(chalk.cyan.dim('  ─'.repeat(45))),
+    success: (text) => console.log(chalk.bgGreenBright.black.bold(' SUCCESS ') + chalk.greenBright('  ✔ ') + chalk.white(text)),
+    error: (text) => console.log(chalk.bgRedBright.black.bold(' ERROR ') + chalk.redBright('  ✖ ') + chalk.white(text)),
+    warning: (text) => console.log(chalk.bgYellowBright.black.bold(' WARNING ') + chalk.yellowBright('  ▲ ') + chalk.white(text)),
+    info: (text) => console.log(chalk.bgBlueBright.black.bold(' INFO ') + chalk.cyanBright('  ◆ ') + chalk.hex('#C9D1D9')(text)),
+    divider: () => console.log(chalk.hex('#30363D')('  ─'.repeat(54))),
     banner: () => {
         console.clear();
-        console.log(chalk.cyan.bold(`
-   __  ____      _             ____ _ _ _ _     
-  /  |/  (_)____/ /_____  __  / __/ /_  / __/ /_ v3.1
- / /|_/ / / __/  '_/ __ \\/ / / / _// / / / /_/ __ /
-/_/  /_/_/\\__/_/\\_\\\\____/\\_ / /_/ /_/_/_/\\__/_/ /_/
-                        /___/
-        `));
-        console.log(chalk.dim('       ⚡ Cyberpunk Core Setup Engaged ⚡\n'));
+        console.log(chalk.magentaBright.bold(`
+  ███╗   ███╗██╗ ██████╗██╗  ██╗███████╗██╗   ██╗
+  ████╗ ████║██║██╔════╝██║ ██╔╝██╔════╝╚██╗ ██╔╝
+  ██╔████╔██║██║██║     █████╔╝ █████╗   ╚████╔╝ 
+  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝    ╚██╔╝  
+  ██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗   ██║   
+  ╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝   `));
+        console.log(chalk.hex('#FF4FD8')('  GLITCH ') + chalk.hex('#00D4FF').bold('BOT CORE') + chalk.hex('#6E7681')('  •  SYSTEM v3.1  •  LIVE') + '\n');
     }
 };
 
@@ -248,12 +254,12 @@ async function startMickeyBot() {
         UI.banner();
 
         const { version } = await fetchLatestBaileysVersion();
-        console.log(chalk.cyan('  » Core Engine :'), chalk.green(`Baileys v${version.join('.')}`));
+        console.log(chalk.bgHex('#161B22').hex('#00D4FF').bold(' CORE ') + chalk.hex('#00D4FF')('  Engine'), chalk.greenBright(`Baileys v${version.join('.')}`));
 
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
         
         const hasSession = state.creds?.registered === true;
-        console.log(chalk.cyan('  » Security auth:'), hasSession ? chalk.green('Session Loaded ✓') : chalk.yellow('No active session found'));
+        console.log(chalk.bgHex('#161B22').hex('#7D5FFF').bold(' AUTH ') + chalk.hex('#7D5FFF')('  Security'), hasSession ? chalk.greenBright('Session Loaded ✓') : chalk.yellowBright('Waiting for authentication'));
 
         const msgRetryCounterCache = new NodeCache();
 
@@ -374,15 +380,15 @@ async function startMickeyBot() {
                 isPairing = false;
                 pairingAttempts = 0;
                 
-                console.log('\n' + chalk.bgGreen.black.bold("  🚀 CORE ONLINE  ") + chalk.greenBright(" System successfully synchronized with WhatsApp matrix.\n"));
+                console.log('\n' + chalk.bgGreenBright.black.bold('  CORE ONLINE  ') + chalk.greenBright('  System synchronized with WhatsApp.\n'));
 
                 const myNumber = Mickey.user.id.split(':')[0] + "@s.whatsapp.net";
                 const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
                 
-                console.log(chalk.cyan('  ┌─[ BOT METRICS ]'));
-                console.log(chalk.cyan('  │ ') + chalk.white(`User-ID  : ${chalk.greenBright(Mickey.user.id.split(':')[0])}`));
-                console.log(chalk.cyan('  │ ') + chalk.white(`Memory   : ${chalk.yellow(ramUsage + ' MB')}`));
-                console.log(chalk.cyan('  └────────────────'));
+                console.log(chalk.bgHex('#161B22').hex('#00D4FF').bold(' BOT METRICS '));
+                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('User') + chalk.hex('#30363D')(' ─── ' ) + chalk.greenBright(Mickey.user.id.split(':')[0]));
+                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('Memory') + chalk.hex('#30363D')(' ─ ' ) + chalk.yellowBright(`${ramUsage} MB`));
+                console.log(chalk.hex('#30363D')('  └─ ') + chalk.hex('#C9D1D9')('State') + chalk.hex('#30363D')(' ─── ' ) + chalk.greenBright('LIVE'));
                 UI.divider();
 
                 // Connection notification and auto-join handled by helper
@@ -507,7 +513,7 @@ function startKeepAlive() {
         }
         const status = isWhatsAppRunning ? chalk.greenBright('ONLINE') : chalk.redBright('OFFLINE');
         const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
-        console.log(chalk.dim(`  [MONITOR] Status: [${status}] | Core RAM: ${ram}MB`));
+        console.log(chalk.hex('#30363D')('  ├─') + chalk.bgHex('#161B22').hex('#C9D1D9').bold(' MONITOR ') + chalk.hex('#30363D')('  status ') + status + chalk.hex('#30363D')('  •  RAM ') + chalk.yellowBright(`${ram} MB`));
     }, 5 * 60 * 1000);
 }
 
