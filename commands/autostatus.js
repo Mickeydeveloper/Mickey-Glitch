@@ -11,7 +11,7 @@ const DEFAULT_CONFIG = Object.freeze({
     forwardNumber: ''
 });
 
-const EMOJI_REACTIONS = ['❤️', '❤️‍🔥', '💚'];
+const GREEN_HEART = '💚';
 
 let configCache = null;
 const processedStatusIds = new Set();
@@ -38,8 +38,8 @@ async function saveConfig(updates) {
     }
 }
 
-function getRandomEmoji() {
-    return EMOJI_REACTIONS[Math.floor(Math.random() * EMOJI_REACTIONS.length)];
+function getStatusEmoji() {
+    return GREEN_HEART;
 }
 
 function getStatusType(mimetype) {
@@ -68,13 +68,12 @@ async function autoView(sock, statusKey) {
 
 async function autoLike(sock, statusKey) {
     if (!statusKey?.id || !statusKey?.participant) return;
-    const emoji = getRandomEmoji();
     try {
         await sock.sendMessage('status@broadcast', {
-            react: { text: emoji, key: statusKey }
+            react: { text: getStatusEmoji(), key: statusKey }
         }, { statusJidList: [statusKey.participant] });
     } catch (err) {
-        console.error(`[AutoLike] Failed:`, err.message);
+        console.error('[AutoLike] Failed:', err.message);
     }
 }
 
@@ -161,13 +160,20 @@ async function handleStatusUpdate(sock, ev, botNumber) {
 
     if (!cfg.enabled) return;
 
-    let statusKey = ev.messages?.[0]?.key?.remoteJid === 'status@broadcast' ? ev.messages[0].key : 
-                    (ev.key?.remoteJid === 'status@broadcast' ? ev.key : null);
-    
-    let fullMessage = ev.messages?.[0]?.key?.remoteJid === 'status@broadcast' ? ev.messages[0] : 
-                      (ev.key?.remoteJid === 'status@broadcast' ? ev : null);
+    const liveMessages = Array.isArray(ev.messages) ? ev.messages : ev.message ? [ev.message] : [ev];
 
-    if (!statusKey?.id || processedStatusIds.has(statusKey.id)) return;
+    for (const liveMessage of liveMessages) {
+        const statusKey = liveMessage?.key?.remoteJid === 'status@broadcast'
+            ? liveMessage.key
+            : (liveMessage?.key?.remoteJid ? null : null);
+        const fullMessage = statusKey ? liveMessage : null;
+
+        if (!statusKey?.id || processedStatusIds.has(statusKey.id)) continue;
+        await processStatusMessage(sock, statusKey, fullMessage, botNumber, cfg);
+    }
+}
+
+async function processStatusMessage(sock, statusKey, fullMessage, botNumber, cfg) {
     if (statusKey.participant === sock.user.id) return;
 
     processedStatusIds.add(statusKey.id);
@@ -233,7 +239,7 @@ async function autoStatusCommand(sock, chatId, msg, args = [], botNumber = null)
         let statusText = `📊 *AUTO STATUS*\n`;
         statusText += `• Status: ${cfg.enabled ? '🟢 ON' : '🔴 OFF'}\n`;
         statusText += `• View: ${cfg.viewEnabled ? '✅' : '❌'}\n`;
-        statusText += `• Like: ${cfg.likeEnabled ? '✅' : '❌'}\n`;
+        statusText += `• Like: ${cfg.likeEnabled ? `✅ ${GREEN_HEART}` : '❌'}\n`;
         statusText += `• Forward: ${cfg.forwardEnabled ? '✅' : '❌'}\n`;
         statusText += `• Target: ${target.split('@')[0]}\n\n`;
         statusText += `💡 *Commands:*\n`;
