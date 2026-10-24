@@ -5,8 +5,12 @@ const isOwnerOrSudo = require('../lib/isOwner');
 
 const activeSockets = new WeakSet();
 const voipManagers = new WeakMap();
-const DEFAULT_AUDIO_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/sina%20mda%20nae.mp3';
+const DEFAULT_AUDIO_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/blob/main/ushauri.mp3';
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024;
+const configuredMaxDuration = Number(process.env.CALL_MAX_DURATION_SECONDS || 300);
+const MAX_CALL_DURATION_SECONDS = Number.isInteger(configuredMaxDuration) && configuredMaxDuration >= 10
+    ? configuredMaxDuration
+    : 300;
 
 async function getDefaultAudioPath() {
     const response = await fetch(DEFAULT_AUDIO_URL, {
@@ -41,9 +45,9 @@ async function callCommand(sock, chatId, message, args = []) {
     const durationSeconds = Number(args[1] || 30);
     const audioArgument = args.slice(2).join(' ').trim();
 
-    if (!/^\d{8,15}$/.test(phoneNumber) || !Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 60) {
+    if (!/^\d{8,15}$/.test(phoneNumber) || !Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > MAX_CALL_DURATION_SECONDS) {
         await sock.sendMessage(chatId, {
-            text: 'Matumizi: .call <namba> [sekunde 10-60] [faili.mp3|faili.wav]\nBila faili, audio ya raw GitHub itatumika.\nMfano: .call 255712345678 30',
+            text: `Matumizi: .call <namba> [sekunde 10-${MAX_CALL_DURATION_SECONDS}] [faili.mp3|faili.wav]\nBila faili, audio ya raw GitHub itatumika.\nMfano: .call 255712345678 30`,
         }, { quoted: message });
         return;
     }
