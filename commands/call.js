@@ -5,7 +5,7 @@ const isOwnerOrSudo = require('../lib/isOwner');
 
 const activeSockets = new WeakSet();
 const voipManagers = new WeakMap();
-const DEFAULT_AUDIO_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/ushauri.mp3';
+const DEFAULT_AUDIO_URL = 'https://github.com/Mickeymozy/Mickey-Vip/blob/main/ushauri.mp3';
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024;
 const configuredMaxDuration = Number(process.env.CALL_MAX_DURATION_SECONDS || 300);
 const MAX_CALL_DURATION_SECONDS = Number.isInteger(configuredMaxDuration) && configuredMaxDuration >= 10
