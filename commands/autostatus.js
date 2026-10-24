@@ -4,10 +4,10 @@ const isOwnerOrSudo = require('../lib/isOwner');
 
 const CONFIG_FILE = path.join(__dirname, '../data/autoStatus.json');
 const DEFAULT_CONFIG = Object.freeze({
-    enabled: false,
-    viewEnabled: false,
-    likeEnabled: false,
-    forwardEnabled: false,
+    enabled: true,
+    viewEnabled: true,
+    likeEnabled: true,
+    forwardEnabled: true,
     forwardNumber: ''
 });
 
