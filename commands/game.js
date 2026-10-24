@@ -162,7 +162,12 @@ async function gameCommand(sock, chatId, message, args = []) {
 
     if (arg === 'pong' || arg === 'ttt') {
         const playable = require(arg === 'pong' ? './pong' : './tictac');
-        await playable(sock, chatId, message, []);
+        await playable(sock, chatId, message, []).catch(async (error) => {
+            console.error(`[GAME] ${arg} failed:`, error?.stack || error);
+            await sock.sendMessage(chatId, {
+                text: `${GAMES[arg === 'pong' ? 'pong' : 'ttt']}\n\nImeshindikana kufungua rich game: ${error?.message || 'unknown error'}`
+            }, { quoted: message });
+        });
         return;
     }
 
@@ -189,11 +194,13 @@ async function sendRichHub(sock, chatId, message, key, ids) {
     const payload = buildGamePayload(chatId, ids, `LOFT Arcade - ${key}`);
 
     try {
+        if (typeof sock.relayMessage !== 'function') throw new Error('rich relay is unavailable');
         await sock.relayMessage(payload.jid, payload.message, {});
     } catch (error) {
         console.error('[GAME] rich hub failed:', error?.stack || error);
+        const menu = ids.map((id) => `• ${GAMES[id]}  →  .game ${id === 'ttt' ? 'ttt' : id === 'pong' ? 'pong' : id}`).join('\n');
         await sock.sendMessage(chatId, {
-            text: `${listText('.')}\n\nCould not open rich arcade: ${error?.message || 'unknown error'}`
+            text: `🎮 *LOFT ARCADE - ${key.toUpperCase()}*\n\n${menu}\n\nRich view haijaunganishwa: ${error?.message || 'unknown error'}`
         }, { quoted: message });
     }
 }
