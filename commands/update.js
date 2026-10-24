@@ -150,28 +150,19 @@ function syncExtractedRepo(sourceRoot, targetRoot, ignoreSet) {
     return deletedFiles;
 }
 
-async function updateCommand(sock, chatId, message, zipUrl) {
+async function updateCommand(sock, chatId, message) {
     try {
         const isOwner = message.key.fromMe;
         if (!isOwner) return;
 
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
 
-        // --- 🛡️ FIXED URL LOGIC ---
-        const repoUrl = "https://github.com/Mickeydeveloper/Mickey-Glitch";
+        // Always use the complete repository archive. Custom ZIP selection can
+        // leave missing or stale files behind.
+        const repoUrl = 'https://github.com/Mickeydeveloper/Mickey-Glitch';
+        const updateZipUrl = `${repoUrl}/archive/refs/heads/main.zip`;
 
-        const rawZipUrl = typeof zipUrl === 'string'
-            ? zipUrl
-            : (zipUrl && typeof zipUrl === 'object' && typeof zipUrl.url === 'string'
-                ? zipUrl.url
-                : '');
-
-        const normalizedZipUrl = rawZipUrl.trim();
-        let updateZipUrl = normalizedZipUrl && normalizedZipUrl.startsWith('http')
-            ? normalizedZipUrl
-            : `${repoUrl}/archive/refs/heads/main.zip`;
-
-        console.log(chalk.blue(`[Update] Link inayotumika: ${updateZipUrl}`));
+        console.log(chalk.blue(`[Update] Full repository archive: ${updateZipUrl}`));
 
         const tmpDir = path.join(process.cwd(), 'temp_update');
         const zipPath = path.join(tmpDir, 'bot_update.zip');
@@ -222,7 +213,10 @@ async function updateCommand(sock, chatId, message, zipUrl) {
                     }))
                     : rootFolder;
 
-            const ignore = new Set(['node_modules', 'session', 'auth_info_baileys', '.git', 'settings.js', 'config.js', '.env', 'index.js', 'main.js', 'temp_update']);
+            const ignore = new Set([
+                'node_modules', 'session', 'auth_info_baileys', 'session-state',
+                'temp_update', 'temp', 'tmp', 'cache', 'logs', '.git', '.env'
+            ]);
 
             const deletedFiles = syncExtractedRepo(repoRoot, process.cwd(), ignore);
 

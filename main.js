@@ -1745,11 +1745,7 @@ We will process it and send you an update shortly.`
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.update'):
-                {
-                    const parts = rawText.trim().split(/\s+/);
-                    const zipArg = parts[1] && parts[1].startsWith('http') ? parts[1] : '';
-                    await updateCommand(sock, chatId, message, zipArg);
-                }
+                await updateCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.checkupdates'):
