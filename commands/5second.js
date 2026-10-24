@@ -32,11 +32,20 @@ async function fiveSecondCommand(sock, chatId, message, args = []) {
             disappearingMessagesInChat: enabled ? 5 : 0,
         });
 
-        await sock.sendMessage(chatId, {
+        const confirmation = await sock.sendMessage(chatId, {
             text: enabled
-                ? 'Disappearing messages zimewashwa kwa sekunde 5 kwenye chat hii. Ujumbe mpya wa pande zote mbili utatoweka baada ya muda huo.'
+                ? 'Disappearing messages zimewashwa kwa sekunde 5 kwenye chat hii. Ujumbe mpya wa watumiaji wote utatoweka baada ya muda huo.'
                 : 'Disappearing messages zimezimwa kwenye chat hii.',
         }, { quoted: message });
+
+        if (enabled && confirmation?.key) {
+            const timer = setTimeout(() => {
+                sock.sendMessage(chatId, { delete: confirmation.key }).catch((error) => {
+                    console.error('[5SECOND] Failed to delete confirmation:', error?.message || error);
+                });
+            }, 5000);
+            timer.unref?.();
+        }
     } catch (error) {
         console.error('[5SECOND] Failed to update disappearing messages:', error?.message || error);
         await sock.sendMessage(chatId, {
