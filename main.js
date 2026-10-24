@@ -172,7 +172,6 @@ const checkUpdatesCommand = require('./commands/checkupdates');
 const { igsCommand } = require('./commands/igs');
 const { anticallCommand, readState: readAnticallState } = require('./commands/anticall');
 const callCommand = require('./commands/call');
-const albumCommand = require('./commands/album');
 const { pinCommand, verifyPinCommand, checkPinVerification } = require('./commands/pin');
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
@@ -784,7 +783,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const isAdminCommand = adminCommands.some(cmd => userMessage.startsWith(cmd));
 
         // List of owner commands
-        const ownerCommands = ['.mode', '.autostatus', '.antidelete', '.cleartmp', '.setpp', '.pp', '.clearsession', '.areact', '.autoreact', '.autotyping', '.autorecording', '.autoread', '.pmblocker', '.ipleak', '.album', '.albumsend', '.sendalbum'];
+        const ownerCommands = ['.mode', '.autostatus', '.antidelete', '.cleartmp', '.setpp', '.pp', '.clearsession', '.areact', '.autoreact', '.autotyping', '.autorecording', '.autoread', '.pmblocker', '.ipleak'];
         const isOwnerCommand = ownerCommands.some(cmd => userMessage.startsWith(cmd));
 
         let isSenderAdmin = false;
@@ -1085,14 +1084,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.ping2':
                 await ping2Command(sock, chatId, message, userMessage.split(/\s+/).slice(1));
-                commandExecuted = true;
-                break;
-            case /^\.album(?:\s|$)/i.test(userMessage) || /^\.albumsend(?:\s|$)/i.test(userMessage) || /^\.sendalbum(?:\s|$)/i.test(userMessage):
-                await albumCommand(sock, chatId, message, userMessage.trim().split(/\s+/).slice(1));
-                commandExecuted = true;
-                break;
-            case /^\.album(?:\s|$)/i.test(userMessage) || /^\.albumsend(?:\s|$)/i.test(userMessage) || /^\.sendalbum(?:\s|$)/i.test(userMessage):
-                await albumCommand(sock, chatId, message, userMessage.trim().split(/\s+/).slice(1));
                 commandExecuted = true;
                 break;
             case /^\.call(?:\s|$)/i.test(userMessage):
