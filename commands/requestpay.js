@@ -123,9 +123,20 @@ module.exports = {
             }
             return reply(`✅ Ombi la malipo la *${amount.toLocaleString('en-US')} TZS* limetumwa kwa ${customerPhone}. Hali: pending mpaka API ithibitishe.`);
         } catch (error) {
-            console.error('[requestpay] Error:', error);
+            const status = error.response?.status;
             const apiError = error.response?.data?.message || error.response?.data?.error;
-            await reply(`❌ Imeshindwa kuunda malipo: ${apiError || error.message || 'Hitilafu ya API.'}`);
+
+            if (status === 503) {
+                console.error('[requestpay] Payment API unavailable:', apiError || 'External service configuration missing');
+                return reply('❌ API ya malipo haijasanidiwa kwenye server: merchant webhook URL na secret zinahitaji kusanidiwa kwenye deployment ya mickey-pterodacty.');
+            }
+
+            console.error('[requestpay] Checkout failed:', {
+                status,
+                code: error.code,
+                message: error.message,
+            });
+            return reply(`❌ Imeshindwa kuunda malipo: ${apiError || error.message || 'Hitilafu ya API.'}`);
         }
     },
 };
