@@ -13,7 +13,7 @@ const PAYMENT_CONFIG = {
     palmPesaWebhookSecret: '',
     appUrl: 'https://mickey-pterodacty.vercel.app',
     externalPaymentWebhookUrl: '',
-    credentialEncryptionKey: '',
+    credentialEncryptionKey: 'ba474c584797ba7992eeb4c7fc038857a1973c724a280e0169023cdc3ae6ec66',
     externalPaymentWebhookSecret: 'mp_whsec_31c2e836d2d934553c6796ca11b6e37ad3e0ad134f9d7885a693f3b59ce06bb3'
 };
 
