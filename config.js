@@ -3,7 +3,18 @@ const { decrypt } = require('./lib/encryption');
 
 const PAYMENT_CONFIG = {
     externalApiKey: 'mp_live_068a1a78f8f9570ac3a9df400fb7bf15c616fda7e12a6c3805afac429458fe9d',
-    maxTzs: 50000000
+    maxTzs: 50000000,
+
+    // Replace these placeholders before deploying the payment API.
+    palmPesaApiToken: '',
+    palmPesaUserId: '',
+    palmPesaVendor: '',
+    palmPesaWebhookUrl: 'https://mickey-pterodacty.vercel.app/api/payment/webhook',
+    palmPesaWebhookSecret: '',
+    appUrl: 'https://mickey-pterodacty.vercel.app',
+    externalPaymentWebhookUrl: '',
+    credentialEncryptionKey: '',
+    externalPaymentWebhookSecret: 'mp_whsec_31c2e836d2d934553c6796ca11b6e37ad3e0ad134f9d7885a693f3b59ce06bb3'
 };
 
 global.APIs = {
