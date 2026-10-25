@@ -2,7 +2,7 @@ require('dotenv').config();
 const { decrypt } = require('./lib/encryption');
 
 const PAYMENT_CONFIG = {
-    externalApiKey: 'mp_live_2889760a1567aa0d8d04028bc5b7339d30f009a43d90612dfeb73cfab4b83f91',
+    externalApiKey: 'mp_live_068a1a78f8f9570ac3a9df400fb7bf15c616fda7e12a6c3805afac429458fe9d',
     maxTzs: 50000000
 };
 

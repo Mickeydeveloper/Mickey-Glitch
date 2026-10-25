@@ -85,7 +85,7 @@ module.exports = {
 
         const apiKey = config.PAYMENT_CONFIG?.externalApiKey;
         if (!apiKey) {
-            return reply('❌ Malipo hayajasanidiwa: EXTERNAL_PAYMENT_API_KEY haipo kwenye server.');
+            return reply('❌ Malipo hayajasanidiwa: EXTERNAL_PAYMENT_API_KEY haipo kwenye config.js.');
         }
 
         try {
