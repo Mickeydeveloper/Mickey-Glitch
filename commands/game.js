@@ -424,7 +424,6 @@ async function gameCommand(sock, chatId, message, args = []) {
     return sendGameReply(sock, chatId, message, response, session.kind);
 }
 
-gameCommand.name = 'game';
 gameCommand.category = 'fun';
 gameCommand.description = 'Play chat-based games';
 gameCommand.aliases = [...GAME_ALIASES.keys()];
