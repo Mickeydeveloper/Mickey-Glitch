@@ -103,6 +103,7 @@ const warningsCommand = require('./commands/warnings');
 const ttsCommand = require('./commands/tts');
 const { incrementMessageCount, topMembers } = require('./commands/topmembers');
 const ownerCommand = require('./commands/owner');
+const gameCommand = require('./commands/game');
 const deleteCommand = require('./commands/delete');
 const { handleAntilinkCommand, handleLinkDetection } = require('./commands/antilink');
 const { handleAntitagCommand, handleTagDetection } = require('./commands/antitag');
@@ -831,7 +832,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const customCommandHandler = getCustomCommandHandler(userMessage);
         // --- Coin consumption: charge 10 coins per command for non-owner users ---
         try {
-            const exemptCommands = ['.pin', '.balance', '.coin', '.setcoin', '.menu', '.help'];
+            const exemptCommands = [
+                '.pin', '.balance', '.coin', '.setcoin', '.menu', '.help',
+                '.game', '.dino', '.dinojump', '.runner', '.slot', '.jackpot', '.777',
+                '.snake', '.ular', '.snakegame', '.tictac', '.tictactoe', '.ttt', '.xoxo',
+                '.brick', '.breakout', '.bricks', '.pong', '.ponggame', '.tenis', '.pingpong',
+                '.shooting', '.shoot',
+            ];
             const isExempt = exemptCommands.some(cmd => userMessage.startsWith(cmd));
             if (coins.isEnabled() && userMessage.startsWith('.') && !isExempt && !message.key.fromMe && !senderIsOwnerOrSudo) {
                 const ok = coins.consumeForCommand(chatId, senderId, 10);
@@ -939,6 +946,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         switch (true) {
+            case /^\.(game|dino|dinojump|runner|slot|jackpot|777|snake|ular|snakegame|tictac|tictactoe|ttt|xoxo|brick|breakout|bricks|pong|ponggame|tenis|pingpong|shooting|shoot)(?:\s|$)/i.test(userMessage):
+                await gameCommand(sock, chatId, message, userMessage.trim().split(/\s+/).slice(1));
+                commandExecuted = true;
+                break;
             case userMessage === '.addmeta':
                 await addMetaAI(sock, chatId, senderId, message);
                 commandExecuted = true;
