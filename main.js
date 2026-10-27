@@ -834,10 +834,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
         try {
             const exemptCommands = [
                 '.pin', '.balance', '.coin', '.setcoin', '.menu', '.help',
-                '.game', '.dino', '.dinojump', '.runner', '.slot', '.jackpot', '.777',
-                '.snake', '.ular', '.snakegame', '.tictac', '.tictactoe', '.ttt', '.xoxo',
-                '.brick', '.breakout', '.bricks', '.pong', '.ponggame', '.tenis', '.pingpong',
-                '.shooting', '.shoot',
+                '.game', '.arcade', '.minigames', '.gamehub',
+                '.dino', '.dinojump', '.runner', '.snake', '.ular', '.snakegame', '.tictac', '.tictactoe', '.ttt', '.xoxo',
+                '.doom', '.2048', '.flappy', '.slot', '.jackpot', '.777', '.brick', '.breakout', '.bricks',
+                '.pong', '.ponggame', '.tenis', '.pingpong', '.shooter', '.shooting', '.shoot', '.stack', '.whack',
+                '.memory', '.mines', '.connect4', '.simon', '.lights', '.reflex',
             ];
             const isExempt = exemptCommands.some(cmd => userMessage.startsWith(cmd));
             if (coins.isEnabled() && userMessage.startsWith('.') && !isExempt && !message.key.fromMe && !senderIsOwnerOrSudo) {
@@ -946,7 +947,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         switch (true) {
-            case /^\.(game|dino|dinojump|runner|slot|jackpot|777|snake|ular|snakegame|tictac|tictactoe|ttt|xoxo|brick|breakout|bricks|pong|ponggame|tenis|pingpong|shooting|shoot)(?:\s|$)/i.test(userMessage):
+            case /^\.(game|arcade|minigames|gamehub|dino|dinojump|runner|slot|jackpot|777|snake|ular|snakegame|tictac|tictactoe|ttt|xoxo|doom|2048|flappy|brick|breakout|bricks|pong|ponggame|tenis|pingpong|shooter|shooting|shoot|stack|whack|memory|mines|connect4|simon|lights|reflex)(?:\s|$)/i.test(userMessage):
                 await gameCommand(sock, chatId, message, userMessage.trim().split(/\s+/).slice(1));
                 commandExecuted = true;
                 break;
