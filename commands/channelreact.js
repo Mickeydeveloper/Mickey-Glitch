@@ -90,19 +90,23 @@ async function reactViaApi(ctx, target, emojis, count) {
     }
 
     const data = result?.data || {};
-    if (result?.success !== false && data.ok !== false && response.status >= 200 && response.status < 300) {
+    const explicitlyAccepted = result?.success === true || data.ok === true;
+    if (explicitlyAccepted && response.status >= 200 && response.status < 300) {
         return ctx.reply(
-            '✅ *Reactions queued*\n\n' +
+            '✅ *API accepted the request*\n\n' +
             (data.message ? `📝 ${data.message}\n` : '') +
             `😀 ${data.emojis || emojis.join(', ')}\n` +
             (count ? `🔢 Requested: ${formattedCount}\n` : '') +
             (data.task_id ? `🆔 ${data.task_id}\n` : '') +
-            '\n_Queued: they appear on the post shortly, not instantly._'
+            '\n_This confirms queue acceptance only, not that reactions were delivered._'
         );
     }
 
     const reason = data.message || result?.message ||
-        (typeof result?.error === 'string' ? result.error : result?.error?.message) || `HTTP ${response.status}`;
+        (typeof result?.error === 'string' ? result.error : result?.error?.message) ||
+        (response.status >= 200 && response.status < 300
+            ? 'The API did not confirm that the request was accepted.'
+            : `HTTP ${response.status}`);
     return ctx.reply(`❌ The reaction API refused: ${String(reason).slice(0, 200)}`);
 }
 
