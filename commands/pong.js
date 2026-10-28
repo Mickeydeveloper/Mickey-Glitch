@@ -24,7 +24,8 @@ const pongHtml = `
     position: relative; width: 100%; border-radius: 14px; overflow: hidden;
     border: 2px solid rgba(255,255,255,.09); background: linear-gradient(180deg, #111827, #030712);
   }
-  #pongCanvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+  #pongCanvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; touch-action: none; }
+  .pong-status { margin-top: 8px; text-align: center; color: rgba(255,255,255,.65); font-size: 12px; }
   .pong-overlay {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column;
     background: rgba(0,0,0,.38); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
@@ -62,7 +63,7 @@ const pongHtml = `
     <canvas id="pongCanvas" width="640" height="360"></canvas>
     <div class="pong-overlay" id="pongOverlay">
       <h3>READY?</h3>
-      <p>W / S or ↑ / ↓ to play</p>
+      <p>Drag to move · First to 5 wins</p>
       <button class="pong-btn" id="startBtn">START</button>
     </div>
   </div>
@@ -71,6 +72,7 @@ const pongHtml = `
     <button class="pong-pad-btn" data-dir="up">↑ Move</button>
     <button class="pong-pad-btn" data-dir="down">↓ Move</button>
   </div>
+  <div class="pong-status" id="pongStatus">Drag the paddle or use the controls</div>
 </div>
 
 <script>
@@ -81,6 +83,7 @@ const pongHtml = `
   const startBtn = document.getElementById('startBtn');
   const leftScoreEl = document.getElementById('leftScore');
   const rightScoreEl = document.getElementById('rightScore');
+  const statusEl = document.getElementById('pongStatus');
   const padButtons = document.querySelectorAll('.pong-pad-btn');
 
   const paddleWidth = 12;
@@ -98,6 +101,7 @@ const pongHtml = `
     ballVx: 5,
     ballVy: 2.3,
     started: false,
+    over: false,
     keys: { up: false, down: false }
   };
 
@@ -120,9 +124,43 @@ const pongHtml = `
   }
 
   function startGame() {
+    if (game.over) {
+      game.leftScore = 0;
+      game.rightScore = 0;
+      game.over = false;
+      updateScore();
+      overlay.querySelector('h3').textContent = 'READY?';
+      overlay.querySelector('p').textContent = 'Drag to move · First to 5 wins';
+      startBtn.textContent = 'START';
+    }
     game.started = true;
     overlay.classList.add('hidden');
     resetBall(Math.random() < 0.5 ? -1 : 1);
+  }
+
+  function awardPoint(playerScored) {
+    if (playerScored) game.leftScore += 1;
+    else game.rightScore += 1;
+    updateScore();
+
+    if (game.leftScore === 5 || game.rightScore === 5) {
+      game.started = false;
+      game.over = true;
+      overlay.querySelector('h3').textContent = game.leftScore === 5 ? 'YOU WIN!' : 'CPU WINS';
+      overlay.querySelector('p').textContent = game.leftScore + ' - ' + game.rightScore + ' · First to 5';
+      startBtn.textContent = 'PLAY AGAIN';
+      overlay.classList.remove('hidden');
+      statusEl.textContent = 'Match complete';
+      return;
+    }
+
+    resetBall(playerScored ? -1 : 1);
+  }
+
+  function movePaddleToPointer(event) {
+    const rect = canvas.getBoundingClientRect();
+    const pointerY = (event.clientY - rect.top) * canvas.height / rect.height;
+    game.leftY = clamp(pointerY - paddleHeight / 2, 0, canvas.height - paddleHeight);
   }
 
   function moveLeftPaddle(dir) {
@@ -177,15 +215,11 @@ const pongHtml = `
     }
 
     if (game.ballX < -20) {
-      game.rightScore += 1;
-      updateScore();
-      resetBall(1);
+      awardPoint(false);
     }
 
     if (game.ballX > canvas.width + 20) {
-      game.leftScore += 1;
-      updateScore();
-      resetBall(-1);
+      awardPoint(true);
     }
   }
 
@@ -231,6 +265,18 @@ const pongHtml = `
 
   document.addEventListener('keydown', (event) => onKeyChange(event, true));
   document.addEventListener('keyup', (event) => onKeyChange(event, false));
+
+  canvas.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    if (!game.started && !game.over) startGame();
+    if (game.started) {
+      canvas.setPointerCapture(event.pointerId);
+      movePaddleToPointer(event);
+    }
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (game.started && event.buttons) movePaddleToPointer(event);
+  });
 
   padButtons.forEach((button) => {
     button.addEventListener('pointerdown', (event) => {
