@@ -1,10 +1,10 @@
 /**
- * addcmd.js - Powerful Command Manager (Full Fixed Version with Smart Completion)
+ * addcmd.js - Powerful Command Manager (Full Fixed & Enhanced Version)
  * Features:
  *   - Add, Run, List, Delete custom commands
  *   - Live Preview as Bot Message (buttons, image, interactive, n.k.)
- *   - Smart Code Completion — inaongeza `)`, `}` zinazokosekana
- *   - Sandbox execution for snippets and commands
+ *   - Smart Code Completion — inaongeza `)`, `}` na template literals sahihi
+ *   - Sandbox execution with security checks and syntax validation
  *   - Handles relayMessage, sendMessage, requestPaymentMessage, interactiveMessage, etc.
  * Usage: .cmdadd <name> <code> | .run <name> | .run preview <name> | .run execute <name>
  */
@@ -169,227 +169,9 @@ function deleteCustomCommand(commandName) {
     return true;
 }
 
-function saveCustomCommand(commandName, sourceCode) {
-    const filePath = path.join(COMMANDS_DIR, `${commandName}.js`);
-
-    if (!/^[a-z0-9_\-]+$/i.test(commandName)) {
-        throw new Error('Invalid command name. Use only letters, numbers, underscore, and hyphen.');
-    }
-    if (fs.existsSync(filePath) && !isGeneratedCommandFile(filePath)) {
-        throw new Error(`Command "${commandName}" already exists as a built-in command and cannot be overwritten.`);
-    }
-
-    let cleaned = String(sourceCode || '')
-        .replace(/^```(?:js|javascript)?\s*/i, '')
-        .replace(/```\s*$/i, '')
-        .trim();
-
-    if (!cleaned) throw new Error('Command source is empty');
-
-    // Smart completion ya code iliyokatwa
-    cleaned = completeCodeIfTruncated(cleaned);
-
-    cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
-    cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi, "require('../lib/messageBuilder')");
-    cleaned = cleaned.replace(/require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
-
-    const symbolNames = ['Button', 'ButtonV2', 'Carousel', 'AIRich', 'Toolkit', 'createCtx'];
-    const hasMessageBuilderRequire = /messageBuilder/.test(cleaned);
-    const hasSymbol = symbolNames.some((s) => new RegExp('\\b' + s + '\\b').test(cleaned));
-    const header = `${GENERATED_MARKER}\nconst { Button, ButtonV2, Carousel, AIRich, Toolkit, createCtx } = require('../lib/messageBuilder');\n\n`;
-
-    const isDirectFunction =
-        /^async\s*\(/.test(cleaned) ||
-        /^async\s+[A-Za-z0-9_$]+\s*\(/.test(cleaned) ||
-        /^function\s*/.test(cleaned) ||
-        /^\(.*\)\s*=>/.test(cleaned) ||
-        /^async\s*\(.*\)\s*=>/.test(cleaned);
-    const isObjectExport = /module\.exports\s*=\s*\{/.test(cleaned) || /exports\.[A-Za-z0-9_$]+\s*=/.test(cleaned);
-    const hasModuleExports = cleaned.includes('module.exports');
-
-    if (!hasModuleExports && !isObjectExport) {
-        if (isDirectFunction) {
-            cleaned = `module.exports = ${cleaned};`;
-        } else {
-            cleaned = `module.exports = {\n    code: async (sock, chatId, message, args = [], options = {}) => {\n        ${cleaned}\n    },\n    name: '${commandName}',\n    description: 'Generated command',\n    category: 'UTILITY'\n};`;
-        }
-    }
-
-    if (/module\.exports\s*=\s*async\s+function/.test(cleaned) || /module\.exports\s*=\s*\(?\s*\(?[^)]*\)\s*=>/.test(cleaned)) {
-        cleaned = cleaned.replace(
-            /module\.exports\s*=\s*/,
-            "module.exports = async function generatedCommand(sock, chatId, message, args = [], options = {}) {\n    return (async () => {\n    "
-        );
-        cleaned += '\n    })();\n};\n';
-    }
-
-    const finalSource = `${(!hasMessageBuilderRequire && hasSymbol) || !hasMessageBuilderRequire ? header : ''}${cleaned}\n`;
-    fs.writeFileSync(filePath, finalSource, 'utf8');
-    registerGeneratedCommand(commandName, filePath);
-    return filePath;
-}
-
 // ─── ──────────────────────────────────────────────────────────────────────
-// 4. SMART CODE COMPLETION
+// 4. IMPROVED FUNCTIONS (formatPreviewPayload, completeCodeIfTruncated, saveCustomCommand, sendPreviewAsBot)
 // ─── ──────────────────────────────────────────────────────────────────────
-
-/**
- * Kamilisha code iliyokatwa — inaongeza `)`, `}`, `]` zinazokosekana.
- */
-function completeCodeIfTruncated(code) {
-    if (!code) return code;
-    let cleaned = String(code).trim();
-
-    // Ondoa alama za WhatsApp truncation
-    cleaned = cleaned.replace(/\.\.\.\s*Read\s*more\s*$/i, '');
-    cleaned = cleaned.replace(/…\s*Read\s*more\s*$/i, '');
-    cleaned = cleaned.replace(/\.\.\.\s*$/g, '');
-
-    // Hesabu brackets kwa kuzingatia strings na comments
-    const stack = [];
-    let inString = null;
-    let inComment = false;
-    let inBlockComment = false;
-    let escape = false;
-
-    for (let i = 0; i < cleaned.length; i++) {
-        const char = cleaned[i];
-        const next = cleaned[i + 1] || '';
-
-        if (escape) { escape = false; continue; }
-        if (char === '\\') { escape = true; continue; }
-
-        if (!inString && !inBlockComment && char === '/' && next === '/') {
-            inComment = true; continue;
-        }
-        if (inComment && char === '\n') { inComment = false; continue; }
-        if (!inString && !inComment && char === '/' && next === '*') {
-            inBlockComment = true; i++; continue;
-        }
-        if (inBlockComment && char === '*' && next === '/') {
-            inBlockComment = false; i++; continue;
-        }
-        if (inComment || inBlockComment) continue;
-
-        if (!inString && (char === '"' || char === "'" || char === '`')) {
-            inString = char; continue;
-        }
-        if (inString && char === inString) { inString = null; continue; }
-        if (inString) continue;
-
-        if (char === '(' || char === '{' || char === '[') {
-            stack.push(char);
-        } else if (char === ')' || char === '}' || char === ']') {
-            const open = char === ')' ? '(' : char === '}' ? '{' : '[';
-            if (stack[stack.length - 1] === open) stack.pop();
-        }
-    }
-
-    if (inComment) cleaned += '\n';
-    if (inBlockComment) cleaned += '*/';
-    if (inString) {
-        if (escape) cleaned += '\\';
-        cleaned += inString;
-    }
-
-    // Funga brackets kwa mpangilio wa nyuma
-    while (stack.length > 0) {
-        const open = stack.pop();
-        if (open === '(') cleaned += ')';
-        else if (open === '{') cleaned += '}';
-        else if (open === '[') cleaned += ']';
-    }
-
-    return cleaned.trim();
-}
-
-/**
- * Angalia kama code inaonekana haijakamilika.
- */
-function isCodeLikelyTruncated(code) {
-    if (!code) return false;
-    const s = String(code).trim();
-
-    // Alama za truncation
-    if (/\.\.\.\s*$/.test(s) || /…\s*$/.test(s) || /Read\s*more\s*$/i.test(s)) return true;
-
-    // Hesabu brackets
-    const openParen = (s.match(/\(/g) || []).length;
-    const closeParen = (s.match(/\)/g) || []).length;
-    const openBrace = (s.match(/\{/g) || []).length;
-    const closeBrace = (s.match(/\}/g) || []).length;
-    const openBracket = (s.match(/\[/g) || []).length;
-    const closeBracket = (s.match(/\]/g) || []).length;
-
-    if (openParen !== closeParen || openBrace !== closeBrace || openBracket !== closeBracket) return true;
-
-    // Kama inaishia na operator au comma
-    if (/[,\+\-\*\/\=\&\|\?]\s*$/.test(s)) return true;
-
-    return false;
-}
-
-// ─── ──────────────────────────────────────────────────────────────────────
-// 5. PREVIEW AS BOT MESSAGE
-// ─── ──────────────────────────────────────────────────────────────────────
-
-async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMessage = null) {
-    try {
-        if (!payload) {
-            await sock.sendMessage(chatId, {
-                text: `${PREVIEW_TAG}⚠️ _Payload tupu._`,
-            }, { quoted: originalMessage });
-            return { success: false };
-        }
-
-        if (typeof payload === 'string') {
-            await sock.sendMessage(chatId, {
-                text: `${PREVIEW_TAG}📝 *Text Message:*\n\n${payload}`,
-            }, { quoted: originalMessage });
-            return { success: true, method: 'text' };
-        }
-
-        const relayKeys = [
-            'buttonsMessage', 'viewOnceMessage', 'viewOnceMessageV2',
-            'interactiveMessage', 'documentWithCaptionMessage', 'ephemeralMessage',
-            'requestPaymentMessage', 'templateMessage', 'listMessage',
-            'productMessage', 'orderMessage', 'invoiceMessage',
-        ];
-        const isRelay = relayKeys.some((k) => payload[k]);
-
-        if (payload.text && typeof payload.text === 'string' && !payload.text.includes('PREVIEW MODE')) {
-            payload.text = `${PREVIEW_TAG}${payload.text}`;
-        } else if (payload.caption && typeof payload.caption === 'string' && !payload.caption.includes('PREVIEW MODE')) {
-            payload.caption = `${PREVIEW_TAG}${payload.caption}`;
-        }
-
-        try {
-            await sock.sendMessage(chatId, payload, { quoted: originalMessage, ...options });
-            return { success: true, method: 'sendMessage' };
-        } catch (sendError) {
-            if (isRelay && typeof sock.relayMessage === 'function') {
-                try {
-                    await sock.relayMessage(chatId, payload, { quoted: originalMessage, ...options });
-                    return { success: true, method: 'relayMessage' };
-                } catch (relayError) {
-                    throw new Error(`sendMessage: ${sendError.message} | relayMessage: ${relayError.message}`);
-                }
-            }
-            throw sendError;
-        }
-    } catch (error) {
-        try {
-            const formatted = formatPreviewPayload(payload);
-            await sock.sendMessage(chatId, {
-                text: `${PREVIEW_TAG}⚠️ _Imeshindwa kutuma preview halisi. Muonekano wake:_\n\n${formatted}`,
-            }, { quoted: originalMessage });
-            return { success: false, method: 'text-fallback', error };
-        } catch (finalError) {
-            console.error('[sendPreviewAsBot] Final error:', finalError);
-            return { success: false, method: 'failed', error: finalError };
-        }
-    }
-}
 
 function formatPreviewPayload(payload) {
     if (!payload) return '_(hakuna payload)_';
@@ -479,6 +261,39 @@ function formatPreviewPayload(payload) {
         if (msg.documentMessage) {
             lines.push('┃ 📄 *[DOCUMENT]*');
             lines.push(`┃ 📎 ${msg.documentMessage.fileName || 'file'}`);
+            if (msg.documentMessage.caption) lines.push(`┃ 📝 _${msg.documentMessage.caption}_`);
+            lines.push('┃');
+        }
+        if (msg.audioMessage) {
+            lines.push('┃ 🎵 *[AUDIO]*');
+            lines.push(`┃ ⏱️ Duration: ${msg.audioMessage.seconds || '?'}s`);
+            if (msg.audioMessage.ptt) lines.push('┃ 🎤 Voice Note');
+            lines.push('┃');
+        }
+        if (msg.stickerMessage) {
+            lines.push('┃ 🎨 *[STICKER]*');
+            lines.push('┃');
+        }
+        if (msg.locationMessage) {
+            lines.push('┃ 📍 *[LOCATION]*');
+            lines.push(`┃   Lat: ${msg.locationMessage.degreesLatitude}`);
+            lines.push(`┃   Lon: ${msg.locationMessage.degreesLongitude}`);
+            if (msg.locationMessage.name) lines.push(`┃   Name: ${msg.locationMessage.name}`);
+            lines.push('┃');
+        }
+        if (msg.contactMessage) {
+            lines.push('┃ 👤 *[CONTACT]*');
+            lines.push(`┃   Name: ${msg.contactMessage.displayName || '-'}`);
+            lines.push('┃');
+        }
+        if (msg.reactionMessage) {
+            lines.push('┃ 😊 *[REACTION]*');
+            lines.push(`┃   Emoji: ${msg.reactionMessage.text || '-'}`);
+            lines.push('┃');
+        }
+        if (msg.protocolMessage) {
+            lines.push('┃ 🔧 *[PROTOCOL]*');
+            lines.push(`┃   Type: ${msg.protocolMessage.type || '-'}`);
             lines.push('┃');
         }
 
@@ -490,18 +305,259 @@ function formatPreviewPayload(payload) {
         }
 
         if (lines.length <= 2) {
-            return util.inspect(payload, { depth: 4, colors: false, maxArrayLength: 20 });
+            lines.push('┃ ⚠️ _Payload haijatambulika_');
+            lines.push('┃');
+            try {
+                const preview = JSON.stringify(payload, null, 2);
+                preview.split('\n').slice(0, 15).forEach((l) => lines.push(`┃ ${l}`));
+            } catch (_) {
+                lines.push('┃ _Imeshindwa kuonyesha payload_');
+            }
+            lines.push('┃');
         }
 
         lines.push('╰━━━━━━━━━━━━━━━━━━⬣');
         return lines.join('\n');
-    } catch (err) {
-        return util.inspect(payload, { depth: 4, colors: false, maxArrayLength: 20 });
+    } catch (error) {
+        return `_Imeshindwa kuonyesha payload: ${error.message}_`;
+    }
+}
+
+function completeCodeIfTruncated(code) {
+    if (!code) return code;
+    let cleaned = String(code).trim();
+
+    // Ondoa alama za WhatsApp truncation
+    cleaned = cleaned.replace(/\.\.\.\s*Read\s*more\s*$/i, '');
+    cleaned = cleaned.replace(/…\s*Read\s*more\s*$/i, '');
+    cleaned = cleaned.replace(/\.\.\.\s*$/g, '');
+    cleaned = cleaned.replace(/…\s*$/g, '');
+
+    // Hesabu brackets kwa kuzingatia strings na comments
+    const stack = [];
+    let inString = null;
+    let inComment = false;
+    let inBlockComment = false;
+    let escape = false;
+    let templateDepth = 0;
+
+    for (let i = 0; i < cleaned.length; i++) {
+        const char = cleaned[i];
+        const next = cleaned[i + 1] || '';
+
+        if (escape) { escape = false; continue; }
+        if (char === '\\') { escape = true; continue; }
+
+        if (!inString && !inBlockComment && char === '/' && next === '/') {
+            inComment = true; continue;
+        }
+        if (inComment && char === '\n') { inComment = false; continue; }
+        if (!inString && !inComment && char === '/' && next === '*') {
+            inBlockComment = true; i++; continue;
+        }
+        if (inBlockComment && char === '*' && next === '/') {
+            inBlockComment = false; i++; continue;
+        }
+        if (inComment || inBlockComment) continue;
+
+        if (!inString && (char === '"' || char === "'" || char === '`')) {
+            inString = char; 
+            if (char === '`') templateDepth++;
+            continue;
+        }
+        if (inString && char === inString) { 
+            inString = null; 
+            if (char === '`' && templateDepth > 0) templateDepth--;
+            continue; 
+        }
+        if (inString) continue;
+
+        if (char === '(' || char === '{' || char === '[') {
+            stack.push(char);
+        } else if (char === ')' || char === '}' || char === ']') {
+            const open = char === ')' ? '(' : char === '}' ? '{' : '[';
+            if (stack[stack.length - 1] === open) stack.pop();
+        }
+    }
+
+    if (inComment) cleaned += '\n';
+    if (inBlockComment) cleaned += '*/';
+    if (inString) {
+        if (escape) cleaned += '\\';
+        cleaned += inString;
+    }
+
+    // Funga brackets kwa mpangilio wa nyuma
+    while (stack.length > 0) {
+        const open = stack.pop();
+        if (open === '(') cleaned += ')';
+        else if (open === '{') cleaned += '}';
+        else if (open === '[') cleaned += ']';
+    }
+
+    // Kama code inaishia na operator, safisha
+    if (/[,\+\-\*\/\=\&\|\?]\s*$/.test(cleaned)) {
+        cleaned = cleaned.replace(/[,\+\-\*\/\=\&\|\?]\s*$/, '');
+    }
+
+    return cleaned.trim();
+}
+
+function isCodeLikelyTruncated(code) {
+    if (!code) return false;
+    const s = String(code).trim();
+    if (/\.\.\.\s*$/.test(s) || /…\s*$/.test(s) || /Read\s*more\s*$/i.test(s)) return true;
+
+    const openParen = (s.match(/\(/g) || []).length;
+    const closeParen = (s.match(/\)/g) || []).length;
+    const openBrace = (s.match(/\{/g) || []).length;
+    const closeBrace = (s.match(/\}/g) || []).length;
+    const openBracket = (s.match(/\[/g) || []).length;
+    const closeBracket = (s.match(/\]/g) || []).length;
+
+    if (openParen !== closeParen || openBrace !== closeBrace || openBracket !== closeBracket) return true;
+    if (/[,\+\-\*\/\=\&\|\?]\s*$/.test(s)) return true;
+
+    return false;
+}
+
+function saveCustomCommand(commandName, sourceCode) {
+    const filePath = path.join(COMMANDS_DIR, `${commandName}.js`);
+
+    if (!/^[a-z0-9_\-]+$/i.test(commandName)) {
+        throw new Error('Invalid command name. Use only letters, numbers, underscore, and hyphen.');
+    }
+    if (commandName.length > 30) {
+        throw new Error('Command name is too long (max 30 characters).');
+    }
+    if (fs.existsSync(filePath) && !isGeneratedCommandFile(filePath)) {
+        throw new Error(`Command "${commandName}" already exists as a built-in command and cannot be overwritten.`);
+    }
+
+    let cleaned = String(sourceCode || '')
+        .replace(/^```(?:js|javascript)?\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+
+    if (!cleaned) throw new Error('Command source is empty');
+
+    if (isCodeLikelyTruncated(cleaned)) {
+        cleaned = completeCodeIfTruncated(cleaned);
+    }
+
+    cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
+    cleaned = cleaned.replace(/require\(['"]\.\.\/lib\/messagebuilder\.js['"]\)/gi, "require('../lib/messageBuilder')");
+    cleaned = cleaned.replace(/require\(['"]\.\.\/\.\.\/lib\/messagebuilder['"]\)/gi, "require('../lib/messageBuilder')");
+    cleaned = cleaned.replace(/require\(['"]\.\.\/\.\.\/lib\/messagebuilder\.js['"]\)/gi, "require('../lib/messageBuilder')");
+
+    const symbolNames = ['Button', 'ButtonV2', 'Carousel', 'AIRich', 'Toolkit', 'createCtx'];
+    const hasMessageBuilderRequire = /messageBuilder/.test(cleaned);
+    const hasSymbol = symbolNames.some((s) => new RegExp('\\b' + s + '\\b').test(cleaned));
+    const header = `${GENERATED_MARKER}\nconst { Button, ButtonV2, Carousel, AIRich, Toolkit, createCtx } = require('../lib/messageBuilder');\n\n`;
+
+    const isDirectFunction =
+        /^async\s*\(/.test(cleaned) ||
+        /^async\s+[A-Za-z0-9_$]+\s*\(/.test(cleaned) ||
+        /^function\s*/.test(cleaned) ||
+        /^\(.*\)\s*=>/.test(cleaned) ||
+        /^async\s*\(.*\)\s*=>/.test(cleaned);
+    const isObjectExport = /module\.exports\s*=\s*\{/.test(cleaned) || /exports\.[A-Za-z0-9_$]+\s*=/.test(cleaned);
+    const hasModuleExports = cleaned.includes('module.exports');
+
+    if (!hasModuleExports && !isObjectExport) {
+        if (isDirectFunction) {
+            cleaned = `module.exports = ${cleaned};`;
+        } else {
+            cleaned = `module.exports = {\n    code: async (sock, chatId, message, args = [], options = {}) => {\n        ${cleaned}\n    },\n    name: '${commandName}',\n    description: 'Generated command',\n    category: 'UTILITY'\n};`;
+        }
+    }
+
+    if (/module\.exports\s*=\s*async\s+function/.test(cleaned) || /module\.exports\s*=\s*\(?\s*\(?[^)]*\)\s*=>/.test(cleaned)) {
+        cleaned = cleaned.replace(
+            /module\.exports\s*=\s*/,
+            "module.exports = async function generatedCommand(sock, chatId, message, args = [], options = {}) {\n    return (async () => {\n    "
+        );
+        cleaned += '\n    })();\n};\n';
+    }
+
+    const finalSource = `${(!hasMessageBuilderRequire && hasSymbol) || !hasMessageBuilderRequire ? header : ''}${cleaned}\n`;
+    
+    try {
+        new Function(finalSource);
+    } catch (syntaxError) {
+        throw new Error(`Syntax error: ${syntaxError.message}`);
+    }
+
+    fs.writeFileSync(filePath, finalSource, 'utf8');
+    registerGeneratedCommand(commandName, filePath);
+    return filePath;
+}
+
+async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMessage = null) {
+    try {
+        if (!payload) {
+            await sock.sendMessage(chatId, {
+                text: `${PREVIEW_TAG}⚠️ _Payload tupu._`,
+            }, { quoted: originalMessage });
+            return { success: false, reason: 'empty-payload' };
+        }
+
+        if (typeof payload === 'string') {
+            await sock.sendMessage(chatId, {
+                text: `${PREVIEW_TAG}📝 *Text Message:*\n\n${payload}`,
+            }, { quoted: originalMessage });
+            return { success: true, method: 'text' };
+        }
+
+        const previewPayload = JSON.parse(JSON.stringify(payload));
+
+        const relayKeys = [
+            'buttonsMessage', 'viewOnceMessage', 'viewOnceMessageV2',
+            'interactiveMessage', 'documentWithCaptionMessage', 'ephemeralMessage',
+            'requestPaymentMessage', 'templateMessage', 'listMessage',
+            'productMessage', 'orderMessage', 'invoiceMessage',
+        ];
+        const isRelay = relayKeys.some((k) => previewPayload[k]);
+
+        if (previewPayload.text && typeof previewPayload.text === 'string' && !previewPayload.text.includes('PREVIEW MODE')) {
+            previewPayload.text = `${PREVIEW_TAG}${previewPayload.text}`;
+        } else if (previewPayload.caption && typeof previewPayload.caption === 'string' && !previewPayload.caption.includes('PREVIEW MODE')) {
+            previewPayload.caption = `${PREVIEW_TAG}${previewPayload.caption}`;
+        }
+
+        try {
+            await sock.sendMessage(chatId, previewPayload, { quoted: originalMessage, ...options });
+            return { success: true, method: 'sendMessage' };
+        } catch (sendError) {
+            console.warn('[sendPreviewAsBot] sendMessage failed:', sendError.message);
+            if (isRelay && typeof sock.relayMessage === 'function') {
+                try {
+                    await sock.relayMessage(chatId, previewPayload, { quoted: originalMessage, ...options });
+                    return { success: true, method: 'relayMessage' };
+                } catch (relayError) {
+                    console.warn('[sendPreviewAsBot] relayMessage failed:', relayError.message);
+                    throw new Error(`sendMessage: ${sendError.message} | relayMessage: ${relayError.message}`);
+                }
+            }
+            throw sendError;
+        }
+    } catch (error) {
+        console.error('[sendPreviewAsBot] Preview failed:', error.message);
+        try {
+            const formatted = formatPreviewPayload(payload);
+            await sock.sendMessage(chatId, {
+                text: `${PREVIEW_TAG}⚠️ _Imeshindwa kutuma preview halisi. Muonekano wake:_\n\n${formatted}`,
+            }, { quoted: originalMessage });
+            return { success: false, method: 'text-fallback', error };
+        } catch (finalError) {
+            console.error('[sendPreviewAsBot] Final error:', finalError);
+            return { success: false, method: 'failed', error: finalError };
+        }
     }
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 6. SANDBOX EXECUTION
+// 5. SANDBOX EXECUTION
 // ─── ──────────────────────────────────────────────────────────────────────
 
 function createSandbox(sock, chatId, message, args, senderId, commandName = '', options = {}) {
@@ -518,6 +574,10 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '', 
         util,
         require: (specifier) => {
             if (typeof specifier !== 'string') throw new TypeError('Module specifier must be a string');
+            const blockedModules = ['child_process', 'cluster', 'dgram', 'dns', 'net', 'readline'];
+            if (blockedModules.includes(specifier)) {
+                throw new Error(`Moduli '${specifier}' imezuiwa kwa sababu za kiusalama.`);
+            }
             const baseRequire = Module.createRequire(path.join(COMMANDS_DIR, 'addcmd.js'));
             if (specifier.startsWith('.')) {
                 try { return require(path.resolve(COMMANDS_DIR, specifier)); }
@@ -525,7 +585,13 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '', 
             }
             return baseRequire(specifier);
         },
-        process, Buffer,
+        process: {
+            env: process.env,
+            version: process.version,
+            platform: process.platform,
+            exit: () => { throw new Error('process.exit() imezuiwa kwenye sandbox!'); }
+        },
+        Buffer,
         __dirname: process.cwd(),
         __filename: path.join(process.cwd(), 'runCommand.js'),
         module: { exports: {} }, exports: {},
@@ -577,9 +643,7 @@ function createSandbox(sock, chatId, message, args, senderId, commandName = '', 
             sandbox.Carousel = mb.Carousel; sandbox.AIRich = mb.AIRich;
             sandbox.Toolkit = mb.Toolkit; sandbox.createCtx = mb.createCtx;
         }
-    } catch (_) {
-        console.log('[SANDBOX] MessageBuilder not loaded');
-    }
+    } catch (_) {}
 
     return sandbox;
 }
@@ -603,7 +667,7 @@ async function executeInSandbox(codeText, sandbox, timeout = 15000) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 7. RUN COMMAND
+// 6. RUN COMMAND
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function safeInvokeHandler(handler, sandbox, args = []) {
@@ -696,8 +760,7 @@ function extractFunctionName(source) {
 function isRunnableCodeSnippet(source) {
     if (!source) return false;
     const s = String(source).trim();
-    if (!s) return false;
-    if (s === '>' || s === '=>') return false;
+    if (!s || s === '>' || s === '=>') return false;
 
     return (
         /=>/.test(s) ||
@@ -714,7 +777,7 @@ function createSnippetSandbox(sock, chatId, message, senderId) {
     const sandbox = {
         sock, conn: sock, core: sock, chatId, jid: chatId, message, senderId,
         commandName: 'snippet', args: [], prefix: '.',
-        util, process, Buffer,
+        util, process: { env: process.env, version: process.version, platform: process.platform }, Buffer,
         __dirname: process.cwd(),
         __filename: path.join(process.cwd(), '__run_preview__.js'),
         module: { exports: {} }, exports: {},
@@ -722,6 +785,10 @@ function createSnippetSandbox(sock, chatId, message, senderId) {
         Promise, Date, Math, String, Number, Boolean, Array, Object, JSON, Error, RegExp, Map, Set,
         require: (specifier) => {
             if (typeof specifier !== 'string') throw new TypeError('Module specifier must be a string');
+            const blockedModules = ['child_process', 'cluster', 'dgram', 'dns', 'net', 'readline'];
+            if (blockedModules.includes(specifier)) {
+                throw new Error(`Moduli '${specifier}' imezuiwa kwa sababu za kiusalama.`);
+            }
             const rootedSpecifier = specifier.startsWith('../') ? `./${specifier.slice(3)}` : specifier;
             try { return baseRequire(rootedSpecifier); }
             catch (error) {
@@ -769,9 +836,7 @@ function createSnippetSandbox(sock, chatId, message, senderId) {
             Toolkit: messageBuilder.Toolkit,
             createCtx: messageBuilder.createCtx,
         });
-    } catch (error) {
-        sandbox.__logs.push(`MessageBuilder load failed: ${error.message}`);
-    }
+    } catch (error) {}
 
     return sandbox;
 }
@@ -804,12 +869,8 @@ function prepareSnippetExecution(code) {
     return { wrappedCode, isBlockCode };
 }
 
-/**
- * Run or preview snippets after repairing incomplete delimiters.
- */
 async function runSourceSnippet(sock, chatId, senderId, message, source, previewMode) {
     let code = String(source || '').replace(/^```[\w-]*\s*|\s*```$/g, '').trim();
-
     code = code.replace(/^\s*(?:=>|>)\s*/, '').trim();
 
     if (!code) {
@@ -817,7 +878,6 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
         return;
     }
 
-    // ─── Smart Code Completion ─────────────────────────────────────
     const wasTruncated = isCodeLikelyTruncated(code);
     let completedCode = completeCodeIfTruncated(code);
     let completionApplied = completedCode !== code;
@@ -870,9 +930,7 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
                 }
                 aiRepaired = result.success;
             }
-        } catch (repairError) {
-            console.error('AI snippet repair failed:', repairError?.message || repairError);
-        }
+        } catch (repairError) {}
     }
 
     if (!result.success) {
@@ -880,8 +938,7 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
             text: `❌ *Snippet ${previewMode ? 'preview' : 'run'} imeshindwa*\n\n` +
                   `🔧 *Kosa:* ${result.error?.name || 'Error'}\n` +
                   `📝 *Maelezo:* ${result.error?.message || result.error}\n\n` +
-                  `💡 *Kidokezo:* Hakikisha code yako imekamilika (imefungwa vizuri) na haina makosa ya syntax.\n\n` +
-                  `📄 *Code uliyotuma (kwa ufupi):*\n\`\`\`\n${code.slice(0, 500)}${code.length > 500 ? '\n...' : ''}\n\`\`\``,
+                  `📄 *Code uliyotuma:*\n\`\`\`\n${code.slice(0, 500)}${code.length > 500 ? '\n...' : ''}\n\`\`\``,
         }, { quoted: message });
         return;
     }
@@ -904,9 +961,7 @@ async function runSourceSnippet(sock, chatId, senderId, message, source, preview
                 try {
                     await sendPreviewAsBot(sock, chatId, entry.payload, entry.options, message);
                     await new Promise((r) => setTimeout(r, 900));
-                } catch (err) {
-                    console.error('Preview send error:', err);
-                }
+                } catch (err) {}
             }
         }
         return;
@@ -945,7 +1000,7 @@ async function previewCommand(sock, chatId, senderId, message, targetInput) {
     const commandPath = resolveCommandPath(commandName);
     if (!commandPath) {
         await sock.sendMessage(chatId, {
-            text: `❌ Function/command "${commandName}" haikupatikana kwenye commands/. Tumia jina la command au function iliyotangazwa na ku-export.`,
+            text: `❌ Function/command "${commandName}" haikupatikana kwenye commands/.`,
         }, { quoted: message });
         return;
     }
@@ -976,9 +1031,7 @@ async function previewCommand(sock, chatId, senderId, message, targetInput) {
                 try {
                     await sendPreviewAsBot(sock, chatId, entry.payload, entry.options, message);
                     await new Promise((r) => setTimeout(r, 900));
-                } catch (err) {
-                    console.error('Preview send error:', err);
-                }
+                } catch (err) {}
             }
             return;
         }
@@ -991,7 +1044,7 @@ async function previewCommand(sock, chatId, senderId, message, targetInput) {
         }, { quoted: message });
     } catch (error) {
         await sock.sendMessage(chatId, {
-            text: `❌ Preview ya function .${commandName} imeshindwa:\n${error?.stack || error?.message || error}`,
+            text: `❌ Preview ya function .${commandName} imeshindwa:\n${error?.message || error}`,
         }, { quoted: message });
     }
 }
@@ -1013,7 +1066,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             || quotedMessage?.imageMessage?.caption
             || quotedMessage?.videoMessage?.caption || '';
 
-        // ─── List ─────────────────────────────────────────────────
         if (body.match(/^list$/i)) {
             const commands = listCustomCommands();
             if (commands.length === 0) {
@@ -1027,7 +1079,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
-        // ─── Delete ───────────────────────────────────────────────
         if (body.match(/^delete\s+(\S+)/i)) {
             const match = body.match(/^delete\s+(\S+)/i);
             try {
@@ -1039,17 +1090,16 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
-        // ─── Help ─────────────────────────────────────────────────
         if (body.match(/^help$/i)) {
             await sock.sendMessage(chatId, {
-                text: `🛠️ Run Command Help:\n\nUsage:\n• .run <code> - Run a code snippet now\n• Reply to code with .run - Run the quoted snippet now\n• .run preview <code> - Preview without running the message action\n• .run <command_name> - Preview a custom command\n• .run execute <command_name> - Execute a custom command\n• .run list - List custom commands\n• .run delete <command_name> - Delete a custom command\n\nExamples:\n.run conn.relayMessage(m.chat, payload, {})\n.run preview conn.sendMessage(m.chat, { text: 'Hello' })\n.run execute button8\n.run list\n.run delete button8`,
+                text: `🛠️ Run Command Help:\n\nUsage:\n• .run <code> - Run code snippet\n• .run preview <code> - Preview action\n• .run execute <command_name> - Execute custom command\n• .run list - List commands\n• .run delete <command_name> - Delete command`,
             }, { quoted: message });
             return;
         }
 
         if (!body && !quotedCode) {
             await sock.sendMessage(chatId, {
-                text: `🛠️ Usage:\n• Reply to code and send .run to execute it.\n• Or send .run <code> to execute a snippet immediately.\n• Use .run preview <code> to preview without executing it.\n• Use .run execute <command_name> to execute a saved command.\n• Send .run help for more info.`,
+                text: `🛠️ Usage:\n• Reply to code with .run\n• Or send .run <code>`,
             }, { quoted: message });
             return;
         }
@@ -1057,7 +1107,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         const explicitPreview = body.match(/^preview(?:\s+([\s\S]+))?$/i);
         const explicitExecute = body.match(/^execute(?:\s+([\s\S]+))?$/i);
 
-        // ─── Quoted code → run snippet moja kwa moja ──────────────
         if (quotedCode) {
             const source = quotedCode.toString().trim();
             if (isRunnableCodeSnippet(source)) {
@@ -1080,7 +1129,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         const snippetInput = explicitPreview?.[1] || explicitExecute?.[1] || body;
         let cleanBody = snippetInput.replace(/^\s*(?:=>|>)\s*/, '').trim();
 
-        // ─── Detect kama body ni code ─────────────────────────────
         const looksLikeCode = isRunnableCodeSnippet(cleanBody) ||
             cleanBody.includes('relayMessage') ||
             cleanBody.includes('sendMessage') ||
@@ -1107,7 +1155,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
-        // ─── Target = jina la command/function ────────────────────
         const sourceFunction = extractFunctionName(cleanBody);
         let target = explicitPreview?.[1] || explicitExecute?.[1] || sourceFunction || cleanBody;
         target = String(target || '').trim();
@@ -1116,7 +1163,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             target = cleanBody;
         }
 
-        // ─── Preview command ──────────────────────────────────────
         if (!explicitExecute) {
             const firstWord = target.split(/\s+/)[0].replace(/^\./, '').toLowerCase();
             const cmdPath = resolveCommandPath(firstWord);
@@ -1129,7 +1175,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
             return;
         }
 
-        // ─── Execute command ──────────────────────────────────────
         const parts = target.split(/\s+/);
         const commandName = parts[0].replace(/^\./, '').toLowerCase();
         const commandPath = resolveCommandPath(commandName);
@@ -1175,13 +1220,12 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
                 }
             } catch (execError) {
                 await sock.sendMessage(chatId, {
-                    text: `❌ Command .${commandName} failed:\n${execError?.stack || execError?.message || execError}`,
+                    text: `❌ Command .${commandName} failed:\n${execError?.message || execError}`,
                 }, { quoted: message });
             }
             return;
         }
 
-        // ─── Fallback: preview snippet moja kwa moja ──────────────
         if (isRunnableCodeSnippet(target)) {
             await previewSourceSnippet(sock, chatId, senderId, message, target);
             return;
@@ -1192,7 +1236,6 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         }, { quoted: message });
 
     } catch (error) {
-        console.error('runCommand error:', error);
         await sock.sendMessage(chatId, {
             text: `❌ Run command failed: ${error?.message || error}`,
         }, { quoted: message });
@@ -1200,7 +1243,7 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 8. ADD COMMAND (CMDADD)
+// 7. ADD COMMAND (CMDADD)
 // ─── ──────────────────────────────────────────────────────────────────────
 
 async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText = '') {
@@ -1224,7 +1267,7 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
             const nameMatch = input.match(/^\.cmdadd\s+([a-z0-9_\-]+)/i);
             if (!nameMatch) {
                 await sock.sendMessage(chatId, {
-                    text: '🛠️ Usage:\n.cmdadd <command_name> (with quoted code)\nOr\n.cmdadd <command_name> <module_code>',
+                    text: '🛠️ Usage:\n.cmdadd <command_name> (with quoted code)',
                 }, { quoted: message });
                 return;
             }
@@ -1234,7 +1277,7 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
             const match = input.match(/^\.cmdadd\s+([a-z0-9_\-]+)\s*(.*)$/is);
             if (!match) {
                 await sock.sendMessage(chatId, {
-                    text: '🛠️ Usage:\n.cmdadd <command_name> <module_code>\n\nExample:\n.cmdadd button8 module.exports = { ... }',
+                    text: '🛠️ Usage:\n.cmdadd <command_name> <module_code>',
                 }, { quoted: message });
                 return;
             }
@@ -1244,7 +1287,7 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
 
         if (!sourceCode) {
             await sock.sendMessage(chatId, {
-                text: '❌ Please provide command source code. You can either type it or reply to a code message.',
+                text: '❌ Please provide command source code.',
             }, { quoted: message });
             return;
         }
@@ -1278,7 +1321,6 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
             }, { quoted: message });
         }
     } catch (error) {
-        console.error('cmdadd error:', error);
         await sock.sendMessage(chatId, {
             text: `❌ Failed to add custom command: ${error?.message || error}`,
         }, { quoted: message });
@@ -1286,7 +1328,7 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 9. EXPORTS
+// 8. EXPORTS
 // ─── ──────────────────────────────────────────────────────────────────────
 
 module.exports = {
