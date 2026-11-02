@@ -5,6 +5,11 @@ const {
     proto
 } = require('@whiskeysockets/baileys');
 
+const DEFAULT_POLL_IMAGES = [
+    'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg',
+    'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy3.jpg'
+];
+
 const getPollInput = (match, message) => {
     if (Array.isArray(match)) return match.join(' ').trim();
     if (typeof match === 'string' && match.trim()) return match.trim();
@@ -19,18 +24,20 @@ async function pollCommand(conn, jid, message, match) {
     const input = getPollInput(match, message);
     const parts = input.split('|').map(part => part.trim());
     const question = parts.shift();
+    const useDefaultImages = parts.length === 2;
 
-    if (!question || parts.length < 4 || parts.length % 2 !== 0) {
+    if (!question || (!useDefaultImages && (parts.length < 4 || parts.length % 2 !== 0))) {
         await conn.sendMessage(jid, {
-            text: 'Matumizi: .poll Swali | Jina la picha 1 | URL ya picha 1 | Jina la picha 2 | URL ya picha 2\nMfano: .poll Chagua picha | Picha A | https://example.com/a.jpg | Picha B | https://example.com/b.jpg'
+            text: 'Matumizi: .poll Swali | Option A | Option B (default images)\nAu: .poll Swali | Option A | URL ya picha A | Option B | URL ya picha B'
         }, { quoted: message });
         return;
     }
 
     const options = [];
-    for (let index = 0; index < parts.length; index += 2) {
-        const name = parts[index];
-        const imageUrl = parts[index + 1];
+    const optionCount = useDefaultImages ? parts.length : parts.length / 2;
+    for (let index = 0; index < optionCount; index++) {
+        const name = useDefaultImages ? parts[index] : parts[index * 2];
+        const imageUrl = useDefaultImages ? DEFAULT_POLL_IMAGES[index] : parts[index * 2 + 1];
         let parsedUrl;
 
         try {
