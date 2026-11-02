@@ -493,6 +493,103 @@ function saveCustomCommand(commandName, sourceCode) {
     return filePath;
 }
 
+function saveAndLoadGeneratedCommand(commandName, sourceCode) {
+    const filePath = path.join(COMMANDS_DIR, `${commandName}.js`);
+    const previousSource = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : null;
+    let saved = false;
+
+    try {
+        saveCustomCommand(commandName, sourceCode);
+        saved = true;
+        const commandModule = loadCommandModule(filePath);
+        const handler = findHandler(commandModule);
+        if (!handler) throw new Error('No valid handler found in generated command.');
+        return { filePath, commandModule, handler };
+    } catch (error) {
+        if (saved) {
+            if (previousSource === null) {
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                if (global.commands) delete global.commands[commandName];
+                if (global.autoRegisteredCommands instanceof Map) {
+                    global.autoRegisteredCommands.delete(commandName);
+                } else if (global.autoRegisteredCommands) {
+                    delete global.autoRegisteredCommands[commandName];
+                }
+            } else {
+                fs.writeFileSync(filePath, previousSource, 'utf8');
+            }
+            try { delete require.cache[require.resolve(filePath)]; } catch (_) {}
+        }
+        throw error;
+    }
+}
+
+async function requestCommandRepair(sourceCode, error) {
+    try {
+        const { repairCodeSnippet } = require('./chatbot');
+        return await repairCodeSnippet(
+            sourceCode,
+            `${error?.name || 'Error'}: ${error?.message || error}`
+        );
+    } catch (repairError) {
+        console.error('AI command repair failed:', repairError?.message || repairError);
+        return null;
+    }
+}
+
+async function saveGeneratedCommandWithRepair(commandName, sourceCode) {
+    let candidate = sourceCode;
+    let repaired = false;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            return { ...saveAndLoadGeneratedCommand(commandName, candidate), repaired };
+        } catch (error) {
+            if (attempt > 0 || !/Syntax error:|Failed to load module:|No valid handler/i.test(error.message)) {
+                throw error;
+            }
+            const fixed = await requestCommandRepair(candidate, error);
+            if (!fixed) throw error;
+            candidate = fixed;
+            repaired = true;
+        }
+    }
+
+    throw new Error('AI repair could not produce a valid command.');
+}
+
+async function repairExistingGeneratedCommand(commandPath, error) {
+    if (!isGeneratedCommandFile(commandPath)) return null;
+
+    const commandName = path.basename(commandPath, '.js');
+    const sourceCode = fs.readFileSync(commandPath, 'utf8');
+    const fixed = await requestCommandRepair(sourceCode, error);
+    if (!fixed) return null;
+
+    const cleaned = String(fixed)
+        .replace(/^```(?:js|javascript)?\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+    const repairedSource = cleaned.includes(GENERATED_MARKER)
+        ? `${cleaned}\n`
+        : `${GENERATED_MARKER}\n${cleaned}\n`;
+
+    try {
+        new Function(repairedSource);
+        fs.writeFileSync(commandPath, repairedSource, 'utf8');
+        const commandModule = loadCommandModule(commandPath);
+        const handler = findHandler(commandModule);
+        if (!handler) throw new Error('No valid handler found in repaired command.');
+        registerGeneratedCommand(commandName, commandPath);
+        return { filePath: commandPath, commandModule, handler };
+    } catch (repairError) {
+        fs.writeFileSync(commandPath, sourceCode, 'utf8');
+        try { delete require.cache[require.resolve(commandPath)]; } catch (_) {}
+        console.error(`AI repair for .${commandName} was rejected:`, repairError?.message || repairError);
+        return null;
+    }
+}
+
 async function sendPreviewAsBot(sock, chatId, payload, options = {}, originalMessage = null) {
     try {
         if (!payload) {
@@ -1182,46 +1279,78 @@ async function runCommand(sock, chatId, senderId, rawText, message, fullText = '
         if (commandPath) {
             const args = parts.slice(1);
             let commandModule;
+            let handler;
+            let aiRepaired = false;
             try {
                 commandModule = loadCommandModule(commandPath);
+                handler = findHandler(commandModule);
+                if (!handler) throw new Error(`No runnable handler found in ${commandName}.js`);
             } catch (loadError) {
-                await sock.sendMessage(chatId, {
-                    text: `❌ Failed to load command file:\n${loadError?.message || loadError}`,
-                }, { quoted: message });
-                return;
+                const repairedCommand = await repairExistingGeneratedCommand(commandPath, loadError);
+                if (!repairedCommand) {
+                    await sock.sendMessage(chatId, {
+                        text: `❌ Failed to load command file:\n${loadError?.message || loadError}`,
+                    }, { quoted: message });
+                    return;
+                }
+                commandModule = repairedCommand.commandModule;
+                handler = repairedCommand.handler;
+                aiRepaired = true;
             }
 
-            const handler = findHandler(commandModule);
-            if (!handler) {
-                await sock.sendMessage(chatId, {
-                    text: `❌ No runnable handler found in ${commandName}.js`,
-                }, { quoted: message });
-                return;
-            }
-
+            let sandbox;
+            let handlerResult;
             try {
-                const sandbox = createSandbox(sock, chatId, message, args, senderId, commandName, {
+                sandbox = createSandbox(sock, chatId, message, args, senderId, commandName, {
                     previewMode: false,
                 });
                 sandbox.sock = createTrackedSocket(sock, sandbox);
                 sandbox.core = sandbox.sock;
-                const handlerResult = await safeInvokeHandler(handler, sandbox, sandbox.args);
-
-                if (!sandbox.__sent) {
-                    let response;
-                    if (handlerResult !== undefined) {
-                        response = `✅ Command .${commandName} executed successfully.\nResult:\n${util.inspect(handlerResult, { depth: 2, colors: false })}`;
-                    } else if (sandbox.__logs.length) {
-                        response = `✅ Command .${commandName} completed.\n\n📋 Logs:\n${sandbox.__logs.join('\n')}`;
-                    } else {
-                        response = `✅ Command .${commandName} executed successfully.`;
-                    }
-                    await sock.sendMessage(chatId, { text: response }, { quoted: message });
-                }
+                handlerResult = await safeInvokeHandler(handler, sandbox, sandbox.args);
             } catch (execError) {
-                await sock.sendMessage(chatId, {
-                    text: `❌ Command .${commandName} failed:\n${execError?.message || execError}`,
-                }, { quoted: message });
+                const repairedCommand = await repairExistingGeneratedCommand(commandPath, execError);
+                if (!repairedCommand) {
+                    await sock.sendMessage(chatId, {
+                        text: `❌ Command .${commandName} failed:\n${execError?.message || execError}`,
+                    }, { quoted: message });
+                    return;
+                }
+                aiRepaired = true;
+
+                if (sandbox?.__sentMessages?.length) {
+                    await sock.sendMessage(chatId, {
+                        text: `🤖 AI imehifadhi fix ya .${commandName}, lakini command ilikuwa tayari imetuma ujumbe; haikurudiwa kuzuia duplicate.`,
+                    }, { quoted: message });
+                    return;
+                }
+
+                try {
+                    sandbox = createSandbox(sock, chatId, message, args, senderId, commandName, {
+                        previewMode: false,
+                    });
+                    sandbox.sock = createTrackedSocket(sock, sandbox);
+                    sandbox.core = sandbox.sock;
+                    handlerResult = await safeInvokeHandler(repairedCommand.handler, sandbox, sandbox.args);
+                    handler = repairedCommand.handler;
+                } catch (retryError) {
+                    await sock.sendMessage(chatId, {
+                        text: `🤖 AI imehifadhi fix ya .${commandName}, lakini retry bado imeshindwa:\n${retryError?.message || retryError}`,
+                    }, { quoted: message });
+                    return;
+                }
+            }
+
+            if (!sandbox.__sent && !sandbox.__sentMessages.length) {
+                let response;
+                if (handlerResult !== undefined) {
+                    response = `✅ Command .${commandName} executed successfully.\nResult:\n${util.inspect(handlerResult, { depth: 2, colors: false })}`;
+                } else if (sandbox.__logs.length) {
+                    response = `✅ Command .${commandName} completed.\n\n📋 Logs:\n${sandbox.__logs.join('\n')}`;
+                } else {
+                    response = `✅ Command .${commandName} executed successfully.`;
+                }
+                if (aiRepaired) response = `🤖 AI imeirekebisha command.\n\n${response}`;
+                await sock.sendMessage(chatId, { text: response }, { quoted: message });
             }
             return;
         }
@@ -1293,27 +1422,11 @@ async function cmdaddCommand(sock, chatId, senderId, rawText, message, fullText 
         }
 
         try {
-            const filePath = saveCustomCommand(commandName, sourceCode);
-            try {
-                const module = loadCommandModule(filePath);
-                const handler = findHandler(module);
-                if (!handler) {
-                    fs.unlinkSync(filePath);
-                    await sock.sendMessage(chatId, {
-                        text: `❌ Command saved but no valid handler found. File deleted.`,
-                    }, { quoted: message });
-                    return;
-                }
-            } catch (loadError) {
-                fs.unlinkSync(filePath);
-                await sock.sendMessage(chatId, {
-                    text: `❌ Command saved but failed to load:\n${loadError.message}\n\nFile deleted.`,
-                }, { quoted: message });
-                return;
-            }
+            const { filePath, repaired } = await saveGeneratedCommandWithRepair(commandName, sourceCode);
 
             await sock.sendMessage(chatId, {
-                text: `✅ Custom command saved as .${commandName}\n\nFile: commands/${commandName}.js`,
+                text: `${repaired ? '🤖 AI imerekebisha command na validation imepita.\n\n' : ''}` +
+                      `✅ Custom command saved as .${commandName}\n\nFile: ${path.relative(process.cwd(), filePath)}`,
             }, { quoted: message });
         } catch (saveError) {
             await sock.sendMessage(chatId, {

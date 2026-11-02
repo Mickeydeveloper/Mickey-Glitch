@@ -123,7 +123,7 @@ async function repairCodeSnippet(source, errorMessage = '') {
     const code = String(source || '').slice(0, 12000);
     if (!code.trim()) return null;
 
-    const prompt = `Repair this JavaScript snippet so it runs in a WhatsApp Baileys bot sandbox. Keep the intended behavior and existing APIs. The available variables may include sock, conn, core, chatId, jid, message, m, senderId, reply, Button, ButtonV2, Carousel, AIRich, Toolkit, and createCtx. Fix syntax errors and obvious TypeErrors only. Return ONLY the corrected JavaScript code, without Markdown fences or explanations.\n\nRuntime error:\n${String(errorMessage).slice(0, 2000)}\n\nSnippet:\n${code}`;
+    const prompt = `Repair this JavaScript code so it works in a WhatsApp Baileys bot. Keep its intended behavior and existing APIs; do not add dependencies or remove permission checks. Available variables may include sock, conn, core, chatId, jid, message, m, senderId, reply, Button, ButtonV2, Carousel, AIRich, Toolkit, and createCtx. Fix the reported syntax or runtime error with the smallest necessary change. Return ONLY the corrected JavaScript code, without Markdown fences or explanations.\n\nRuntime error:\n${String(errorMessage).slice(0, 2000)}\n\nCode:\n${code}`;
 
     const response = parseChatbotResponse(await requestChatbotReply(prompt, ''));
     if (!response) return null;
