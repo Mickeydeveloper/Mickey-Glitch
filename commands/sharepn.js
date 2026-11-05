@@ -1,4 +1,6 @@
 const settings = require('../settings');
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+const { getSudoList } = require('../lib/index');
 
 const MAX_MESSAGES = 3;
 const MIN_DELAY_MS = 1000;
@@ -7,7 +9,11 @@ const MAX_DELAY_MS = 10000;
 async function sharePhoneNumberCommand(sock, chatId, message, args = []) {
     const messageKey = message?.key || {};
     const reply = (text) => sock.sendMessage(chatId, { text }, { quoted: message });
-    const ownerNumber = String(settings.ownerNumber || '').replace(/\D/g, '');
+    const normalizeNumber = (value) => String(value || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+    const authorizedNumbers = new Set([
+        normalizeNumber(settings.ownerNumber),
+        ...(await getSudoList()).map(normalizeNumber),
+    ].filter(Boolean));
     const senderIds = [
         messageKey.participant,
         messageKey.remoteJid,
@@ -28,14 +34,13 @@ async function sharePhoneNumberCommand(sock, chatId, message, args = []) {
         }
     }
 
-    const matchesOwner = senderIds.some((senderId) => {
+    const isAuthorized = senderIds.some((senderId) => {
         if (senderId.endsWith('@lid')) return false;
-        const senderNumber = senderId.split('@')[0].split(':')[0].replace(/\D/g, '');
-        return senderNumber === ownerNumber;
+        return authorizedNumbers.has(normalizeNumber(senderId));
     });
 
-    if (!ownerNumber || !matchesOwner) {
-        return reply('Owner pekee anaweza kutumia command hii.');
+    if (!isAuthorized) {
+        return reply('Owner au sudo pekee anaweza kutumia command hii.');
     }
 
     const isPrivateChat = chatId?.endsWith('@s.whatsapp.net') || chatId?.endsWith('@lid');
@@ -59,20 +64,29 @@ async function sharePhoneNumberCommand(sock, chatId, message, args = []) {
     const delay = Math.min(Math.max(requestedDelay, MIN_DELAY_MS), MAX_DELAY_MS);
     const protocol = { protocolMessage: { type: 11 } };
     let sent = 0;
+    let lastMessageId = '';
 
     try {
         for (let index = 0; index < amount; index++) {
-            await sock.relayMessage(chatId, protocol, {
+            const generated = generateWAMessageFromContent(chatId, protocol, {
+                userJid: sock.user?.id,
+            });
+            const relayResult = await sock.relayMessage(chatId, generated.message, {
+                messageId: generated.key.id,
                 additionalAttributes: { expiration: '7776000' },
             });
             sent++;
+
+            const messageId = typeof relayResult === 'string' ? relayResult : generated.key.id;
+            lastMessageId = messageId;
+            console.log(`[sharepn] Relayed protocol message ${messageId} to ${chatId}`);
 
             if (index < amount - 1) {
                 await new Promise((resolve) => setTimeout(resolve, delay));
             }
         }
 
-        return reply(`Imetumwa ${sent}/${amount} message za majaribio kwenye DM yako.`);
+        return reply(`Baileys ime-relay protocol ${sent}/${amount}. ID: ${lastMessageId}. Protocol hii haina maandishi ya bubble ya kawaida.`);
     } catch (error) {
         console.error('[sharepn] Failed to relay protocol message:', error?.message || error);
         return reply(`Imeshindikana: zimetumwa ${sent}/${amount}.`);
