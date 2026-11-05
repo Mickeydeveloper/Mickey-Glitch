@@ -5,16 +5,41 @@ const MIN_DELAY_MS = 1000;
 const MAX_DELAY_MS = 10000;
 
 async function sharePhoneNumberCommand(sock, chatId, message, args = []) {
-    const senderId = message?.key?.participant || message?.key?.remoteJid || '';
+    const messageKey = message?.key || {};
     const reply = (text) => sock.sendMessage(chatId, { text }, { quoted: message });
     const ownerNumber = String(settings.ownerNumber || '').replace(/\D/g, '');
-    const senderNumber = senderId.split('@')[0].split(':')[0].replace(/\D/g, '');
+    const senderIds = [
+        messageKey.participant,
+        messageKey.remoteJid,
+        messageKey.participantAlt,
+        messageKey.remoteJidAlt,
+        message?.participant,
+        message?.sender,
+    ].filter((value) => typeof value === 'string' && value);
 
-    if (!ownerNumber || senderNumber !== ownerNumber) {
+    if (typeof sock?.signalRepository?.lidMapping?.getPNForLID === 'function') {
+        for (const senderId of senderIds.filter((value) => value.endsWith('@lid'))) {
+            try {
+                const phoneJid = await sock.signalRepository.lidMapping.getPNForLID(senderId);
+                if (phoneJid) senderIds.push(phoneJid);
+            } catch (error) {
+                console.debug('[sharepn] Could not resolve sender LID:', error?.message || error);
+            }
+        }
+    }
+
+    const matchesOwner = senderIds.some((senderId) => {
+        if (senderId.endsWith('@lid')) return false;
+        const senderNumber = senderId.split('@')[0].split(':')[0].replace(/\D/g, '');
+        return senderNumber === ownerNumber;
+    });
+
+    if (!ownerNumber || !matchesOwner) {
         return reply('Owner pekee anaweza kutumia command hii.');
     }
 
-    if (!chatId?.endsWith('@s.whatsapp.net') || senderId !== chatId) {
+    const isPrivateChat = chatId?.endsWith('@s.whatsapp.net') || chatId?.endsWith('@lid');
+    if (!isPrivateChat || !senderIds.includes(chatId)) {
         return reply('Command hii inafanya kazi kwenye DM yako binafsi pekee, si kwenye group au chat ya mtu mwingine.');
     }
 
