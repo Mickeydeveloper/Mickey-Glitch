@@ -9,6 +9,7 @@ async function sharePhoneNumberCommand(sock, chatId, message, args = []) {
     const messageKey = message?.key || {};
     const reply = (text) => sock.sendMessage(chatId, { text }, { quoted: message });
     const normalizeNumber = (value) => String(value || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+    
     const authorizedNumbers = new Set([
         normalizeNumber(settings.ownerNumber),
         ...(await getSudoList()).map(normalizeNumber),
@@ -40,12 +41,12 @@ async function sharePhoneNumberCommand(sock, chatId, message, args = []) {
     });
 
     if (!isAuthorized) {
-        return reply('❌ Owner au sudo pekee anaweza kutumia command hii.');
+        return reply('❌ (Owner) Owner au sudo pekee anaweza kutumia command hii.'); // (Only the owner or sudo can use this command.)
     }
 
     const isPrivateChat = chatId?.endsWith('@s.whatsapp.net') || chatId?.endsWith('@lid');
     if (!isPrivateChat || !senderIds.includes(chatId)) {
-        return reply('❌ Command hii inafanya kazi kwenye DM yako binafsi pekee, si kwenye group.');
+        return reply('❌ (Private chat only) Command hii inafanya kazi kwenye DM yako binafsi pekee.'); // (This command only works in your personal DM.)
     }
 
     const values = Array.isArray(args) ? args : String(args || '').trim().split(/\s+/).filter(Boolean);
@@ -53,83 +54,50 @@ async function sharePhoneNumberCommand(sock, chatId, message, args = []) {
     const requestedDelay = values[1] === undefined ? 1000 : Number.parseInt(values[1], 10);
 
     if (!Number.isInteger(amount) || amount < 1 || amount > MAX_MESSAGES) {
-        return reply(`Matumizi: .sharepn <1-${MAX_MESSAGES}> [delay-ms]`);
+        return reply(`Matumizi: .sharepn <1-${MAX_MESSAGES}> [delay-ms]`); // (Usage: .sharepn <1-3> [delay-ms])
     }
 
     if (!Number.isInteger(requestedDelay) || requestedDelay < 0) {
-        return reply('❌ Delay lazima iwe namba isiyo hasi ya milliseconds.');
+        return reply('❌ (Invalid delay) Delay lazima iwe namba isiyo hasi.'); // (Delay must be a non-negative number.)
     }
 
     const delay = Math.min(Math.max(requestedDelay, MIN_DELAY_MS), MAX_DELAY_MS);
     let sent = 0;
 
+    // Chagua namba ya owner au namba ya sasa ya bot kujituma kama Contact Card
+    const ownerNum = normalizeNumber(settings.ownerNumber) || '255612130873';
+    const ownerFormatted = ownerNum.startsWith('+') ? ownerNum : `+${ownerNum}`;
+
     try {
         for (let index = 0; index < amount; index++) {
-            // Tumia muundo sahihi wa Native Flow / Interactive Button ya Share Phone Number
-            await sock.relayMessage(chatId, {
-                messageContextInfo: {
-                    messageSecret: "W5KnXsgl7BbvKEwONIgLe9X6ajI3xpjRzTGdCkZip/k="
-                },
-                interactiveMessage: {
-                    body: { 
-                        text: `📱 *MICKEY GLITCH - SHARE PHONE NUMBER*\n\nTafadhali bonyeza kitufe hapa chini ili kushiriki namba yako ya simu na mfumo wa bot.` 
-                    },
-                    footer: { text: 'Mickey Glitch Technology V3.0.5' },
-                    nativeFlowMessage: {
-                        messageVersion: 1,
-                        buttons: [
-                            {
-                                name: "send_location", // Unaweza kutumia native flow action inayolingana au address/phone request
-                                buttonParamsJson: JSON.stringify({
-                                    display_text: "Share Phone Number",
-                                    id: "share_phone_btn"
-                                })
-                            }
-                        ]
-                    }
+            // Tumia vCard ya namba halisi ambayo inaleta contact card inayoweza kuguswa na kuhifadhiwa au kushirikiwa
+            await sock.sendMessage(chatId, {
+                contacts: {
+                    displayName: global.ownername || settings.botOwner || "Mickey Glitch Owner",
+                    contacts: [
+                        {
+                            vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${global.ownername || "Mickey Glitch Owner"}\nTEL;type=CELL;type=VOICE;waid=${ownerNum}:${ownerFormatted}\nEND:VCARD`
+                        }
+                    ]
                 }
-            }, {
-                additionalNodes: [
-                    {
-                        tag: "biz",
-                        attrs: {},
-                        content: [
-                            {
-                                tag: "interactive",
-                                attrs: {
-                                    type: "native_flow",
-                                    v: "1"
-                                },
-                                content: [
-                                    {
-                                        tag: "native_flow",
-                                        attrs: {
-                                            name: "address_message"
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            });
+            }, { quoted: message });
 
             sent++;
-            console.log(`[sharepn] Sent interactive share phone request ${sent}/${amount} to ${chatId}`);
+            console.log(`[sharepn] Sent contact card ${sent}/${amount} to ${chatId}`);
 
             if (index < amount - 1) {
                 await new Promise((resolve) => setTimeout(resolve, delay));
             }
         }
 
-        return reply(`✅ Imefanikiwa! Zimetumwa request za Share Phone Number ${sent}/${amount} kupitia Native Flow UI.`);
+        return reply(`✅ (Success) Imefanikiwa! Yametumwa makadi ya namba ${sent}/${amount} kupitia vCard.`); // (Success! Sent number cards via vCard.)
     } catch (error) {
-        console.error('[sharepn] Failed to send interactive message:', error?.message || error);
-        return reply(`❌ Imeshindikana kutuma: zimetumwa ${sent}/${amount}. Kosa: ${error?.message || error}`);
+        console.error('[sharepn] Failed to send contact card:', error?.message || error);
+        return reply(`❌ (Failed) Imeshindikana kutuma: zimetumwa ${sent}/${amount}. Kosa: ${error?.message || error}`); // (Failed to send...)
     }
 }
 
-sharePhoneNumberCommand.description = 'Tuma Interactive Share Phone Number request kwenye DM yako';
+sharePhoneNumberCommand.description = 'Tuma Share Phone Number Contact Card kwenye DM yako'; // (Send Share Phone Number Contact Card to your DM)
 sharePhoneNumberCommand.category = 'OWNER';
 sharePhoneNumberCommand.aliases = ['sp', 'sharephonenumber'];
 
