@@ -1,4 +1,5 @@
 const { randomUUID } = require('node:crypto');
+const sharp = require('sharp');
 const settings = require('../settings');
 const { getSudoList } = require('../lib/index');
 
@@ -47,12 +48,21 @@ async function eventInviteCommand(sock, chatId, message) {
         const response = await fetch(THUMBNAIL_URL, { signal: AbortSignal.timeout(10000) });
         if (!response.ok) throw new Error(`Thumbnail fetch failed (${response.status})`);
 
-        const thumbnail = Buffer.from(await response.arrayBuffer());
-        if (thumbnail.length > MAX_THUMBNAIL_BYTES) {
+        const image = Buffer.from(await response.arrayBuffer());
+        if (image.length > MAX_THUMBNAIL_BYTES) {
             throw new Error('Thumbnail exceeds the 2 MB limit');
         }
-        if (thumbnail.length < 3 || thumbnail[0] !== 0xff || thumbnail[1] !== 0xd8 || thumbnail[2] !== 0xff) {
-            throw new Error('Thumbnail is not a valid JPEG image');
+        if (!image.length) {
+            throw new Error('Thumbnail response was empty');
+        }
+
+        const thumbnail = await sharp(image, { limitInputPixels: 16000000 })
+            .rotate()
+            .resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 80 })
+            .toBuffer();
+        if (thumbnail.length > MAX_THUMBNAIL_BYTES) {
+            throw new Error('Converted JPEG thumbnail exceeds the 2 MB limit');
         }
 
         const result = await sock.relayMessage(chatId, {
