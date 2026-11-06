@@ -1,103 +1,106 @@
 const settings = require('../settings');
-const { getSudoList } = require('../lib/index');
 
-const MAX_MESSAGES = 10;
-const MIN_DELAY_MS = 100;
+const MAX_MESSAGES = 3;
+const MIN_DELAY_MS = 1000;
+const MAX_DELAY_MS = 10000;
 
-async function sharePhoneNumberCommand(sock, chatId, message, args = []) {
-    const messageKey = message?.key || {};
-    const reply = (text) => sock.sendMessage(chatId, { text }, { quoted: message });
-    const normalizeNumber = (value) => String(value || '').split('@')[0].split(':')[0].replace(/\D/g, '');
-    
-    // Angalia idhini ya Owner / Sudo
-    const authorizedNumbers = new Set([
-        normalizeNumber(settings.ownerNumber),
-        ...(await getSudoList()).map(normalizeNumber),
-    ].filter(Boolean));
-    
+function normalizeNumber(value) {
+    return String(value || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+}
+
+async function sharePhoneNumberCode(ctx) {
+    const { sock, chatId, senderId, msg, args = [] } = ctx;
+    const reply = (text) => ctx.reply(text);
+    const ownerNumber = normalizeNumber(settings.ownerNumber);
     const senderIds = [
-        messageKey.participant,
-        messageKey.remoteJid,
-        messageKey.participantAlt,
-        messageKey.remoteJidAlt,
-        message?.participant,
-        message?.sender,
+        senderId,
+        msg?.key?.participant,
+        msg?.key?.remoteJid,
+        msg?.key?.participantAlt,
+        msg?.key?.remoteJidAlt,
     ].filter((value) => typeof value === 'string' && value);
 
     if (typeof sock?.signalRepository?.lidMapping?.getPNForLID === 'function') {
-        for (const senderId of senderIds.filter((value) => value.endsWith('@lid'))) {
+        for (const id of senderIds.filter((value) => value.endsWith('@lid'))) {
             try {
-                const phoneJid = await sock.signalRepository.lidMapping.getPNForLID(senderId);
+                const phoneJid = await sock.signalRepository.lidMapping.getPNForLID(id);
                 if (phoneJid) senderIds.push(phoneJid);
             } catch (error) {
-                console.debug('[sharepn] Could not resolve LID:', error?.message || error);
+                console.debug('[sharepn] Could not resolve sender LID:', error?.message || error);
             }
         }
     }
 
-    const isAuthorized = senderIds.some((senderId) => {
-        if (senderId.endsWith('@lid')) return false;
-        return authorizedNumbers.has(normalizeNumber(senderId));
-    });
+    const isOwner = ownerNumber && senderIds.some((id) =>
+        !id.endsWith('@lid') && normalizeNumber(id) === ownerNumber
+    );
+    if (!isOwner) return reply(global.action?.owneronly || 'Owner only');
 
-    if (!isAuthorized) {
-        return reply('❌ (Owner only) Owner au sudo pekee anaweza kutumia command hii.');
+    const values = Array.isArray(args)
+        ? args.map(String).filter(Boolean)
+        : String(args || '').trim().split(/\s+/).filter(Boolean);
+    const amount = Number.parseInt(values[0], 10);
+    const targetInput = values[1] || 'here';
+    const delayInput = values[2] === undefined ? 1000 : Number.parseInt(values[2], 10);
+
+    if (!Number.isInteger(amount) || amount < 1 || amount > MAX_MESSAGES) {
+        return reply(`Matumizi: ${ctx.prefix || '.'}${ctx.command || 'sp'} <1-${MAX_MESSAGES}> [here|namba yako] [delay-ms]`);
+    }
+    if (!Number.isInteger(delayInput) || delayInput < 0) {
+        return reply('Delay lazima iwe namba isiyo hasi ya milliseconds.');
     }
 
-    // Kuchuja vigezo (args)
-    const values = Array.isArray(args) ? args : String(args || '').trim().split(/\s+/).filter(Boolean);
-    if (!values.length || !parseInt(values[0])) {
-        return reply('format: *.sharepn <amount> <?target> <?delay>*');
-    }
-
-    const much = parseInt(values[0]);
-    const targetInput = values[1];
-    const sendto = (!targetInput || targetInput === 'here') ? chatId : (targetInput.includes('@s.whatsapp.net') || targetInput.includes('@g.us') ? targetInput : `${targetInput.replace(/\D/g, '')}@s.whatsapp.net`);
-    const wait = Math.max(parseInt(values[2]) || 500, MIN_DELAY_MS);
-
-    // Protocol payload ya Aina ya 11 (Share Phone Number Protocol)
-    const protocol = {
-        protocolMessage: {
-            type: 11
+    let sendTo;
+    if (targetInput.toLowerCase() === 'here') {
+        const isPrivateChat = chatId.endsWith('@s.whatsapp.net') || chatId.endsWith('@lid');
+        if (!isPrivateChat || !senderIds.includes(chatId)) {
+            return reply('Target "here" inaruhusiwa kwenye DM yako binafsi pekee.');
         }
-    };
+        sendTo = chatId;
+    } else {
+        const targetNumber = normalizeNumber(targetInput);
+        if (!targetNumber || targetNumber !== ownerNumber) {
+            return reply('Target maalum lazima iwe namba yako ya owner.');
+        }
+        sendTo = `${ownerNumber}@s.whatsapp.net`;
+    }
 
-    // Weka reaction ya saa (⏳)
-    try {
-        await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
-    } catch {}
-
+    const delayMs = Math.min(Math.max(delayInput, MIN_DELAY_MS), MAX_DELAY_MS);
+    const protocol = { protocolMessage: { type: 11 } };
+    const messageKey = msg?.key;
     let sent = 0;
 
-    try {
-        for (let i = 0; i < much; i++) {
-            await sock.relayMessage(sendto, protocol, {
-                additionalAttributes: {
-                    expiration: "7776000"
-                }
-            });
+    if (messageKey) {
+        await sock.sendMessage(chatId, { react: { text: '⏳', key: messageKey } }).catch(() => {});
+    }
 
+    try {
+        for (let index = 0; index < amount; index++) {
+            await sock.relayMessage(sendTo, protocol, {
+                additionalAttributes: { expiration: '7776000' },
+            });
             sent++;
-            if (i < much - 1) {
-                await new Promise(resolve => setTimeout(resolve, wait));
+
+            if (index < amount - 1) {
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
             }
         }
 
-        console.log(`✅ Share Phone Number sended *${sent}×* ke *${sendto}* (delay ${wait}ms)`);
-        return reply(`✅ Imereley protocol *${sent}×* kwenda *${sendto}* (delay: ${wait}ms).`);
-    } catch (e) {
-        console.error('[sharepn]', e);
-        return reply(`❌ Error ${sent}/${much}×: ${e?.message || e}`);
+        return reply(`Baileys ime-relay protocol ${sent}/${amount} kwenye ${sendTo}. Kumbuka: protocol hii haina bubble ya maandishi ya kawaida.`);
+    } catch (error) {
+        console.error('[sharepn] Relay failed:', error?.message || error);
+        return reply(`Imeshindikana: zimetumwa ${sent}/${amount}. ${error?.message || ''}`.trim());
     } finally {
-        // Ondoa reaction au weka mafanikio
-        try {
-            await sock.sendMessage(chatId, { react: { text: '', key: message.key } });
-        } catch {}
+        if (messageKey) {
+            await sock.sendMessage(chatId, { react: { text: '', key: messageKey } }).catch(() => {});
+        }
     }
 }
 
-sharePhoneNumberCommand.description = 'Send protocol message share phone number';
-sharePhoneNumberCommand.category = 'OWNER';
-sharePhoneNumberCommand.aliases = ['sp', 'sharepn', 'sharephonenumber'];
-
-module.exports = sharePhoneNumberCommand;
+module.exports = {
+    name: 'sharepn',
+    aliases: ['sp', 'sharephonenumber'],
+    description: 'Tuma Share Phone Number protocol message ya majaribio',
+    category: 'OWNER',
+    code: sharePhoneNumberCode,
+};
