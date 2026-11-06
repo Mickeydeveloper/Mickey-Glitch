@@ -2,7 +2,8 @@ const { randomUUID } = require('node:crypto');
 const settings = require('../settings');
 const { getSudoList } = require('../lib/index');
 
-const THUMBNAIL_URL = 'https://cdn.ornzora.eu.cc/4d4f3591-1c3e-4e1b-b1c2-45faeb91b781-fiora.jpg';
+const THUMBNAIL_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
+
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 
 function normalizeNumber(value) {
