@@ -173,6 +173,7 @@ const checkUpdatesCommand = require('./commands/checkupdates');
 const { igsCommand } = require('./commands/igs');
 const { anticallCommand, readState: readAnticallState } = require('./commands/anticall');
 const callCommand = require('./commands/call');
+const videoCallCommand = require('./commands/videocall');
 const { pinCommand, verifyPinCommand, checkPinVerification } = require('./commands/pin');
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
@@ -1684,6 +1685,10 @@ We will process it and send you an update shortly.`
             case userMessage.startsWith('.music'):
             case userMessage.startsWith('.play') || userMessage.startsWith('.mp3') || userMessage.startsWith('.ytmp3') || userMessage.startsWith('.song'):
                 await playCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
+            case /^\.(vcall|videocall|ccalll)(?:\s|$)/i.test(userMessage):
+                await videoCallCommand(sock, chatId, message, userMessage.trim().split(/\s+/).slice(1));
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.video') || userMessage.startsWith('.ytmp4'):
