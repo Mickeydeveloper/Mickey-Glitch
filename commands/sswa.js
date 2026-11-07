@@ -2,7 +2,7 @@ const isOwnerOrSudo = require('../lib/isOwner');
 
 async function sswaCommand(sock, chatId, message, args = [], options = {}) {
     const senderId = options.senderId || message?.key?.participant || message?.key?.remoteJid || '';
-    const allowed = await isOwnerOrSudo(senderId, sock, chatId);
+    const allowed = Boolean(message?.key?.fromMe) || await isOwnerOrSudo(senderId, sock, chatId);
 
     if (!allowed) {
         await sock.sendMessage(chatId, {
