@@ -130,30 +130,55 @@ async function videoCallCommand(sock, chatId, message, args = []) {
             }, { quoted: message });
             return;
         }
+
         if (active) {
-            await sock.sendMessage(chatId, { text: 'Tayari kuna video call inayoendelea. Tumia .vcall end kwanza.' }, { quoted: message });
+            await sock.sendMessage(chatId, { text: '❌ Tayari kuna video call inayoendelea. Tumia .vcall end kwanza.' }, { quoted: message });
             return;
         }
 
         const videoPath = resolveVideoPath(videoFile);
-        const voip = await getVoipClient(sock);
-        const call = await voip.call(number, { video: true, durationMs: 0 });
-        startedCall = call;
-        activeCalls.set(sock, { call, number });
-        call.playVideo(videoPath);
+        let call;
+        try {
+            const voip = await getVoipClient(sock);
+            call = await voip.call(number, { video: true, durationMs: 0 });
+            startedCall = call;
+            activeCalls.set(sock, { call, number });
+            call.playVideo(videoPath);
 
-        void call.waitForEnd().then(async (reason) => {
-            if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
-            await sock.sendMessage(chatId, { text: `Video call imeisha (${reason}).` }).catch(() => {});
-        }).catch(async (error) => {
-            if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
-            console.error('[VIDEOCALL] Call ended with error:', error?.message || error);
-            await sock.sendMessage(chatId, { text: `Video call imeisha kwa hitilafu: ${error?.message || 'kosa lisilojulikana'}.` }).catch(() => {});
-        });
+            await sock.sendMessage(chatId, {
+                text: `📞 Inaanzisha video call kwenda +${number}...\nInacheza: ${path.basename(videoPath)}\nTumia .vcall end kumaliza.`,
+            }, { quoted: message });
 
-        await sock.sendMessage(chatId, {
-            text: `Video call inaanza kwenda +${number}.\nInacheza: ${path.basename(videoPath)}\nTumia .vcall end kumaliza.`,
-        }, { quoted: message });
+            call.on('ringing', () => {
+                void sock.sendMessage(chatId, { text: `🔔 Video call inaita +${number}...` }, { quoted: message }).catch(() => {});
+            });
+            call.on('connected', () => {
+                void sock.sendMessage(chatId, { text: '✅ Video call imeunganishwa.' }, { quoted: message }).catch(() => {});
+            });
+            call.on('item', (item) => {
+                console.log('[VIDEOCALL] Media item started:', item);
+            });
+            call.on('playlist_ended', () => {
+                console.log('[VIDEOCALL] Video playlist ended.');
+            });
+            call.on('error', async (error) => {
+                if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
+                console.error('[VIDEOCALL] Call error:', error?.message || error);
+                await sock.sendMessage(chatId, { text: `❌ Video call imekumbana na hitilafu: ${error?.message || 'kosa lisilojulikana'}.` }, { quoted: message }).catch(() => {});
+            });
+
+            void call.waitForEnd().then(async (reason) => {
+                if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
+                await sock.sendMessage(chatId, { text: `📴 Video call imeisha (${reason}).` }).catch(() => {});
+            }).catch(async (error) => {
+                if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
+                console.error('[VIDEOCALL] Call ended with error:', error?.message || error);
+                await sock.sendMessage(chatId, { text: `❌ Video call imeisha kwa hitilafu: ${error?.message || 'kosa lisilojulikana'}.` }).catch(() => {});
+            });
+        } catch (err) {
+            if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
+            throw err;
+        }
     } catch (error) {
         console.error('[VIDEOCALL] Command failed:', error?.message || error);
         if (startedCall) {

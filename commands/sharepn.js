@@ -8,6 +8,112 @@ function normalizeNumber(value) {
     return String(value || '').split('@')[0].split(':')[0].replace(/\D/g, '');
 }
 
+function withTimeout(promise, timeoutMs, label) {
+    let timer;
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`${label} imechukua muda mrefu.`)), timeoutMs);
+        }),
+    ]).finally(() => clearTimeout(timer));
+}
+
+function getContact(sock, jid) {
+    const contacts = sock?.contacts || sock?.store?.contacts;
+    if (contacts instanceof Map) return contacts.get(jid);
+    return contacts?.[jid];
+}
+
+async function lookupNumber(ctx, rawNumber) {
+    const { sock, reply } = ctx;
+    const number = normalizeNumber(rawNumber);
+    if (!/^\d{8,15}$/.test(number)) {
+        return reply(`Tumia: ${ctx.prefix || '.'}${ctx.command || 'sharepn'} info <namba-yenye-country-code>`);
+    }
+    if (typeof sock?.onWhatsApp !== 'function') {
+        return reply('Baileys hii haina onWhatsApp() ya kuthibitisha namba kwa sasa.');
+    }
+
+    await reply(`🔎 Nafanya lookup ya live kwa +${number}...`);
+
+    try {
+        const results = await withTimeout(sock.onWhatsApp(number), 15000, 'Lookup');
+        const account = Array.isArray(results)
+            ? results.find((entry) => entry?.exists && entry?.jid) || results[0]
+            : null;
+
+        if (!account?.exists || !account?.jid) {
+            return reply(`📱 +${number}\nWhatsApp: haijasajiliwa au namba haikupatikana.`);
+        }
+
+        const jid = account.jid;
+        let lid = account.lid || null;
+        if (!lid && typeof sock?.signalRepository?.lidMapping?.getLIDForPN === 'function') {
+            try {
+                lid = await withTimeout(
+                    sock.signalRepository.lidMapping.getLIDForPN(jid),
+                    5000,
+                    'LID lookup'
+                );
+            } catch (error) {
+                console.debug('[sharepn] LID lookup unavailable:', error?.message || error);
+            }
+        }
+
+        const contact = getContact(sock, jid) || {};
+        const displayName = contact.name || contact.notify || contact.verifiedName || '';
+        let pictureUrl = null;
+        let business = null;
+
+        if (typeof sock.profilePictureUrl === 'function') {
+            try {
+                pictureUrl = await withTimeout(sock.profilePictureUrl(jid, 'image'), 8000, 'Profile picture');
+            } catch {}
+        }
+        if (typeof sock.getBusinessProfile === 'function') {
+            try {
+                business = await withTimeout(sock.getBusinessProfile(jid), 8000, 'Business profile');
+            } catch {}
+        }
+
+        const lines = [
+            `📱 *Taarifa za +${number}*`,
+            'WhatsApp: ✅ imesajiliwa',
+            `JID: ${jid}`,
+        ];
+        if (lid) lines.push(`LID: ${typeof lid === 'string' ? lid : lid?.lid || 'inapatikana'}`);
+        if (displayName) lines.push(`Jina kwenye contacts: ${displayName}`);
+
+        const businessFields = [
+            ['Business description', business?.description],
+            ['Business address', business?.address],
+            ['Business email', business?.email],
+            ['Business website', business?.website],
+        ];
+        const availableBusinessFields = businessFields.filter(([, value]) => typeof value === 'string' && value.trim());
+        if (availableBusinessFields.length) {
+            lines.push('', '*Business profile*');
+            for (const [label, value] of availableBusinessFields) lines.push(`${label}: ${value.trim()}`);
+        }
+
+        if (pictureUrl) {
+            try {
+                await sock.sendMessage(ctx.chatId, {
+                    image: { url: pictureUrl },
+                    caption: lines.join('\n'),
+                }, { quoted: ctx.msg });
+                return;
+            } catch (error) {
+                console.debug('[sharepn] Could not send profile picture:', error?.message || error);
+            }
+        }
+        return reply(lines.join('\n'));
+    } catch (error) {
+        console.error('[sharepn] Live number lookup failed:', error?.message || error);
+        return reply(`Lookup ya +${number} imeshindikana: ${error?.message || 'jaribu tena baadaye.'}`);
+    }
+}
+
 async function sharePhoneNumberCode(ctx) {
     const { sock, chatId, senderId, msg, args = [] } = ctx;
     const reply = (text) => ctx.reply(text);
@@ -39,12 +145,21 @@ async function sharePhoneNumberCode(ctx) {
     const values = Array.isArray(args)
         ? args.map(String).filter(Boolean)
         : String(args || '').trim().split(/\s+/).filter(Boolean);
-    const amount = Number.parseInt(values[0], 10);
-    const targetInput = values[1] || 'here';
-    const delayInput = values[2] === undefined ? 1000 : Number.parseInt(values[2], 10);
+    const action = String(values[0] || '').toLowerCase();
+    if (['info', 'lookup', 'check'].includes(action)) {
+        return lookupNumber(ctx, values[1]);
+    }
+    if (values[0] && /^\+?\d{8,15}$/.test(values[0])) {
+        return lookupNumber(ctx, values[0]);
+    }
+
+    const relayValues = action === 'relay' ? values.slice(1) : values;
+    const amount = Number.parseInt(relayValues[0], 10);
+    const targetInput = relayValues[1] || 'here';
+    const delayInput = relayValues[2] === undefined ? 1000 : Number.parseInt(relayValues[2], 10);
 
     if (!Number.isInteger(amount) || amount < 1 || amount > MAX_MESSAGES) {
-        return reply(`Matumizi: ${ctx.prefix || '.'}${ctx.command || 'sp'} <1-${MAX_MESSAGES}> [here|namba yako] [delay-ms]`);
+        return reply(`Matumizi:\n${ctx.prefix || '.'}${ctx.command || 'sharepn'} info <namba>\n${ctx.prefix || '.'}${ctx.command || 'sharepn'} relay <1-${MAX_MESSAGES}> [here|namba yako] [delay-ms]`);
     }
     if (!Number.isInteger(delayInput) || delayInput < 0) {
         return reply('Delay lazima iwe namba isiyo hasi ya milliseconds.');
@@ -100,7 +215,7 @@ async function sharePhoneNumberCode(ctx) {
 module.exports = {
     name: 'sharepn',
     aliases: ['sp', 'sharephonenumber'],
-    description: 'Tuma Share Phone Number protocol message ya majaribio',
+    description: 'Pata live WhatsApp info ya namba au tuma Share Phone Number protocol',
     category: 'OWNER',
     code: sharePhoneNumberCode,
 };
