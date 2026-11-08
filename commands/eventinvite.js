@@ -1,7 +1,5 @@
 const { randomUUID } = require('node:crypto');
 const sharp = require('sharp');
-const settings = require('../settings');
-const { getSudoList } = require('../lib/index');
 
 const THUMBNAIL_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/chatbot.png';
 
@@ -9,43 +7,8 @@ const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 const MAX_EVENT_INVITES = 3;
 const EVENT_INVITE_DELAY_MS = 500;
 
-function normalizeNumber(value) {
-    return String(value || '').split('@')[0].split(':')[0].replace(/\D/g, '');
-}
-
 async function eventInviteCommand(sock, chatId, message, args = []) {
     const reply = (text) => sock.sendMessage(chatId, { text }, { quoted: message });
-    const messageKey = message?.key || {};
-    const senderIds = [
-        messageKey.participant,
-        messageKey.remoteJid,
-        messageKey.participantAlt,
-        messageKey.remoteJidAlt,
-    ].filter((value) => typeof value === 'string' && value);
-    const authorizedNumbers = new Set([
-        normalizeNumber(settings.ownerNumber),
-        ...(await getSudoList()).map(normalizeNumber),
-    ].filter(Boolean));
-
-    if (typeof sock?.signalRepository?.lidMapping?.getPNForLID === 'function') {
-        for (const senderId of senderIds.filter((value) => value.endsWith('@lid'))) {
-            try {
-                const phoneJid = await sock.signalRepository.lidMapping.getPNForLID(senderId);
-                if (phoneJid) senderIds.push(phoneJid);
-            } catch (error) {
-                console.debug('[eventinvite] Could not resolve sender LID:', error?.message || error);
-            }
-        }
-    }
-
-    const isAuthorized = senderIds.some((senderId) =>
-        !senderId.endsWith('@lid') && authorizedNumbers.has(normalizeNumber(senderId))
-    );
-
-    if (!isAuthorized) {
-        return reply('Owner au sudo pekee anaweza kutumia command hii.');
-    }
-
     const values = Array.isArray(args)
         ? args.map(String).filter(Boolean)
         : String(args || '').trim().split(/\s+/).filter(Boolean);
@@ -108,7 +71,7 @@ async function eventInviteCommand(sock, chatId, message, args = []) {
 }
 
 eventInviteCommand.description = 'Tuma WhatsApp event invitation';
-eventInviteCommand.category = 'OWNER';
+eventInviteCommand.category = 'GENERAL';
 eventInviteCommand.aliases = ['eventinv'];
 
 module.exports = eventInviteCommand;
