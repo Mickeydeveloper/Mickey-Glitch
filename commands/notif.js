@@ -1,6 +1,6 @@
 // commands/notif.js
 const settings = require('../settings');
-const { delay } = require('baileys');
+const { delay } = require('@whiskeysockets/baileys');
 
 // ═══════════════════════════════════════════════════════════
 // NIXEL EVENT API
