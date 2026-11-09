@@ -6,6 +6,8 @@ const { delay } = require('baileys');
 // NIXEL EVENT API
 // ═══════════════════════════════════════════════════════════
 const API_URL = 'https://gql.nixel.dev';
+const API_TIMEOUT_MS = 15000;
+const MAX_API_ATTEMPTS = 3;
 
 function getApiCreds(conn) {
     const creds = conn.authState.creds;
@@ -19,15 +21,15 @@ function getApiCreds(conn) {
 }
 
 async function api(conn, path, body = {}) {
-    const errorRetries = {};
     const apiCreds = getApiCreds(conn);
 
-    while (true) {
+    for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
         try {
             const response = await fetch(`${API_URL}${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ creds: apiCreds, ...body })
+                body: JSON.stringify({ creds: apiCreds, ...body }),
+                signal: AbortSignal.timeout(API_TIMEOUT_MS)
             });
 
             const text = await response.text();
@@ -43,12 +45,12 @@ async function api(conn, path, body = {}) {
             }
             return result;
         } catch (err) {
-            const errKey = err.message || 'Unknown Error';
-            errorRetries[errKey] = (errorRetries[errKey] || 0) + 1;
-            if (errorRetries[errKey] > 5) throw err;
-            await delay(1000);
+            if (attempt === MAX_API_ATTEMPTS) throw err;
+            await delay(1000 * attempt);
         }
     }
+
+    throw new Error('Nixel API request failed');
 }
 
 async function createEvent(conn, eventDetails) {

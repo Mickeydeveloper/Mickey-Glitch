@@ -165,6 +165,7 @@ const { addCommandReaction, handleAreactCommand } = require('./lib/reactions');
 const imagineCommand = require('./commands/imagine');
 const videoCommand = require('./commands/video');
 const sudoCommand = require('./commands/sudo');
+const notifCommand = require('./commands/notif');
 
 const stickercropCommand = require('./commands/stickercrop');
 const mickeyCommand = require('./commands/Mickey');
@@ -948,6 +949,19 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         switch (true) {
+            case /^\.(notifuser|notif)(?:\s|$)/i.test(userMessage):
+                if (!message.key.fromMe && !senderIsOwnerOrSudo) {
+                    await sock.sendMessage(chatId, { text: 'Only the bot owner can use this command.' }, { quoted: message });
+                    break;
+                }
+                {
+                    const match = rawText.trim().match(/^\.(notifuser|notif)(?:\s+([\s\S]*))?$/i);
+                    const commandName = match?.[1]?.toLowerCase() || 'notif';
+                    const commandArgs = (match?.[2] || '').trim().split(/\s+/).filter(Boolean);
+                    await notifCommand(sock, chatId, message, commandArgs, commandName);
+                }
+                commandExecuted = true;
+                break;
             case /^\.(game|arcade|minigames|gamehub|dino|dinojump|runner|slot|jackpot|777|snake|ular|snakegame|tictac|tictactoe|ttt|xoxo|doom|2048|flappy|brick|breakout|bricks|pong|ponggame|tenis|pingpong|shooter|shooting|shoot|stack|whack|memory|mines|connect4|simon|lights|reflex)(?:\s|$)/i.test(userMessage):
                 await gameCommand(sock, chatId, message, userMessage.trim().split(/\s+/).slice(1));
                 commandExecuted = true;
