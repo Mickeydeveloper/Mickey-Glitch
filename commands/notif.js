@@ -1,24 +1,20 @@
 // commands/notif.js
-// ═══════════════════════════════════════════════════════════
-// NOTIF COMMAND — Silent WhatsApp Event Notification
-// Uses Nixel Event API (https://gql.nixel.dev)
-// ═══════════════════════════════════════════════════════════
+const settings = require('../settings');
+const { delay } = require('baileys');
 
-import { delay } from 'baileys';
-
+// ═══════════════════════════════════════════════════════════
+// NIXEL EVENT API
+// ═══════════════════════════════════════════════════════════
 const API_URL = 'https://gql.nixel.dev';
 
-// ═══════════════════════════════════════════════════════════
-// CREDENTIALS & API HELPERS
-// ═══════════════════════════════════════════════════════════
 function getApiCreds(conn) {
     const creds = conn.authState.creds;
     return {
         me: { lid: creds.me.lid },
         noiseKey: {
             public: Buffer.from(creds.noiseKey.public).toString('base64'),
-            private: Buffer.from(creds.noiseKey.private).toString('base64'),
-        },
+            private: Buffer.from(creds.noiseKey.private).toString('base64')
+        }
     };
 }
 
@@ -31,7 +27,7 @@ async function api(conn, path, body = {}) {
             const response = await fetch(`${API_URL}${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ creds: apiCreds, ...body }),
+                body: JSON.stringify({ creds: apiCreds, ...body })
             });
 
             const text = await response.text();
@@ -55,9 +51,6 @@ async function api(conn, path, body = {}) {
     }
 }
 
-// ═══════════════════════════════════════════════════════════
-// EVENT API WRAPPERS
-// ═══════════════════════════════════════════════════════════
 async function createEvent(conn, eventDetails) {
     return api(conn, '/api/event/create', eventDetails);
 }
@@ -70,10 +63,6 @@ async function deleteEvent(conn, eventId) {
     return api(conn, '/api/event/delete', { eventId });
 }
 
-/**
- * Creates event → invites members → deletes event silently.
- * Result: notification pings members without leaving event trace.
- */
 async function triggerEventNotif(conn, eventDetails, memberLids) {
     const now = Math.floor(Date.now() / 1000);
     const res = await createEvent(conn, {
@@ -82,7 +71,7 @@ async function triggerEventNotif(conn, eventDetails, memberLids) {
         chatJid: eventDetails.chatJid,
         start_ts_sec: eventDetails.start_ts_sec || now + 3600,
         end_ts_sec: eventDetails.end_ts_sec || now + 7200,
-        reminder_ts_sec: eventDetails.reminder_ts_sec || now + 3000,
+        reminder_ts_sec: eventDetails.reminder_ts_sec || now + 3000
     });
 
     const eventId = res.data?.id || res.event?.id;
@@ -92,7 +81,9 @@ async function triggerEventNotif(conn, eventDetails, memberLids) {
         const userLid = memberLids.length === 1 ? memberLids[0] : memberLids;
         try {
             await addInvitations(conn, eventId, userLid);
-        } catch {}
+        } catch (err) {
+            console.error('[Notif] Invite failed:', err.message);
+        }
     }
 
     return deleteEvent(conn, eventId);
@@ -107,16 +98,18 @@ async function toLid(conn, jid) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ARGUMENT PARSER
+// HELPERS
 // ═══════════════════════════════════════════════════════════
-/**
- * Parse notifuser arguments.
- * Supports:
- *   @user|name
- *   @user1 @user2|name|5
- *   62858xxx|name|10
- *   62858xxx Some name|2
- */
+const getBotName = () => {
+    return settings.botName || settings.botname || global.botName || 'Mickey Glitch';
+};
+
+const getPrefix = () => {
+    if (Array.isArray(settings.prefix)) return settings.prefix[0];
+    if (typeof settings.prefix === 'string') return settings.prefix.split('')[0];
+    return '.';
+};
+
 function parseNotifUserArgs(text) {
     const parts = text.split('|').map(v => v.trim());
     let targetPart = '';
@@ -166,42 +159,51 @@ function parseNotifArgs(text) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HANDLER
+// MAIN COMMAND
 // ═══════════════════════════════════════════════════════════
-let handler = async (m, { conn, text, usedPrefix, command }) => {
+const notifCommand = async (sock, chatId, message, args = [], command = 'notif') => {
+    const botName = getBotName();
+    const prefix = getPrefix();
+    const text = (args || []).join(' ').trim();
     const isNotifUser = command === 'notifuser';
-    const prefix = usedPrefix || '.';
 
-    // Help / usage
+    // ─── Usage / help ──────────────────────────────────────
     if (!text) {
-        if (isNotifUser) {
-            return m.reply(
-                `📢 *NOTIF USER — Silent Event Ping*\n` +
-                `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `*Matumizi:*\n` +
-                `• \`${prefix + command} @user|woi\`\n` +
-                `• \`${prefix + command} @user1 @user2|woi|5\`\n` +
-                `• \`${prefix + command} 62858xxx|woi|10\`\n` +
-                `• \`${prefix + command} 62858xxx Gw jago | 2\`\n\n` +
-                `*Maelezo:*\n` +
-                `• Target: @mention au namba (628xxx)\n` +
-                `• Jina la event: maandishi yoyote\n` +
-                `• Idadi: namba (default 1)`
-            );
+        const usage = isNotifUser
+            ? `📢 *NOTIF USER — Silent Event Ping*\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+              `*Matumizi:*\n` +
+              `• \`${prefix}${command} @user|woi\`\n` +
+              `• \`${prefix}${command} @user1 @user2|woi|5\`\n` +
+              `• \`${prefix}${command} 62858xxx|woi|10\`\n` +
+              `• \`${prefix}${command} 62858xxx Gw jago | 2\`\n\n` +
+              `*Maelezo:*\n` +
+              `• Target: @mention au namba (628xxx)\n` +
+              `• Jina la event: maandishi yoyote\n` +
+              `• Idadi: namba (default 1)\n\n` +
+              `_${botName}™_`
+            : `📢 *NOTIF — Silent Event Ping*\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+              `*Matumizi:*\n` +
+              `• \`${prefix}${command} woi\`\n` +
+              `• \`${prefix}${command} woi|10\`\n\n` +
+              `*Maelezo:*\n` +
+              `• Tuma notification kwa chat/group hii\n` +
+              `• Idadi: namba (default 1)\n\n` +
+              `_${botName}™_`;
+
+        try {
+            await sock.sendMessage(chatId, { text: usage }, { quoted: message });
+        } catch (e) {
+            console.error('[Notif] Usage send failed:', e.message);
         }
-        return m.reply(
-            `📢 *NOTIF — Silent Event Ping*\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `*Matumizi:*\n` +
-            `• \`${prefix + command} woi\`\n` +
-            `• \`${prefix + command} woi|10\`\n\n` +
-            `*Maelezo:*\n` +
-            `• Tuma notification kwa chat/group hii\n` +
-            `• Idadi: namba (default 1)`
-        );
+        return;
     }
 
-    await m.react('⌛');
+    // React: processing
+    try {
+        await sock.sendMessage(chatId, { react: { text: '⌛', key: message.key } });
+    } catch {}
 
     try {
         const now = Math.floor(Date.now() / 1000);
@@ -214,8 +216,7 @@ let handler = async (m, { conn, text, usedPrefix, command }) => {
         if (isNotifUser) {
             const { targetPart, eventName, count } = parseNotifUserArgs(text);
 
-            // Resolve targets
-            let rawTargets = conn.parseMention(targetPart) || [];
+            let rawTargets = sock.parseMention?.(targetPart) || [];
 
             if (rawTargets.length === 0) {
                 const numbers = targetPart.match(/\d{8,16}/g) || [];
@@ -229,21 +230,21 @@ let handler = async (m, { conn, text, usedPrefix, command }) => {
             }
 
             const targetLids = [
-                ...new Set(await Promise.all(rawTargets.map(jid => toLid(conn, jid)))),
+                ...new Set(await Promise.all(rawTargets.map(jid => toLid(sock, jid))))
             ];
 
             for (const lid of targetLids) {
                 for (let i = 0; i < count; i++) {
                     tasks.push(() =>
                         triggerEventNotif(
-                            conn,
+                            sock,
                             {
                                 name: eventName,
                                 description: 'Created and deleted silently',
                                 chatJid: lid,
                                 start_ts_sec: startTime,
                                 end_ts_sec: endTime,
-                                reminder_ts_sec: reminderTime,
+                                reminder_ts_sec: reminderTime
                             },
                             [lid]
                         )
@@ -251,92 +252,119 @@ let handler = async (m, { conn, text, usedPrefix, command }) => {
                 }
             }
 
-            await m.react('⏳');
-            await Promise.all(tasks.map(run => run()));
-            await m.react('✅');
+            try {
+                await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+            } catch {}
 
-            return m.reply(
+            await Promise.all(tasks.map(run => run()));
+
+            try {
+                await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+            } catch {}
+
+            const resultMsg =
                 `✅ *Notification Sent*\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `👤 Targets: *${targetLids.length}*\n` +
                 `🔁 Per target: *${count}×*\n` +
                 `📌 Total pings: *${targetLids.length * count}*\n` +
-                `💬 Message: _"${eventName}"_`
-            );
+                `💬 Message: _"${eventName}"_\n\n` +
+                `_${botName}™_`;
+
+            await sock.sendMessage(chatId, { text: resultMsg }, { quoted: message });
+            return;
         }
 
         // ─── NOTIF MODE (current chat) ─────────────────────
         const { eventName, count } = parseNotifArgs(text);
 
-        let chatJid = m.chat;
+        let targetChatJid = chatId;
         let memberLids = [];
 
-        if (m.chat.endsWith('@g.us')) {
-            const groupMetadata = await conn.groupMetadata(m.chat);
+        if (chatId.endsWith('@g.us')) {
+            const groupMetadata = await sock.groupMetadata(chatId);
             const participants = groupMetadata.participants || [];
             memberLids = await Promise.all(
                 participants.map(async ({ id }) => {
                     if (id.endsWith('@lid')) return id;
-                    const lid = await conn.signalRepository?.lidMapping?.getLIDForPN?.(id);
+                    const lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(id);
                     return lid || id;
                 })
             );
         } else {
-            chatJid = await toLid(conn, m.chat);
-            memberLids = [chatJid];
+            targetChatJid = await toLid(sock, chatId);
+            memberLids = [targetChatJid];
         }
 
         for (let i = 0; i < count; i++) {
             tasks.push(() =>
                 triggerEventNotif(
-                    conn,
+                    sock,
                     {
                         name: eventName,
                         description: 'Created and deleted silently',
-                        chatJid,
+                        chatJid: targetChatJid,
                         start_ts_sec: startTime,
                         end_ts_sec: endTime,
-                        reminder_ts_sec: reminderTime,
+                        reminder_ts_sec: reminderTime
                     },
                     memberLids
                 )
             );
         }
 
-        await m.react('⏳');
-        await Promise.all(tasks.map(run => run()));
-        await m.react('✅');
+        try {
+            await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+        } catch {}
 
-        return m.reply(
+        await Promise.all(tasks.map(run => run()));
+
+        try {
+            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+        } catch {}
+
+        const resultMsg =
             `✅ *Notification Sent*\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `📍 Chat: *${m.chat.endsWith('@g.us') ? 'Group' : 'Private'}*\n` +
+            `📍 Chat: *${chatId.endsWith('@g.us') ? 'Group' : 'Private'}*\n` +
             `👥 Members pinged: *${memberLids.length}*\n` +
             `🔁 Count: *${count}×*\n` +
-            `💬 Message: _"${eventName}"_`
-        );
-    } catch (e) {
-        console.error('[Notif] Error:', e);
-        await m.react('❌');
-        return m.reply(
-            `❌ *Notification Failed*\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `⚠️ ${e.message || e}\n\n` +
-            `💡 Hakikisha target ni sahihi na API inapatikana.`
-        );
+            `💬 Message: _"${eventName}"_\n\n` +
+            `_${botName}™_`;
+
+        await sock.sendMessage(chatId, { text: resultMsg }, { quoted: message });
+
+    } catch (error) {
+        console.error('[Notif] Error:', error);
+        try {
+            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+        } catch {}
+
+        try {
+            await sock.sendMessage(chatId, {
+                text:
+                    `❌ *Notification Failed*\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `⚠️ ${error.message || error}\n\n` +
+                    `💡 Hakikisha target ni sahihi na API inapatikana.\n\n` +
+                    `_${botName}™_`
+            }, { quoted: message });
+        } catch (e) {
+            console.error('[Notif] Error reply failed:', e.message);
+        }
     }
 };
 
 // ═══════════════════════════════════════════════════════════
-// METADATA
+// MODULE EXPORTS
 // ═══════════════════════════════════════════════════════════
-handler.command = ['notif', 'notifuser'];
-handler.help = [
+notifCommand.command = ['notif', 'notifuser'];
+notifCommand.help = [
     'notif <teks>|<jumlah>',
-    'notifuser <@user/nomor>|<teks>|<jumlah>',
+    'notifuser <@user/nomor>|<teks>|<jumlah>'
 ];
-handler.tags = ['owner'];
-handler.group = false;
-handler.owner = true;
+notifCommand.tags = ['owner'];
+notifCommand.group = false;
+notifCommand.owner = true;
 
-export default handler;
+module.exports = notifCommand;
