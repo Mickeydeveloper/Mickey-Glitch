@@ -1,94 +1,48 @@
 // commands/notif.js
 const settings = require('../settings');
-const { delay } = require('@whiskeysockets/baileys');
+const { randomUUID } = require('node:crypto');
 
-// ═══════════════════════════════════════════════════════════
-// NIXEL EVENT API
-// ═══════════════════════════════════════════════════════════
-const API_URL = 'https://gql.nixel.dev';
-const API_TIMEOUT_MS = 15000;
-const MAX_API_ATTEMPTS = 3;
+const THUMBNAIL_URL = 'https://cdn.ornzora.eu.cc/4d4f3591-1c3e-4e1b-b1c2-45faeb91b781-FIORA.jpg';
+const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 
-function getApiCreds(conn) {
-    const creds = conn.authState.creds;
-    return {
-        me: { lid: creds.me.lid },
-        noiseKey: {
-            public: Buffer.from(creds.noiseKey.public).toString('base64'),
-            private: Buffer.from(creds.noiseKey.private).toString('base64')
-        }
-    };
-}
-
-async function api(conn, path, body = {}) {
-    const apiCreds = getApiCreds(conn);
-
-    for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
-        try {
-            const response = await fetch(`${API_URL}${path}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ creds: apiCreds, ...body }),
-                signal: AbortSignal.timeout(API_TIMEOUT_MS)
-            });
-
-            const text = await response.text();
-            let result;
-            try {
-                result = JSON.parse(text);
-            } catch {
-                throw new Error(`Invalid API response: ${text}`);
-            }
-
-            if (!response.ok || !result.success) {
-                throw new Error(result.message || `HTTP ${response.status}`);
-            }
-            return result;
-        } catch (err) {
-            if (attempt === MAX_API_ATTEMPTS) throw err;
-            await delay(1000 * attempt);
-        }
-    }
-
-    throw new Error('Nixel API request failed');
-}
-
-async function createEvent(conn, eventDetails) {
-    return api(conn, '/api/event/create', eventDetails);
-}
-
-async function addInvitations(conn, eventId, userLid) {
-    return api(conn, '/api/event/invite', { eventId, userLid });
-}
-
-async function deleteEvent(conn, eventId) {
-    return api(conn, '/api/event/delete', { eventId });
-}
-
-async function triggerEventNotif(conn, eventDetails, memberLids) {
-    const now = Math.floor(Date.now() / 1000);
-    const res = await createEvent(conn, {
-        name: eventDetails.name || 'New Event',
-        description: eventDetails.description || '',
-        chatJid: eventDetails.chatJid,
-        start_ts_sec: eventDetails.start_ts_sec || now + 3600,
-        end_ts_sec: eventDetails.end_ts_sec || now + 7200,
-        reminder_ts_sec: eventDetails.reminder_ts_sec || now + 3000
+async function getEventThumbnail() {
+    const response = await fetch(THUMBNAIL_URL, {
+        signal: AbortSignal.timeout(10000)
     });
+    if (!response.ok) throw new Error(`Thumbnail download failed: HTTP ${response.status}`);
 
-    const eventId = res.data?.id || res.event?.id;
-    if (!eventId) throw new Error('Event ID tidak ditemukan');
-
-    if (memberLids && memberLids.length > 0) {
-        const userLid = memberLids.length === 1 ? memberLids[0] : memberLids;
-        try {
-            await addInvitations(conn, eventId, userLid);
-        } catch (err) {
-            console.error('[Notif] Invite failed:', err.message);
-        }
+    const contentLength = Number(response.headers.get('content-length'));
+    if (contentLength > MAX_THUMBNAIL_BYTES) {
+        throw new Error('Event thumbnail is larger than 2 MB');
     }
 
-    return deleteEvent(conn, eventId);
+    const thumbnail = Buffer.from(await response.arrayBuffer());
+    if (thumbnail.length > MAX_THUMBNAIL_BYTES) {
+        throw new Error('Event thumbnail is larger than 2 MB');
+    }
+    return thumbnail;
+}
+
+async function triggerEventNotif(conn, chatJid, eventTitle, jpegThumbnail, startTime) {
+    return conn.relayMessage(
+        chatJid,
+        {
+            eventInviteMessage: {
+                eventId: randomUUID(),
+                eventTitle,
+                jpegThumbnail,
+                startTime
+            }
+        },
+        {
+            additionalNodes: [
+                {
+                    tag: 'meta',
+                    attrs: { context_source: 'event_invitation' }
+                }
+            ]
+        }
+    );
 }
 
 async function toLid(conn, jid) {
@@ -172,7 +126,7 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
     // ─── Usage / help ──────────────────────────────────────
     if (!text) {
         const usage = isNotifUser
-            ? `📢 *NOTIF USER — Silent Event Ping*\n` +
+            ? `📢 *NOTIF USER — Event Invitation*\n` +
               `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
               `*Matumizi:*\n` +
               `• \`${prefix}${command} @user|woi\`\n` +
@@ -184,13 +138,13 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
               `• Jina la event: maandishi yoyote\n` +
               `• Idadi: namba (default 1)\n\n` +
               `_${botName}™_`
-            : `📢 *NOTIF — Silent Event Ping*\n` +
+            : `📢 *NOTIF — Event Invitation*\n` +
               `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
               `*Matumizi:*\n` +
               `• \`${prefix}${command} woi\`\n` +
               `• \`${prefix}${command} woi|10\`\n\n` +
               `*Maelezo:*\n` +
-              `• Tuma notification kwa chat/group hii\n` +
+              `• Tuma event invitation kwa chat/group hii\n` +
               `• Idadi: namba (default 1)\n\n` +
               `_${botName}™_`;
 
@@ -210,9 +164,7 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
     try {
         const now = Math.floor(Date.now() / 1000);
         const startTime = now + 3600;
-        const endTime = now + 7200;
-        const reminderTime = now + 3000;
-        const tasks = [];
+        const jpegThumbnail = await getEventThumbnail();
 
         // ─── NOTIFUSER MODE ────────────────────────────────
         if (isNotifUser) {
@@ -237,20 +189,7 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
 
             for (const lid of targetLids) {
                 for (let i = 0; i < count; i++) {
-                    tasks.push(() =>
-                        triggerEventNotif(
-                            sock,
-                            {
-                                name: eventName,
-                                description: 'Created and deleted silently',
-                                chatJid: lid,
-                                start_ts_sec: startTime,
-                                end_ts_sec: endTime,
-                                reminder_ts_sec: reminderTime
-                            },
-                            [lid]
-                        )
-                    );
+                    await triggerEventNotif(sock, lid, eventName, jpegThumbnail, startTime);
                 }
             }
 
@@ -258,14 +197,12 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
                 await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
             } catch {}
 
-            await Promise.all(tasks.map(run => run()));
-
             try {
                 await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
             } catch {}
 
             const resultMsg =
-                `✅ *Notification Sent*\n` +
+                `✅ *Event Invitation Sent*\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `👤 Targets: *${targetLids.length}*\n` +
                 `🔁 Per target: *${count}×*\n` +
@@ -280,57 +217,23 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
         // ─── NOTIF MODE (current chat) ─────────────────────
         const { eventName, count } = parseNotifArgs(text);
 
-        let targetChatJid = chatId;
-        let memberLids = [];
-
-        if (chatId.endsWith('@g.us')) {
-            const groupMetadata = await sock.groupMetadata(chatId);
-            const participants = groupMetadata.participants || [];
-            memberLids = await Promise.all(
-                participants.map(async ({ id }) => {
-                    if (id.endsWith('@lid')) return id;
-                    const lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(id);
-                    return lid || id;
-                })
-            );
-        } else {
-            targetChatJid = await toLid(sock, chatId);
-            memberLids = [targetChatJid];
-        }
-
         for (let i = 0; i < count; i++) {
-            tasks.push(() =>
-                triggerEventNotif(
-                    sock,
-                    {
-                        name: eventName,
-                        description: 'Created and deleted silently',
-                        chatJid: targetChatJid,
-                        start_ts_sec: startTime,
-                        end_ts_sec: endTime,
-                        reminder_ts_sec: reminderTime
-                    },
-                    memberLids
-                )
-            );
+            await triggerEventNotif(sock, chatId, eventName, jpegThumbnail, startTime);
         }
 
         try {
             await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
         } catch {}
 
-        await Promise.all(tasks.map(run => run()));
-
         try {
             await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         } catch {}
 
         const resultMsg =
-            `✅ *Notification Sent*\n` +
+            `✅ *Event Invitation Sent*\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
             `📍 Chat: *${chatId.endsWith('@g.us') ? 'Group' : 'Private'}*\n` +
-            `👥 Members pinged: *${memberLids.length}*\n` +
-            `🔁 Count: *${count}×*\n` +
+            `🔁 Invitations sent: *${count}*\n` +
             `💬 Message: _"${eventName}"_\n\n` +
             `_${botName}™_`;
 
@@ -348,7 +251,7 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
                     `❌ *Notification Failed*\n` +
                     `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
                     `⚠️ ${error.message || error}\n\n` +
-                    `💡 Hakikisha target ni sahihi na API inapatikana.\n\n` +
+                    `💡 Hakikisha target ni sahihi na thumbnail inapatikana.\n\n` +
                     `_${botName}™_`
             }, { quoted: message });
         } catch (e) {
