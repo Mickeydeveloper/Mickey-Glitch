@@ -4,6 +4,8 @@ const { randomUUID } = require('node:crypto');
 
 const THUMBNAIL_URL = 'https://cdn.ornzora.eu.cc/4d4f3591-1c3e-4e1b-b1c2-45faeb91b781-FIORA.jpg';
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+const EVENT_DURATION_SEC = 3600;      // event lasts 1 hour
+const EVENT_DELAY_MS = 500;           // gap between multiple events
 
 async function getEventThumbnail() {
     const response = await fetch(THUMBNAIL_URL, {
@@ -31,7 +33,8 @@ async function triggerEventNotif(conn, chatJid, eventTitle, jpegThumbnail, start
                 eventId: randomUUID(),
                 eventTitle,
                 jpegThumbnail,
-                startTime
+                startTime,
+                endTime: startTime + EVENT_DURATION_SEC
             }
         },
         {
@@ -53,6 +56,8 @@ async function toLid(conn, jid) {
     return lid;
 }
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
@@ -66,6 +71,15 @@ const getPrefix = () => {
     return '.';
 };
 
+/**
+ * Parse args for `notifuser`
+ * Formats supported:
+ *   @user|woi
+ *   @user1 @user2|woi|5
+ *   62858xxx|woi|10
+ *   62858xxx Gw jago | 2
+ *   62858xxx Gw jago 2
+ */
 function parseNotifUserArgs(text) {
     const parts = text.split('|').map(v => v.trim());
     let targetPart = '';
@@ -103,14 +117,44 @@ function parseNotifUserArgs(text) {
         }
     }
 
+    // Final fallback: try "name 20" pattern inside eventName
+    if (count === 1) {
+        const tail = eventName.match(/^(.+?)\s+(\d+)$/);
+        if (tail) {
+            eventName = tail[1].trim();
+            count = parseInt(tail[2]);
+        }
+    }
+
     return { targetPart, eventName, count };
 }
 
+/**
+ * Parse args for `notif`
+ * Formats supported:
+ *   woi
+ *   woi|10
+ *   Mickey 20        -> eventName="Mickey", count=20
+ *   Mickey|20
+ */
 function parseNotifArgs(text) {
-    const parts = text.split('|').map(v => v.trim());
-    const eventName = parts[0] || 'Woi';
-    const n = parseInt(parts[1]);
-    const count = !isNaN(n) && n > 0 ? n : 1;
+    const trimmed = text.trim();
+    let eventName = trimmed;
+    let count = 1;
+
+    if (trimmed.includes('|')) {
+        const parts = trimmed.split('|').map(v => v.trim());
+        eventName = parts[0] || 'Woi';
+        const n = parseInt(parts[1]);
+        if (!isNaN(n) && n > 0) count = n;
+    } else {
+        const match = trimmed.match(/^(.+?)\s+(\d+)$/);
+        if (match) {
+            eventName = match[1].trim();
+            count = parseInt(match[2]);
+        }
+    }
+
     return { eventName, count };
 }
 
@@ -132,7 +176,7 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
               `• \`${prefix}${command} @user|woi\`\n` +
               `• \`${prefix}${command} @user1 @user2|woi|5\`\n` +
               `• \`${prefix}${command} 62858xxx|woi|10\`\n` +
-              `• \`${prefix}${command} 62858xxx Gw jago | 2\`\n\n` +
+              `• \`${prefix}${command} 62858xxx Gw jago 2\`\n\n` +
               `*Maelezo:*\n` +
               `• Target: @mention au namba (628xxx)\n` +
               `• Jina la event: maandishi yoyote\n` +
@@ -142,10 +186,11 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
               `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
               `*Matumizi:*\n` +
               `• \`${prefix}${command} woi\`\n` +
-              `• \`${prefix}${command} woi|10\`\n\n` +
+              `• \`${prefix}${command} Mickey 20\`\n` +
+              `• \`${prefix}${command} Mickey|20\`\n\n` +
               `*Maelezo:*\n` +
               `• Tuma event invitation kwa chat/group hii\n` +
-              `• Idadi: namba (default 1)\n\n` +
+              `• Idadi: namba mwishoni (default 1)\n\n` +
               `_${botName}™_`;
 
         try {
@@ -163,7 +208,7 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
 
     try {
         const now = Math.floor(Date.now() / 1000);
-        const startTime = now + 3600;
+        const startTime = now + EVENT_DURATION_SEC;
         const jpegThumbnail = await getEventThumbnail();
 
         // ─── NOTIFUSER MODE ────────────────────────────────
@@ -190,27 +235,14 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
             for (const lid of targetLids) {
                 for (let i = 0; i < count; i++) {
                     await triggerEventNotif(sock, lid, eventName, jpegThumbnail, startTime);
+                    if (i < count - 1) await sleep(EVENT_DELAY_MS);
                 }
             }
 
-            try {
-                await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
-            } catch {}
-
+            // ✅ No text confirmation — events only
             try {
                 await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
             } catch {}
-
-            const resultMsg =
-                `✅ *Event Invitation Sent*\n` +
-                `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `👤 Targets: *${targetLids.length}*\n` +
-                `🔁 Per target: *${count}×*\n` +
-                `📌 Total pings: *${targetLids.length * count}*\n` +
-                `💬 Message: _"${eventName}"_\n\n` +
-                `_${botName}™_`;
-
-            await sock.sendMessage(chatId, { text: resultMsg }, { quoted: message });
             return;
         }
 
@@ -219,25 +251,13 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
 
         for (let i = 0; i < count; i++) {
             await triggerEventNotif(sock, chatId, eventName, jpegThumbnail, startTime);
+            if (i < count - 1) await sleep(EVENT_DELAY_MS);
         }
 
-        try {
-            await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
-        } catch {}
-
+        // ✅ No text confirmation — events only
         try {
             await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         } catch {}
-
-        const resultMsg =
-            `✅ *Event Invitation Sent*\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `📍 Chat: *${chatId.endsWith('@g.us') ? 'Group' : 'Private'}*\n` +
-            `🔁 Invitations sent: *${count}*\n` +
-            `💬 Message: _"${eventName}"_\n\n` +
-            `_${botName}™_`;
-
-        await sock.sendMessage(chatId, { text: resultMsg }, { quoted: message });
 
     } catch (error) {
         console.error('[Notif] Error:', error);
@@ -265,8 +285,8 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
 // ═══════════════════════════════════════════════════════════
 notifCommand.command = ['notif', 'notifuser'];
 notifCommand.help = [
-    'notif <teks>|<jumlah>',
-    'notifuser <@user/nomor>|<teks>|<jumlah>'
+    'notif <jina> [idadi]',
+    'notifuser <@user/nomor>|<jina>|<idadi>'
 ];
 notifCommand.tags = ['owner'];
 notifCommand.group = false;
