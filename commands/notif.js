@@ -1,11 +1,10 @@
 // commands/notif.js
 const settings = require('../settings');
-const { randomUUID } = require('node:crypto');
 
 const THUMBNAIL_URL = 'https://cdn.ornzora.eu.cc/4d4f3591-1c3e-4e1b-b1c2-45faeb91b781-FIORA.jpg';
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
-const EVENT_DURATION_SEC = 3600;      // event lasts 1 hour
-const EVENT_DELAY_MS = 500;           // gap between multiple events
+const EVENT_DURATION_SEC = 3600; // Muda wa tukio: saa 1
+const EVENT_DELAY_MS = 500;      // Muda wa kusubiri kati ya matukio mengi
 
 async function getEventThumbnail() {
     const response = await fetch(THUMBNAIL_URL, {
@@ -25,26 +24,30 @@ async function getEventThumbnail() {
     return thumbnail;
 }
 
+// ✅ Muundo sahihi wa eventMessage unaotambulika na WhatsApp
 async function triggerEventNotif(conn, chatJid, eventTitle, jpegThumbnail, startTime) {
+    const endTime = startTime + EVENT_DURATION_SEC;
+
     return conn.relayMessage(
         chatJid,
         {
-            eventInviteMessage: {
-                eventId: randomUUID(),
-                eventTitle,
-                jpegThumbnail,
-                startTime,
-                endTime: startTime + EVENT_DURATION_SEC
+            eventMessage: {
+                isCanceled: false,
+                name: eventTitle,
+                description: eventTitle,
+                location: {
+                    degreesLatitude: 0,
+                    degreesLongitude: 0,
+                    name: ''
+                },
+                // startTime na endTime lazima ziwe timestamp za Unix (sekunde)
+                startTime: String(startTime),
+                endTime: String(endTime),
+                extraGuestsAllowed: false,
+                jpegThumbnail: jpegThumbnail
             }
         },
-        {
-            additionalNodes: [
-                {
-                    tag: 'meta',
-                    attrs: { context_source: 'event_invitation' }
-                }
-            ]
-        }
+        {}
     );
 }
 
@@ -71,15 +74,6 @@ const getPrefix = () => {
     return '.';
 };
 
-/**
- * Parse args for `notifuser`
- * Formats supported:
- *   @user|woi
- *   @user1 @user2|woi|5
- *   62858xxx|woi|10
- *   62858xxx Gw jago | 2
- *   62858xxx Gw jago 2
- */
 function parseNotifUserArgs(text) {
     const parts = text.split('|').map(v => v.trim());
     let targetPart = '';
@@ -117,7 +111,6 @@ function parseNotifUserArgs(text) {
         }
     }
 
-    // Final fallback: try "name 20" pattern inside eventName
     if (count === 1) {
         const tail = eventName.match(/^(.+?)\s+(\d+)$/);
         if (tail) {
@@ -129,14 +122,6 @@ function parseNotifUserArgs(text) {
     return { targetPart, eventName, count };
 }
 
-/**
- * Parse args for `notif`
- * Formats supported:
- *   woi
- *   woi|10
- *   Mickey 20        -> eventName="Mickey", count=20
- *   Mickey|20
- */
 function parseNotifArgs(text) {
     const trimmed = text.trim();
     let eventName = trimmed;
@@ -167,7 +152,6 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
     const text = (args || []).join(' ').trim();
     const isNotifUser = command === 'notifuser';
 
-    // ─── Usage / help ──────────────────────────────────────
     if (!text) {
         const usage = isNotifUser
             ? `📢 *NOTIF USER — Event Invitation*\n` +
@@ -201,7 +185,6 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
         return;
     }
 
-    // React: processing
     try {
         await sock.sendMessage(chatId, { react: { text: '⌛', key: message.key } });
     } catch {}
@@ -239,7 +222,6 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
                 }
             }
 
-            // ✅ No text confirmation — events only
             try {
                 await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
             } catch {}
@@ -254,7 +236,6 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
             if (i < count - 1) await sleep(EVENT_DELAY_MS);
         }
 
-        // ✅ No text confirmation — events only
         try {
             await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         } catch {}
