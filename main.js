@@ -162,6 +162,7 @@ const { handleChatbotMessage, groupChatbotToggleCommand } = require('./commands/
 const urlCommand = require('./commands/url');
 const { handleTranslateCommand } = require('./commands/translate');
 const { addCommandReaction, handleAreactCommand } = require('./lib/reactions');
+const { sendStickerReaction, isAutoreactEnabled } = require('./commands/autoreact');
 const imagineCommand = require('./commands/imagine');
 const videoCommand = require('./commands/video');
 const sudoCommand = require('./commands/sudo');
@@ -485,6 +486,15 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // Handle autoread functionality
         await handleAutoread(sock, message);
+
+        // Auto-react stickers when enabled
+        if (message.message?.stickerMessage && isAutoreactEnabled()) {
+            try {
+                await sendStickerReaction(sock, message.key.remoteJid, message);
+            } catch (e) {
+                console.error('[Main] Auto-react sticker failed:', e?.message || e);
+            }
+        }
 
         // Determine chat context early
         const chatIdEarly = message.key.remoteJid;

