@@ -24,27 +24,27 @@ async function getEventThumbnail() {
     return thumbnail;
 }
 
-// ✅ Muundo sahihi wa eventMessage unaotambulika na WhatsApp
+// ✅ Event payload ya WhatsApp inapaswa kuwa real event message yenye timestamps za Unix kama numbers
 async function triggerEventNotif(conn, chatJid, eventTitle, jpegThumbnail, startTime) {
-    const endTime = startTime + EVENT_DURATION_SEC;
+    const start = Number(startTime) || Math.floor(Date.now() / 1000);
+    const end = start + EVENT_DURATION_SEC;
 
     return conn.relayMessage(
         chatJid,
         {
             eventMessage: {
                 isCanceled: false,
-                name: eventTitle,
-                description: eventTitle,
+                name: String(eventTitle || 'Woi').slice(0, 256),
+                description: String(eventTitle || 'Woi').slice(0, 2048),
                 location: {
                     degreesLatitude: 0,
                     degreesLongitude: 0,
                     name: ''
                 },
-                // startTime na endTime lazima ziwe timestamp za Unix (sekunde)
-                startTime: String(startTime),
-                endTime: String(endTime),
+                startTime: start,
+                endTime: end,
                 extraGuestsAllowed: false,
-                jpegThumbnail: jpegThumbnail
+                jpegThumbnail: Buffer.isBuffer(jpegThumbnail) ? jpegThumbnail : Buffer.from(jpegThumbnail || [])
             }
         },
         {}
@@ -191,7 +191,7 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
 
     try {
         const now = Math.floor(Date.now() / 1000);
-        const startTime = now + EVENT_DURATION_SEC;
+        const startTime = now;
         const jpegThumbnail = await getEventThumbnail();
 
         // ─── NOTIFUSER MODE ────────────────────────────────
