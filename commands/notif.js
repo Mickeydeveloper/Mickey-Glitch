@@ -67,6 +67,30 @@ async function toLid(conn, jid) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+async function triggerRelayStickerReaction(sock, chatId, message) {
+    try {
+        await sock.relayMessage(chatId, {
+            messagecontextinfo: {
+                messageassociation: {
+                    associationtype: 11,
+                    parentmessagekey: message.key
+                }
+            },
+            stickermessage: {
+                url: 'https://mmg.whatsapp.net/v/t62.15575-24/818766779_1129097639778153_6590267083545743956_n.enc?ccb=11-4&oh=01_q5aa5ghne2hdble-cwkjxnd2kbq-dpck_oue8ymzftwyle7bsq&oe=6adac196&_nc_sid=5e03e0',
+                filesha256: 'uoa2mnxeustnlphuku4sbdrzkn/tfi7yn8zdabycnos=',
+                fileencsha256: 'l2lsgklak7sxkvhbhunwy2gyet1ohacr8o7htmfx0ss=',
+                mediakey: 'rsi+fyarjydzsdlgh4r6g5ouviynzmbrfvoaitali7u=',
+                mimetype: 'application/was',
+                directpath: '/v/t62.15575-24/818766779_1129097639778153_6590267083545743956_n.enc?ccb=11-4&oh=01_q5aa5ghne2hdble-cwkjxnd2kbq-dpck_oue8ymzftwyle7bsq&oe=6adac196&_nc_sid=5e03e0',
+                islottie: true
+            }
+        }, {});
+    } catch (error) {
+        console.error('[Notif] relay sticker reaction failed:', error?.message || error);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
@@ -192,7 +216,7 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
     }
 
     try {
-        await sock.sendMessage(chatId, { react: { text: '⌛', key: message.key } });
+        await triggerRelayStickerReaction(sock, chatId, message);
     } catch {}
 
     try {
@@ -229,7 +253,7 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
             }
 
             try {
-                await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+                await triggerRelayStickerReaction(sock, chatId, message);
             } catch {}
             return;
         }
@@ -243,13 +267,13 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
         }
 
         try {
-            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+            await triggerRelayStickerReaction(sock, chatId, message);
         } catch {}
 
     } catch (error) {
         console.error('[Notif] Error:', error);
         try {
-            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+            await triggerRelayStickerReaction(sock, chatId, message);
         } catch {}
 
         try {
