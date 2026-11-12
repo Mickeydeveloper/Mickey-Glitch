@@ -29,26 +29,32 @@ async function triggerEventNotif(conn, chatJid, eventTitle, jpegThumbnail, start
     const start = Number(startTime) || Math.floor(Date.now() / 1000);
     const end = start + EVENT_DURATION_SEC;
 
-    return conn.relayMessage(
-        chatJid,
-        {
-            eventMessage: {
-                isCanceled: false,
-                name: String(eventTitle || 'Woi').slice(0, 256),
-                description: String(eventTitle || 'Woi').slice(0, 2048),
-                location: {
-                    degreesLatitude: 0,
-                    degreesLongitude: 0,
-                    name: ''
-                },
-                startTime: start,
-                endTime: end,
-                extraGuestsAllowed: false,
-                jpegThumbnail: Buffer.isBuffer(jpegThumbnail) ? jpegThumbnail : Buffer.from(jpegThumbnail || [])
-            }
-        },
-        {}
-    );
+    const payload = {
+        eventMessage: {
+            isCanceled: false,
+            name: String(eventTitle || 'Woi').slice(0, 256),
+            description: String(eventTitle || 'Woi').slice(0, 2048),
+            location: {
+                degreesLatitude: 0,
+                degreesLongitude: 0,
+                name: ''
+            },
+            startTime: start,
+            endTime: end,
+            extraGuestsAllowed: false,
+            jpegThumbnail: Buffer.isBuffer(jpegThumbnail) ? jpegThumbnail : Buffer.from(jpegThumbnail || [])
+        }
+    };
+
+    try {
+        return await conn.sendMessage(chatJid, payload);
+    } catch (sendErr) {
+        try {
+            return await conn.relayMessage(chatJid, payload, {});
+        } catch (relayErr) {
+            throw relayErr || sendErr;
+        }
+    }
 }
 
 async function toLid(conn, jid) {
