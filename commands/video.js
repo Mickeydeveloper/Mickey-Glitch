@@ -41,7 +41,7 @@ function extractYoutubeVideoId(ytUrl) {
 // 1. API MPYA: ZiaUl API (Chanzo cha Kwanza)
 async function getVideoFromZiaUlAPI(ytUrl) {
     const encodedUrl = encodeURIComponent(ytUrl);
-    const apiUrl = `https://apiziaul.vercel.app/api/downloader/ytmp4?url=${encodedUrl}`;
+    const apiUrl = `https://prexzyapis.com/download/ytmp4?url=${encodedUrl}`;
 
     try {
         const res = await tryRequest(() => axios.get(apiUrl, {
