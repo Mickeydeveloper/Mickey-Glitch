@@ -9,10 +9,7 @@ const BANNER = 'https://c.termai.cc/a199/0Dw0j.jpg';
 function formatSize(bytes) {
     const u = ['B', 'KB', 'MB', 'GB', 'TB'];
     let i = 0, v = bytes;
-    while (v >= 1024 && i < u.length - 1) {
-        v /= 1024;
-        i++;
-    }
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
     return `${v.toFixed(i === 0 ? 0 : 2)} ${u[i]}`;
 }
 
@@ -22,9 +19,7 @@ function getDisk() {
         const r = out.slice(1).map(l => l.trim().split(/\s+/))[0];
         const total = +r[1] * 1024, used = +r[2] * 1024;
         return { total, used, percent: +(used / total * 100).toFixed(1) };
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
 
 function getSwap() {
@@ -35,9 +30,7 @@ function getSwap() {
         if (!total) return null;
         const used = total - free;
         return { total, used, free, percent: +(used / total * 100).toFixed(1) };
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
 
 function getNetwork() {
@@ -60,6 +53,7 @@ function collect(sock) {
     const heap = process.memoryUsage();
     const isBun = typeof Bun !== 'undefined';
     const disk = getDisk();
+    const uptime = os.uptime();
     return {
         botName: sock?.user?.name || 'MICKEYGLITCH BOT',
         cpu: +Math.min(99.9, (load[0] / Math.max(cores, 1)) * 100).toFixed(1),
@@ -70,10 +64,11 @@ function collect(sock) {
         arch: os.arch(),
         heapUsed: formatSize(heap.heapUsed),
         rss: formatSize(heap.rss),
-        swapTxt: (s => s ? `${formatSize(s.used)} / ${formatSize(s.total)} (${s.percent}%)` : 'haijawekezwa')(getSwap()),
+        swapTxt: (s => s ? `${formatSize(s.used)}/${formatSize(s.total)}` : '—')(getSwap()),
         net: getNetwork(),
+        uptime: uptime,
         runtime: isBun ? `Bun ${Bun.version}` : `Node ${process.version}`,
-        engine: isBun ? 'JavaScriptCore' : `V8 ${process.versions.v8}`,
+        engine: isBun ? 'JSC' : `V8 ${process.versions.v8.split('.')[0]}`,
         timezone: 'Africa/Dar_es_Salaam',
         at: Date.now(),
     };
@@ -82,11 +77,8 @@ function collect(sock) {
 // ===== PAYLOAD BUILDER =====
 function buildPayload(d) {
     const DATA = JSON.stringify({
-        cpu: d.cpu,
-        ram: d.ram,
-        disk: d.disk,
-        timezone: d.timezone,
-        at: d.at,
+        cpu: d.cpu, ram: d.ram, disk: d.disk,
+        timezone: d.timezone, at: d.at,
     }).replace(/</g, '\\u003c');
 
     return {
@@ -95,82 +87,148 @@ function buildPayload(d) {
             primitive: {
                 __typename: 'FOAHtmlPrimitiveDemoDONOTUSE',
                 trusted_sources: [],
-                payload: `<style>
-*{box-sizing:border-box;margin:0;font-family:'Segoe UI',Arial,sans-serif;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-html,body{width:100%}
-body{background:linear-gradient(165deg,#0a1526,#060c18 60%,#04080f);padding:8px;color:#e8f0ff;overflow-y:auto}
-#app{max-width:420px;margin:0 auto}
-.hdr{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid rgba(90,160,255,.25);border-radius:16px;background:linear-gradient(150deg,rgba(40,90,180,.25),rgba(10,25,50,.5));margin-bottom:8px}
-.hdr img{width:52px;height:52px;border-radius:12px;object-fit:cover;border:1px solid rgba(120,180,255,.4)}
-.hdr h1{font:900 16px 'Arial Black';color:#fff}
-.hdr .st{display:flex;align-items:center;gap:5px;font-size:10px;color:#4ade80;margin-top:2px}
-.hdr .st i{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 8px #4ade80;animation:blink 1.6s infinite}
-@keyframes blink{50%{opacity:.35}}
-.up{border:1px solid rgba(74,222,128,.3);border-radius:13px;background:rgba(74,222,128,.06);padding:9px 11px;margin-bottom:8px;text-align:center}
-.up small{font:700 8px Arial;letter-spacing:1.5px;color:#5ea877}
-.up b{display:block;font:900 17px 'Arial Black';color:#7dffab;font-variant-numeric:tabular-nums;margin-top:2px}
-.up span{font:600 9px monospace;color:#9fb8d8}
-.gauge{border:1px solid rgba(255,255,255,.1);border-radius:13px;background:rgba(255,255,255,.04);padding:9px 11px;margin-bottom:7px}
-.gl{display:flex;justify-content:space-between;font:700 10.5px monospace;margin-bottom:5px}
-.gl b{color:#7db8ff}.gl span{color:#eaf3ff;font-variant-numeric:tabular-nums}
-.bar{height:9px;border-radius:6px;background:rgba(0,0,0,.45);overflow:hidden}
-.bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,#3b82f6,#22d3ee);transition:width 1.8s cubic-bezier(.45,.05,.3,1);box-shadow:0 0 9px #38bdf866}
-.bar.r i{background:linear-gradient(90deg,#f43f5e,#fb923c)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}
-.cell{border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:7px 9px;background:rgba(255,255,255,.03)}
-.cell i{display:block;font:700 7.5px Arial;font-style:normal;letter-spacing:1px;color:#7285a8}
-.cell b{font:700 10.5px monospace;color:#dbe7ff;word-break:break-word}
-.ft{display:flex;justify-content:space-between;font:600 8.5px monospace;color:#5d7396;padding:2px 4px}
-.pulse{animation:pl 2.4s ease-in-out infinite}
-@keyframes pl{50%{opacity:.45}}
+                payload: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:radial-gradient(circle at 20% 0%,#0f1e3d 0%,#0a1526 35%,#050a15 100%);padding:10px;color:#e8f0ff;min-height:100vh;overflow-x:hidden}
+#app{max-width:430px;margin:0 auto;position:relative}
+
+/* ambient glow */
+#app::before{content:'';position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:260px;height:260px;background:radial-gradient(circle,rgba(59,130,246,.28),transparent 65%);filter:blur(30px);pointer-events:none;z-index:0}
+
+.hdr{position:relative;display:flex;gap:11px;align-items:center;padding:12px;border-radius:18px;background:linear-gradient(145deg,rgba(40,90,180,.22),rgba(10,25,50,.55));border:1px solid rgba(96,165,250,.28);box-shadow:0 8px 28px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.06);margin-bottom:10px;backdrop-filter:blur(8px);z-index:1}
+.hdr img{width:54px;height:54px;border-radius:14px;object-fit:cover;border:1.5px solid rgba(120,180,255,.5);box-shadow:0 0 18px rgba(59,130,246,.4)}
+.hdr .info{flex:1;min-width:0}
+.hdr h1{font-size:16px;font-weight:900;color:#fff;letter-spacing:.3px;display:flex;align-items:center;gap:6px}
+.hdr .st{display:flex;align-items:center;gap:6px;font-size:9.5px;color:#4ade80;margin-top:4px;font-weight:600;letter-spacing:.4px}
+.hdr .dot{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 10px #4ade80;animation:pulse-dot 1.6s ease-in-out infinite}
+.hdr .badge{margin-left:auto;font-size:8.5px;font-weight:800;padding:4px 8px;border-radius:8px;background:rgba(74,222,128,.15);color:#4ade80;border:1px solid rgba(74,222,128,.35);letter-spacing:.6px}
+@keyframes pulse-dot{50%{opacity:.35;transform:scale(.85)}}
+
+.clock-card{position:relative;padding:12px 14px;border-radius:16px;background:linear-gradient(135deg,rgba(34,211,238,.1),rgba(59,130,246,.06));border:1px solid rgba(34,211,238,.28);margin-bottom:10px;box-shadow:0 4px 20px rgba(34,211,238,.08);z-index:1}
+.clock-card .lbl{font-size:8.5px;font-weight:800;letter-spacing:2px;color:#67e8f9;opacity:.85;display:flex;align-items:center;gap:5px}
+.clock-card .time{font-size:26px;font-weight:900;color:#fff;letter-spacing:1px;font-variant-numeric:tabular-nums;margin:4px 0 2px;text-shadow:0 0 20px rgba(34,211,238,.4);font-family:'Arial Black',monospace}
+.clock-card .date{font-size:10px;color:#94a3b8;font-weight:600;letter-spacing:.5px}
+
+.section-title{font-size:9px;font-weight:800;letter-spacing:2px;color:#64748b;margin:12px 2px 7px;display:flex;align-items:center;gap:6px}
+.section-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(100,116,139,.4),transparent)}
+
+.gauge{position:relative;padding:11px 13px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);margin-bottom:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.03);z-index:1}
+.gl{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;margin-bottom:7px}
+.gl .name{display:flex;align-items:center;gap:6px;color:#93c5fd;letter-spacing:.5px}
+.gl .name i{font-style:normal;font-size:13px}
+.gl .val{color:#fff;font-variant-numeric:tabular-nums;font-weight:800;font-size:12px}
+.bar{height:10px;border-radius:8px;background:rgba(0,0,0,.5);overflow:hidden;position:relative;box-shadow:inset 0 1px 3px rgba(0,0,0,.6)}
+.bar>i{display:block;height:100%;border-radius:8px;background:linear-gradient(90deg,#3b82f6,#22d3ee,#67e8f9);transition:width 1.6s cubic-bezier(.4,.05,.3,1);box-shadow:0 0 12px rgba(34,211,238,.5);position:relative;overflow:hidden}
+.bar>i::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:shimmer 2.4s ease-in-out infinite}
+@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.bar.warn>i{background:linear-gradient(90deg,#f59e0b,#fbbf24,#fde047)}
+.bar.danger>i{background:linear-gradient(90deg,#ef4444,#f43f5e,#fb7185);box-shadow:0 0 12px rgba(239,68,68,.6)}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;z-index:1;position:relative}
+.cell{padding:9px 11px;border-radius:12px;background:linear-gradient(145deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+.cell .k{font-size:7.5px;font-weight:800;letter-spacing:1.2px;color:#64748b;display:flex;align-items:center;gap:4px;margin-bottom:3px}
+.cell .k i{font-style:normal;font-size:10px}
+.cell .v{font-size:10.5px;font-weight:700;color:#e2e8f0;word-break:break-word;font-family:ui-monospace,monospace;line-height:1.35}
+.cell.full{grid-column:1/-1}
+.cell.accent{border-color:rgba(59,130,246,.35);background:linear-gradient(145deg,rgba(59,130,246,.1),rgba(59,130,246,.03))}
+
+.ft{display:flex;justify-content:space-between;align-items:center;font-size:8.5px;font-weight:600;color:#475569;padding:10px 4px 4px;margin-top:6px;position:relative;z-index:1}
+.ft b{color:#3b82f6;letter-spacing:.5px}
+.live-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#ef4444;box-shadow:0 0 6px #ef4444;margin-right:3px;animation:pulse-dot 1.2s infinite;vertical-align:middle}
 </style>
 <div id="app">
-<div class="hdr"><img src="${BANNER}" onerror="this.remove()"><div><h1>📡 SERVER LIVE</h1><div class="st"><i></i>REALTIME MONITOR · <b id="spd">${d.speed || 0} ms</b></div></div></div>
-    <div class="up"><small>🕒 MUDA WA SASA — REALTIME</small><b id="clock">-</b><span id="date">-</span></div>
-<div class="gauge"><div class="gl"><b>CPU LOAD</b><span id="cv">-</span></div><div class="bar" id="cb"><i style="width:0%"></i></div></div>
-<div class="gauge"><div class="gl"><b>RAM</b><span id="rv">-</span></div><div class="bar" id="rb"><i style="width:0%"></i></div></div>
-<div class="gauge"><div class="gl"><b>DISK</b><span id="dv">-</span></div><div class="bar" id="db"><i style="width:0%"></i></div></div>
-<div class="grid">
-<div class="cell"><i>OS</i><b>${d.osType}</b></div>
-<div class="cell"><i>ARCH</i><b>${d.arch}</b></div>
-<div class="cell"><i>CPU</i><b>${d.cores} core</b></div>
-<div class="cell"><i>HEAP / RSS</i><b>${d.heapUsed} / ${d.rss}</b></div>
-<div class="cell"><i>SWAP</i><b>${d.swapTxt}</b></div>
-<div class="cell"><i>IP PRIMER</i><b>${d.net}</b></div>
-<div class="cell" style="grid-column:1/-1"><i>RUNTIME</i><b>${d.runtime} · ${d.engine}</b></div>
+
+<div class="hdr">
+  <img src="${BANNER}" onerror="this.style.display='none'">
+  <div class="info">
+    <h1>📡 Live Monitor</h1>
+    <div class="st"><span class="dot"></span>REALTIME · <span id="spd">${d.speed || 0}ms</span></div>
+  </div>
+  <div class="badge">● LIVE</div>
 </div>
-<div class="ft"><span id="age">diperbarui 0 dtk lalu</span><b class="pulse">data monitor · ${d.botName}</b></div>
+
+<div class="clock-card">
+  <div class="lbl">🕒 MUDA WA SASA · EAT</div>
+  <div class="time" id="clock">--:--:--</div>
+  <div class="date" id="date">--</div>
+</div>
+
+<div class="section-title">📊 SYSTEM RESOURCES</div>
+
+<div class="gauge">
+  <div class="gl"><span class="name"><i>⚡</i>CPU LOAD</span><span class="val" id="cv">-</span></div>
+  <div class="bar" id="cb"><i style="width:0%"></i></div>
+</div>
+
+<div class="gauge">
+  <div class="gl"><span class="name"><i>🧠</i>RAM</span><span class="val" id="rv">-</span></div>
+  <div class="bar" id="rb"><i style="width:0%"></i></div>
+</div>
+
+<div class="gauge">
+  <div class="gl"><span class="name"><i>💾</i>DISK</span><span class="val" id="dv">-</span></div>
+  <div class="bar" id="db"><i style="width:0%"></i></div>
+</div>
+
+<div class="section-title">🔧 SYSTEM INFO</div>
+
+<div class="grid">
+  <div class="cell"><div class="k"><i>💻</i>OS</div><div class="v">${d.osType}</div></div>
+  <div class="cell"><div class="k"><i>🏗️</i>ARCH</div><div class="v">${d.arch}</div></div>
+  <div class="cell"><div class="k"><i>⚙️</i>CPU</div><div class="v">${d.cores} cores</div></div>
+  <div class="cell"><div class="k"><i>📦</i>HEAP/RSS</div><div class="v">${d.heapUsed} / ${d.rss}</div></div>
+  <div class="cell"><div class="k"><i>🔄</i>SWAP</div><div class="v">${d.swapTxt}</div></div>
+  <div class="cell"><div class="k"><i>🌐</i>IP</div><div class="v">${d.net}</div></div>
+  <div class="cell accent full"><div class="k"><i>🚀</i>RUNTIME</div><div class="v">${d.runtime} · ${d.engine}</div></div>
+</div>
+
+<div class="ft">
+  <span id="age"><span class="live-dot"></span>imepimwa 0s zilizopita</span>
+  <b>${d.botName}</b>
+</div>
+
 </div>
 <script>
 var D=${DATA};
 function $(i){return document.getElementById(i)}
-function fmt(s){var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),x=s%60;
-return (d?d+'h ':'')+(h||d?h+'j ':'')+(m||h||d?m+'m ':'')+x+'s'}
+
 function paint(cpu,ram,disk){
- $('cb').firstChild.style.width=cpu+'%';$('cv').textContent=cpu.toFixed(1)+'%';
- $('rb').firstChild.style.width=ram+'%';$('rv').textContent=ram.toFixed(1)+'%';
- $('db').firstChild.style.width=disk+'%';$('dv').textContent=disk.toFixed(1)+'%';
- $('cb').className='bar'+(cpu>85?' r':'');$('rb').className='bar'+(ram>85?' r':'');$('db').className='bar'+(disk>90?' r':'');
+  var set=function(barId,valId,v){
+    var b=$(barId),i=b.firstChild;
+    i.style.width=Math.min(100,v)+'%';
+    $(valId).textContent=v.toFixed(1)+'%';
+    b.className='bar'+(v>90?' danger':v>75?' warn':'');
+  };
+  set('cb','cv',cpu);set('rb','rv',ram);set('db','dv',disk);
 }
+
 function tick(){
-var now=new Date();
-var time=new Intl.DateTimeFormat('sw-TZ',{timeZone:D.timezone,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(now);
-var date=new Intl.DateTimeFormat('sw-TZ',{timeZone:D.timezone,day:'2-digit',month:'2-digit',year:'numeric'}).format(now);
- $('clock').textContent=time;
- $('date').textContent=date+' · '+D.timezone;
- $('age').textContent='imepimwa '+Math.floor((Date.now()-D.at)/1000)+' dtk zilizopita';
+  var now=new Date();
+  try{
+    var t=new Intl.DateTimeFormat('sw-TZ',{timeZone:D.timezone,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(now);
+    var d=new Intl.DateTimeFormat('sw-TZ',{timeZone:D.timezone,weekday:'short',day:'2-digit',month:'short',year:'numeric'}).format(now);
+    $('clock').textContent=t;
+    $('date').textContent=d;
+  }catch(e){}
+  var s=Math.floor((Date.now()-D.at)/1000);
+  $('age').innerHTML='<span class="live-dot"></span>imepimwa '+s+'s zilizopita';
 }
+
 function breathe(){
-var n=function(v,amp,lo,hi){
-var x=v+(Math.random()*2-1)*amp;
-return Math.max(lo,Math.min(hi,x));
-};
-paint(n(D.cpu,3,2,99),n(D.ram,1.5,2,99),n(D.disk,.6,1,99));
+  var n=function(v,amp,lo,hi){
+    var x=v+(Math.random()*2-1)*amp;
+    return Math.max(lo,Math.min(hi,x));
+  };
+  paint(n(D.cpu,2.5,1,99),n(D.ram,1.2,1,99),n(D.disk,.4,.5,99));
 }
-paint(0,0,0);setTimeout(function(){breathe()},350);
-setInterval(breathe,2000);
+
+paint(0,0,0);
+setTimeout(breathe,300);
+setInterval(breathe,2200);
 setInterval(tick,1000);tick();
-</script>`
+</script>
+</body></html>`
             }
         }
     };
@@ -186,16 +244,15 @@ const ping2Command = async (sock, chatId, msg, args) => {
 
     const rich = new AIRich(ctx.sock || ctx.core)
         .setTitle('📡 SERVER LIVE MONITOR')
-        .setFooter('Uptime realtime · monitor bernafas · MICKEYGLITCH');
+        .setFooter('Real-time · Breathing UI · MICKEYGLITCH');
 
-    // Inatuma Live Inspector UI kupitia method ya addSection
     rich.addSection(buildPayload(d));
 
     try {
         await rich.send(ctx.chatId, { quoted: ctx.msg });
     } catch (error) {
         console.error('ping2Command error:', error?.message || error);
-        await ctx.reply('⚠️ Imeshindikana kutuma mfumo wa Live Ping UI.');
+        await ctx.reply('⚠️ Imeshindikana kutuma Live Monitor UI.');
     }
 };
 
