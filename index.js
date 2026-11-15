@@ -44,18 +44,30 @@ try {
 // ────────────────────────────────────────────────
 const pinoLogger = pino({ level: 'silent' });
 const originalConsoleLog = console.log.bind(console);
+const sensitiveSessionLogPattern = /closing (?:open )?session|sessionentry\s*\{/i;
+const isSensitiveSessionDiagnostic = (args) => args.some(value =>
+    (typeof value === 'string' && sensitiveSessionLogPattern.test(value)) ||
+    (value && typeof value === 'object' &&
+        value.registrationId !== undefined &&
+        value.currentRatchet &&
+        value._chains)
+);
+
+for (const method of ['info', 'warn', 'error', 'debug', 'dir']) {
+    const original = console[method].bind(console);
+    console[method] = (...args) => {
+        if (isSensitiveSessionDiagnostic(args)) return;
+        original(...args);
+    };
+}
+
 const consoleTimestamp = () => chalk.hex('#6E7681')(
     new Intl.DateTimeFormat('en-GB', {
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
     }).format(new Date())
 );
 console.log = (...args) => {
-    const message = args[0];
-    if (typeof message === 'string' && (
-        message.startsWith('Closing open session in favor of incoming prekey bundle') ||
-        message.startsWith('Closing session: SessionEntry')
-    )) return;
-
+    if (isSensitiveSessionDiagnostic(args)) return;
     originalConsoleLog(chalk.hex('#00D4FF')('  ●'), consoleTimestamp(), ...args);
 };
 
@@ -309,37 +321,41 @@ async function startMickeyBot() {
         store.bind(Mickey.ev);
 
         // --- Message Handler with Decrypt Error Recovery ---
-        Mickey.ev.on("messages.upsert", async chatUpdate => {
-            try {
-                const mek = chatUpdate.messages[0];
-                if (!mek?.message) return;
+        Mickey.ev.on("messages.upsert", chatUpdate => {
+            const messages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : [];
+            for (const mek of messages) {
+                const messageUpdate = { ...chatUpdate, messages: [mek] };
+                void (async () => {
+                    try {
+                        if (!mek?.message) return;
 
-                if (isButtonResponse && isButtonResponse(mek)) {
-                    const buttonId = getButtonId && getButtonId(mek);
-                    if (buttonId && isCommandId && isCommandId(buttonId)) {
-                        const command = autoDetectButtonCommand && autoDetectButtonCommand(mek);
-                        if (command) {
-                            mek.message.conversation = command;
-                            mek.message.extendedTextMessage = null;
-                            await handleMessages(Mickey, chatUpdate, true);
+                        if (isButtonResponse && isButtonResponse(mek)) {
+                            const buttonId = getButtonId && getButtonId(mek);
+                            if (buttonId && isCommandId && isCommandId(buttonId)) {
+                                const command = autoDetectButtonCommand && autoDetectButtonCommand(mek);
+                                if (command) {
+                                    mek.message.conversation = command;
+                                    mek.message.extendedTextMessage = null;
+                                    await handleMessages(Mickey, messageUpdate, true);
+                                    return;
+                                }
+                            }
+                        }
+
+                        if (mek.key?.remoteJid === "status@broadcast") {
+                            if (handleStatus) await handleStatus(Mickey, messageUpdate);
                             return;
                         }
+
+                        if (handleMessages) await handleMessages(Mickey, messageUpdate, true);
+                    } catch (err) {
+                        if (err.message?.includes('decrypt') || err.message?.includes('session')) {
+                            console.log(chalk.dim(`  [Session] Decrypt error (normal): ${err.message?.substring(0, 50)}`));
+                        } else if (err.message) {
+                            console.log(chalk.yellow(`  [Message Handler] ${err.message?.substring(0, 60)}...`));
+                        }
                     }
-                }
-
-                if (mek.key?.remoteJid === "status@broadcast") {
-                    if (handleStatus) await handleStatus(Mickey, chatUpdate);
-                    return;
-                }
-
-                if (handleMessages) await handleMessages(Mickey, chatUpdate, true);
-            } catch (err) {
-                // Gracefully handle decrypt errors without crashing
-                if (err.message?.includes('decrypt') || err.message?.includes('session')) {
-                    console.log(chalk.dim(`  [Session] Decrypt error (normal): ${err.message?.substring(0, 50)}`));
-                } else if (err.message) {
-                    console.log(chalk.yellow(`  [Message Handler] ${err.message?.substring(0, 60)}...`));
-                }
+                })();
             }
         });
 
