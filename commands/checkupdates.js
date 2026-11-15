@@ -1,7 +1,6 @@
 const isOwnerOrSudo = require('../lib/isOwner');
 const fs = require('fs/promises');
 const path = require('path');
-const crypto = require('crypto');
 const axios = require('axios');
 const { Button } = require('../lib/messageBuilder');
 
@@ -117,49 +116,6 @@ function isIgnoredPath(filePath) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FILE COLLECTION & HASHING
-// ═══════════════════════════════════════════════════════════
-async function collectLocalFiles(rootDir, currentDir = rootDir, files = new Map()) {
-    let entries;
-    try {
-        entries = await fs.readdir(currentDir, { withFileTypes: true });
-    } catch {
-        return files;
-    }
-
-    for (const entry of entries) {
-        if (IGNORED_NAMES.has(entry.name)) continue;
-
-        const fullPath = path.join(currentDir, entry.name);
-        const relativePath = path.relative(rootDir, fullPath).split(path.sep).join('/');
-
-        if (isIgnoredPath(relativePath)) continue;
-
-        if (entry.isDirectory()) {
-            await collectLocalFiles(rootDir, fullPath, files);
-        } else if (entry.isFile()) {
-            files.set(relativePath, fullPath);
-        }
-    }
-
-    return files;
-}
-
-function gitBlobSha(buffer) {
-    const header = Buffer.from(`blob ${buffer.length}\0`);
-    return crypto.createHash('sha1').update(Buffer.concat([header, buffer])).digest('hex');
-}
-
-async function getLocalFileSha(fullPath) {
-    try {
-        const buffer = await fs.readFile(fullPath);
-        return gitBlobSha(buffer);
-    } catch {
-        return null;
-    }
-}
-
-// ═══════════════════════════════════════════════════════════
 // GITHUB API HELPERS
 // ═══════════════════════════════════════════════════════════
 async function fetchLatestCommit() {
@@ -174,76 +130,22 @@ async function fetchLatestCommit() {
     return res.data?.[0] || null;
 }
 
-async function fetchRemoteTree(sha) {
+async function fetchCommitDiff(baseSha, headSha) {
     const res = await axios.get(
-        `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/git/trees/${sha}?recursive=1`,
+        `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/compare/${baseSha}...${headSha}`,
         {
             headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' },
             timeout: 20000,
         }
     );
-    const map = new Map();
-    for (const item of res.data.tree || []) {
-        if (item.type !== 'blob') continue;
-        if (isIgnoredPath(item.path)) continue;
-        map.set(item.path, item.sha);
-    }
-    return map;
-}
-
-async function fetchCommitDiff(baseSha, headSha) {
-    try {
-        const res = await axios.get(
-            `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/compare/${baseSha}...${headSha}`,
-            {
-                headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' },
-                timeout: 20000,
-            }
-        );
-        const files = (res.data.files || [])
-            .filter(f => !isIgnoredPath(f.filename))
-            .map(f => ({ file: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }));
-        return files;
-    } catch {
-        return [];
-    }
+    return (res.data.files || [])
+        .filter(f => !isIgnoredPath(f.filename))
+        .map(f => ({ file: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }));
 }
 
 // ═══════════════════════════════════════════════════════════
 // CHANGE DETECTION
 // ═══════════════════════════════════════════════════════════
-/**
- * Compare local working tree against remote GitHub tree.
- * Only tracks files that belong to the repo — ignores install/build files.
- */
-async function getLocalChanges(latestSha) {
-    const remoteFiles = await fetchRemoteTree(latestSha);
-    const localFiles = await collectLocalFiles(process.cwd());
-
-    const changed = [];
-
-    // Check local files against remote
-    for (const [file, fullPath] of localFiles) {
-        if (!remoteFiles.has(file)) {
-            changed.push({ file, status: 'removed from GitHub' });
-            continue;
-        }
-        const localSha = await getLocalFileSha(fullPath);
-        if (localSha && localSha !== remoteFiles.get(file)) {
-            changed.push({ file, status: 'modified' });
-        }
-    }
-
-    // Check remote files missing locally
-    for (const file of remoteFiles.keys()) {
-        if (!localFiles.has(file)) {
-            changed.push({ file, status: 'added' });
-        }
-    }
-
-    return changed.sort((a, b) => a.file.localeCompare(b.file));
-}
-
 /**
  * Detect changes based on commit history (last installed SHA vs latest SHA).
  * This is what `.update` actually installs — so this is the "real" update list.
@@ -304,7 +206,7 @@ function formatUpdateInfo(res) {
     const ts = new Date().toLocaleString('en-GB', { hour12: false });
 
     // NO UPDATE CASE
-    if (!res || (!res.available && res.mode !== 'error')) {
+    if (!res || (!res.available && res.mode !== 'error' && res.mode !== 'untracked')) {
         return [
             header,
             line,
@@ -326,6 +228,20 @@ function formatUpdateInfo(res) {
             '',
             '💡 Check your internet connection and try again.',
         ].join('\n');
+    }
+
+    if (res.mode === 'untracked') {
+        return [
+            header,
+            line,
+            '⚠️ *Installed repo version is not tracked yet*',
+            '',
+            `📅 Checked: ${ts}`,
+            res.version ? `🔖 Latest repo commit: \`${res.version.slice(0, 7)}\`` : '',
+            '',
+            'Run `.update` once to install the repository version and start tracking commits.',
+            'After that, this command will list only files changed in GitHub commits.',
+        ].filter(Boolean).join('\n');
     }
 
     // UPDATE AVAILABLE
@@ -378,17 +294,19 @@ async function checkForUpdates() {
         const version = await loadVersion();
         const currentSha = version?.sha || null;
 
-        // Prefer commit-diff changes (what .update will actually install)
-        let changes = await getCommitChanges(currentSha, latestSha);
-
-        // Fallback: compare working tree against remote if no SHA tracked yet
-        if (changes.length === 0 && !currentSha) {
-            const localChanges = await getLocalChanges(latestSha);
-            changes = localChanges;
+        if (!currentSha) {
+            return {
+                available: false,
+                mode: 'untracked',
+                changes: [],
+                version: latestSha,
+                currentVersion: null,
+            };
         }
 
+        const changes = await getCommitChanges(currentSha, latestSha);
         return {
-            available: changes.length > 0 || (!currentSha && latestSha),
+            available: changes.length > 0,
             mode: 'git',
             files: changes.map(c => c.file).join('\n'),
             changes,
@@ -531,7 +449,6 @@ async function checkUpdatesCommand(sock, chatId, message, args = []) {
 module.exports = checkUpdatesCommand;
 module.exports.checkForUpdates = checkForUpdates;
 module.exports.formatUpdateInfo = formatUpdateInfo;
-module.exports.getLocalChanges = getLocalChanges;
 module.exports.saveCurrentVersion = saveCurrentVersion;
 module.exports.IGNORED_NAMES = IGNORED_NAMES;
 module.exports.isIgnoredPath = isIgnoredPath;
