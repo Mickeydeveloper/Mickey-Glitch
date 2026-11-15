@@ -157,10 +157,22 @@ async function updateCommand(sock, chatId, message) {
 
         await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
 
-        // Always use the complete repository archive. Custom ZIP selection can
-        // leave missing or stale files behind.
-        const repoUrl = 'https://github.com/Mickeydeveloper/Mickey-Glitch';
-        const updateZipUrl = `${repoUrl}/archive/refs/heads/main.zip`;
+        // Pin the archive to a commit so the installed files match the saved SHA.
+        const repoUrl = 'https://api.github.com/repos/Mickeydeveloper/Mickey-Glitch';
+        const githubHeaders = {
+            'User-Agent': 'MickeyBot-Updater',
+            Accept: 'application/vnd.github+json',
+        };
+        const commitResponse = await axios.get(`${repoUrl}/commits/main`, {
+            headers: githubHeaders,
+            timeout: 20000,
+        });
+        const targetSha = commitResponse.data?.sha;
+        if (!/^[a-f0-9]{40}$/i.test(targetSha || '')) {
+            throw new Error('GitHub returned an invalid commit SHA.');
+        }
+
+        const updateZipUrl = `https://github.com/Mickeydeveloper/Mickey-Glitch/archive/${targetSha}.zip`;
 
         console.log(chalk.blue(`[Update] Full repository archive: ${updateZipUrl}`));
 
@@ -219,6 +231,12 @@ async function updateCommand(sock, chatId, message) {
             ]);
 
             const deletedFiles = syncExtractedRepo(repoRoot, process.cwd(), ignore);
+            const versionFile = path.join(process.cwd(), 'data', 'currentVersion.json');
+            fs.ensureDirSync(path.dirname(versionFile));
+            fs.writeJsonSync(versionFile, {
+                sha: targetSha,
+                updatedAt: new Date().toISOString(),
+            }, { spaces: 2 });
 
             if (deletedFiles.length > 0) {
                 console.log(chalk.red(`[Update] Deleted stale files (${deletedFiles.length}):`));
