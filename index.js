@@ -254,14 +254,18 @@ const UI = {
 let whatsappBot = null;
 let isWhatsAppRunning = false;
 let reconnectAttempts = 0;
+let startupCleanupDone = false;
 
 async function startMickeyBot() {
     if (isWhatsAppRunning && whatsappBot) return whatsappBot;
 
     try {
         ensureDirectories();
-        cleanSessionFiles();
-        autoClean();
+        if (!startupCleanupDone) {
+            cleanSessionFiles();
+            autoClean();
+            startupCleanupDone = true;
+        }
         
         UI.banner();
 
@@ -521,8 +525,6 @@ async function startMickeyBot() {
 // KEEP ALIVE & MONITORING
 // ────────────────────────────────────────────────
 function startKeepAlive() {
-    setInterval(autoClean, 30 * 60 * 1000);
-    
     setInterval(() => {
         if (whatsappBot && isWhatsAppRunning && typeof whatsappBot.sendPresenceUpdate === 'function') {
             void whatsappBot.sendPresenceUpdate('available').catch(() => {});
