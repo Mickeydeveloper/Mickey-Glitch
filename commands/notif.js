@@ -2,7 +2,7 @@
 const { randomUUID } = require('node:crypto');
 const settings = require('../settings');
 
-const THUMBNAIL_URL = 'https://cdn.ornzora.eu.cc/4d4f3591-1c3e-4e1b-b1c2-45faeb91b781-FIORA.jpg';
+const THUMBNAIL_URL = 'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/Privacy/privacy1.jpg';
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 const MAX_EVENT_INVITES = 3;
 const EVENT_DELAY_MS = 500;
