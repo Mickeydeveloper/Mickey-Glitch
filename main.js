@@ -47,26 +47,6 @@ process.env.TMPDIR = customTemp;
 process.env.TEMP = customTemp;
 process.env.TMP = customTemp;
 
-// 🧹 AGGRESSIVE temp cleanup - Every 2 minutes - DELETE ALL FILES
-setInterval(() => {
-  const foldersToClean = [customTemp, customTmp];
-
-  foldersToClean.forEach(folder => {
-    fs.readdir(folder, (err, files) => {
-      if (err) return;
-
-      files.forEach(file => {
-        const filePath = path.join(folder, file);
-        try {
-          fs.rmSync(filePath, { recursive: true, force: true });
-        } catch (e) {
-          // Silent fail
-        }
-      });
-    });
-  });
-}, 2 * 60 * 1000); // 2 minutes
-
 const settings = require('./settings');
 require('./config.js');
 
