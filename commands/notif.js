@@ -1,11 +1,11 @@
 // commands/notif.js
+const { randomUUID } = require('node:crypto');
 const settings = require('../settings');
 
 const THUMBNAIL_URL = 'https://cdn.ornzora.eu.cc/4d4f3591-1c3e-4e1b-b1c2-45faeb91b781-FIORA.jpg';
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
-const EVENT_DURATION_SEC = 3600;
+const MAX_EVENT_INVITES = 3;
 const EVENT_DELAY_MS = 500;
-const API_URL = 'https://gql.nixel.dev';
 
 async function getEventThumbnail() {
     const response = await fetch(THUMBNAIL_URL, {
@@ -25,110 +25,20 @@ async function getEventThumbnail() {
     return thumbnail;
 }
 
-function getApiCreds(conn) {
-    const creds = conn.authState?.creds || {};
-    const me = creds.me || {};
-    const noiseKey = creds.noiseKey || {};
-
-    return {
-        me: { lid: me.lid },
-        noiseKey: {
-            public: Buffer.from(noiseKey.public || []).toString('base64'),
-            private: Buffer.from(noiseKey.private || []).toString('base64')
+async function sendEventInvite(sock, chatId, title, thumbnail, startTime) {
+    await sock.relayMessage(chatId, {
+        eventInviteMessage: {
+            eventId: randomUUID(),
+            eventTitle: title.slice(0, 256),
+            jpegThumbnail: thumbnail,
+            startTime
         }
-    };
-}
-
-async function api(conn, path, body = {}) {
-    const errorRetries = {};
-    const apiCreds = getApiCreds(conn);
-
-    while (true) {
-        try {
-            const response = await fetch(`${API_URL}${path}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    creds: apiCreds,
-                    ...body
-                })
-            });
-
-            const text = await response.text();
-            let result;
-            try {
-                result = JSON.parse(text);
-            } catch {
-                throw new Error(`Invalid API response: ${text}`);
-            }
-
-            if (!response.ok || !result.success) {
-                throw new Error(result.message || `HTTP ${response.status}`);
-            }
-
-            return result;
-        } catch (err) {
-            const errKey = err.message || 'Unknown Error';
-            errorRetries[errKey] = (errorRetries[errKey] || 0) + 1;
-            if (errorRetries[errKey] > 5) {
-                throw err;
-            }
-            await sleep(1000);
-        }
-    }
-}
-
-async function createEvent(conn, eventDetails) {
-    return api(conn, '/api/event/create', eventDetails);
-}
-
-async function addInvitations(conn, eventId, userLid) {
-    return api(conn, '/api/event/invite', { eventId, userLid });
-}
-
-async function deleteEvent(conn, eventId) {
-    return api(conn, '/api/event/delete', { eventId });
-}
-
-async function triggerEventNotif(conn, eventDetails, memberLids) {
-    const now = Math.floor(Date.now() / 1000);
-    const safeName = String(eventDetails?.name || 'New Event').slice(0, 256);
-    const safeDescription = String(eventDetails?.description || '').slice(0, 2048);
-
-    const res = await createEvent(conn, {
-        name: safeName,
-        description: safeDescription,
-        chatJid: eventDetails?.chatJid,
-        start_ts_sec: Number(eventDetails?.start_ts_sec) || now + 3600,
-        end_ts_sec: Number(eventDetails?.end_ts_sec) || now + 7200,
-        reminder_ts_sec: Number(eventDetails?.reminder_ts_sec) || now + 3000
+    }, {
+        additionalNodes: [{
+            tag: 'meta',
+            attrs: { context_source: 'event_invitation' }
+        }]
     });
-
-    const eventId = res.data?.id || res.event?.id;
-    if (!eventId) throw new Error('Event ID tidak ditemukan');
-
-    const list = Array.isArray(memberLids) ? memberLids : memberLids ? [memberLids] : [];
-    if (list.length > 0) {
-        const userLid = list.length === 1 ? list[0] : list;
-        try {
-            await addInvitations(conn, eventId, userLid);
-        } catch (err) {
-            console.warn('[Notif] addInvitations failed:', err.message || err);
-        }
-    }
-
-    await deleteEvent(conn, eventId);
-    return res;
-}
-
-async function toLid(conn, jid) {
-    if (jid.endsWith('@lid') || jid.endsWith('@g.us')) return jid;
-    const pn = jid.includes('@') ? jid : `${jid.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
-    const lid = await conn.signalRepository?.lidMapping?.getLIDForPN?.(pn);
-    if (!lid) throw new Error(`LID tidak ditemukan untuk ${pn}`);
-    return lid;
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -230,23 +140,23 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
               `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
               `*Matumizi:*\n` +
               `• \`${prefix}${command} @user|woi\`\n` +
-              `• \`${prefix}${command} @user1 @user2|woi|5\`\n` +
-              `• \`${prefix}${command} 62858xxx|woi|10\`\n` +
+              `• \`${prefix}${command} @user1 @user2|woi|3\`\n` +
+              `• \`${prefix}${command} 62858xxx|woi|3\`\n` +
               `• \`${prefix}${command} 62858xxx Gw jago 2\`\n\n` +
               `*Maelezo:*\n` +
               `• Target: @mention au namba (628xxx)\n` +
               `• Jina la event: maandishi yoyote\n` +
-              `• Idadi: namba (default 1)\n\n` +
+              `• Idadi: 1-${MAX_EVENT_INVITES} (default 1)\n\n` +
               `_${botName}™_`
             : `📢 *NOTIF — Event Invitation*\n` +
               `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
               `*Matumizi:*\n` +
               `• \`${prefix}${command} woi\`\n` +
-              `• \`${prefix}${command} Mickey 20\`\n` +
-              `• \`${prefix}${command} Mickey|20\`\n\n` +
+              `• \`${prefix}${command} Mickey 3\`\n` +
+              `• \`${prefix}${command} Mickey|3\`\n\n` +
               `*Maelezo:*\n` +
-              `• Tuma event invitation kwa chat/group hii\n` +
-              `• Idadi: namba mwishoni (default 1)\n\n` +
+              `• Tuma event invitation halisi kwa chat/group hii\n` +
+              `• Idadi: 1-${MAX_EVENT_INVITES} (default 1)\n\n` +
               `_${botName}™_`;
 
         try {
@@ -264,11 +174,12 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
     try {
         const now = Math.floor(Date.now() / 1000);
         const startTime = now + 3600;
-        const jpegThumbnail = await getEventThumbnail();
-
         // ─── NOTIFUSER MODE ────────────────────────────────
         if (isNotifUser) {
             const { targetPart, eventName, count } = parseNotifUserArgs(text);
+            if (count > MAX_EVENT_INVITES) {
+                throw new Error(`Idadi ya event invite lazima iwe kati ya 1 na ${MAX_EVENT_INVITES}.`);
+            }
 
             let rawTargets = sock.parseMention?.(targetPart) || [];
 
@@ -283,20 +194,12 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
                 throw new Error('Target tidak valid! Gunakan @mention atau nomor (628xxx).');
             }
 
-            const targetLids = [
-                ...new Set(await Promise.all(rawTargets.map(jid => toLid(sock, jid))))
-            ];
+            const targets = [...new Set(rawTargets)];
+            const jpegThumbnail = await getEventThumbnail();
 
-            for (const lid of targetLids) {
+            for (const target of targets) {
                 for (let i = 0; i < count; i++) {
-                    await triggerEventNotif(sock, {
-                        name: eventName,
-                        description: 'Created and deleted silently',
-                        chatJid: lid,
-                        start_ts_sec: startTime,
-                        end_ts_sec: startTime + EVENT_DURATION_SEC,
-                        reminder_ts_sec: now + 3000
-                    }, [lid]);
+                    await sendEventInvite(sock, target, eventName, jpegThumbnail, startTime);
                     if (i < count - 1) await sleep(EVENT_DELAY_MS);
                 }
             }
@@ -309,30 +212,13 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
 
         // ─── NOTIF MODE (current chat) ─────────────────────
         const { eventName, count } = parseNotifArgs(text);
-        let memberLids = [chatId];
-
-        if (chatId.endsWith('@g.us')) {
-            const groupMetadata = await sock.groupMetadata(chatId);
-            const participants = groupMetadata.participants || [];
-            memberLids = await Promise.all(participants.map(async ({ id }) => {
-                if (id.endsWith('@lid')) return id;
-                const lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(id);
-                return lid || id;
-            }));
-        } else {
-            const chatLid = await toLid(sock, chatId);
-            memberLids = [chatLid];
+        if (count > MAX_EVENT_INVITES) {
+            throw new Error(`Idadi ya event invite lazima iwe kati ya 1 na ${MAX_EVENT_INVITES}.`);
         }
+        const jpegThumbnail = await getEventThumbnail();
 
         for (let i = 0; i < count; i++) {
-            await triggerEventNotif(sock, {
-                name: eventName,
-                description: 'Created and deleted silently',
-                chatJid: chatId,
-                start_ts_sec: startTime,
-                end_ts_sec: startTime + EVENT_DURATION_SEC,
-                reminder_ts_sec: now + 3000
-            }, memberLids);
+            await sendEventInvite(sock, chatId, eventName, jpegThumbnail, startTime);
             if (i < count - 1) await sleep(EVENT_DELAY_MS);
         }
 
