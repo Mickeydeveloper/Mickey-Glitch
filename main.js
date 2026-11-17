@@ -464,8 +464,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
             if (detected) return; // message handled (deleted/removed)
         } catch (e) {}
 
-        // Handle autoread functionality
-        await handleAutoread(sock, message);
+        // Read receipts should not delay commands while WhatsApp is responding slowly.
+        void handleAutoread(sock, message).catch(error => {
+            console.error('[Main] Auto-read failed:', error?.message || error);
+        });
 
         // Auto-react stickers when enabled
         if (message.message?.stickerMessage && isAutoreactEnabled()) {
@@ -495,7 +497,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const senderId = message.key.participant || message.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
         const senderIsSudo = await isSudo(senderId);
-        const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
+        const senderIsOwnerOrSudo = senderIsSudo || await isOwnerOrSudo(senderId, sock, chatId, true);
 
         // Handle interactive responses (buttons, lists, native flows)
         let userMessage = '';

@@ -84,7 +84,10 @@ const SESSION_DIR = path.resolve(process.cwd(), 'session');
 const TEMP_DIR = path.resolve(process.cwd(), 'tmp');
 const CACHE_DIR = path.resolve(process.cwd(), 'cache');
 const MEDIA_DIR = path.resolve(process.cwd(), 'media');
-const CREDENTIAL_FILE_PATTERN = /^creds\.(?:json|js)(?:\.|$)/i;
+const SESSION_KEY_FILE_PATTERN = /^(?:pre-key|session|sender-key|app-state-sync-key|app-state-sync-version|lid-mapping|device-list|tctoken)-.+\.json$/;
+const SESSION_TEMP_FILE_PATTERN = /\.(?:tmp|temp|bak|old|lock)$/i;
+const SESSION_STALE_ARTIFACT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_CORRUPT_FILE_MIN_AGE_MS = 60 * 60 * 1000;
 
 function ensureDirectories() {
     [SESSION_DIR, TEMP_DIR, CACHE_DIR, MEDIA_DIR].forEach(dir => {
@@ -96,23 +99,35 @@ function cleanSessionFiles() {
     try {
         if (!fs.existsSync(SESSION_DIR)) return;
 
+        const now = Date.now();
         let cleaned = 0;
-        const cleanDirectory = (directory) => {
-            for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-                const filePath = path.join(directory, entry.name);
-                if (entry.isDirectory()) {
-                    cleanDirectory(filePath);
-                } else if (entry.isFile() && !CREDENTIAL_FILE_PATTERN.test(entry.name)) {
+
+        for (const entry of fs.readdirSync(SESSION_DIR, { withFileTypes: true })) {
+            if (!entry.isFile() || entry.name === 'creds.json' || entry.name.startsWith('creds.json.')) continue;
+
+            const filePath = path.join(SESSION_DIR, entry.name);
+            try {
+                const age = now - fs.statSync(filePath).mtimeMs;
+                let shouldDelete = SESSION_TEMP_FILE_PATTERN.test(entry.name) && age > SESSION_STALE_ARTIFACT_AGE_MS;
+
+                if (!shouldDelete && SESSION_KEY_FILE_PATTERN.test(entry.name) && age > SESSION_CORRUPT_FILE_MIN_AGE_MS) {
+                    try {
+                        JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                    } catch {
+                        shouldDelete = true;
+                    }
+                }
+
+                if (shouldDelete) {
                     fs.unlinkSync(filePath);
                     cleaned++;
                 }
+            } catch (error) {
+                UI.warning(`Could not inspect session file ${entry.name}: ${error.message}`);
             }
-        };
-
-        cleanDirectory(SESSION_DIR);
-        if (cleaned > 0) {
-            UI.warning(`Removed ${cleaned} session file(s); creds files were preserved and session keys may need to be regenerated.`);
         }
+
+        if (cleaned > 0) UI.info(`Removed ${cleaned} stale or corrupted session artifact(s); valid session keys were preserved.`);
     } catch (error) {
         UI.warning(`Session cleanup skipped: ${error.message}`);
     }
@@ -207,8 +222,10 @@ try {
     store.readFromFile();
 } catch (err) {}
 setInterval(() => {
-    try { store.writeToFile(); } catch (err) {}
-}, settings.storeWriteInterval || 10000);
+    void store.writeToFile().catch(err => {
+        console.error('[Store] Persist failed:', err.message);
+    });
+}, settings.storeWriteInterval || 60000);
 
 // ────────────────────────────────────────────────
 // ULTRA-MODERN UI COMPONENTS
@@ -546,6 +563,11 @@ async function initializeBot() {
     process.on('SIGINT', async () => {
         console.log(chalk.yellow('\n  👋 Terminating bot processes...'));
         if (whatsappBot) { try { await whatsappBot.end(); } catch(e) {} }
+        try {
+            await store.writeToFile();
+        } catch (err) {
+            console.error('[Store] Final persist failed:', err.message);
+        }
         if (rl) { try { rl.close(); } catch(e) {} }
         process.exit(0);
     });

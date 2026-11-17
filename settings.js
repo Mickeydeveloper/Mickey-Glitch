@@ -24,7 +24,7 @@ const settings = {
   },
   commandMode: "public",
   maxStoreMessages: 20,
-  storeWriteInterval: 10000,
+  storeWriteInterval: 60000,
   description: "This is a bot for managing group commands and automating tasks.",
   version: "3.0.5",
   updateZipUrl: "https://github.com/Mickeydeveloper/Mickey-Glitch/archive/refs/heads/main.zip",
