@@ -72,7 +72,7 @@ console.log = (...args) => {
 };
 
 // --- Global Settings ---
-const _botName = settings.botName || settings.botname || "𝙼𝚒𝚌𝚔𝚎𝚢 𝙶𝚕𝚒𝚝𝚌𝚑™";
+const _botName = settings.botName || settings.botname || "𝙼𝚒𝚌𝚔𝖞 𝙶𝚕𝚒𝚝𝚌𝚑™";
 global.botname = _botName;
 global.botName = _botName;
 global.themeemoji = '•';
@@ -255,7 +255,36 @@ const UI = {
 let whatsappBot = null;
 let isWhatsAppRunning = false;
 let reconnectAttempts = 0;
+let reconnectTimer = null;
+let reconnectInProgress = false;
 let startupCleanupDone = false;
+
+async function scheduleReconnect(reason = 'connection lost') {
+    if (reconnectInProgress) return;
+    reconnectInProgress = true;
+
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+
+    reconnectAttempts = Math.min(reconnectAttempts + 1, 100);
+    const delayTime = Math.min(3000 + (reconnectAttempts * 1500), 60000);
+
+    console.log(chalk.cyan(`  🔄 [RECONNECT] ${reason}; retry in ${(delayTime / 1000).toFixed(1)}s (attempt ${reconnectAttempts})`));
+
+    reconnectTimer = setTimeout(async () => {
+        reconnectTimer = null;
+        reconnectInProgress = false;
+        try {
+            await startMickeyBot();
+        } catch (error) {
+            UI.error(`Reconnect failed: ${error.message}`);
+            reconnectInProgress = false;
+            scheduleReconnect(error.message);
+        }
+    }, delayTime);
+}
 
 async function startMickeyBot() {
     if (isWhatsAppRunning && whatsappBot) return whatsappBot;
@@ -398,6 +427,11 @@ async function startMickeyBot() {
             if (connection === "open") {
                 isWhatsAppRunning = true;
                 reconnectAttempts = 0;
+                reconnectInProgress = false;
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
                 isPairing = false;
                 pairingAttempts = 0;
                 
@@ -429,43 +463,31 @@ async function startMickeyBot() {
                 isWhatsAppRunning = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const errorMessage = lastDisconnect?.error?.message || 'Unknown';
-                
-                // Check if it's a decrypt/session error (non-fatal)
-                const isDecryptError = errorMessage?.includes('decrypt') || 
+
+                const isDecryptError = errorMessage?.includes('decrypt') ||
                                       errorMessage?.includes('no session') ||
                                       errorMessage?.includes('session') ||
                                       errorMessage?.includes('Bad MAC') ||
                                       errorMessage?.includes('Bad mac');
-                
+
                 if (isDecryptError) {
                     UI.info(`Session error (recoverable): ${errorMessage.substring(0, 40)}...`);
                     UI.warning('Session credentials and valid key files were preserved for reconnect.');
                 } else {
                     UI.warning(`Link disrupted: ${errorMessage.substring(0, 50)}`);
                 }
-                
+
                 if (statusCode === DisconnectReason.loggedOut) {
-                    UI.error('Session structure revoked (Logged Out). Flashing memory...');
+                    UI.error('Session structure revoked (Logged Out). Waiting for manual pairing.');
                     clearSession();
-                    await delay(3000);
-                    return startMickeyBot();
+                    reconnectAttempts = 0;
+                    await scheduleReconnect('logged out; preparing new session');
+                    return;
                 }
-                
-                if (statusCode === DisconnectReason.connectionClosed || statusCode === DisconnectReason.connectionLost) {
-                    UI.info('Connection lost, attempting reconnect...');
-                }
-                
-                // Exponential backoff with max limit
-                if (reconnectAttempts < 20) {
-                    const delayTime = Math.min(3000 + (reconnectAttempts * 1500), 45000);
-                    reconnectAttempts++;
-                    console.log(chalk.cyan(`  🔄 [RECONNECT] Attempting re-entry in ${(delayTime/1000).toFixed(1)}s... (${reconnectAttempts}/20)`));
-                    await delay(delayTime);
-                    return startMickeyBot();
-                } else {
-                    UI.error('Max reconnection threshold reached. Manual restart mandatory.');
-                    process.exit(1);
-                }
+
+                await scheduleReconnect(statusCode === DisconnectReason.restartRequired
+                    ? 'server restart required'
+                    : 'connection interrupted');
             }
         });
 
@@ -507,8 +529,7 @@ async function startMickeyBot() {
                 if (pairingAttempts < 3) {
                     pairingAttempts++;
                     isPairing = false;
-                    await delay(5000);
-                    return startMickeyBot();
+                    await scheduleReconnect('pairing retry');
                 }
             }
         }
@@ -517,8 +538,8 @@ async function startMickeyBot() {
 
     } catch (err) {
         UI.error('Critical exception detected: ' + err.message);
-        await delay(5000);
-        return startMickeyBot();
+        await scheduleReconnect('startup exception');
+        return null;
     }
 }
 
@@ -572,6 +593,20 @@ async function initializeBot() {
         process.exit(0);
     });
 }
+
+process.on('unhandledRejection', (reason) => {
+    console.error(chalk.yellow(`[Process] Unhandled rejection: ${reason?.message || reason}`));
+    if (!isWhatsAppRunning) {
+        scheduleReconnect('unhandled async failure');
+    }
+});
+
+process.on('uncaughtException', (error) => {
+    console.error(chalk.red(`[Process] Uncaught exception: ${error?.message || error}`));
+    if (!isWhatsAppRunning) {
+        scheduleReconnect('uncaught process exception');
+    }
+});
 
 initializeBot().catch(err => {
     UI.error(`Fatal crash: ${err.message}`);

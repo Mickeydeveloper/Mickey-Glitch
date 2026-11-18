@@ -257,7 +257,7 @@ async function updateCommand(sock, chatId, message) {
             console.log(chalk.green.bold('📢 UPDATE SUCCESSFUL!'));
 
             setTimeout(() => {
-                process.exit(1); 
+                process.exit(0);
             }, 3000);
         } catch (extractErr) {
             console.error(chalk.red('Extraction Error:'), extractErr.message);
