@@ -1,6 +1,7 @@
 /**
  * MICKEY GLITCH - A WhatsApp Bot
- * CUSTOM PAIRING - Uses Custom 8-digit code (MICKDADY)
+ * Powered by @mickeyteam/baileys (ESM-first Baileys fork)
+ * CUSTOM PAIRING - Uses Custom 8-char code (MICKDADY)
  * MODERNISED CONSOLE UI & GITHUB IMAGE CONNECTION
  */
 
@@ -12,16 +13,20 @@ const fs = require('fs');
 const path = require('path');
 const chalk = require('chalk');
 const pino = require("pino");
-const NodeCache = require("node-cache");
 const readline = require("readline");
-const { 
-    default: makeWASocket, 
-    useMultiFileAuthState, 
-    DisconnectReason, 
-    fetchLatestBaileysVersion, 
-    makeCacheableSignalKeyStore, 
-    delay 
-} = require("@whiskeysockets/baileys");
+
+// ── @mickeyteam/baileys (ESM package, imported via CJS interop) ──
+const mickey = require("@mickeyteam/baileys");
+const makeWASocket = mickey.default;
+const {
+    useMultiFileAuthState,
+    addMemoryCacheToAuthState,
+    DisconnectReason,
+    fetchLatestBaileysVersion,
+    delay,
+    // MessageBuilder utilities — integrated, no external package needed
+    // Button, ButtonV2, Carousel, AIRich, Toolkit, MessageBuilder, MB
+} = mickey;
 
 const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require("./main");
 const { handleAnticall } = require("./commands/anticall");
@@ -189,9 +194,9 @@ function createReadline() {
         try { rl.close(); } catch(e) {}
         rl = null;
     }
-    rl = readline.createInterface({ 
-        input: process.stdin, 
-        output: process.stdout 
+    rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
     });
     return rl;
 }
@@ -199,13 +204,13 @@ function createReadline() {
 async function askPhoneNumber() {
     return new Promise((resolve) => {
         const readlineInterface = createReadline();
-        
+
         console.log('\n' + chalk.cyan.bold('┌────────────────────────────────────────────────────────┐'));
         console.log(chalk.cyan.bold('│') + chalk.bgCyan.black.bold('              📱 WHATSAPP PAIRING INTERFACE             ') + chalk.cyan.bold('│'));
         console.log(chalk.cyan.bold('└────────────────────────────────────────────────────────┘'));
         console.log(chalk.dim('  Ingiza namba ya simu ya WhatsApp (Mfano: 255612130873)'));
         console.log('');
-        
+
         readlineInterface.question(chalk.cyan.bold('  ⚡ Namba yako ➜ '), (answer) => {
             let num = answer.trim().replace(/[^0-9]/g, '');
             if (!num.startsWith("255")) {
@@ -241,11 +246,11 @@ const UI = {
         console.log(chalk.magentaBright.bold(`
   ███╗   ███╗██╗ ██████╗██╗  ██╗███████╗██╗   ██╗
   ████╗ ████║██║██╔════╝██║ ██╔╝██╔════╝╚██╗ ██╔╝
-  ██╔████╔██║██║██║     █████╔╝ █████╗   ╚████╔╝ 
-  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝    ╚██╔╝  
-  ██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗   ██║   
+  ██╔████╔██║██║██║     █████╔╝ █████╗   ╚████╔╝
+  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝    ╚██╔╝
+  ██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗   ██║
   ╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝   `));
-        console.log(chalk.hex('#FF4FD8')('  GLITCH ') + chalk.hex('#00D4FF').bold('BOT CORE') + chalk.hex('#6E7681')('  •  SYSTEM v3.1  •  LIVE') + '\n');
+        console.log(chalk.hex('#FF4FD8')('  GLITCH ') + chalk.hex('#00D4FF').bold('BOT CORE') + chalk.hex('#6E7681')('  •  SYSTEM v3.2  •  @mickeyteam/baileys') + '\n');
     }
 };
 
@@ -296,34 +301,50 @@ async function startMickeyBot() {
             autoClean();
             startupCleanupDone = true;
         }
-        
+
         UI.banner();
 
         const { version } = await fetchLatestBaileysVersion();
         console.log(chalk.bgHex('#161B22').hex('#00D4FF').bold(' CORE ') + chalk.hex('#00D4FF')('  Engine'), chalk.greenBright(`Baileys v${version.join('.')}`));
 
+        // ── Session Auth ──
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-        
-        const hasSession = state.creds?.registered === true;
-        console.log(chalk.bgHex('#161B22').hex('#7D5FFF').bold(' AUTH ') + chalk.hex('#7D5FFF')('  Security'), hasSession ? chalk.greenBright('Session Loaded ✓') : chalk.yellowBright('Waiting for authentication'));
 
-        const msgRetryCounterCache = new NodeCache();
+        // In-memory Signal key cache (recommended by @mickeyteam/baileys docs for busy bots)
+        const cachedState = addMemoryCacheToAuthState(state);
+
+        const hasSession = cachedState.creds?.registered === true;
+        console.log(chalk.bgHex('#161B22').hex('#7D5FFF').bold(' AUTH ') + chalk.hex('#7D5FFF')('  Security'), hasSession ? chalk.greenBright('Session Loaded ✓') : chalk.yellowBright('Waiting for authentication'));
 
         const Mickey = makeWASocket({
             version,
             logger: pinoLogger,
-            printQRInTerminal: false,
+            // printQRInTerminal removed (deprecated) — pairing is via requestPairingCode
             browser: ["Ubuntu", "Chrome", "120.0.0.0"],
-            auth: {
-                creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }).child({ level: 'silent' }))
-            },
+            auth: cachedState,
             markOnlineOnConnect: true,
             syncFullHistory: false,
             generateHighQualityLinkPreview: true,
+
+            // ── Retry / pairing tuning (from @mickeyteam/baileys docs) ──
+            maxMsgRetryCount: 3,
+            retryRequestDelayMs: 250,
+            maxRetryQueueSize: 64,
+            ackRetryDelayMs: 750,
+            maxAckRetryCount: 3,
+            pairingCodeTimeoutMs: 180000,
+
+            // ── Socket options ──
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
             keepAliveIntervalMs: 30000,
+            countryCode: 'TZ',
+
+            // Opt-in banner — custom message per docs
+            branding: {
+                message: `THANKS FOR USING ${_botName}. POWERED BY @mickeyteam/baileys`
+            },
+
             patchMessageBeforeSending: (message) => {
                 const requiresPatch = !!(message.buttonsMessage || message.templateMessage || message.listMessage);
                 if (requiresPatch) {
@@ -341,13 +362,13 @@ async function startMickeyBot() {
                 }
                 return message;
             },
+
             getMessage: async (key) => {
                 if (!key || !key.id) return undefined;
                 const jid = key.remoteJid || key.participant || key.sender || '';
                 const msg = await store.loadMessage(jid, key.id);
                 return msg?.message || undefined;
             },
-            msgRetryCounterCache
         });
 
         whatsappBot = Mickey;
@@ -434,25 +455,24 @@ async function startMickeyBot() {
                 }
                 isPairing = false;
                 pairingAttempts = 0;
-                
+
                 console.log('\n' + chalk.bgGreenBright.black.bold('  CORE ONLINE  ') + chalk.greenBright('  System synchronized with WhatsApp.\n'));
 
                 const myNumber = Mickey.user.id.split(':')[0] + "@s.whatsapp.net";
                 const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-                
+
                 console.log(chalk.bgHex('#161B22').hex('#00D4FF').bold(' BOT METRICS '));
-                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('User') + chalk.hex('#30363D')(' ─── ' ) + chalk.greenBright(Mickey.user.id.split(':')[0]));
-                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('Memory') + chalk.hex('#30363D')(' ─ ' ) + chalk.yellowBright(`${ramUsage} MB`));
-                console.log(chalk.hex('#30363D')('  └─ ') + chalk.hex('#C9D1D9')('State') + chalk.hex('#30363D')(' ─── ' ) + chalk.greenBright('LIVE'));
+                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('User') + chalk.hex('#30363D')(' ─── ') + chalk.greenBright(Mickey.user.id.split(':')[0]));
+                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('Memory') + chalk.hex('#30363D')(' ─ ') + chalk.yellowBright(`${ramUsage} MB`));
+                console.log(chalk.hex('#30363D')('  └─ ') + chalk.hex('#C9D1D9')('State') + chalk.hex('#30363D')(' ─── ') + chalk.greenBright('LIVE'));
                 UI.divider();
 
-                // Connection notification and auto-join handled by helper
                 try {
                     await MickeyHelper.handleConnection(Mickey, UI);
                 } catch (e) {
                     UI.warning('Connection helper failed: ' + (e.message || e));
                 }
-                
+
                 if (rl) {
                     try { rl.close(); } catch(e) {}
                     rl = null;
@@ -493,19 +513,21 @@ async function startMickeyBot() {
 
         // ────────────────────────────────────────────────
         // PAIRING - INJECTING CUSTOM CODE "MICKDADY"
+        // Note: @mickeyteam/baileys enforces exactly 8 chars.
+        //       "MICKDADY" is 8 chars ✔
         // ────────────────────────────────────────────────
         if (!hasSession && !isPairing) {
             isPairing = true;
-            
+
             const phoneNumber = await askPhoneNumber();
             UI.info('Intercepting token stream and pushing custom signature...');
-            
+
             await delay(3000);
-            
+
             try {
-                // Inalazimisha custom code yako ya MICKDADY
+                // requestPairingCode(phoneNumber, customCode) — code must be exactly 8 chars
                 await Mickey.requestPairingCode(phoneNumber, "MICKDADY");
-                
+
                 console.log('\n' + chalk.magenta.bold('  ┌────────────────────────────────────────────────────────┐'));
                 console.log(chalk.magenta.bold('  │') + chalk.bgMagenta.black.bold('              🔐 CUSTOM WHATSAPP PAIRING CODE             ') + chalk.magenta.bold('  │'));
                 console.log(chalk.magenta.bold('  ├────────────────────────────────────────────────────────┤'));
@@ -514,16 +536,16 @@ async function startMickeyBot() {
                 console.log(chalk.magenta.bold('  ├────────────────────────────────────────────────────────┤'));
                 console.log(chalk.magenta.bold('  │') + chalk.greenBright.bold('               👉    M I C K D A D Y    👈               ') + chalk.magenta.bold('│'));
                 console.log(chalk.magenta.bold('  └────────────────────────────────────────────────────────┘\n'));
-                
+
                 UI.info('Waiting for authorization handshakes... (10-30s)');
-                
+
                 const keepAliveInterval = setInterval(() => {
                     if (isWhatsAppRunning && typeof Mickey.sendPresenceUpdate === 'function') {
                         void Mickey.sendPresenceUpdate('available').catch(() => {});
                         clearInterval(keepAliveInterval);
                     }
                 }, 5000);
-                
+
             } catch (err) {
                 UI.error('Pairing pipeline blocked: ' + err.message);
                 if (pairingAttempts < 3) {
@@ -563,10 +585,10 @@ function startKeepAlive() {
 async function initializeBot() {
     UI.banner();
     startKeepAlive();
-    
+
     const hasTelegramToken = settings.telegram?.botToken && settings.telegram.botToken?.trim()?.length > 0;
     let telegramStarted = false;
-    
+
     if (hasTelegramToken && startTelegramBot) {
         try {
             await startTelegramBot();
@@ -578,9 +600,9 @@ async function initializeBot() {
     } else {
         UI.info('WhatsApp standalone operation active.');
     }
-    
+
     await startMickeyBot();
-    
+
     process.on('SIGINT', async () => {
         console.log(chalk.yellow('\n  👋 Terminating bot processes...'));
         if (whatsappBot) { try { await whatsappBot.end(); } catch(e) {} }
