@@ -14,18 +14,17 @@ const path = require('path');
 const chalk = require('chalk');
 const pino = require("pino");
 const readline = require("readline");
+const NodeCache = require("node-cache");
 
 // ── @mickeyteam/baileys (ESM package, imported via CJS interop) ──
 const mickey = require("@mickeyteam/baileys");
-const makeWASocket = mickey.default;
+const makeWASocket = mickey.default || mickey;
 const {
     useMultiFileAuthState,
-    addMemoryCacheToAuthState,
+    makeCacheableSignalKeyStore,
     DisconnectReason,
     fetchLatestBaileysVersion,
     delay,
-    // MessageBuilder utilities — integrated, no external package needed
-    // Button, ButtonV2, Carousel, AIRich, Toolkit, MessageBuilder, MB
 } = mickey;
 
 const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require("./main");
@@ -128,13 +127,13 @@ function cleanSessionFiles() {
                     cleaned++;
                 }
             } catch (error) {
-                UI.warning(`Could not inspect session file ${entry.name}: ${error.message}`);
+                // Ignore errors
             }
         }
 
-        if (cleaned > 0) UI.info(`Removed ${cleaned} stale or corrupted session artifact(s); valid session keys were preserved.`);
+        if (cleaned > 0) console.log(chalk.cyan(`▓▒░ [CLEANER] Removed ${cleaned} stale or corrupted session artifact(s)`));
     } catch (error) {
-        UI.warning(`Session cleanup skipped: ${error.message}`);
+        // Ignore
     }
 }
 
@@ -170,14 +169,14 @@ function autoClean() {
 function clearSession() {
     try {
         if (fs.existsSync(SESSION_DIR)) {
-            UI.warning('Clearing corrupted/expired session files...');
+            console.log(chalk.yellow(`  [WARN] Clearing corrupted/expired session files...`));
             fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-            UI.success('Session directory wiped successfully!');
+            console.log(chalk.green(`  [OK] Session directory wiped successfully!`));
         }
         ensureDirectories();
         return true;
     } catch (err) {
-        UI.error(`Failed to clear session: ${err.message}`);
+        console.log(chalk.red(`  [ERR] Failed to clear session: ${err.message}`));
         return false;
     }
 }
@@ -194,9 +193,9 @@ function createReadline() {
         try { rl.close(); } catch(e) {}
         rl = null;
     }
-    rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
+    rl = readline.createInterface({ 
+        input: process.stdin, 
+        output: process.stdout 
     });
     return rl;
 }
@@ -216,7 +215,7 @@ async function askPhoneNumber() {
             if (!num.startsWith("255")) {
                 num = "255" + num;
             }
-            UI.success(`Namba imethibitishwa: ${num}`);
+            console.log(chalk.green(`  ✔ Namba imethibitishwa: ${num}`));
             resolve(num);
         });
     });
@@ -227,9 +226,11 @@ try {
     store.readFromFile();
 } catch (err) {}
 setInterval(() => {
-    void store.writeToFile().catch(err => {
-        console.error('[Store] Persist failed:', err.message);
-    });
+    if (typeof store.writeToFile === 'function') {
+        void store.writeToFile().catch(err => {
+            console.error('[Store] Persist failed:', err.message);
+        });
+    }
 }, settings.storeWriteInterval || 60000);
 
 // ────────────────────────────────────────────────
@@ -246,9 +247,9 @@ const UI = {
         console.log(chalk.magentaBright.bold(`
   ███╗   ███╗██╗ ██████╗██╗  ██╗███████╗██╗   ██╗
   ████╗ ████║██║██╔════╝██║ ██╔╝██╔════╝╚██╗ ██╔╝
-  ██╔████╔██║██║██║     █████╔╝ █████╗   ╚████╔╝
-  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝    ╚██╔╝
-  ██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗   ██║
+  ██╔████╔██║██║██║     █████╔╝ █████╗   ╚████╔╝ 
+  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝    ╚██╔╝  
+  ██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗   ██║   
   ╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝   `));
         console.log(chalk.hex('#FF4FD8')('  GLITCH ') + chalk.hex('#00D4FF').bold('BOT CORE') + chalk.hex('#6E7681')('  •  SYSTEM v3.2  •  @mickeyteam/baileys') + '\n');
     }
@@ -310,8 +311,12 @@ async function startMickeyBot() {
         // ── Session Auth ──
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
-        // In-memory Signal key cache (recommended by @mickeyteam/baileys docs for busy bots)
-        const cachedState = addMemoryCacheToAuthState(state);
+        // Fix: Tumia makeCacheableSignalKeyStore badala ya addMemoryCacheToAuthState
+        const msgRetryCounterCache = new NodeCache({ stdTTL: 0, checkperiod: 0 });
+        const cachedState = {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pinoLogger)
+        };
 
         const hasSession = cachedState.creds?.registered === true;
         console.log(chalk.bgHex('#161B22').hex('#7D5FFF').bold(' AUTH ') + chalk.hex('#7D5FFF')('  Security'), hasSession ? chalk.greenBright('Session Loaded ✓') : chalk.yellowBright('Waiting for authentication'));
@@ -319,61 +324,42 @@ async function startMickeyBot() {
         const Mickey = makeWASocket({
             version,
             logger: pinoLogger,
-            // printQRInTerminal removed (deprecated) — pairing is via requestPairingCode
             browser: ["Ubuntu", "Chrome", "120.0.0.0"],
             auth: cachedState,
+            msgRetryCounterCache,
             markOnlineOnConnect: true,
-            syncFullHistory: false,
+            syncFullHistory: false, // Imepunguza matumizi ya RAM sana
             generateHighQualityLinkPreview: true,
-
-            // ── Retry / pairing tuning (from @mickeyteam/baileys docs) ──
-            maxMsgRetryCount: 3,
-            retryRequestDelayMs: 250,
-            maxRetryQueueSize: 64,
-            ackRetryDelayMs: 750,
-            maxAckRetryCount: 3,
-            pairingCodeTimeoutMs: 180000,
-
-            // ── Socket options ──
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
             keepAliveIntervalMs: 30000,
             countryCode: 'TZ',
-
-            // Opt-in banner — custom message per docs
-            branding: {
-                message: `THANKS FOR USING ${_botName}. POWERED BY @mickeyteam/baileys`
-            },
-
-            patchMessageBeforeSending: (message) => {
-                const requiresPatch = !!(message.buttonsMessage || message.templateMessage || message.listMessage);
-                if (requiresPatch) {
-                    message = {
-                        viewOnceMessage: {
-                            message: {
-                                messageContextInfo: {
-                                    deviceListMetadataVersion: 2,
-                                    deviceListMetadata: {},
-                                },
-                                ...message,
-                            },
-                        },
-                    };
-                }
-                return message;
-            },
-
             getMessage: async (key) => {
                 if (!key || !key.id) return undefined;
-                const jid = key.remoteJid || key.participant || key.sender || '';
-                const msg = await store.loadMessage(jid, key.id);
-                return msg?.message || undefined;
+                try {
+                    const jid = key.remoteJid || key.participant || key.sender || '';
+                    if (typeof store.loadMessage === 'function') {
+                        const msg = await store.loadMessage(jid, key.id);
+                        return msg?.message || undefined;
+                    }
+                    return undefined;
+                } catch (e) {
+                    return undefined;
+                }
             },
         });
 
         whatsappBot = Mickey;
         Mickey.ev.on("creds.update", saveCreds);
-        store.bind(Mickey.ev);
+
+        // Fix: Kinga ya store.bind() kuzuia crash
+        if (typeof store.bind === 'function') {
+            try {
+                store.bind(Mickey.ev);
+            } catch (e) {
+                console.log(chalk.yellow(`  [Store] Bind warning: ${e.message}`));
+            }
+        }
 
         // --- Message Handler with Decrypt Error Recovery ---
         Mickey.ev.on("messages.upsert", chatUpdate => {
@@ -404,7 +390,9 @@ async function startMickeyBot() {
 
                         if (handleMessages) await handleMessages(Mickey, messageUpdate, true);
                     } catch (err) {
-                        if (err.message?.includes('decrypt') || err.message?.includes('session')) {
+                        if (err.message?.includes('storeMessage is not a function')) {
+                            console.log(chalk.red(`  [Message Handler] KOSA: storeMessage haipo kwenye lightweight_store.js.`));
+                        } else if (err.message?.includes('decrypt') || err.message?.includes('session')) {
                             console.log(chalk.dim(`  [Session] Decrypt error (normal): ${err.message?.substring(0, 50)}`));
                         } else if (err.message) {
                             console.log(chalk.yellow(`  [Message Handler] ${err.message?.substring(0, 60)}...`));
@@ -462,9 +450,9 @@ async function startMickeyBot() {
                 const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
 
                 console.log(chalk.bgHex('#161B22').hex('#00D4FF').bold(' BOT METRICS '));
-                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('User') + chalk.hex('#30363D')(' ─── ') + chalk.greenBright(Mickey.user.id.split(':')[0]));
-                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('Memory') + chalk.hex('#30363D')(' ─ ') + chalk.yellowBright(`${ramUsage} MB`));
-                console.log(chalk.hex('#30363D')('  └─ ') + chalk.hex('#C9D1D9')('State') + chalk.hex('#30363D')(' ─── ') + chalk.greenBright('LIVE'));
+                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('User') + chalk.hex('#30363D')(' ─── ' ) + chalk.greenBright(Mickey.user.id.split(':')[0]));
+                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('Memory') + chalk.hex('#30363D')(' ─ ' ) + chalk.yellowBright(`${ramUsage} MB`));
+                console.log(chalk.hex('#30363D')('  └─ ') + chalk.hex('#C9D1D9')('State') + chalk.hex('#30363D')(' ─── ' ) + chalk.greenBright('LIVE'));
                 UI.divider();
 
                 try {
@@ -513,8 +501,6 @@ async function startMickeyBot() {
 
         // ────────────────────────────────────────────────
         // PAIRING - INJECTING CUSTOM CODE "MICKDADY"
-        // Note: @mickeyteam/baileys enforces exactly 8 chars.
-        //       "MICKDADY" is 8 chars ✔
         // ────────────────────────────────────────────────
         if (!hasSession && !isPairing) {
             isPairing = true;
@@ -525,7 +511,6 @@ async function startMickeyBot() {
             await delay(3000);
 
             try {
-                // requestPairingCode(phoneNumber, customCode) — code must be exactly 8 chars
                 await Mickey.requestPairingCode(phoneNumber, "MICKDADY");
 
                 console.log('\n' + chalk.magenta.bold('  ┌────────────────────────────────────────────────────────┐'));
