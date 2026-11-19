@@ -1,5 +1,5 @@
 /**
- * Video Call Command — powered by @mickeyteam/baileys
+ * Video Call Command — powered by @whiskeysockets/baileys
  * Default video: https://github.com/Mickeymozy/Mickey-Vip/raw/main/videocall.mp4
  * Owner / sudo only.
  */
@@ -161,11 +161,17 @@ async function getVoipClient(sock) {
         process.env.PATH = [ffmpegDirectory, ...pathEntries].filter(Boolean).join(path.delimiter);
     }
 
-    // ── @mickeyteam/baileys (GitHub build) ──
-    const baileys = await import('@mickeyteam/baileys');
+    // ── @whiskeysockets/baileys ──
+    let baileys;
+    try {
+        baileys = require('@whiskeysockets/baileys');
+    } catch (e) {
+        throw new Error('Baileys haijapatikana. Hakikisha imewekwa kwenye package.json.');
+    }
+    
     const makeVoipClient = baileys.makeVoipClient || baileys.default?.makeVoipClient;
     if (typeof makeVoipClient !== 'function') {
-        throw new Error('makeVoipClient haipatikani kwenye @mickeyteam/baileys hii.');
+        throw new Error('makeVoipClient haipatikani kwenye @whiskeysockets/baileys unayotumia. Video calls zinahitaji fork maalum ya Baileys inayosupport VoIP (kama @mickeyteam/baileys).');
     }
 
     client = await makeVoipClient(sock, { ffmpegPath });
