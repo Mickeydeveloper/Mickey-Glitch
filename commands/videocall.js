@@ -1,14 +1,117 @@
+/**
+ * Video Call Command — powered by @mickeyteam/baileys
+ * Default video: https://github.com/Mickeymozy/Mickey-Vip/raw/main/videocall.mp4
+ * Owner / sudo only.
+ */
+
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
 const { spawnSync } = require('child_process');
+const { pipeline } = require('stream/promises');
 const isOwnerOrSudo = require('../lib/isOwner');
 
 const voipClients = new WeakMap();
 const activeCalls = new WeakMap();
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.mkv', '.mov', '.webm', '.avi']);
 
-function resolveVideoPath(file) {
-    const videoPath = path.resolve(process.cwd(), file);
+// ────────────────────────────────────────────────
+// DEFAULTS
+// ────────────────────────────────────────────────
+const DEFAULT_VIDEO_URL =
+    'https://github.com/Mickeymozy/Mickey-Vip/raw/main/videocall.mp4';
+const GITHUB_RAW_FALLBACK =
+    'https://raw.githubusercontent.com/Mickeymozy/Mickey-Vip/main/videocall.mp4';
+
+const TMP_DIR = path.resolve(process.cwd(), 'tmp');
+const VIDEO_CACHE_DIR = path.resolve(TMP_DIR, 'videocall-cache');
+if (!fs.existsSync(VIDEO_CACHE_DIR)) {
+    fs.mkdirSync(VIDEO_CACHE_DIR, { recursive: true });
+}
+
+// ────────────────────────────────────────────────
+// HELPERS
+// ────────────────────────────────────────────────
+function isHttpUrl(value) {
+    return /^https?:\/\//i.test(String(value || '').trim());
+}
+
+function isGithubBlobUrl(value) {
+    return /^https?:\/\/github\.com\/[^/]+\/[^/]+\/blob\/[^/]+\/.+/i.test(String(value || ''));
+}
+
+function toGithubRawUrl(value) {
+    return String(value).replace(
+        /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/i,
+        'https://raw.githubusercontent.com/$1/$2/$3/$4'
+    );
+}
+
+async function downloadFile(url, destPath) {
+    const filePath = fs.existsSync(destPath) && fs.statSync(destPath).size > 0
+        ? destPath
+        : destPath;
+
+    return new Promise((resolve, reject) => {
+        const client = url.startsWith('https') ? https : http;
+        const req = client.get(url, { timeout: 60000 }, (res) => {
+            if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                // Follow redirect (GitHub does this)
+                downloadFile(res.headers.location, destPath).then(resolve).catch(reject);
+                return;
+            }
+            if (res.statusCode !== 200) {
+                reject(new Error(`Download failed (${res.statusCode}) for ${url}`));
+                return;
+            }
+            const stream = fs.createWriteStream(filePath);
+            pipeline(res, stream)
+                .then(() => {
+                    if (!fs.existsSync(filePath) || fs.statSync(filePath).size < 1024) {
+                        reject(new Error('Downloaded file too small — probably an error page.'));
+                        return;
+                    }
+                    resolve(filePath);
+                })
+                .catch(reject);
+        });
+        req.on('timeout', () => { req.destroy(new Error('Download timeout (60s).')); });
+        req.on('error', reject);
+    });
+}
+
+async function resolveVideoSource(input) {
+    const raw = String(input || '').trim();
+    if (!raw) throw new Error('Taja video (path au URL).');
+
+    // ── HTTP(S) URL → download to cache ──
+    if (isHttpUrl(raw)) {
+        const url = isGithubBlobUrl(raw) ? toGithubRawUrl(raw) : raw;
+        const fileName = `videocall-${Date.now()}-${path.basename(new URL(url).pathname) || 'video.mp4'}`;
+        const dest = path.join(VIDEO_CACHE_DIR, fileName);
+        const candidates = [url];
+        if (/github\.com\/.*\/raw\//i.test(url)) candidates.push(GITHUB_RAW_FALLBACK);
+
+        let lastErr;
+        for (const candidate of candidates) {
+            try {
+                const finalPath = await downloadFile(candidate, dest);
+                if (!VIDEO_EXTENSIONS.has(path.extname(finalPath).toLowerCase())) {
+                    fs.unlinkSync(finalPath);
+                    throw new Error('URL haina video ya MP4/MKV/MOV/WEBM/AVI.');
+                }
+                return finalPath;
+            } catch (err) {
+                lastErr = err;
+                console.warn(`[VIDEOCALL] Download attempt failed (${candidate}): ${err.message}`);
+            }
+        }
+        throw new Error(`Imeshindikana kupakua video: ${lastErr?.message || 'kosa lisilojulikana'}`);
+    }
+
+    // ── Local path → validate ──
+    const videoPath = path.resolve(process.cwd(), raw);
     const relativePath = path.relative(process.cwd(), videoPath);
     if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
         throw new Error('Video lazima iwe ndani ya folder la project.');
@@ -17,9 +120,22 @@ function resolveVideoPath(file) {
         throw new Error('Tumia video ya MP4, MKV, MOV, WEBM au AVI.');
     }
     if (!fs.existsSync(videoPath) || !fs.statSync(videoPath).isFile()) {
-        throw new Error(`Video haijapatikana: ${file}`);
+        throw new Error(`Video haijapatikana: ${raw}`);
     }
     return videoPath;
+}
+
+function cleanupOldVideos(maxAgeMs = 3600000) {
+    try {
+        if (!fs.existsSync(VIDEO_CACHE_DIR)) return;
+        const now = Date.now();
+        for (const f of fs.readdirSync(VIDEO_CACHE_DIR)) {
+            const p = path.join(VIDEO_CACHE_DIR, f);
+            try {
+                if (now - fs.statSync(p).mtimeMs > maxAgeMs) fs.unlinkSync(p);
+            } catch {}
+        }
+    } catch {}
 }
 
 function getFfmpegPath() {
@@ -45,10 +161,11 @@ async function getVoipClient(sock) {
         process.env.PATH = [ffmpegDirectory, ...pathEntries].filter(Boolean).join(path.delimiter);
     }
 
-    const baileys = await import('@whiskeysockets/baileys');
+    // ── @mickeyteam/baileys (GitHub build) ──
+    const baileys = await import('@mickeyteam/baileys');
     const makeVoipClient = baileys.makeVoipClient || baileys.default?.makeVoipClient;
     if (typeof makeVoipClient !== 'function') {
-        throw new Error('makeVoipClient haipatikani kwenye Baileys hii.');
+        throw new Error('makeVoipClient haipatikani kwenye @mickeyteam/baileys hii.');
     }
 
     client = await makeVoipClient(sock, { ffmpegPath });
@@ -56,6 +173,9 @@ async function getVoipClient(sock) {
     return client;
 }
 
+// ────────────────────────────────────────────────
+// COMMAND
+// ────────────────────────────────────────────────
 async function videoCallCommand(sock, chatId, message, args = []) {
     const senderId = message?.key?.participant || message?.key?.remoteJid || '';
     const allowed = Boolean(message?.key?.fromMe) || await isOwnerOrSudo(senderId, sock, chatId);
@@ -66,12 +186,15 @@ async function videoCallCommand(sock, chatId, message, args = []) {
         return;
     }
 
-    const input = Array.isArray(args) ? args.map(String) : String(args || '').trim().split(/\s+/).filter(Boolean);
+    const input = Array.isArray(args)
+        ? args.map(String)
+        : String(args || '').trim().split(/\s+/).filter(Boolean);
     const action = String(input[0] || '').toLowerCase();
     const active = activeCalls.get(sock);
     let startedCall = null;
 
     try {
+        // ── Sub-commands on active call ──
         if (['play', 'queue', 'skip', 'share', 'end', 'status'].includes(action)) {
             if (!active) {
                 await sock.sendMessage(chatId, { text: 'Hakuna video call inayoendelea.' }, { quoted: message });
@@ -79,12 +202,16 @@ async function videoCallCommand(sock, chatId, message, args = []) {
             }
 
             if (action === 'play' || action === 'queue') {
-                const files = input.slice(1);
-                if (!files.length) throw new Error(`Taja video: .vcall ${action} <video.mp4>`);
-                const paths = files.map(resolveVideoPath);
+                const sources = input.slice(1);
+                if (!sources.length) throw new Error(`Taja video: .vcall ${action} <video.mp4|URL>`);
+                const paths = [];
+                for (const src of sources) paths.push(await resolveVideoSource(src));
+
                 if (action === 'play') {
                     active.call.playVideo(paths[0]);
-                    await sock.sendMessage(chatId, { text: `Inacheza video: ${path.basename(paths[0])}` }, { quoted: message });
+                    await sock.sendMessage(chatId, {
+                        text: `Inacheza video: ${path.basename(paths[0])}`,
+                    }, { quoted: message });
                 } else {
                     active.call.enqueueVideo(paths);
                     await sock.sendMessage(chatId, {
@@ -116,17 +243,20 @@ async function videoCallCommand(sock, chatId, message, args = []) {
                 return;
             }
 
-            active.call.end();
+            // end
+            try { active.call.end(); } catch {}
             await sock.sendMessage(chatId, { text: 'Inamaliza video call...' }, { quoted: message });
             return;
         }
 
+        // ── Start new call ──
         const startArgs = action === 'start' ? input.slice(1) : input;
         const number = String(startArgs[0] || '').replace(/\D/g, '');
-        const videoFile = startArgs[1];
-        if (!/^\d{8,15}$/.test(number) || !videoFile) {
+        const videoInput = startArgs[1] || DEFAULT_VIDEO_URL; // default = GitHub raw video
+
+        if (!/^\d{8,15}$/.test(number)) {
             await sock.sendMessage(chatId, {
-                text: 'Matumizi: .vcall <namba> <video.mp4>\nAu: .vcall start <namba> <video.mp4>',
+                text: 'Matumizi: .vcall <namba> [video.mp4|URL]\nBila video, default video ya Mickey-Vip itatumika.',
             }, { quoted: message });
             return;
         }
@@ -136,13 +266,16 @@ async function videoCallCommand(sock, chatId, message, args = []) {
             return;
         }
 
-        const videoPath = resolveVideoPath(videoFile);
+        // Resolve video (local or download)
+        const videoPath = await resolveVideoSource(videoInput);
+
         let call;
         try {
             const voip = await getVoipClient(sock);
             call = await voip.call(number, { video: true, durationMs: 0 });
             startedCall = call;
-            activeCalls.set(sock, { call, number });
+            activeCalls.set(sock, { call, number, videoPath });
+
             call.playVideo(videoPath);
 
             await sock.sendMessage(chatId, {
@@ -164,16 +297,23 @@ async function videoCallCommand(sock, chatId, message, args = []) {
             call.on('error', async (error) => {
                 if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
                 console.error('[VIDEOCALL] Call error:', error?.message || error);
-                await sock.sendMessage(chatId, { text: `❌ Video call imekumbana na hitilafu: ${error?.message || 'kosa lisilojulikana'}.` }, { quoted: message }).catch(() => {});
+                await sock.sendMessage(chatId, {
+                    text: `❌ Video call imekumbana na hitilafu: ${error?.message || 'kosa lisilojulikana'}.`,
+                }, { quoted: message }).catch(() => {});
             });
 
+            // Wait for end + cleanup
             void call.waitForEnd().then(async (reason) => {
                 if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
+                cleanupOldVideos();
                 await sock.sendMessage(chatId, { text: `📴 Video call imeisha (${reason}).` }).catch(() => {});
             }).catch(async (error) => {
                 if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
+                cleanupOldVideos();
                 console.error('[VIDEOCALL] Call ended with error:', error?.message || error);
-                await sock.sendMessage(chatId, { text: `❌ Video call imeisha kwa hitilafu: ${error?.message || 'kosa lisilojulikana'}.` }).catch(() => {});
+                await sock.sendMessage(chatId, {
+                    text: `❌ Video call imeisha kwa hitilafu: ${error?.message || 'kosa lisilojulikana'}.`,
+                }).catch(() => {});
             });
         } catch (err) {
             if (activeCalls.get(sock)?.call === call) activeCalls.delete(sock);
@@ -192,7 +332,7 @@ async function videoCallCommand(sock, chatId, message, args = []) {
 }
 
 videoCallCommand.name = 'videocall';
-videoCallCommand.description = 'Piga video call na kucheza video (owner/sudo pekee)';
+videoCallCommand.description = 'Piga video call na kucheza video (owner/sudo pekee) — default video kutoka Mickey-Vip';
 videoCallCommand.category = 'OWNER';
 videoCallCommand.aliases = ['vcall', 'ccalll'];
 
