@@ -1,9 +1,11 @@
 // commands/notif.js
 const { randomUUID } = require('node:crypto');
+const sharp = require('sharp');
 const settings = require('../settings');
 
 const THUMBNAIL_URL = 'https://cdn.ornzora.eu.cc/4d4f3591-1c3e-4e1b-b1c2-45faeb91b781-FIORA.jpg';
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+const MAX_EVENT_TITLE_LENGTH = 256;
 const MAX_EVENT_INVITES = 3;
 const EVENT_DELAY_MS = 500;
 
@@ -18,9 +20,19 @@ async function getEventThumbnail() {
         throw new Error('Event thumbnail is larger than 2 MB');
     }
 
-    const thumbnail = Buffer.from(await response.arrayBuffer());
-    if (thumbnail.length > MAX_THUMBNAIL_BYTES) {
+    const image = Buffer.from(await response.arrayBuffer());
+    if (image.length > MAX_THUMBNAIL_BYTES) {
         throw new Error('Event thumbnail is larger than 2 MB');
+    }
+
+    const thumbnail = await sharp(image, { limitInputPixels: 16000000 })
+        .rotate()
+        .resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+
+    if (!thumbnail.length || thumbnail.length > MAX_THUMBNAIL_BYTES) {
+        throw new Error('Converted event thumbnail is invalid');
     }
     return thumbnail;
 }
@@ -29,7 +41,7 @@ async function sendEventInvite(sock, chatId, title, thumbnail, startTime) {
     await sock.relayMessage(chatId, {
         eventInviteMessage: {
             eventId: randomUUID(),
-            eventTitle: title.slice(0, 256),
+            eventTitle: title.slice(0, MAX_EVENT_TITLE_LENGTH),
             jpegThumbnail: thumbnail,
             startTime
         }
@@ -104,6 +116,19 @@ function parseNotifUserArgs(text) {
     return { targetPart, eventName, count };
 }
 
+function normalizeEventTarget(target) {
+    const value = String(target || '').trim();
+    if (/^\d{8,16}$/.test(value)) return `${value}@s.whatsapp.net`;
+    if (/^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$/.test(value)) return value;
+    return null;
+}
+
+function validateEventCount(count) {
+    if (!Number.isInteger(count) || count < 1 || count > MAX_EVENT_INVITES) {
+        throw new Error(`Idadi ya event invite lazima iwe kati ya 1 na ${MAX_EVENT_INVITES}.`);
+    }
+}
+
 function parseNotifArgs(text) {
     const trimmed = text.trim();
     let eventName = trimmed;
@@ -172,14 +197,11 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
     } catch {}
 
     try {
-        const now = Math.floor(Date.now() / 1000);
-        const startTime = now + 3600;
+        const startTime = Math.floor(Date.now() / 1000);
         // ─── NOTIFUSER MODE ────────────────────────────────
         if (isNotifUser) {
             const { targetPart, eventName, count } = parseNotifUserArgs(text);
-            if (count > MAX_EVENT_INVITES) {
-                throw new Error(`Idadi ya event invite lazima iwe kati ya 1 na ${MAX_EVENT_INVITES}.`);
-            }
+            validateEventCount(count);
 
             let rawTargets = sock.parseMention?.(targetPart) || [];
 
@@ -194,36 +216,48 @@ const notifCommand = async (sock, chatId, message, args = [], command = 'notif')
                 throw new Error('Target tidak valid! Gunakan @mention atau nomor (628xxx).');
             }
 
-            const targets = [...new Set(rawTargets)];
+            const targets = [...new Set(rawTargets.map(normalizeEventTarget).filter(Boolean))];
+            if (targets.length === 0) {
+                throw new Error('Target tidak valid! Gunakan @mention atau nomor (628xxx).');
+            }
+
             const jpegThumbnail = await getEventThumbnail();
+            let sent = 0;
 
             for (const target of targets) {
                 for (let i = 0; i < count; i++) {
                     await sendEventInvite(sock, target, eventName, jpegThumbnail, startTime);
+                    sent++;
                     if (i < count - 1) await sleep(EVENT_DELAY_MS);
                 }
             }
 
             try {
                 await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+                await sock.sendMessage(chatId, {
+                    text: `✅ Event ${sent} zimetumwa kwa ${targets.length} target.\n📌 Jina: ${eventName}`
+                }, { quoted: message });
             } catch {}
             return;
         }
 
         // ─── NOTIF MODE (current chat) ─────────────────────
         const { eventName, count } = parseNotifArgs(text);
-        if (count > MAX_EVENT_INVITES) {
-            throw new Error(`Idadi ya event invite lazima iwe kati ya 1 na ${MAX_EVENT_INVITES}.`);
-        }
+        validateEventCount(count);
         const jpegThumbnail = await getEventThumbnail();
 
+        let sent = 0;
         for (let i = 0; i < count; i++) {
             await sendEventInvite(sock, chatId, eventName, jpegThumbnail, startTime);
+            sent++;
             if (i < count - 1) await sleep(EVENT_DELAY_MS);
         }
 
         try {
             await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+            await sock.sendMessage(chatId, {
+                text: `✅ Event invite ${sent}/${count} zimetumwa.\n📌 Jina: ${eventName}`
+            }, { quoted: message });
         } catch {}
 
     } catch (error) {
