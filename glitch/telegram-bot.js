@@ -22,6 +22,7 @@ const TEMP_DIR = path.join(__dirname, '..', 'tmp');
 const COMMANDS_DIR = path.join(__dirname, '..', 'commands');
 
 const whatsappCommands = new Map();
+const telegramCallbackRoutes = new Map();
 let isPollingActive = false;
 let pollingOffset = 0;
 let globalSock = null;
@@ -188,7 +189,12 @@ async function handleTelegramUpdate(update) {
         // Handle commands with ., /, !, # or direct button clicks
         if (/^[./!#]/.test(text.trim()) || callbackData) {
             const mockSock = createTelegramSock(chatId, message.message_id);
-            await executeCommand(mockSock, chatId, message, text);
+            await executeCommand(mockSock, chatId, message, text, {
+                actor,
+                callbackQuery: update.callback_query || null,
+                chatId,
+                telegram: true,
+            });
         }
     } catch (e) {
         logError(`Error in handleTelegramUpdate: ${e.message}`);
@@ -213,8 +219,8 @@ function createTelegramSock(chatId, messageId) {
             // Extract Caption/Text
             const caption = content.caption || content.text || '';
 
-            // Handle WhatsApp Inline Buttons & Interactive Layouts
-            const buttons = content.interactiveButtons || content.buttons || content.templateButtons || [];
+            // Handle WhatsApp Inline Buttons, native flow buttons, and interactive layouts
+            const buttons = extractTelegramButtons(content);
             if (buttons.length > 0) {
                 return await sendTelegramButtons(targetChat, caption, buttons, replyId);
             }
@@ -249,6 +255,31 @@ function createTelegramSock(chatId, messageId) {
             return false;
         },
         sendMessageAck: async () => true,
+        relayMessage: async (jid, content, options = {}) => {
+            const targetChat = String(jid || chatId);
+            if (content?.buttonsMessage) {
+                const buttons = extractTelegramButtons({ buttons: content.buttonsMessage.buttons });
+                const text = content.buttonsMessage.contentText || content.buttonsMessage.footerText || 'Select an option:';
+                if (buttons.length) return sendTelegramButtons(targetChat, text, buttons, messageId);
+            }
+            if (content?.interactiveMessage) {
+                const buttons = extractTelegramButtons(content.interactiveMessage);
+                const text = content.interactiveMessage.body?.text || content.interactiveMessage.footer?.text || 'Select an option:';
+                if (buttons.length) return sendTelegramButtons(targetChat, text, buttons, messageId);
+            }
+            if (content?.eventInviteMessage) {
+                return sendTelegramMessage(
+                    targetChat,
+                    `Event: ${content.eventInviteMessage.eventTitle || 'Event Invitation'}`,
+                    {},
+                    messageId
+                );
+            }
+            if (content?.text) {
+                return sendTelegramMessage(targetChat, content.text, {}, messageId);
+            }
+            return false;
+        },
         react: async (jid, { text }) => sendTelegramMessage(String(jid || chatId), text, {}, messageId),
         user: { id: 'telegram_bridge@s.whatsapp.net', name: 'Mickey Bridge' },
         profilePictureUrl: async (jid) => {
@@ -278,6 +309,45 @@ function createTelegramSock(chatId, messageId) {
 // ============================================================
 // 🔘 AUTO-CONVERT WHATSAPP BUTTONS TO TELEGRAM INLINE KEYBOARD
 // ============================================================
+
+function extractTelegramButtons(content) {
+    if (!content || typeof content !== 'object') return [];
+
+    const direct = content.interactiveButtons || content.buttons || content.templateButtons || [];
+    const extracted = Array.isArray(direct) ? [...direct] : [];
+
+    const nativeFlow = content.nativeFlowMessage || content.interactiveMessage?.nativeFlowMessage;
+    const nativeButtons = Array.isArray(nativeFlow?.buttons) ? nativeFlow.buttons : [];
+
+    for (const button of nativeButtons) {
+        let params = {};
+        if (typeof button?.buttonParamsJson === 'string') {
+            try { params = JSON.parse(button.buttonParamsJson); } catch {}
+        } else if (button?.buttonParamsJson && typeof button.buttonParamsJson === 'object') {
+            params = button.buttonParamsJson;
+        }
+
+        if (button.name === 'single_select' && Array.isArray(params.sections)) {
+            for (const section of params.sections) {
+                for (const row of section.rows || []) {
+                    extracted.push({
+                        text: row.title || row.header || 'Option',
+                        id: row.id || row.title || '',
+                    });
+                }
+            }
+            continue;
+        }
+
+        extracted.push({
+            text: params.display_text || params.title || button.name || 'Button',
+            id: params.id || '',
+            url: params.url || '',
+        });
+    }
+
+    return extracted;
+}
 
 async function sendTelegramButtons(chatId, text, buttons, replyToId = null) {
     const token = settings.telegram?.botToken?.trim();
@@ -314,9 +384,25 @@ async function sendTelegramButtons(chatId, text, buttons, replyToId = null) {
                 actionData = `.${label.toLowerCase().replace(/\s+/g, '')}`;
             }
 
-            const buttonObj = { text: label };
-            if (isUrl) buttonObj.url = actionData;
-            else buttonObj.callback_data = actionData;
+            const buttonObj = { text: String(label).slice(0, 64) || 'Button' };
+            if (isUrl) {
+                buttonObj.url = actionData;
+            } else {
+                const routeKey = String(actionData || '').trim();
+                if (!/^[./!#]/.test(routeKey) && !routeKey.startsWith('tel:')) {
+                    actionData = `.${routeKey}`.replace(/\s+/g, ' ').trim();
+                }
+
+                let callbackData = String(actionData).slice(0, 64);
+                if (callbackData !== actionData) {
+                    const routeId = `b${cryptoRandomId()}`;
+                    telegramCallbackRoutes.set(routeId, actionData);
+                    callbackData = routeId;
+                } else {
+                    telegramCallbackRoutes.set(callbackData, actionData);
+                }
+                buttonObj.callback_data = callbackData;
+            }
 
             currentRow.push(buttonObj);
             if (currentRow.length === 2) {
@@ -395,6 +481,10 @@ async function sendTelegramMediaSmart(chatId, apiMethod, fileField, mediaSource,
     }
 }
 
+function cryptoRandomId() {
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function getFileExtension(field) {
     if (field === 'photo') return 'jpg';
     if (field === 'audio' || field === 'voice') return 'mp3';
@@ -406,8 +496,12 @@ function getFileExtension(field) {
 // ⚡ EXECUTION ENGINE & COMMAND PARSER
 // ============================================================
 
-async function executeCommand(sock, chatId, message, commandText) {
+async function executeCommand(sock, chatId, message, commandText, options = {}) {
     try {
+        if (telegramCallbackRoutes.has(String(commandText || '').trim())) {
+            commandText = telegramCallbackRoutes.get(String(commandText || '').trim());
+        }
+
         const parsed = parseCommandText(commandText || '');
         if (!parsed) return false;
 
@@ -419,6 +513,8 @@ async function executeCommand(sock, chatId, message, commandText) {
 
         logInfo(`Executing command .${parsed.name} for Telegram Chat ID: ${chatId}`);
 
+        const actor = options.actor || message.from || {};
+
         // Construct WhatsApp-like 'm' message object for Telegram
         const fakeMessage = {
             key: {
@@ -429,10 +525,12 @@ async function executeCommand(sock, chatId, message, commandText) {
             message: { conversation: commandText },
             chat: String(chatId),
             sender: String(actor?.id || chatId),
+            participant: String(actor?.id || chatId),
             pushName: actor?.first_name || 'Telegram User',
             reply: async (text) => sendTelegramMessage(chatId, text, {}, message.message_id)
         };
 
+        const argumentArray = parsed.args ? parsed.args.split(/\s+/).filter(Boolean) : [];
         const legacyArgumentOrder = new Set(['pair', 'status', 'unpair']);
         if (legacyArgumentOrder.has(parsed.name)) {
             await target.execute(sock, chatId, parsed.args || '', fakeMessage, {
@@ -441,8 +539,8 @@ async function executeCommand(sock, chatId, message, commandText) {
                 telegram: true,
             });
         } else {
-            await target.execute(sock, chatId, fakeMessage, parsed.args || '', {
-                senderId: message.from?.id || chatId,
+            await target.execute(sock, chatId, fakeMessage, argumentArray, {
+                senderId: actor?.id || chatId,
                 chatId,
                 telegram: true,
             });
@@ -514,11 +612,24 @@ function loadWhatsappCommands() {
                 whatsappCommands.set(normalizeCommandName(baseName), entry);
                 if (cmdModule.name) whatsappCommands.set(normalizeCommandName(cmdModule.name), entry);
 
-                if (Array.isArray(cmdModule.alias || cmdModule.aliases)) {
-                    (cmdModule.alias || cmdModule.aliases).forEach(a => {
-                        whatsappCommands.set(normalizeCommandName(a), entry);
-                    });
-                }
+                const commandNames = [];
+                if (typeof cmdModule.command === 'string') commandNames.push(cmdModule.command);
+                if (Array.isArray(cmdModule.command)) commandNames.push(...cmdModule.command);
+                if (typeof cmdModule.commandName === 'string') commandNames.push(cmdModule.commandName);
+                if (typeof cmdModule.name === 'string') commandNames.push(cmdModule.name);
+                commandNames.forEach(name => {
+                    whatsappCommands.set(normalizeCommandName(name), entry);
+                });
+
+                const aliases = [
+                    ...(Array.isArray(cmdModule.alias) ? cmdModule.alias : []),
+                    ...(Array.isArray(cmdModule.aliases) ? cmdModule.aliases : []),
+                    ...(typeof cmdModule.alias === 'string' ? [cmdModule.alias] : []),
+                    ...(typeof cmdModule.aliases === 'string' ? [cmdModule.aliases] : [])
+                ];
+                aliases.forEach(alias => {
+                    whatsappCommands.set(normalizeCommandName(alias), entry);
+                });
             }
         } catch (e) {
             logError(`Imeshindwa ku-load command ${file}: ${e.message}`);
