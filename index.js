@@ -42,7 +42,7 @@ try {
 // ────────────────────────────────────────────────
 // LOGGER - SILENT FOR CLEAN CONSOLE
 // ────────────────────────────────────────────────
-const pinoLogger = pino({ level: 'silent' });
+const pinoLogger = pino({ level: process.env.BAILEYS_LOG_LEVEL || 'warn' });
 const originalConsoleLog = console.log.bind(console);
 const sensitiveSessionLogPattern = /closing (?:open )?session|sessionentry\s*\{/i;
 const isSensitiveSessionDiagnostic = (args) => args.some(value =>
@@ -207,9 +207,11 @@ try {
     store.readFromFile();
 } catch (err) {}
 setInterval(() => {
-    try { 
-        if (typeof store.writeToFile === 'function') store.writeToFile(); 
-    } catch (err) {}
+    if (typeof store.writeToFile === 'function') {
+        Promise.resolve(store.writeToFile()).catch(err => {
+            console.error('[Store] Periodic persistence failed:', err?.stack || err);
+        });
+    }
 }, settings.storeWriteInterval || 10000);
 
 // ────────────────────────────────────────────────
@@ -241,6 +243,10 @@ let whatsappBot = null;
 let isWhatsAppRunning = false;
 let reconnectAttempts = 0;
 let startupCleanupDone = false;
+let inboundUpdateCount = 0;
+let ignoredUpsertCount = 0;
+let lastInboundAt = 0;
+let lastInboundType = 'none';
 
 async function startMickeyBot() {
     if (isWhatsAppRunning && whatsappBot) return whatsappBot;
@@ -315,7 +321,11 @@ async function startMickeyBot() {
         });
 
         whatsappBot = Mickey;
-        Mickey.ev.on("creds.update", saveCreds);
+        Mickey.ev.on("creds.update", () => {
+            Promise.resolve(saveCreds()).catch(err => {
+                console.error('[Auth] Failed to persist updated credentials:', err?.stack || err);
+            });
+        });
 
         // Fix: Try/Catch to prevent crash if store.bind is missing
         if (typeof store.bind === 'function') {
@@ -329,9 +339,24 @@ async function startMickeyBot() {
         // --- Message Handler with Decrypt Error Recovery ---
         Mickey.ev.on("messages.upsert", chatUpdate => {
             const messages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : [];
+            inboundUpdateCount += messages.length;
+            if (messages.length) {
+                lastInboundAt = Date.now();
+                lastInboundType = chatUpdate?.type || 'unknown';
+            }
+            if (chatUpdate?.type !== 'notify') ignoredUpsertCount += messages.length;
+
             for (const mek of messages) {
                 const messageUpdate = { ...chatUpdate, messages: [mek] };
                 void (async () => {
+                    const startedAt = Date.now();
+                    const chatId = mek?.key?.remoteJid || 'unknown';
+                    const messageId = mek?.key?.id || 'unknown';
+                    const timeoutWarning = setTimeout(() => {
+                        console.warn(`[Message Handler] Still processing after 30s (chat=${chatId}, message=${messageId}, type=${chatUpdate?.type || 'unknown'})`);
+                    }, 30000);
+                    timeoutWarning.unref?.();
+
                     try {
                         if (!mek?.message) return;
 
@@ -355,13 +380,17 @@ async function startMickeyBot() {
 
                         if (handleMessages) await handleMessages(Mickey, messageUpdate, true);
                     } catch (err) {
-                        // Fix: Display exact error for storeMessage instead of crashing
                         if (err.message?.includes('storeMessage is not a function')) {
                             console.log(chalk.red(`  [Message Handler] KOSA: storeMessage haipo kwenye lib/lightweight_store.js.`));
                         } else if (err.message?.includes('decrypt') || err.message?.includes('session')) {
-                            console.log(chalk.dim(`  [Session] Decrypt error (normal): ${err.message?.substring(0, 50)}`));
-                        } else if (err.message) {
-                            console.log(chalk.yellow(`  [Message Handler] ${err.message?.substring(0, 60)}...`));
+                            console.warn(`[Session] Decrypt error (chat=${chatId}, message=${messageId}): ${err?.stack || err}`);
+                        } else {
+                            console.error(`[Message Handler] Failed (chat=${chatId}, message=${messageId}, type=${chatUpdate?.type || 'unknown'}):`, err?.stack || err);
+                        }
+                    } finally {
+                        clearTimeout(timeoutWarning);
+                        if (Date.now() - startedAt > 30000) {
+                            console.warn(`[Message Handler] Completed after ${Date.now() - startedAt}ms (chat=${chatId}, message=${messageId})`);
                         }
                     }
                 })();
@@ -536,7 +565,10 @@ function startKeepAlive() {
         }
         const status = isWhatsAppRunning ? chalk.greenBright('ONLINE') : chalk.redBright('OFFLINE');
         const ram = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
-        console.log(chalk.hex('#30363D')('  ├─') + chalk.bgHex('#161B22').hex('#C9D1D9').bold(' MONITOR ') + chalk.hex('#30363D')('  status ') + status + chalk.hex('#30363D')('  •  RAM ') + chalk.yellowBright(`${ram} MB`));
+        const inboundAge = lastInboundAt ? `${Math.floor((Date.now() - lastInboundAt) / 60000)}m ago` : 'none yet';
+        const heap = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1);
+        console.log(chalk.hex('#30363D')('  ├─') + chalk.bgHex('#161B22').hex('#C9D1D9').bold(' MONITOR ') + chalk.hex('#30363D')('  status ') + status + chalk.hex('#30363D')('  •  RSS ') + chalk.yellowBright(`${ram} MB`) + chalk.hex('#30363D')('  •  Heap ') + chalk.yellowBright(`${heap} MB`));
+        console.log(chalk.hex('#30363D')('  └─') + chalk.hex('#C9D1D9')(` inbound updates=${inboundUpdateCount}, ignored non-notify=${ignoredUpsertCount}, last=${lastInboundType} ${inboundAge}`));
     }, 5 * 60 * 1000);
 }
 

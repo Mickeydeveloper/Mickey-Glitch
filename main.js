@@ -1874,9 +1874,10 @@ We will process it and send you an update shortly.`
             await addCommandReaction(sock, message, commandExecuted);
         }
     } catch (error) {
-        console.error('❌ Error in message handler:', error.message);
         let safeChatId = null;
         try { safeChatId = messageUpdate?.messages?.[0]?.key?.remoteJid || null; } catch (e) { safeChatId = null; }
+        const safeMessageId = messageUpdate?.messages?.[0]?.key?.id || 'unknown';
+        console.error(`❌ Error in message handler (chat=${safeChatId || 'unknown'}, message=${safeMessageId}):`, error?.stack || error);
         if (safeChatId) {
             await sock.sendMessage(safeChatId, {
                 text: `❌ Failed to process command: ${String(error.message).slice(0, 300)}`
