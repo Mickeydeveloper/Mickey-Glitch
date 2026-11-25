@@ -38,8 +38,8 @@ function extractYoutubeVideoId(ytUrl) {
     return '';
 }
 
-// 1. API MPYA: ZiaUl API (Chanzo cha Kwanza)
-async function getVideoFromZiaUlAPI(ytUrl) {
+// 1. Prexzy ytmp4 API
+async function getVideoFromPrexzyAPI(ytUrl) {
     const encodedUrl = encodeURIComponent(ytUrl);
     const apiUrl = `https://prexzyapis.com/download/ytmp4?url=${encodedUrl}`;
 
@@ -52,26 +52,50 @@ async function getVideoFromZiaUlAPI(ytUrl) {
             }
         }));
 
-        if (res.data?.status === true && res.data?.result?.downloadUrl) {
-            const result = res.data.result;
-
-            // Kupakua faili la MP4 kupitia downloadUrl
-            const fileRes = await tryRequest(() => axios.get(result.downloadUrl, {
-                ...AXIOS_DEFAULTS,
-                responseType: 'arraybuffer'
-            }));
-
-            return {
-                buffer: Buffer.from(fileRes.data),
-                title: result.title || 'YouTube Video',
-                thumbnail: result.thumbnail || '',
-                quality: result.quality || '720p',
-                source: 'ZiaUl API'
-            };
+        const payload = res.data?.result || res.data?.data || res.data;
+        if (payload?.status !== true) {
+            throw new Error(payload?.message || 'API status was not successful');
         }
-        throw new Error('ZiaUl API returned invalid structure or missing downloadUrl');
+
+        const formats = [
+            ...(Array.isArray(payload.qualities) ? payload.qualities : []),
+            ...(Array.isArray(payload.formats) ? payload.formats : []),
+            ...(payload.format && typeof payload.format === 'object' ? [payload.format] : []),
+        ];
+        const hasAudio = (format) => format?.acodec && format.acodec !== 'none';
+        const withAudio = formats.find(format => hasAudio(format) && (format.download_url || format.url));
+        const topLevelFormat = payload.format || {};
+        const directUrl = withAudio?.download_url || withAudio?.url ||
+            (topLevelFormat.download_url || topLevelFormat.url) || payload.download_url || '';
+
+        if (!directUrl) {
+            throw new Error('Prexzy response is missing download_url');
+        }
+
+        const selectedFormat = withAudio || topLevelFormat || {};
+        if (selectedFormat.acodec === 'none') {
+            console.warn('[VIDEO] Prexzy returned a video-only format; this download may not contain audio.');
+        }
+
+        const fileRes = await tryRequest(() => axios.get(directUrl, {
+            ...AXIOS_DEFAULTS,
+            timeout: 120000,
+            maxContentLength: 150 * 1024 * 1024,
+            responseType: 'arraybuffer'
+        }));
+        const buffer = Buffer.from(fileRes.data);
+        if (!buffer.length) throw new Error('Prexzy returned an empty video file');
+
+        const info = payload.info || {};
+        return {
+            buffer,
+            title: info.title || payload.title || 'YouTube Video',
+            thumbnail: info.thumbnail || payload.thumbnail || '',
+            quality: selectedFormat.quality || payload.quality || 'MP4',
+            source: 'Prexzy API',
+        };
     } catch (err) {
-        throw new Error(`ZiaUl API failed: ${err.message}`);
+        throw new Error(`Prexzy API failed: ${err.message}`);
     }
 }
 
@@ -273,13 +297,13 @@ async function getVideoFromYoutubeAPI(ytUrl) {
     }
 }
 
-// Function inayojaribu kupakua video ikianzia na ZiaUl API
+// Try Prexzy first, then existing sources if it has no playable A/V format.
 async function getYoutubeVideo(ytUrl) {
     try {
-        console.log('[VIDEO] Trying ZiaUl API (1st priority)...');
-        return await getVideoFromZiaUlAPI(ytUrl);
-    } catch (ziaUlErr) {
-        console.log(`[VIDEO] ZiaUl API failed: ${ziaUlErr.message}, trying YouTubeMP4 scraper...`);
+        console.log('[VIDEO] Trying Prexzy ytmp4 API (1st priority)...');
+        return await getVideoFromPrexzyAPI(ytUrl);
+    } catch (prexzyErr) {
+        console.log(`[VIDEO] Prexzy API failed: ${prexzyErr.message}, trying YouTubeMP4 scraper...`);
         try {
             return await getVideoFromYouTubeMP4Scraper(ytUrl);
         } catch (scraperErr) {
