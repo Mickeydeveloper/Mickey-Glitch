@@ -147,6 +147,7 @@ const imagineCommand = require('./commands/imagine');
 const videoCommand = require('./commands/video');
 const sudoCommand = require('./commands/sudo');
 const notifCommand = require('./commands/notif');
+const allDownloadCommand = require('./commands/alldownload');
 
 const stickercropCommand = require('./commands/stickercrop');
 const mickeyCommand = require('./commands/Mickey');
@@ -731,6 +732,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // If userMessage is still not a command, check for active halotel pending state first
         if (!userMessage.startsWith('.')) {
+            if (await allDownloadCommand.handleIncomingMessage(sock, message)) return;
+
             try {
                 if (typeof getPendingRequest !== 'undefined' && typeof getPendingRequest === 'function') {
                     const pendingReq = getPendingRequest(chatId);
