@@ -1,7 +1,8 @@
-const { downloadMediaMessage, downloadContentFromMessage, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
-const { exec } = require('child_process');
+const { downloadMediaMessage, downloadContentFromMessage, generateWAMessageFromContent, prepareWAMessageMedia, proto } = require('@whiskeysockets/baileys');
+const { exec, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const settings = require('../settings');
 const webp = require('node-webpmux');
 const crypto = require('crypto');
@@ -211,6 +212,234 @@ async function stickerPremiumCommand(sock, chatId, message) {
     }
 }
 
+const audioStickerVarint = (value) => {
+    const bytes = [];
+    while (value > 127) {
+        bytes.push((value % 128) | 128);
+        value = Math.floor(value / 128);
+    }
+    bytes.push(value);
+    return Buffer.from(bytes);
+};
+
+const audioStickerLengthDelimited = (field, body) => Buffer.concat([
+    audioStickerVarint(field * 8 + 2),
+    audioStickerVarint(body.length),
+    body,
+]);
+
+function parseAudioStickerWebp(buffer) {
+    if (
+        buffer.length < 30 ||
+        buffer.toString('ascii', 0, 4) !== 'RIFF' ||
+        buffer.toString('ascii', 8, 12) !== 'WEBP'
+    ) throw new Error('Audio sticker image is not a valid WebP');
+
+    const chunk = buffer.toString('ascii', 12, 16);
+    if (chunk === 'VP8 ') {
+        return {
+            width: buffer.readUInt16LE(26) & 0x3fff,
+            height: buffer.readUInt16LE(28) & 0x3fff,
+            isAnimated: false,
+        };
+    }
+    if (chunk === 'VP8L') {
+        return {
+            width: 1 + (buffer[21] | ((buffer[22] & 0x3f) << 8)),
+            height: 1 + ((buffer[22] >> 6) | (buffer[23] << 2) | ((buffer[24] & 0x0f) << 10)),
+            isAnimated: false,
+        };
+    }
+    if (chunk === 'VP8X') {
+        return {
+            width: 1 + buffer.readUIntLE(24, 3),
+            height: 1 + buffer.readUIntLE(27, 3),
+            isAnimated: (buffer[20] & 2) !== 0,
+        };
+    }
+    throw new Error(`Unsupported WebP chunk: ${chunk}`);
+}
+
+function runFFmpegBuffer(args, input) {
+    return new Promise((resolve, reject) => {
+        const process = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+        const output = [];
+        let outputSize = 0;
+        let errorOutput = '';
+
+        process.stdout.on('data', (chunk) => {
+            outputSize += chunk.length;
+            if (outputSize > 32 * 1024 * 1024) {
+                process.kill('SIGKILL');
+                reject(new Error('FFmpeg output exceeded 32 MB'));
+                return;
+            }
+            output.push(chunk);
+        });
+        process.stderr.on('data', (chunk) => {
+            errorOutput = `${errorOutput}${chunk.toString()}`.slice(-4000);
+        });
+        process.once('error', reject);
+        process.once('close', (code) => {
+            if (code !== 0) return reject(new Error(errorOutput.slice(-1000) || `FFmpeg exited with code ${code}`));
+            resolve(Buffer.concat(output));
+        });
+        process.stdin.on('error', () => {});
+        process.stdin.end(input);
+    });
+}
+
+async function createAudioStickerImage(audioBuffer) {
+    const configuredImage = settings.audioStickerImage || path.join(process.cwd(), 'media', 'menu.jpg');
+    let imageBuffer;
+    if (typeof configuredImage === 'string' && fs.existsSync(configuredImage)) {
+        imageBuffer = await fs.promises.readFile(configuredImage);
+    } else {
+        imageBuffer = await runFFmpegBuffer([
+            '-v', 'error',
+            '-i', 'pipe:0',
+            '-filter_complex', 'showwavespic=s=512x512:colors=0x40d6b0:scale=sqrt',
+            '-frames:v', '1',
+            '-vcodec', 'png',
+            '-f', 'image2pipe',
+            'pipe:1',
+        ], audioBuffer);
+    }
+
+    return runFFmpegBuffer([
+        '-v', 'error',
+        '-i', 'pipe:0',
+        '-frames:v', '1',
+        '-vf', 'scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#101820',
+        '-c:v', 'libwebp',
+        '-quality', '82',
+        '-f', 'webp',
+        'pipe:1',
+    ], imageBuffer);
+}
+
+async function uploadAudioStickerMedia(sock, plain, kind) {
+    const keyInfo = {
+        audio: 'WhatsApp Audio Keys',
+        sticker: 'WhatsApp Image Keys',
+    }[kind];
+    if (!keyInfo) throw new Error(`Unsupported audio-sticker media kind: ${kind}`);
+
+    const mediaKey = crypto.randomBytes(32);
+    const derivedKey = Buffer.from(crypto.hkdfSync('sha256', mediaKey, Buffer.alloc(32), keyInfo, 112));
+    const iv = derivedKey.subarray(0, 16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', derivedKey.subarray(16, 48), iv);
+    const encrypted = Buffer.concat([cipher.update(plain), cipher.final()]);
+    const mac = crypto.createHmac('sha256', derivedKey.subarray(48, 80))
+        .update(iv)
+        .update(encrypted)
+        .digest()
+        .subarray(0, 10);
+    const encryptedFile = Buffer.concat([encrypted, mac]);
+    const fileEncSha256 = crypto.createHash('sha256').update(encryptedFile).digest();
+    const tempPath = path.join(os.tmpdir(), `audio-sticker-${kind}-${crypto.randomBytes(8).toString('hex')}.enc`);
+
+    await fs.promises.writeFile(tempPath, encryptedFile);
+    try {
+        if (typeof sock.waUploadToServer !== 'function') {
+            throw new Error('This Baileys socket does not expose waUploadToServer');
+        }
+        const uploaded = await sock.waUploadToServer(tempPath, {
+            fileEncSha256B64: fileEncSha256.toString('base64'),
+            mediaType: kind,
+        });
+        if (!uploaded?.directPath) throw new Error(`${kind} upload returned no directPath`);
+
+        return {
+            url: uploaded.mediaUrl || `https://mmg.whatsapp.net${uploaded.directPath}`,
+            directPath: uploaded.directPath,
+            mediaKey,
+            fileEncSha256,
+            fileSha256: crypto.createHash('sha256').update(plain).digest(),
+            fileLength: plain.length,
+            mediaKeyTimestamp: Math.floor(Date.now() / 1000),
+        };
+    } finally {
+        await fs.promises.unlink(tempPath).catch(() => {});
+    }
+}
+
+async function sendAudioSticker(sock, chatId, stickerBuffer, audioBuffer) {
+    if (!proto?.Message?.encode || !proto?.Message?.AudioMessage || !proto?.Message?.StickerMessage) {
+        throw new Error('The installed Baileys build does not expose the required message protobuf types');
+    }
+
+    const webp = parseAudioStickerWebp(stickerBuffer);
+    const [audioUpload, stickerUpload] = await Promise.all([
+        uploadAudioStickerMedia(sock, audioBuffer, 'audio'),
+        uploadAudioStickerMedia(sock, stickerBuffer, 'sticker'),
+    ]);
+    const mediaDomainInfo = (mediaKey) => audioStickerLengthDelimited(74, Buffer.concat([
+        Buffer.from([0x08, 0x01]),
+        audioStickerLengthDelimited(2, mediaKey),
+    ]));
+
+    const audioMessage = Buffer.concat([
+        Buffer.from(proto.Message.AudioMessage.encode(proto.Message.AudioMessage.create({
+            url: audioUpload.url,
+            mimetype: 'audio/ogg; codecs=opus',
+            fileSha256: audioUpload.fileSha256,
+            fileEncSha256: audioUpload.fileEncSha256,
+            fileLength: audioUpload.fileLength,
+            mediaKey: audioUpload.mediaKey,
+            directPath: audioUpload.directPath,
+            mediaKeyTimestamp: audioUpload.mediaKeyTimestamp,
+        })).finish()),
+        audioStickerLengthDelimited(17, mediaDomainInfo(audioUpload.mediaKey)),
+    ]);
+    const stickerMessage = Buffer.concat([
+        Buffer.from(proto.Message.StickerMessage.encode(proto.Message.StickerMessage.create({
+            url: stickerUpload.url,
+            fileSha256: stickerUpload.fileSha256,
+            fileEncSha256: stickerUpload.fileEncSha256,
+            mediaKey: stickerUpload.mediaKey,
+            mimetype: 'image/webp',
+            height: webp.height,
+            width: webp.width,
+            directPath: stickerUpload.directPath,
+            fileLength: stickerUpload.fileLength,
+            mediaKeyTimestamp: stickerUpload.mediaKeyTimestamp,
+            isAnimated: webp.isAnimated,
+            stickerSentTs: Date.now(),
+        })).finish()),
+        audioStickerLengthDelimited(17, Buffer.concat([
+            mediaDomainInfo(stickerUpload.mediaKey),
+            audioStickerLengthDelimited(82, audioStickerVarint(13001)),
+        ])),
+    ]);
+    const rawFieldBody = audioStickerLengthDelimited(1, audioStickerLengthDelimited(26, Buffer.concat([
+        stickerMessage,
+        audioStickerLengthDelimited(26, audioMessage),
+    ])));
+    const rawFields = Symbol('audioStickerRawFields');
+    const payload = proto.Message.create({
+        messageContextInfo: { messageSecret: crypto.randomBytes(32) },
+    });
+    payload[rawFields] = [[134, rawFieldBody]];
+
+    const originalEncode = proto.Message.encode;
+    proto.Message.encode = function encodeWithAudioStickerFields(message, writer) {
+        const encoded = originalEncode.call(this, message, writer);
+        if (message?.[rawFields]) {
+            for (const [field, body] of message[rawFields]) {
+                encoded.uint32(field * 8 + 2).bytes(body);
+            }
+        }
+        return encoded;
+    };
+
+    try {
+        return await sock.relayMessage(chatId, payload, {});
+    } finally {
+        proto.Message.encode = originalEncode;
+    }
+}
+
 
 async function stickerCommand(sock, chatId, message) {
     // The message that will be quoted in the reply.
@@ -233,11 +462,12 @@ async function stickerCommand(sock, chatId, message) {
         };
     }
 
-    const mediaMessage = targetMessage.message?.imageMessage || targetMessage.message?.videoMessage || targetMessage.message?.documentMessage;
+    const mediaMessage = targetMessage.message?.imageMessage || targetMessage.message?.videoMessage || targetMessage.message?.documentMessage || targetMessage.message?.audioMessage;
+    const isAudioInput = !!targetMessage.message?.audioMessage;
 
     if (!mediaMessage) {
         await sock.sendMessage(chatId, { 
-            text: 'Please reply to an image/video with .sticker, or send an image/video with .sticker as the caption.'
+            text: 'Reply to an image/video with .sticker, or reply to audio to create an audio sticker.'
         },{ quoted: messageToQuote });
         return;
     }
@@ -276,26 +506,41 @@ async function stickerCommand(sock, chatId, message) {
         fs.writeFileSync(tempInput, mediaBuffer);
 
         // Check if media is animated (GIF or video)
-        const isAnimated = mediaMessage.mimetype?.includes('gif') || 
+        const isAnimated = !isAudioInput && (mediaMessage.mimetype?.includes('gif') || 
                           mediaMessage.mimetype?.includes('video') || 
-                          mediaMessage.seconds > 0;
+                          mediaMessage.seconds > 0);
 
-        // Convert to WebP using ffmpeg with optimized settings for animated/non-animated
-        const ffmpegCommand = isAnimated
-            ? `ffmpeg -i "${tempInput}" -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=15,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 75 -compression_level 6 "${tempOutput}"`
-            : `ffmpeg -i "${tempInput}" -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 75 -compression_level 6 "${tempOutput}"`;
+        let webpBuffer;
+        if (isAudioInput) {
+            extractedAudio = await runFFmpegBuffer([
+                '-v', 'error',
+                '-i', 'pipe:0',
+                '-vn',
+                '-map_metadata', '-1',
+                '-c:a', 'libopus',
+                '-b:a', '64k',
+                '-ar', '48000',
+                '-ac', '1',
+                '-f', 'ogg',
+                'pipe:1',
+            ], mediaBuffer);
+            webpBuffer = await createAudioStickerImage(extractedAudio);
+            fs.writeFileSync(tempOutput, webpBuffer);
+        } else {
+            const ffmpegCommand = isAnimated
+                ? `ffmpeg -i "${tempInput}" -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=15,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 75 -compression_level 6 "${tempOutput}"`
+                : `ffmpeg -i "${tempInput}" -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 75 -compression_level 6 "${tempOutput}"`;
 
-        await new Promise((resolve, reject) => {
-            exec(ffmpegCommand, (error) => {
-                if (error) {
-                    console.error('FFmpeg error:', error);
-                    reject(error);
-                } else resolve();
+            await new Promise((resolve, reject) => {
+                exec(ffmpegCommand, { timeout: 120000, maxBuffer: 1024 * 1024 }, (error) => {
+                    if (error) {
+                        console.error('FFmpeg error:', error);
+                        reject(error);
+                    } else resolve();
+                });
             });
-        });
-
-        // Read the WebP file
-        let webpBuffer = fs.readFileSync(tempOutput);
+            webpBuffer = fs.readFileSync(tempOutput);
+        }
 
         // If animated and output is too large, re-encode with harsher settings similar to stickercrop
         if (isAnimated && webpBuffer.length > 1000 * 1024) {
@@ -407,16 +652,12 @@ async function stickerCommand(sock, chatId, message) {
             } catch {}
         }
 
-        // Send the sticker
-        await sock.sendMessage(chatId, { 
-            sticker: finalBuffer
-        },{ quoted: messageToQuote });
-
         if (extractedAudio) {
+            const result = await sendAudioSticker(sock, chatId, finalBuffer, extractedAudio);
+            console.log('[sticker] Audio sticker relayed as one message:', result?.key?.id || result?.messageId || 'sent');
+        } else {
             await sock.sendMessage(chatId, {
-                audio: extractedAudio,
-                mimetype: 'audio/ogg; codecs=opus',
-                ptt: false,
+                sticker: finalBuffer
             }, { quoted: messageToQuote });
         }
 
@@ -452,7 +693,8 @@ module.exports = stickerCommand;
 module.exports.name = 'sticker';
 module.exports.aliases = ['s', 'stick'];
 module.exports.category = 'converter';
-module.exports.desc = 'Convert image/video to sticker';
+module.exports.desc = 'Convert image/video to sticker and embed video or quoted audio';
+module.exports.description = module.exports.desc;
 module.exports.execute = stickerCommand;
 
 // Premium sticker command (inject metadata)
