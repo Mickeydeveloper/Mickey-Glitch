@@ -242,6 +242,11 @@ async function stickerCommand(sock, chatId, message) {
         return;
     }
 
+    let tempInput;
+    let tempOutput;
+    let tempAudioOutput;
+    let extractedAudio = null;
+
     try {
         const mediaBuffer = await downloadMediaMessage(targetMessage, 'buffer', {}, { 
             logger: undefined, 
@@ -262,8 +267,10 @@ async function stickerCommand(sock, chatId, message) {
         }
 
         // Generate temp file paths
-        const tempInput = path.join(tmpDir, `temp_${Date.now()}`);
-        const tempOutput = path.join(tmpDir, `sticker_${Date.now()}.webp`);
+        const tempId = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+        tempInput = path.join(tmpDir, `temp_${tempId}`);
+        tempOutput = path.join(tmpDir, `sticker_${tempId}.webp`);
+        tempAudioOutput = path.join(tmpDir, `sticker_audio_${tempId}.ogg`);
 
         // Write media to temp file
         fs.writeFileSync(tempInput, mediaBuffer);
@@ -308,6 +315,23 @@ async function stickerCommand(sock, chatId, message) {
                     try { fs.unlinkSync(tempOutput2); } catch {}
                 }
             } catch {}
+        }
+
+        if (mediaMessage.mimetype?.includes('video')) {
+            try {
+                const extractAudioCommand = `ffmpeg -y -i "${tempInput}" -map 0:a:0 -vn -map_metadata -1 -c:a libopus -b:a 64k -ar 48000 -ac 1 -f ogg "${tempAudioOutput}"`;
+                await new Promise((resolve, reject) => {
+                    exec(extractAudioCommand, { timeout: 120000, maxBuffer: 1024 * 1024 }, (error) => {
+                        if (error) reject(error);
+                        else resolve();
+                    });
+                });
+
+                const audioStats = fs.statSync(tempAudioOutput);
+                if (audioStats.size > 0) extractedAudio = fs.readFileSync(tempAudioOutput);
+            } catch (audioError) {
+                console.info('[sticker] Video has no extractable audio track:', audioError?.message || audioError);
+            }
         }
         // Read the WebP file
         webpBuffer = fs.readFileSync(tempOutput);
@@ -388,16 +412,32 @@ async function stickerCommand(sock, chatId, message) {
             sticker: finalBuffer
         },{ quoted: messageToQuote });
 
+        if (extractedAudio) {
+            await sock.sendMessage(chatId, {
+                audio: extractedAudio,
+                mimetype: 'audio/ogg; codecs=opus',
+                ptt: false,
+            }, { quoted: messageToQuote });
+        }
+
         // Cleanup temp files
         try {
-            fs.unlinkSync(tempInput);
-            fs.unlinkSync(tempOutput);
+            for (const tempFile of [tempInput, tempOutput, tempAudioOutput]) {
+                if (tempFile && fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+            }
         } catch (err) {
             console.error('Error cleaning up temp files:', err);
         }
 
     } catch (error) {
         console.error('Error in sticker command:', error);
+        for (const tempFile of [tempInput, tempOutput, tempAudioOutput]) {
+            try {
+                if (tempFile && fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+            } catch (cleanupError) {
+                console.error('Error cleaning up temp file:', cleanupError?.message || cleanupError);
+            }
+        }
         await sock.sendMessage(chatId, { 
             text: 'Failed to create sticker! Try again later.'
         });
