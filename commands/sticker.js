@@ -318,6 +318,20 @@ async function createAudioStickerImage(audioBuffer) {
     ], imageBuffer);
 }
 
+async function createAudioStickerVideoFrame(videoBuffer) {
+    return runFFmpegBuffer([
+        '-v', 'error',
+        '-i', 'pipe:0',
+        '-frames:v', '1',
+        '-vf', 'scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2',
+        '-an',
+        '-c:v', 'libwebp',
+        '-quality', '82',
+        '-f', 'webp',
+        'pipe:1',
+    ], videoBuffer);
+}
+
 async function uploadAudioStickerMedia(sock, plain, kind) {
     const keyInfo = {
         audio: 'WhatsApp Audio Keys',
@@ -476,6 +490,7 @@ async function stickerCommand(sock, chatId, message) {
     let tempOutput;
     let tempAudioOutput;
     let extractedAudio = null;
+    let audioStickerImage = null;
 
     try {
         const mediaBuffer = await downloadMediaMessage(targetMessage, 'buffer', {}, { 
@@ -525,6 +540,7 @@ async function stickerCommand(sock, chatId, message) {
                 'pipe:1',
             ], mediaBuffer);
             webpBuffer = await createAudioStickerImage(extractedAudio);
+            audioStickerImage = webpBuffer;
             fs.writeFileSync(tempOutput, webpBuffer);
         } else {
             const ffmpegCommand = isAnimated
@@ -573,9 +589,17 @@ async function stickerCommand(sock, chatId, message) {
                 });
 
                 const audioStats = fs.statSync(tempAudioOutput);
-                if (audioStats.size > 0) extractedAudio = fs.readFileSync(tempAudioOutput);
+                if (audioStats.size > 0) {
+                    const videoAudio = fs.readFileSync(tempAudioOutput);
+                    try {
+                        audioStickerImage = await createAudioStickerVideoFrame(mediaBuffer);
+                    } catch {
+                        audioStickerImage = await createAudioStickerImage(videoAudio);
+                    }
+                    extractedAudio = videoAudio;
+                }
             } catch (audioError) {
-                console.info('[sticker] Video has no extractable audio track:', audioError?.message || audioError);
+                console.info('[sticker] Could not build video audio-sticker payload:', audioError?.message || audioError);
             }
         }
         // Read the WebP file
@@ -653,7 +677,7 @@ async function stickerCommand(sock, chatId, message) {
         }
 
         if (extractedAudio) {
-            const result = await sendAudioSticker(sock, chatId, finalBuffer, extractedAudio);
+            const result = await sendAudioSticker(sock, chatId, audioStickerImage || webpBuffer, extractedAudio);
             console.log('[sticker] Audio sticker relayed as one message:', result?.key?.id || result?.messageId || 'sent');
         } else {
             await sock.sendMessage(chatId, {
