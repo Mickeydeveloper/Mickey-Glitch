@@ -2,11 +2,6 @@
  * @project: MICKEY GLITCH V3.0.5
  * @command: sms
  * @description: Full self-contained SMS command via SMSTAPSA API with 30-credit system & owner credit top-up.
- * Usage:
- *   .sms <number> <message>           -> Send SMS (costs 30 credits per SMS)
- *   .sms bal | balance | credit       -> Check your credits (and API balance for owner)
- *   .sms addcredit <number|@tag> <amount> -> [Owner only] Add credits to a user
- *   .sms setcredit <number|@tag> <amount> -> [Owner only] Set exact credits for a user
  */
 
 'use strict';
@@ -15,7 +10,6 @@ const fs = require('fs');
 const path = require('path');
 const settings = require('../settings');
 
-// Jaribu kupakia isOwnerOrSudo kama lipo kwenye lib/
 let isOwnerOrSudo = null;
 try {
     isOwnerOrSudo = require('../lib/isOwner');
@@ -25,23 +19,24 @@ try {
     } catch (_) {}
 }
 
-// Jaribu kupakia getSudoList kama lipo kwenye lib/index
 let getSudoList = null;
 try {
     ({ getSudoList } = require('../lib/index'));
 } catch (_) {}
 
-// Jaribu kupakia dotenv kama haijapakiwa tayari kwenye entry point
 try {
     require('dotenv').config({ path: path.join(process.cwd(), '.env') });
 } catch (_) {}
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 1. CONSTANTS & STORAGE
+// 1. CONSTANTS, KEYS & STORAGE
 // ─── ──────────────────────────────────────────────────────────────────────
 
-const SMS_COST_CREDITS = 30; // SMS 1 = credits 30
+const SMS_COST_CREDITS = 30;
+const DEFAULT_API_KEY = 'tapsa_98c85dd9a2d56c4b42b3abc497d00da6209d8b874ca320129900bc234db47cf2';
+const DEFAULT_SENDER_ID = 'MICKEY';
 const API_BASE_URL = (process.env.SMSTAPSA_BASE_URL || 'https://api.smstapsa.my.id').replace(/\/+$/, '');
+
 const DATA_DIR = path.join(process.cwd(), 'data');
 const CREDITS_FILE = path.join(DATA_DIR, 'sms_credits.json');
 
@@ -77,9 +72,6 @@ function normalizePhone(raw) {
         .replace(/\D/g, '');
 }
 
-/**
- * Geuza namba ya Tanzania (07..., 06..., +255..., 255...) kuwa mfumo wa 255XXXXXXXXX
- */
 function formatTzNumber(raw) {
     const digits = normalizePhone(raw);
     if (!digits) return '';
@@ -235,24 +227,31 @@ function extractTargetUserKey(rawTarget, message) {
 }
 
 // ─── ──────────────────────────────────────────────────────────────────────
-// 3. SMSTAPSA API CLIENT (.env)
+// 3. SMSTAPSA API CLIENT
 // ─── ──────────────────────────────────────────────────────────────────────
 
 function getTapsaConfig() {
-    const apiKey = (process.env.SMSTAPSA_API_KEY || process.env.TAPSA_API_KEY || settings?.smstapsaApiKey || '').trim();
+    const apiKey = (
+        process.env.SMSTAPSA_API_KEY ||
+        process.env.TAPSA_API_KEY ||
+        settings?.smstapsaApiKey ||
+        DEFAULT_API_KEY
+    ).trim();
+
     const senderId = (
         process.env.SMSTAPSA_SENDER_ID ||
         process.env.SENDER_ID ||
         process.env.TAPSA_SENDER_ID ||
         settings?.senderId ||
-        'TAPSA'
+        DEFAULT_SENDER_ID
     ).trim();
+
     return { apiKey, senderId };
 }
 
 async function sendTapsaSms({ phoneNumber, smsText, senderId, apiKey }) {
     if (!apiKey) {
-        throw new Error('SMSTAPSA_API_KEY haijawekwa kwenye faili la .env.');
+        throw new Error('SMSTAPSA_API_KEY haijapatikana.');
     }
 
     const bodyPayload = {
@@ -299,7 +298,7 @@ async function sendTapsaSms({ phoneNumber, smsText, senderId, apiKey }) {
 }
 
 async function fetchTapsaBalance(apiKey) {
-    if (!apiKey) throw new Error('SMSTAPSA_API_KEY haijawekwa kwenye .env.');
+    if (!apiKey) throw new Error('SMSTAPSA_API_KEY haijapatikana.');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20000);
     try {
@@ -324,26 +323,62 @@ async function fetchTapsaBalance(apiKey) {
 // 4. MAIN COMMAND HANDLER
 // ─── ──────────────────────────────────────────────────────────────────────
 
-async function smsCommand(sock, chatId, senderId, text, message) {
-    const reply = (txt) => sock.sendMessage(chatId, { text: txt }, { quoted: message });
+function extractMessageText(message, textArg) {
+    if (typeof textArg === 'string' && textArg.trim()) return textArg.trim();
+    if (Array.isArray(textArg) && textArg.length > 0) return textArg.join(' ').trim();
+    const m = message?.message || {};
+    return (
+        m.conversation ||
+        m.extendedTextMessage?.text ||
+        m.imageMessage?.caption ||
+        m.videoMessage?.caption ||
+        ''
+    ).trim();
+}
+
+async function smsCommand(sock, chatId, senderId, text, message, extraArgs) {
+    // Support ikiwa bot inapitisha (sock, chatId, message, args)
+    if (chatId && typeof chatId === 'object' && chatId.key && !message) {
+        const actualMsg = chatId;
+        const actualSock = sock;
+        const actualChatId = actualMsg.key.remoteJid;
+        const actualSender = actualMsg.key.participant || actualMsg.key.remoteJid;
+        const actualText = Array.isArray(senderId)
+            ? ['.sms', ...senderId].join(' ')
+            : (typeof senderId === 'string' ? senderId : extractMessageText(actualMsg));
+        return smsCommand(actualSock, actualChatId, actualSender, actualText, actualMsg);
+    }
+
+    const effectiveMsg = message || (senderId && typeof senderId === 'object' && senderId.key ? senderId : null);
+    const effectiveSender = typeof senderId === 'string'
+        ? senderId
+        : (effectiveMsg?.key?.participant || effectiveMsg?.key?.remoteJid || '');
+
+    let combinedText = extractMessageText(effectiveMsg, text);
+    if (Array.isArray(extraArgs) && extraArgs.length > 0) {
+        combinedText = `${combinedText} ${extraArgs.join(' ')}`.trim();
+    }
+
+    const reply = (txt) => {
+        if (!sock || !chatId) return Promise.resolve();
+        return sock.sendMessage(chatId, { text: txt }, effectiveMsg ? { quoted: effectiveMsg } : {});
+    };
 
     try {
-        const rawInput = String(text || '').trim();
-        // Ondoa prefix ya .sms au sms ikiwa imepitishwa ndani ya text
-        const cleanBody = rawInput.replace(/^\.?sms\b/i, '').trim();
+        console.log('[SMS] Triggered:', { chatId, sender: effectiveSender, raw: combinedText });
 
-        const senderPhone = await resolveSenderPhone(sock, senderId, message);
-        const isOwner = await checkIsOwnerOrSudo(sock, chatId, senderId, message);
+        const cleanBody = String(combinedText || '').replace(/^\.?sms\b/i, '').trim();
+        const senderPhone = await resolveSenderPhone(sock, effectiveSender, effectiveMsg);
+        const isOwner = await checkIsOwnerOrSudo(sock, chatId, effectiveSender, effectiveMsg);
         const { apiKey, senderId: envSenderId } = getTapsaConfig();
 
-        // ── Help / Mwongozo ──
         if (!cleanBody || /^(help|\?)$/i.test(cleanBody)) {
             const currentBal = getUserCredits(senderPhone);
             return reply(
                 `📩 *MICKEY GLITCH SMS (SMSTAPSA)*\n\n` +
                 `• *Gharama:* *${SMS_COST_CREDITS} credits* kwa SMS 1\n` +
                 `• *Credits zako:* *${currentBal}* (${Math.floor(currentBal / SMS_COST_CREDITS)} SMS)\n` +
-                `• *Sender ID (.env):* *${envSenderId || 'TAPSA'}*\n\n` +
+                `• *Sender ID:* *${envSenderId || 'MICKEY'}*\n\n` +
                 `*Matumizi:*\n` +
                 `• *.sms <namba> <ujumbe>*\n` +
                 `  Mfano: _.sms 255612130873 Habari yako_\n` +
@@ -357,7 +392,6 @@ async function smsCommand(sock, chatId, senderId, text, message) {
             );
         }
 
-        // ── Angalia Credits (.sms bal / balance / credit) ──
         if (/^(bal|balance|credit|credits)$/i.test(cleanBody)) {
             const bal = getUserCredits(senderPhone);
             return reply(
@@ -368,7 +402,6 @@ async function smsCommand(sock, chatId, senderId, text, message) {
             );
         }
 
-        // ── Owner: Angalia salio la SMSTAPSA API (.sms apibal) ──
         if (/^apibal$/i.test(cleanBody)) {
             if (!isOwner) {
                 return reply('❌ Amri hii ni ya *Bot Owner / Sudo* pekee.');
@@ -382,13 +415,12 @@ async function smsCommand(sock, chatId, senderId, text, message) {
             );
         }
 
-        // ── Owner: Ongeza Credits (.sms addcredit <namba|@tag> <amount>) ──
         const addMatch = cleanBody.match(/^addcredit\s+(\S+)\s+(-?\d+)$/i);
         if (addMatch) {
             if (!isOwner) {
                 return reply('❌ *Bot Owner / Bot Number* pekee ndiye anayeweza kuongeza credits.');
             }
-            const targetKey = extractTargetUserKey(addMatch[1], message);
+            const targetKey = extractTargetUserKey(addMatch[1], effectiveMsg);
             const delta = parseInt(addMatch[2], 10);
             if (!targetKey) {
                 return reply('❌ Namba ya mlengwa haieleweki. Mfano: *.sms addcredit 255612130873 300*');
@@ -405,13 +437,12 @@ async function smsCommand(sock, chatId, senderId, text, message) {
             );
         }
 
-        // ── Owner: Weka kiasi maalum cha Credits (.sms setcredit <namba|@tag> <amount>) ──
         const setMatch = cleanBody.match(/^setcredit\s+(\S+)\s+(\d+)$/i);
         if (setMatch) {
             if (!isOwner) {
                 return reply('❌ *Bot Owner / Bot Number* pekee ndiye anayeweza kuweka credits.');
             }
-            const targetKey = extractTargetUserKey(setMatch[1], message);
+            const targetKey = extractTargetUserKey(setMatch[1], effectiveMsg);
             const amount = parseInt(setMatch[2], 10);
             if (!targetKey || !Number.isInteger(amount) || amount < 0) {
                 return reply('❌ Mfano sahihi: *.sms setcredit 255612130873 300*');
@@ -424,7 +455,6 @@ async function smsCommand(sock, chatId, senderId, text, message) {
             );
         }
 
-        // ── Kutuma SMS: .sms <namba> <ujumbe> ──
         const parts = cleanBody.match(/^(\+?\d[\d\s\-]{6,16})\s+([\s\S]+)$/);
         if (!parts) {
             return reply(
@@ -449,11 +479,7 @@ async function smsCommand(sock, chatId, senderId, text, message) {
             );
         }
 
-        if (!apiKey) {
-            return reply('❌ *SMSTAPSA_API_KEY* haijawekwa kwenye faili la `.env` la bot.');
-        }
-
-        const creditAccountKey = senderPhone || normalizePhone(senderId);
+        const creditAccountKey = senderPhone || normalizePhone(effectiveSender);
         const currentCredits = getUserCredits(creditAccountKey);
 
         if (currentCredits < SMS_COST_CREDITS) {
@@ -465,9 +491,11 @@ async function smsCommand(sock, chatId, senderId, text, message) {
             );
         }
 
-        await sock.sendPresenceUpdate('composing', chatId);
         try {
-            await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
+            await sock.sendPresenceUpdate('composing', chatId);
+            if (effectiveMsg?.key) {
+                await sock.sendMessage(chatId, { react: { text: '⏳', key: effectiveMsg.key } });
+            }
         } catch (_) {}
 
         const apiResult = await sendTapsaSms({
@@ -477,7 +505,6 @@ async function smsCommand(sock, chatId, senderId, text, message) {
             apiKey,
         });
 
-        // Angalia kama mpokeaji alifanikiwa (credits hukatwa kwa SMS iliyofanikiwa)
         const firstRecipient = Array.isArray(apiResult?.recipients) ? apiResult.recipients[0] : null;
         const deliveryStatus = firstRecipient?.status || 'Success';
         const isDelivered = !firstRecipient || /success|delivered/i.test(String(deliveryStatus));
@@ -491,10 +518,12 @@ async function smsCommand(sock, chatId, senderId, text, message) {
 
         const deduction = deductUserCredits(creditAccountKey, SMS_COST_CREDITS);
         const msgId = firstRecipient?.messageId ? `\n• *Message ID:* \`${firstRecipient.messageId}\`` : '';
-        const usedSender = apiResult?.senderId || envSenderId || 'TAPSA';
+        const usedSender = apiResult?.senderId || envSenderId || 'MICKEY';
 
         try {
-            await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
+            if (effectiveMsg?.key) {
+                await sock.sendMessage(chatId, { react: { text: '✅', key: effectiveMsg.key } });
+            }
         } catch (_) {}
 
         return reply(
@@ -508,7 +537,9 @@ async function smsCommand(sock, chatId, senderId, text, message) {
     } catch (error) {
         console.error('[SMS COMMAND ERROR]:', error?.stack || error);
         try {
-            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
+            if (effectiveMsg?.key) {
+                await sock.sendMessage(chatId, { react: { text: '❌', key: effectiveMsg.key } });
+            }
         } catch (_) {}
 
         const statusInfo = error?.statusCode ? ` (HTTP ${error.statusCode})` : '';
@@ -519,9 +550,16 @@ async function smsCommand(sock, chatId, senderId, text, message) {
     }
 }
 
+// Hakikisha inafanya kazi bila kujali loader inaita function gani
 smsCommand.name = 'sms';
+smsCommand.command = ['sms', 'sendsms', 'text'];
+smsCommand.cmd = ['sms', 'sendsms', 'text'];
 smsCommand.aliases = ['sendsms', 'text'];
 smsCommand.category = 'TOOLS';
 smsCommand.description = 'Tuma SMS kupitia SMSTAPSA kwa mfumo wa credits (30 credits / SMS)';
+smsCommand.code = smsCommand;
+smsCommand.run = smsCommand;
+smsCommand.execute = smsCommand;
+smsCommand.handler = smsCommand;
 
 module.exports = smsCommand;
