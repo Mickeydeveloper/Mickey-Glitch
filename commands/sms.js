@@ -33,6 +33,7 @@ try {
 // ─── ──────────────────────────────────────────────────────────────────────
 
 const SMS_COST_CREDITS = 30;
+const DEFAULT_API_KEY = 'tapsa_98c85dd9a2d56c4b42b3abc497d00da6209d8b874ca320129900bc234db47cf2';
 const DEFAULT_SENDER_ID = 'MICKEY';
 const API_BASE_URL = (process.env.SMSTAPSA_BASE_URL || 'https://api.smstapsa.my.id').replace(/\/+$/, '');
 
@@ -234,7 +235,7 @@ function getTapsaConfig() {
         process.env.SMSTAPSA_API_KEY ||
         process.env.TAPSA_API_KEY ||
         settings?.smstapsaApiKey ||
-        ''
+        DEFAULT_API_KEY
     ).trim();
 
     const senderId = (
