@@ -33,7 +33,6 @@ try {
 // ─── ──────────────────────────────────────────────────────────────────────
 
 const SMS_COST_CREDITS = 30;
-const DEFAULT_API_KEY = 'tapsa_98c85dd9a2d56c4b42b3abc497d00da6209d8b874ca320129900bc234db47cf2';
 const DEFAULT_SENDER_ID = 'MICKEY';
 const API_BASE_URL = (process.env.SMSTAPSA_BASE_URL || 'https://api.smstapsa.my.id').replace(/\/+$/, '');
 
@@ -235,7 +234,7 @@ function getTapsaConfig() {
         process.env.SMSTAPSA_API_KEY ||
         process.env.TAPSA_API_KEY ||
         settings?.smstapsaApiKey ||
-        DEFAULT_API_KEY
+        ''
     ).trim();
 
     const senderId = (
@@ -347,6 +346,23 @@ async function smsCommand(sock, chatId, senderId, text, message, extraArgs) {
             ? ['.sms', ...senderId].join(' ')
             : (typeof senderId === 'string' ? senderId : extractMessageText(actualMsg));
         return smsCommand(actualSock, actualChatId, actualSender, actualText, actualMsg);
+    }
+
+    // Standard command loader: (sock, chatId, message, args, options)
+    if (senderId && typeof senderId === 'object' && senderId.key) {
+        const actualMsg = senderId;
+        const options = message && typeof message === 'object' && !message.key ? message : {};
+        const actualArgs = Array.isArray(text)
+            ? text
+            : (typeof text === 'string' ? text.trim().split(/\s+/).filter(Boolean) : []);
+        const actualSender = options.senderId || actualMsg.key.participant || actualMsg.key.remoteJid || '';
+        return smsCommand(
+            sock,
+            chatId || actualMsg.key.remoteJid,
+            actualSender,
+            actualArgs,
+            actualMsg
+        );
     }
 
     const effectiveMsg = message || (senderId && typeof senderId === 'object' && senderId.key ? senderId : null);
@@ -506,8 +522,8 @@ async function smsCommand(sock, chatId, senderId, text, message, extraArgs) {
         });
 
         const firstRecipient = Array.isArray(apiResult?.recipients) ? apiResult.recipients[0] : null;
-        const deliveryStatus = firstRecipient?.status || 'Success';
-        const isDelivered = !firstRecipient || /success|delivered/i.test(String(deliveryStatus));
+        const deliveryStatus = firstRecipient?.status || apiResult?.status || 'Success';
+        const isDelivered = !firstRecipient || /success|delivered|queued|pending|sent|accepted/i.test(String(deliveryStatus));
 
         if (!isDelivered) {
             return reply(
@@ -527,8 +543,9 @@ async function smsCommand(sock, chatId, senderId, text, message, extraArgs) {
         } catch (_) {}
 
         return reply(
-            `✅ *SMS IMETUMWA KIKAMILIFU*\n\n` +
+            `✅ *SMS IMEKUBALIWA NA API*\n\n` +
             `• *Kwa:* +${recipientFormatted}\n` +
+            `• *Status:* ${deliveryStatus}\n` +
             `• *Sender ID:* ${usedSender}\n` +
             `• *Ujumbe:* ${smsMessage}\n` +
             `• *Credits zilizokatwa:* -${SMS_COST_CREDITS} credits\n` +
@@ -550,16 +567,17 @@ async function smsCommand(sock, chatId, senderId, text, message, extraArgs) {
     }
 }
 
-// Hakikisha inafanya kazi bila kujali loader inaita function gani
-smsCommand.name = 'sms';
-smsCommand.command = ['sms', 'sendsms', 'text'];
-smsCommand.cmd = ['sms', 'sendsms', 'text'];
-smsCommand.aliases = ['sendsms', 'text'];
-smsCommand.category = 'TOOLS';
-smsCommand.description = 'Tuma SMS kupitia SMSTAPSA kwa mfumo wa credits (30 credits / SMS)';
-smsCommand.code = smsCommand;
-smsCommand.run = smsCommand;
-smsCommand.execute = smsCommand;
-smsCommand.handler = smsCommand;
-
-module.exports = smsCommand;
+module.exports = {
+    name: 'sms',
+    command: ['sms', 'sendsms', 'text'],
+    aliases: ['sendsms', 'text'],
+    category: 'TOOLS',
+    description: 'Tuma SMS kupitia SMSTAPSA kwa mfumo wa credits (30 credits / SMS)',
+    code: async (ctx) => smsCommand(
+        ctx.sock,
+        ctx.chatId,
+        ctx.senderId,
+        ctx.args,
+        ctx.msg
+    ),
+};
