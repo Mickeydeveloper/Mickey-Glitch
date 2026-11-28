@@ -8,19 +8,20 @@ require("dotenv").config();
 require("./settings");
 const { assertValidBotName } = require('./lib/botGuard');
 assertValidBotName();
+
 const fs = require('fs');
 const path = require('path');
 const chalk = require('chalk');
 const pino = require("pino");
 const NodeCache = require("node-cache");
 const readline = require("readline");
-const { 
-    default: makeWASocket, 
-    useMultiFileAuthState, 
-    DisconnectReason, 
-    fetchLatestBaileysVersion, 
-    makeCacheableSignalKeyStore, 
-    delay 
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    DisconnectReason,
+    fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore,
+    delay
 } = require("@whiskeysockets/baileys");
 
 const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require("./main");
@@ -30,13 +31,13 @@ const store = require("./lib/lightweight_store");
 const settings = require("./settings");
 const MickeyHelper = require("./lib/Mickey");
 
-// Try to load telegram module
+// Jaribu kupakia module ya Telegram (Telegram bot)
 let startTelegramBot = null;
 try {
     const telegramModule = require("./glitch/telegram-bot");
     startTelegramBot = telegramModule.startTelegramBot;
 } catch (err) {
-    // Silent fail if not found
+    // Puuza ikiwa haipo (silent fail)
 }
 
 // ────────────────────────────────────────────────
@@ -45,6 +46,7 @@ try {
 const pinoLogger = pino({ level: process.env.BAILEYS_LOG_LEVEL || 'warn' });
 const originalConsoleLog = console.log.bind(console);
 const sensitiveSessionLogPattern = /closing (?:open )?session|sessionentry\s*\{/i;
+
 const isSensitiveSessionDiagnostic = (args) => args.some(value =>
     (typeof value === 'string' && sensitiveSessionLogPattern.test(value)) ||
     (value && typeof value === 'object' &&
@@ -66,6 +68,7 @@ const consoleTimestamp = () => chalk.hex('#6E7681')(
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
     }).format(new Date())
 );
+
 console.log = (...args) => {
     if (isSensitiveSessionDiagnostic(args)) return;
     originalConsoleLog(chalk.hex('#00D4FF')('  ●'), consoleTimestamp(), ...args);
@@ -92,6 +95,7 @@ function ensureDirectories() {
     });
 }
 
+// Inaitwa kwa mkono tu (manual) ikihitajika—haifutwi kila restart ili isivunje session keys
 function cleanSessionFiles() {
     try {
         if (!fs.existsSync(SESSION_DIR)) return;
@@ -136,12 +140,14 @@ function autoClean() {
                             }
                             cleaned++;
                         }
-                    } catch (e) {}
+                    } catch (_) {}
                 });
             }
         });
-        if (cleaned > 0) console.log(chalk.cyan(`▓▒░ [CLEANER] auto-purged ${cleaned} temporary cache files.`));
-    } catch (err) {}
+        if (cleaned > 0) {
+            console.log(chalk.cyan(`▓▒░ [CLEANER] auto-purged ${cleaned} temporary cache files.`));
+        }
+    } catch (_) {}
 }
 
 // ────────────────────────────────────────────────
@@ -171,12 +177,12 @@ let pairingAttempts = 0;
 
 function createReadline() {
     if (rl) {
-        try { rl.close(); } catch(e) {}
+        try { rl.close(); } catch (_) {}
         rl = null;
     }
-    rl = readline.createInterface({ 
-        input: process.stdin, 
-        output: process.stdout 
+    rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
     });
     return rl;
 }
@@ -184,28 +190,31 @@ function createReadline() {
 async function askPhoneNumber() {
     return new Promise((resolve) => {
         const readlineInterface = createReadline();
-        
+
         console.log('\n' + chalk.cyan.bold('┌────────────────────────────────────────────────────────┐'));
         console.log(chalk.cyan.bold('│') + chalk.bgCyan.black.bold('              📱 WHATSAPP PAIRING INTERFACE             ') + chalk.cyan.bold('│'));
         console.log(chalk.cyan.bold('└────────────────────────────────────────────────────────┘'));
         console.log(chalk.dim('  Ingiza namba ya simu ya WhatsApp (Mfano: 255612130873)'));
         console.log('');
-        
+
         readlineInterface.question(chalk.cyan.bold('  ⚡ Namba yako ➜ '), (answer) => {
             let num = answer.trim().replace(/[^0-9]/g, '');
             if (!num.startsWith("255")) {
                 num = "255" + num;
             }
             UI.success(`Namba imethibitishwa: ${num}`);
+            try { readlineInterface.close(); } catch (_) {}
+            if (rl === readlineInterface) rl = null;
             resolve(num);
         });
     });
 }
 
-// Initialize store
+// Initialize store & periodic save
 try {
     store.readFromFile();
-} catch (err) {}
+} catch (_) {}
+
 setInterval(() => {
     if (typeof store.writeToFile === 'function') {
         Promise.resolve(store.writeToFile()).catch(err => {
@@ -213,6 +222,11 @@ setInterval(() => {
         });
     }
 }, settings.storeWriteInterval || 10000);
+
+// Safisha temp/cache kila saa 1 ili RAM/disk isijae baada ya siku kadhaa
+setInterval(() => {
+    autoClean();
+}, 60 * 60 * 1000);
 
 // ────────────────────────────────────────────────
 // ULTRA-MODERN UI COMPONENTS
@@ -237,39 +251,63 @@ const UI = {
 };
 
 // ────────────────────────────────────────────────
-// MAIN BOT FUNCTION
+// MAIN BOT FUNCTION & SOCKET CLEANUP
 // ────────────────────────────────────────────────
 let whatsappBot = null;
 let isWhatsAppRunning = false;
 let reconnectAttempts = 0;
+let isStartingBot = false;
 let startupCleanupDone = false;
 let inboundUpdateCount = 0;
 let ignoredUpsertCount = 0;
 let lastInboundAt = 0;
 let lastInboundType = 'none';
 
-async function startMickeyBot() {
-    if (isWhatsAppRunning && whatsappBot) return whatsappBot;
+async function cleanupPreviousSocket() {
+    if (!whatsappBot) return;
+    const prevBot = whatsappBot;
+    whatsappBot = null;
 
     try {
+        if (prevBot.ev && typeof prevBot.ev.removeAllListeners === 'function') {
+            prevBot.ev.removeAllListeners();
+        }
+    } catch (_) {}
+
+    try {
+        if (prevBot.ws && typeof prevBot.ws.close === 'function') {
+            prevBot.ws.close();
+        } else if (typeof prevBot.end === 'function') {
+            prevBot.end();
+        }
+    } catch (_) {}
+}
+
+async function startMickeyBot() {
+    if (isStartingBot) return whatsappBot;
+    isStartingBot = true;
+
+    try {
+        isWhatsAppRunning = false;
+        await cleanupPreviousSocket();
         ensureDirectories();
+
         if (!startupCleanupDone) {
-            cleanSessionFiles();
             autoClean();
             startupCleanupDone = true;
         }
-        
+
         UI.banner();
 
         const { version } = await fetchLatestBaileysVersion();
         console.log(chalk.bgHex('#161B22').hex('#00D4FF').bold(' CORE ') + chalk.hex('#00D4FF')('  Engine'), chalk.greenBright(`Baileys v${version.join('.')}`));
 
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-        
+
         const hasSession = state.creds?.registered === true;
         console.log(chalk.bgHex('#161B22').hex('#7D5FFF').bold(' AUTH ') + chalk.hex('#7D5FFF')('  Security'), hasSession ? chalk.greenBright('Session Loaded ✓') : chalk.yellowBright('Waiting for authentication'));
 
-        const msgRetryCounterCache = new NodeCache();
+        const msgRetryCounterCache = new NodeCache({ stdTTL: 600, checkperiod: 120 });
 
         const Mickey = makeWASocket({
             version,
@@ -304,7 +342,6 @@ async function startMickeyBot() {
                 return message;
             },
             getMessage: async (key) => {
-                // Fix: Try/Catch to prevent crash if store.loadMessage is missing
                 if (!key || !key.id) return undefined;
                 try {
                     const jid = key.remoteJid || key.participant || key.sender || '';
@@ -312,22 +349,20 @@ async function startMickeyBot() {
                         const msg = await store.loadMessage(jid, key.id);
                         return msg?.message || undefined;
                     }
-                } catch (e) {
-                    // Ignore error
-                }
+                } catch (_) {}
                 return undefined;
             },
             msgRetryCounterCache
         });
 
         whatsappBot = Mickey;
+
         Mickey.ev.on("creds.update", () => {
             Promise.resolve(saveCreds()).catch(err => {
                 console.error('[Auth] Failed to persist updated credentials:', err?.stack || err);
             });
         });
 
-        // Fix: Try/Catch to prevent crash if store.bind is missing
         if (typeof store.bind === 'function') {
             try {
                 store.bind(Mickey.ev);
@@ -380,10 +415,10 @@ async function startMickeyBot() {
 
                         if (handleMessages) await handleMessages(Mickey, messageUpdate, true);
                     } catch (err) {
-                        if (err.message?.includes('storeMessage is not a function')) {
+                        if (err?.message?.includes('storeMessage is not a function')) {
                             console.log(chalk.red(`  [Message Handler] KOSA: storeMessage haipo kwenye lib/lightweight_store.js.`));
-                        } else if (err.message?.includes('decrypt') || err.message?.includes('session')) {
-                            console.warn(`[Session] Decrypt error (chat=${chatId}, message=${messageId}): ${err?.stack || err}`);
+                        } else if (err?.message?.includes('decrypt') || err?.message?.includes('session') || err?.message?.includes('No session')) {
+                            console.warn(`[Session] Decrypt error (chat=${chatId}, message=${messageId}): ${err?.message || err}`);
                         } else {
                             console.error(`[Message Handler] Failed (chat=${chatId}, message=${messageId}, type=${chatUpdate?.type || 'unknown'}):`, err?.stack || err);
                         }
@@ -402,7 +437,7 @@ async function startMickeyBot() {
             try {
                 if (handleAnticall) await handleAnticall(Mickey, { call: callData });
             } catch (err) {
-                console.log(chalk.dim(`  [Call Handler] Error: ${err.message?.substring(0, 40)}`));
+                console.log(chalk.dim(`  [Call Handler] Error: ${err?.message?.substring(0, 40)}`));
             }
         });
 
@@ -411,16 +446,17 @@ async function startMickeyBot() {
             try {
                 if (handleGroupParticipantUpdate) await handleGroupParticipantUpdate(Mickey, update);
             } catch (err) {
-                console.log(chalk.dim(`  [Group Update] Error: ${err.message?.substring(0, 40)}`));
+                console.log(chalk.dim(`  [Group Update] Error: ${err?.message?.substring(0, 40)}`));
             }
         });
 
         // --- Error Event Handler ---
         Mickey.ev.on("error", (err) => {
-            if (err.message?.includes('decrypt') || err.message?.includes('no session')) {
-                console.log(chalk.dim(`  [Session Error] ${err.message?.substring(0, 50)}... (non-critical)`));
+            const msg = err?.message || String(err);
+            if (msg.includes('decrypt') || msg.includes('no session') || msg.includes('No session')) {
+                console.log(chalk.dim(`  [Session Error] ${msg.substring(0, 60)}... (non-critical)`));
             } else {
-                console.log(chalk.yellow(`  [Error] ${err.message}`));
+                console.log(chalk.yellow(`  [Error] ${msg}`));
             }
         });
 
@@ -433,66 +469,63 @@ async function startMickeyBot() {
                 reconnectAttempts = 0;
                 isPairing = false;
                 pairingAttempts = 0;
-                
+
                 console.log('\n' + chalk.bgGreenBright.black.bold('  CORE ONLINE  ') + chalk.greenBright('  System synchronized with WhatsApp.\n'));
 
-                const myNumber = Mickey.user.id.split(':')[0] + "@s.whatsapp.net";
                 const ramUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-                
+
                 console.log(chalk.bgHex('#161B22').hex('#00D4FF').bold(' BOT METRICS '));
-                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('User') + chalk.hex('#30363D')(' ─── ' ) + chalk.greenBright(Mickey.user.id.split(':')[0]));
-                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('Memory') + chalk.hex('#30363D')(' ─ ' ) + chalk.yellowBright(`${ramUsage} MB`));
-                console.log(chalk.hex('#30363D')('  └─ ') + chalk.hex('#C9D1D9')('State') + chalk.hex('#30363D')(' ─── ' ) + chalk.greenBright('LIVE'));
+                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('User') + chalk.hex('#30363D')(' ─── ') + chalk.greenBright(Mickey.user?.id?.split(':')[0] || 'Unknown'));
+                console.log(chalk.hex('#30363D')('  ├─ ') + chalk.hex('#C9D1D9')('Memory') + chalk.hex('#30363D')(' ─ ') + chalk.yellowBright(`${ramUsage} MB`));
+                console.log(chalk.hex('#30363D')('  └─ ') + chalk.hex('#C9D1D9')('State') + chalk.hex('#30363D')(' ─── ') + chalk.greenBright('LIVE'));
                 UI.divider();
 
-                // Connection notification and auto-join handled by helper
                 try {
                     await MickeyHelper.handleConnection(Mickey, UI);
                 } catch (e) {
-                    UI.warning('Connection helper failed: ' + (e.message || e));
+                    UI.warning('Connection helper failed: ' + (e?.message || e));
                 }
-                
+
                 if (rl) {
-                    try { rl.close(); } catch(e) {}
+                    try { rl.close(); } catch (_) {}
                     rl = null;
                 }
             }
 
             if (connection === "close") {
                 isWhatsAppRunning = false;
+                await cleanupPreviousSocket();
+
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const errorMessage = lastDisconnect?.error?.message || 'Unknown';
-                
-                // Check if it's a decrypt/session error (non-fatal)
-                const isDecryptError = errorMessage?.includes('decrypt') || 
-                                      errorMessage?.includes('no session') ||
-                                      errorMessage?.includes('session') ||
-                                      errorMessage?.includes('Bad MAC') ||
-                                      errorMessage?.includes('Bad mac');
-                
+
+                const isDecryptError = /decrypt|no session|session|bad mac/i.test(errorMessage);
+
                 if (isDecryptError) {
-                    UI.info(`Session error (recoverable): ${errorMessage.substring(0, 40)}...`);
+                    UI.info(`Session error (recoverable): ${errorMessage.substring(0, 50)}...`);
                     UI.warning('Session credentials and valid key files were preserved for reconnect.');
                 } else {
-                    UI.warning(`Link disrupted: ${errorMessage.substring(0, 50)}`);
+                    UI.warning(`Link disrupted: ${errorMessage.substring(0, 60)}`);
                 }
-                
+
                 if (statusCode === DisconnectReason.loggedOut) {
                     UI.error('Session structure revoked (Logged Out). Flashing memory...');
                     clearSession();
+                    reconnectAttempts = 0;
+                    isStartingBot = false;
                     await delay(3000);
                     return startMickeyBot();
                 }
-                
+
                 if (statusCode === DisconnectReason.connectionClosed || statusCode === DisconnectReason.connectionLost) {
                     UI.info('Connection lost, attempting reconnect...');
                 }
-                
-                // Exponential backoff with max limit
+
                 if (reconnectAttempts < 20) {
                     const delayTime = Math.min(3000 + (reconnectAttempts * 1500), 45000);
                     reconnectAttempts++;
-                    console.log(chalk.cyan(`  🔄 [RECONNECT] Attempting re-entry in ${(delayTime/1000).toFixed(1)}s... (${reconnectAttempts}/20)`));
+                    console.log(chalk.cyan(`  🔄 [RECONNECT] Attempting re-entry in ${(delayTime / 1000).toFixed(1)}s... (${reconnectAttempts}/20)`));
+                    isStartingBot = false;
                     await delay(delayTime);
                     return startMickeyBot();
                 } else {
@@ -507,16 +540,28 @@ async function startMickeyBot() {
         // ────────────────────────────────────────────────
         if (!hasSession && !isPairing) {
             isPairing = true;
-            
-            const phoneNumber = await askPhoneNumber();
-            UI.info('Intercepting token stream and pushing custom signature...');
-            
-            await delay(3000);
-            
+            let keepAliveInterval = null;
+            let pairingTimeout = null;
+
+            const stopPairingTimers = () => {
+                if (keepAliveInterval) {
+                    clearInterval(keepAliveInterval);
+                    keepAliveInterval = null;
+                }
+                if (pairingTimeout) {
+                    clearTimeout(pairingTimeout);
+                    pairingTimeout = null;
+                }
+            };
+
             try {
-                // Inalazimisha custom code yako ya MICKDADY
+                const phoneNumber = await askPhoneNumber();
+                UI.info('Intercepting token stream and pushing custom signature...');
+
+                await delay(3000);
+
                 await Mickey.requestPairingCode(phoneNumber, "MICKDADY");
-                
+
                 console.log('\n' + chalk.magenta.bold('  ┌────────────────────────────────────────────────────────┐'));
                 console.log(chalk.magenta.bold('  │') + chalk.bgMagenta.black.bold('              🔐 CUSTOM WHATSAPP PAIRING CODE             ') + chalk.magenta.bold('  │'));
                 console.log(chalk.magenta.bold('  ├────────────────────────────────────────────────────────┤'));
@@ -525,21 +570,27 @@ async function startMickeyBot() {
                 console.log(chalk.magenta.bold('  ├────────────────────────────────────────────────────────┤'));
                 console.log(chalk.magenta.bold('  │') + chalk.greenBright.bold('               👉    M I C K D A D Y    👈               ') + chalk.magenta.bold('│'));
                 console.log(chalk.magenta.bold('  └────────────────────────────────────────────────────────┘\n'));
-                
+
                 UI.info('Waiting for authorization handshakes... (10-30s)');
-                
-                const keepAliveInterval = setInterval(() => {
+
+                keepAliveInterval = setInterval(() => {
                     if (isWhatsAppRunning && typeof Mickey.sendPresenceUpdate === 'function') {
                         void Mickey.sendPresenceUpdate('available').catch(() => {});
-                        clearInterval(keepAliveInterval);
+                        stopPairingTimers();
                     }
                 }, 5000);
-                
+
+                pairingTimeout = setTimeout(() => {
+                    stopPairingTimers();
+                    isPairing = false;
+                }, 120000);
             } catch (err) {
+                stopPairingTimers();
+                isPairing = false;
                 UI.error('Pairing pipeline blocked: ' + err.message);
                 if (pairingAttempts < 3) {
                     pairingAttempts++;
-                    isPairing = false;
+                    isStartingBot = false;
                     await delay(5000);
                     return startMickeyBot();
                 }
@@ -547,11 +598,13 @@ async function startMickeyBot() {
         }
 
         return Mickey;
-
     } catch (err) {
         UI.error('Critical exception detected: ' + err.message);
+        isStartingBot = false;
         await delay(5000);
         return startMickeyBot();
+    } finally {
+        isStartingBot = false;
     }
 }
 
@@ -578,28 +631,26 @@ function startKeepAlive() {
 async function initializeBot() {
     UI.banner();
     startKeepAlive();
-    
+
     const hasTelegramToken = settings.telegram?.botToken && settings.telegram.botToken?.trim()?.length > 0;
-    let telegramStarted = false;
-    
+
     if (hasTelegramToken && startTelegramBot) {
         try {
             await startTelegramBot();
             UI.success('Telegram mainframe operational.');
-            telegramStarted = true;
         } catch (err) {
             UI.warning(`Telegram linkage error: ${err.message}`);
         }
     } else {
         UI.info('WhatsApp standalone operation active.');
     }
-    
+
     await startMickeyBot();
-    
+
     process.on('SIGINT', async () => {
         console.log(chalk.yellow('\n  👋 Terminating bot processes...'));
-        if (whatsappBot) { try { await whatsappBot.end(); } catch(e) {} }
-        if (rl) { try { rl.close(); } catch(e) {} }
+        await cleanupPreviousSocket();
+        if (rl) { try { rl.close(); } catch (_) {} }
         process.exit(0);
     });
 }
